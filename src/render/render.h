@@ -36,6 +36,9 @@ typedef struct {
     int adjustableviewdistance; /* 0x657d70 */
     int headlights;             /* 0x657d78 */
     int gammacorrection;        /* 0x657d80 */
+    int skyrendering;           /* 0x657d9c SKYRENDERING: the sky's level (0 low .. 3 amazing: which blocks of
+                                   Sky\<name>.txt count, and the light slot); a front-end option, so not in
+                                   fe.txt: the port uses 2 (high) unless fe.txt or --param sky_detail says */
     int drawsync;               /* 0x657da0 */
     int viewdistance;
 } RenderOptions;

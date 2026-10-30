@@ -26,7 +26,8 @@ void Sky_FreeConfig(void);
    fields later versions added set to their defaults or copied from older fields. */
 void SkyConfig_Upgrade(SkyConfig *c, int version);
 
-/* The light environment (global 0x627e1c): the weather slot of the race (0x657d9c), or the nearest lower
+/* The light environment (global 0x627e1c): the slot of the sky rendering level (0x657d9c, SKYRENDERING;
+   not the race's weather, 0x657a28), or the nearest lower
    one that is set (a slot's first word non-zero), else slot 0. 0x459820 / 0x459890 */
 void Sky_CreateLight(int weather);
 void Sky_FreeLight(void);

@@ -4,6 +4,7 @@
    system's keys the same way. Missing keys keep the value the option globals have before the file is read
    (0, and "" for the driver, which then means the WIDTH x HEIGHT mode of the options). */
 #include "render/render.h"
+#include "platform.h"
 #include "vfs.h"
 #include <ctype.h>
 #include <stdlib.h>
@@ -19,7 +20,7 @@ static struct { const char *name; int *v; } ints[] = {
     {"cardetail", &g_renderopts.cardetail}, {"specialfx", &g_renderopts.specialfx},
     {"adjustableviewdistance", &g_renderopts.adjustableviewdistance}, {"headlights", &g_renderopts.headlights},
     {"gammacorrection", &g_renderopts.gammacorrection}, {"drawsync", &g_renderopts.drawsync},
-    {"viewdistance", &g_renderopts.viewdistance},
+    {"viewdistance", &g_renderopts.viewdistance}, {"skyrendering", &g_renderopts.skyrendering},
 };
 
 static char *trim(char *s)
@@ -33,6 +34,7 @@ static char *trim(char *s)
 void RenderOptions_Load(void)
 {
     memset(&g_renderopts, 0, sizeof g_renderopts);
+    g_renderopts.skyrendering = 2;   /* the front end's option (see render.h) */
     size_t n = 0;
     char *d = (char *)vfs_read_all("fe.txt", &n);
     if (!d) return;
@@ -59,4 +61,6 @@ void RenderOptions_Load(void)
             if (!strcasecmp(key, ints[i].name)) *ints[i].v = atoi(val);
     }
     free(text);
+    char v[8];
+    if (plat_param("sky_detail", v, sizeof v)) g_renderopts.skyrendering = atoi(v);
 }

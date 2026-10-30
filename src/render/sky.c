@@ -17,20 +17,6 @@ static uint8_t *g_sky_fsh;           /* 0x627e50 */
 SkyConfig *Sky_Config(void) { return g_sky_config; }
 const uint8_t *Sky_Fsh(void) { return g_sky_fsh; }
 
-/* The utility's whole-file loads under the search path: UTIL_loadfile 0x59d760 (FILE_loadfile, NULL when
-   missing) and 0x59d690 (FILE_loadabort: a read error is fatal). Both return NULL when no directory of
-   the search path has the name. */
-static void *util_loadfile(const char *name, unsigned flags)
-{
-    char path[260];
-    return UTIL_searchpath(name, path) ? FILE_loadfile(path, flags) : NULL;
-}
-static void *util_loadfile_abort(const char *name, unsigned flags)
-{
-    char path[260];
-    return UTIL_searchpath(name, path) ? FILE_loadabort(path, flags) : NULL;
-}
-
 static void put(uint8_t *b, int word, uint32_t v) { memcpy(b + word * 4, &v, 4); }
 static void putf(uint8_t *b, int word, float v) { memcpy(b + word * 4, &v, 4); }
 static void copy_words(uint8_t *b, int dst, int src, int n) { memmove(b + dst * 4, b + src * 4, (size_t)n * 4); }
@@ -116,10 +102,10 @@ SkyConfig *Sky_CreateConfig(const char *name)
     c->flag = 0;
     c->f108 = -1;
     snprintf(c->path, sizeof c->path, exe_str(0x5ceefc), g_track_dir, name);
-    c->data = util_loadfile(c->path, 0);
+    c->data = UTIL_loadfile(c->path, 0);
     if (!c->data) {
         snprintf(c->path, sizeof c->path, exe_str(0x5ceee8), g_track_dir);
-        c->data = util_loadfile_abort(c->path, 0);
+        c->data = UTIL_loadfileabort(c->path, 0);
     }
     if (!c->data) {
         /* no file: an empty block (not cleared in the original) upgraded from version 0 */
@@ -183,10 +169,10 @@ void Sky_LoadFsh(const char *name, bool reload)
     }
     char path[256];
     snprintf(path, sizeof path, exe_str(0x5cf130), g_track_dir, name);
-    g_sky_fsh = util_loadfile(path, 0);
+    g_sky_fsh = UTIL_loadfile(path, 0);
     if (!g_sky_fsh) {
         snprintf(path, sizeof path, exe_str(0x5cf11c), g_track_dir);
-        g_sky_fsh = util_loadfile_abort(path, 0);
+        g_sky_fsh = UTIL_loadfileabort(path, 0);
     }
     PENDING_NOTE(0x460910, "sky texture object (0x460910 / 0x460b90)");
     PENDING_NOTE(0x45d6c0, "sky object: Sky_LoadText 0x45fa40, the sky levels and scrollers");

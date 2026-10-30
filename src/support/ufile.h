@@ -17,6 +17,10 @@ bool UTIL_searchpath(const char *name, char *out);
 bool UTIL_openfile(const char *name, int mode, int priority, FileHandle *h);
 /* SHAPE_loadfile (loadshp.c, real/shape.h) of the name under the search path. Util_LoadShape 0x59e4d0 */
 void *UTIL_loadshape(const char *name, unsigned memflags);
+/* A file found through the search path, loaded whole; NULL when no directory has it. UTIL_loadfile
+   0x59d760 (FILE_loadfile: NULL on a read error) and 0x59d690 (FILE_loadabort: a read error is fatal). */
+void *UTIL_loadfile(const char *name, unsigned memflags);        /* 0x59d760 */
+void *UTIL_loadfileabort(const char *name, unsigned memflags);   /* 0x59d690 */
 
 /* UFileHandler (vtable 0x5c18ec, RTTI ".?AVUFileHandler@@"): the fields the port keeps, commented with
    their offsets in the original object (0x2c bytes; nothing outside the class reads them). */

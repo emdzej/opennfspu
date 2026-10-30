@@ -1,5 +1,6 @@
 /* NFS Support/Utility files, see ufile.h. */
 #include "support/ufile.h"
+#include "real/file.h"
 #include "real/shape.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,3 +79,15 @@ void UFileHandler_close(UFileHandler *f)
 }
 
 void *UFileHandler_mapview(UFileHandler *f) { return NULL; }
+
+void *UTIL_loadfile(const char *name, unsigned memflags)
+{
+    char path[260];
+    return UTIL_searchpath(name, path) ? FILE_loadfile(path, memflags) : NULL;
+}
+
+void *UTIL_loadfileabort(const char *name, unsigned memflags)
+{
+    char path[260];
+    return UTIL_searchpath(name, path) ? FILE_loadabort(path, memflags) : NULL;
+}

@@ -41,14 +41,6 @@ static int16_t rd16s(const uint8_t *p) { return (int16_t)(p[0] | p[1] << 8); }
 static int pos_x(const uint8_t *shape) { return (int32_t)(rd32le(shape + 0xc) << 20) >> 20; }
 static int pos_y(const uint8_t *shape) { return (int32_t)(rd32le(shape + 0xc) << 4) >> 20; }
 
-/* UTIL_loadfile 0x59d690 (Support/Utility): a file found through the search path, loaded whole. */
-static void *util_loadfile(const char *name, unsigned memflags)
-{
-    char path[260];
-    if (!UTIL_searchpath(name, path)) return NULL;
-    return FILE_loadabort(path, memflags);
-}
-
 const uint8_t *SHAPE_find(const uint8_t *fsh, uint32_t code)
 {
     int i = (int)rd32le(fsh + 8);
@@ -525,7 +517,7 @@ void R3DCar_LoadCommon(void)
     g_carset = R3DMaterialSet_ctor(calloc(1, sizeof *g_carset), m, 3);
     for (int i = 0; i < 5; i++) {
         snprintf(path, sizeof path, exe_str(0x5cccc8), g_r3d_cardir, exe_str(exe_u32(0x5cdafc + 4 * (uint32_t)i)));
-        g_carfiles[i] = util_loadfile(path, 0);                              /* shadow intglass suit head cabrio */
+        g_carfiles[i] = UTIL_loadfileabort(path, 0);                              /* shadow intglass suit head cabrio */
     }
     for (int i = 0; i < 2; i++) CarPage_init(&g_carpages[i]);
     TextureStates_init(&common_states);
