@@ -2,6 +2,7 @@
    Car_Construct 0x411190): the simulation's per-car work. Each is pending until its port lands; the
    registration (lists and priorities) is the original's. */
 #include "game/car.h"
+#include "game/car_ground.h"
 #include "game/car_physics.h"
 #include "pending.h"
 
@@ -15,7 +16,6 @@ TASK(49aee0, "car task: 0x49aee0 (even, 6)")
 TASK(414830, "car task: 0x414830 (unregistered)")
 TASK(499150, "car task: 0x499150 (even, 0x15)")
 TASK(49fb20, "car task: 0x49fb20 (even, 0x1e)")
-TASK(49bcb0, "car task: 0x49bcb0 (even, 0x1e)")
 TASK(498f60, "car task: 0x498f60 (even, 0x28)")
 TASK(4102e0, "car task: 0x4102e0 (even, 0x32)")
 TASK(4169d0, "car task: 0x4169d0 (every tick, 0x19)")
@@ -34,7 +34,7 @@ void Car_SetTasks(Car *c)
     *slot(c, T_E10) = task_414830;
     *slot(c, T_E14) = task_499150;
     *slot(c, T_E1C) = task_49fb20;
-    *slot(c, T_E20) = task_49bcb0;
+    *slot(c, T_E20) = CarSim_Forces;   /* 0x49bcb0 */
     *slot(c, T_E24) = CarSim_Move;   /* 0x49b710 */
     *slot(c, T_E28) = CarSim_Turn;   /* 0x49b850 */
     *slot(c, T_E2C) = task_498f60;

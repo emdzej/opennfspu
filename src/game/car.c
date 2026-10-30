@@ -3,6 +3,7 @@
 #include "exe.h"
 #include "pending.h"
 #include "real/mem.h"
+#include "render/r3dcar.h"
 #include "support/ufile.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -405,6 +406,32 @@ static void Car_AddToLists(Car *c)
 }
 
 /* The car's specs, AI specs, task functions, renderer and wheels. 0x410dc0 (CarSpecs_Load) */
+/* The car's renderer (R3DCar_ctor 0x437850 through 0x443ce0, then its load through the vtable): the
+   model <FILENAME>.crp of GameData\CarModel. The renderer reads the car through its state, which the port
+   keeps beside the car (the original's state is the car object itself). */
+typedef struct {
+    R3DCar car;
+    R3DCarState state;
+    R3DCarSpec spec;
+} CarRenderer;
+
+static void Car_MakeRenderer(Car *c)
+{
+    CarRenderer *r = calloc(1, sizeof *r);
+    if (!r) return;
+    r->state.rot[0] = r->state.rot[4] = r->state.rot[8] = 1;
+    r->spec.racenumber = -1;
+    for (int k = 0; k < CAR_NOPTIONS; k++) r->spec.options[k] = -1;
+    r->state.spec = &r->spec;
+    R3DCar_Init(&r->car, &r->state);
+    PENDING_NOTE(0x410fcf, "the car's colours and options from its description (R3DCar_SetColours)");
+    char path[128];
+    snprintf(path, sizeof path, "GameData\\CarModel\\%s", (const char *)CAR_DESCB(c) + 0x228);
+    R3DCar_LoadCrp(&r->car, path);
+    c->p[CARP_R3D] = &r->car;
+    PENDING_NOTE(0x478e30, "the car's wheel objects (+0x7b8, 0x478e30)");
+}
+
 static void Car_LoadSpecs(Car *c, int i)
 {
     if (i < g_nracecars) {
@@ -418,7 +445,7 @@ static void Car_LoadSpecs(Car *c, int i)
         c->p[CARP_AISPECS] = NULL;
     }
     Car_SetTasks(c);
-    PENDING_NOTE(0x443ce0, "the car's renderer (R3DCar_ctor, the colours, the load) and wheels (0x478e30)");
+    Car_MakeRenderer(c);
 }
 
 void Car_Construct(void)
@@ -428,6 +455,8 @@ void Car_Construct(void)
     for (int i = 0; i < g_nracecars + g_ntrafficcars && i < CAR_MAX; i++) {
         Car *c = MEM_alloc(exe_str(0x5cc5b4), (int)sizeof(Car), 0);   /* "Car_tObj" (0x1254) */
         memset(c, 0, sizeof *c);
+        WSurface_Init(&c->body);
+        for (int k = 0; k < 4; k++) WSurface_Init(&c->surf[k]);
         for (int k = 0; k < 0x14; k++) memset(c->b + 0xbf8 + 4 * k, 0xff, 4);
         if (i < g_nracecars) {
             c->p[CARP_DESC] = g_cardesc[i];

@@ -901,13 +901,19 @@ const float *WSurface_Vertex(const WSurface *s, int i)
     return s->elem ? s->elem->vt->vertex(s->elem, i) : vzero;
 }
 
+void WSurface_Init(WSurface *s)
+{
+    memset(s, 0, sizeof *s);
+    s->f4 = -1;
+    s->normal[1] = 1.0f;
+    s->slope[2] = 1.0f;
+}
+
 float WSurface_HeightAt(const float p[3])
 {
     load_consts();
-    WSurface s = {0};
-    s.f4 = -1;
-    s.normal[1] = 1.0f;
-    s.slope[2] = 1.0f;
+    WSurface s;
+    WSurface_Init(&s);
     WSurface_Update(&s, p, true);
     if (s.none) return k_zero;
     const float *v = WSurface_Vertex(&s, 0);

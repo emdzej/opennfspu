@@ -4,6 +4,7 @@
 #include "game/sim_math.h"
 #include "pending.h"
 #include "render/camera_math.h"
+#include "render/r3dcar.h"
 #include <math.h>
 #include <string.h>
 
@@ -109,4 +110,39 @@ void CarSim_WheelSpin(Car *c)
         if (turn) *spin = rate * K(0x5b2828) + *spin;
         if (K(0x5b24a8) < *spin) *spin = *spin - (float)lrintf(*spin);
     }
+}
+
+void CarSim_LoadBodyPoints(Car *c)
+{
+    if (*CAR_I(c, CAR_FLAGS) & 0x80) {
+        PENDING_NOTE(0x49ab30, "the traffic cars' body points");
+        return;
+    }
+    const R3DCar *r = c->p[CARP_R3D];
+    int n = r ? (int)r->nbound : 0;
+    if (n > 48) n = 48;
+    *CAR_I(c, 0x32c) = n;
+    float *p = CAR_F(c, 0x8c);
+    for (int i = 0; i < n; i++) memcpy(p + 3 * i, r->bound[i], 12);
+    /* Lowest first (a bubble sort by height). */
+    for (int pass = 0; pass < n; pass++)
+        for (int j = 0; j + 1 < n; j++)
+            if (p[3 * (j + 1) + 1] < p[3 * j + 1]) {
+                float t[3];
+                memcpy(t, p + 3 * j, 12);
+                memcpy(p + 3 * j, p + 3 * (j + 1), 12);
+                memcpy(p + 3 * (j + 1), t, 12);
+            }
+    /* The four lowest as the corners: front left, front right, rear left, rear right (by the signs of
+       x and z); a corner with no point stays at the origin. */
+    float corner[4][3] = {{0}};
+    float zero = K(0x5b23f8);
+    for (int i = 0; i < 4; i++) {
+        const float *q = p + 3 * i;
+        if (q[0] < zero && zero < q[2]) memcpy(corner[0], q, 12);
+        else if (zero < q[0] && zero < q[2]) memcpy(corner[1], q, 12);
+        else if (q[0] < zero && q[2] < zero) memcpy(corner[2], q, 12);
+        else if (zero < q[0] && q[2] < zero) memcpy(corner[3], q, 12);
+    }
+    memcpy(p, corner, sizeof corner);
 }

@@ -122,6 +122,8 @@ typedef struct {
     WTreeCell *cell;           /* +0x2c: the leaf searched last */
 } WSurface;
 
+/* A tracker with no polygon: normal up, slope forward (as 0x4744a0 makes one). */
+void WSurface_Init(WSurface *s);
 /* The polygon under p (in x, z) whose centre is nearest p in height, among those with surface bits
    (& 0xf); NULL if none. 0x4731a0 */
 WTreeElem *WSurface_FindBelow(WSurface *s, const float p[3]);

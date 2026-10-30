@@ -11,3 +11,6 @@ void CarSim_Move(void *car);       /* 0x49b710: every tick, the position by the 
 void CarSim_Turn(void *car);       /* 0x49b850: every tick, the orientation by the angular velocity */
 void CarSim_BodyPoints(Car *c);    /* 0x49ada0: the body points in the world */
 void CarSim_WheelSpin(Car *c);     /* 0x4a2570 */
+/* The body's points from the car model's 'PdnB' points (R3DCar +0xf8): the four lowest, one per corner,
+   first. 0x49ab30 */
+void CarSim_LoadBodyPoints(Car *c);

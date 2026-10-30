@@ -1,5 +1,6 @@
 /* The race's cars (game/car.c): one human car per model of the car database, its specs (.sim plus the
    engine model), the task lists. Skips (exit 0) without data. */
+#include "eagl_fake_thrash.h"
 #include "exe.h"
 #include "game/car.h"
 #include "game/race_setup.h"
@@ -17,6 +18,7 @@ int main(void)
     if (!vfs_mount_default() || !vfs_exists("Porsche.exe")) { printf("car_specs_test: no game data, skipped\n"); return 0; }
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("FAIL %s\n", err); return 1; }
+    fake_install_graphics();   /* the cars' renderers load their models */
     static const char *models[] = {"964", "356_1", "959", "boxster", "914", "993"};
     for (size_t m = 0; m < sizeof models / sizeof *models; m++) {
         memset(&g_tasks_tick, 0, sizeof g_tasks_tick);

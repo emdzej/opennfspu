@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include "game/wtree.h"
 
 enum {
     CAR_SIZE = 0x1254,
@@ -53,9 +54,14 @@ enum {
     CARP_COUNT = CARP_TASKS + 10,
 };
 
+/* The wheels' surface trackers are WSurface objects at +0x7bc + 0xc4 i (in the wheel's bytes from +4):
+   the port keeps them as native objects in surf[] (they hold pointers) and copies their surface word
+   into the bytes (+0x7e0, the tracker's +0x24) after each update. */
 typedef struct {
     uint8_t b[CAR_SIZE];
     void *p[CARP_COUNT];
+    WSurface surf[4];
+    WSurface body;     /* +0x8: the body's (its surface word copied to +0x2c) */
 } Car;
 
 static inline float *CAR_F(Car *c, int off) { return (float *)(void *)(c->b + off); }
@@ -76,6 +82,13 @@ extern int g_ntraffic;
    0x65807c): what the front end hands the race. */
 extern uint8_t g_cardesc[CAR_MAX][CARDESC_SIZE];
 extern int g_nracecars, g_ntrafficcars;
+
+/* The race's state the simulation reads: the tick counter (0x606ac4, 64 Hz), wet roads (0x6573f8), a
+   network game (0x657408). */
+extern int32_t g_sim_tick;
+extern int32_t g_race_wet;
+extern int32_t g_race_network;
+extern int32_t g_race_rollover_events;   /* 0x657a2c */
 
 /* ---- task lists (0x414c50 / 0x414cd0 / 0x414d50) ---- */
 

@@ -38,6 +38,7 @@
 00414680	Replay_WriteFinalTick	game	med	"FINAL GAMETICK=%d" into replay.rpl
 00414710	Replay_Load	game	med	Loads replay.rpl (or the default replay)
 00414870	Race_SetupSkidpad	game	low	Skidpad (test drive) race setup
+00414b30	Sim_TaskRate	sim	high	A car task's rate by distance (updates/s, ticks, dt) and whether it runs this tick
 00414d50	TaskList_Run	game	high	Runs a list of (function, argument) callbacks; the race keeps two (0x606acc every tick, 0x606ad0 even ticks)
 00414dd0	Race_SelectTrackDefaults	game	low	Track defaults (autobahn special case)
 00415010	Sim_Step	game	high	One 64 Hz simulation tick: AI, cars, physics, world, audio, network, replay
@@ -612,7 +613,18 @@
 00492960	Net_RaceMessages	net	med	In-race network messages ("Returning to frontend", finish times)
 00492b10	Net_WriteResultsHtml	net	med	Writes race results as HTML ("NfsNet")
 00493320	Net_VoiceInit	net	low	Voice recording buffer (VoiceRecBuff)
+00493b30	CarSim_TyreBump	sim	high	The tyres' bump amplitude from their parts and damage zones
+004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
 00498190	Sim_ClearContacts	sim	med	Clears the per-tick contact accumulator (+0x110c) of every race car (0x5e8b34, count 0x5e8b58) and traffic car (0x5e8c24, count 0x5e8b5c)
+004996a0	CarSim_SurfaceNoise	sim	high	The surface roughness under a wheel (random bumps by surface kind)
+004999e0	CarSim_Ground	sim	high	The wheels on the ground: contacts, suspension, pitch and roll; mean height
+0049a870	CarSim_RideHeights	sim	high	The lowest and mean body points over the ground (+0x424, +0x428)
+0049ab30	CarSim_LoadBodyPoints	sim	high	The body points from the model's PdnB points, corners first
+0049ae30	CarSim_ShiftCompression	sim	high	The wheels' compressions moved with the body
+0049b9a0	CarSim_GroundFrame	sim	high	The car's frame on the ground (+0x490..+0x4b0)
+0049bb10	CarSim_ClampTurn	sim	high	Angular velocity limits after a hard landing
+0049bbf0	CarSim_ClampSpin	sim	high	The local angular velocity held within 0.75
+0049bcb0	CarSim_Forces	sim	high	The force task: ground contact, gravity, landing, bounce
 0049c310	Parts_Load	sim	high	Loads nfs5.prt (car parts database)
 0049c430	Parts_Find	sim	med	Part lookup ("Part %d not found.")
 0049c630	Sim_LoadCarSim	sim	high	Loads <car>.sim (or default.sim): car physics parameters
@@ -622,6 +634,7 @@
 004a43b0	Timer_Tick	timer	high	128 Hz timer callback: counters at 128/64/32 Hz; the 64 Hz one is the sim target, the 32 Hz one samples input (Input_Sample + Input_QueuePacket)
 004a44e0	Timer_Start	timer	high	Resets the race counters and registers Timer_Tick
 004a4540	Timer_Stop	timer	high	Unregisters Timer_Tick
+004a4560	SimRand_Seed	sim	high	Seeds the simulation's random generator
 004a4850	LoadingScreen	game	med	Draws the era loading screen (era%d.fsh, era%dtr.fsh, MLoading.fsh) with progress
 004a51e0	Sys_Init	main	high	Error handler 0x59f970, MEM_init (24 MB object heap), TIMER_init(128 Hz), network object, KEY/joystick/MOUSE init, SYNCTASK, async file I/O (initasync 30 ops)
 004a52c0	Udff_Opena	game	high	Named after its own error message
