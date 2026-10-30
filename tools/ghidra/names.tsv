@@ -317,7 +317,6 @@
 0044dee0	RTex_readdtx	render	high	"%s%s.dtx": texture counts per size/format -> priorities
 0044e240	RTex_levelfor	render	high	Quality level 0..3 from CPU MHz, memory, video memory
 0044e760	Render_DetectCard	render	med	Card-specific workarounds (Trident Blade, Voodoo)
-0044ebe0	Render_SetupQuality	render	med	Render quality from the options: method key 0x6197f8 (1, 3, 4), detail flags
 0044f5b0	RBillBoard_CreateQuads	render	high	RBillBoard.cpp: billboard quads from points
 0044fa10	Track_LoadKeyframes	world	high	Loads <track>_forward.key / _backwards.key (camera/AI keyframes; warns on old versions)
 0044fe60	RDrawAnimArticleBundle_v0	render	struct	Virtual slot 0 of RDrawAnimArticleBundle (vtable 0x5b3cb8)
@@ -2159,3 +2158,25 @@
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005af324	crt_5af324	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
+004b7030	NFSRegistry_GetString	render	high	3D Setup value by index (table 0x5d6f28); writes the default when missing (port: RRegistry_GetString)
+004b7130	NFSRegistry_GetInt	render	high	3D Setup number by index (port: RRegistry_GetInt)
+00467640	NFSRegistryManager_ctor	render	high	Registry manager (0x118 bytes, vtable 0x5b3fbc): company, product
+00467230	Render_CreateCamera	render	high	Camera (0x138): EAGL view, viewport fractions, near, far, clear, half fov 45 (port: render.c)
+004660a0	RFrame_Init	render	high	Camera frame: orientation and rotation identity, eye and translation zero
+004661a0	RFrame_ToView	render	high	Frame to world-to-camera rotation (transposed, forward negated) and translation
+00466e70	RCamera_Setup	render	high	Viewport on mode change, view matrix from the frame, perspective
+00467ed0	Render_SetCull	render	high	Swaps the device render state's cull between 1 and 2
+00537470	RenderState_ctor	render	high	Render-state object (0x38): defaults, sent (0x5374d0), stage states (0x535870)
+005374d0	RenderState_Send	render	high	The render-state object's states to EAGL
+00537600	RenderState_SetCull	render	high	Stores the cull (+0x10); sent only when 0x5ded4c is 1 (never)
+00556e30	RDevice_ctor	render	high	Full-screen graphics device (vtable 0x5bc41c)
+005567f0	RDeviceWindowed_ctor	render	high	Windowed graphics device (vtable 0x5bc3f0; unused)
+00556eb0	RDevice_Open	render	high	GLIDE_env, texture manager, about block, render states, font, EAGL context
+00556f80	RDevice_Begin	render	high	THRASH_window(2)
+00556f90	RDevice_Present	render	high	THRASH_pageflip
+00556f50	RDevice_Clear	render	high	Background, clip to the display, clearwindow
+00556a30	RDevice_DisplaySize	render	high	Width and height of the display (0x5deac8, 0x5deacc)
+0044e190	Render_DisplayInit	render	high	Display mode globals (0x619780..), card detection, quality, 2D window size
+0044ebe0	Render_SetupQuality	render	high	Gamma, specials, car detail and the render method key 0x6197f8 from the options
+00468da0	RaceViews_ctor	render	high	The race's cameras: main (clear 0xff77bbff), overlay, quarter view
+00466df0	RCamera_Letterbox	render	med	Widescreen: the main camera's y range (0.15 .. 0.85)

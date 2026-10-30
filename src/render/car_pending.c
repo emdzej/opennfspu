@@ -15,4 +15,3 @@ void R3DCar_PendingGlobalTextures(R3DCar *car) { PENDING_NOTE(0x44d1f0, "RTex_Fi
 void R3DCar_PendingFallback(R3DCar *car, const char *name) { PENDING_NOTE(0x441940, "R3DCar_LoadCrp (stand-in car)"); }
 void R3DCar_PendingDecals(R3DCar *car) { PENDING_NOTE(0x447b80, "R3DCar_Decals"); }
 void R3DCar_PendingTexturePages(R3DCar *car) { PENDING_NOTE(0x4426c0, "R3DObject_LoadHeader (texture pages)"); }
-void R3DObject_PendingRenderState(R3DCar *car) { PENDING_NOTE(0x467ed0, "Render_SetCull"); }

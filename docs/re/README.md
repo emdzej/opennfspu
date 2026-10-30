@@ -12,6 +12,7 @@ data from the game.
 | [thrash.md](thrash.md) | The THRASH driver interface (dx7z.dll) |
 | [cars.md](cars.md) | Car models: loading, parts and LODs, the car draw |
 | [render.md](render.md) | Textures from FSH to the driver (depthconv, DTEX, TEXTURE, RTex); the material and render-method map |
+| [render-system.md](render-system.md) | Render_Init, the device, render states and the cull, cameras and views, the race frame |
 | [eagl.md](eagl.md) | EAGL2: matrices, the transformer, views, materials and layers, the draw kernels down to THRASH |
 | [../formats.md](../formats.md) | Data file formats |
 

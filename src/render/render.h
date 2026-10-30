@@ -1,0 +1,192 @@
+/* The game's render system (render module 0x464000-0x469000; no source file name in the exe): the
+   driver choice (the 3D Setup registry values, NFSRegistryManager), the render system object at 0x628130
+   with its graphics device and render-state object, the display mode and the render quality, the cameras
+   (0x138-byte objects with their own EAGL view) and the per-frame view begin / end. docs/re/render-system.md. */
+#pragma once
+#include "eagl/eagl.h"
+#include "real/set3d.h"
+#include "real/texture.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+/* ---- the 3D Setup choice (NFSRegistryManager, vtable 0x5b3fbc) ---- */
+
+/* Values of HKLM\Software\Electronic Arts\Need For Speed - Porsche Unleashed, by index into the exe's table
+   0x5d6f28 (name, type, default; a missing value is written with its default, as the original does).
+   The port has no registry: a value comes from the launch parameter of its name in lower case with '_'
+   for spaces (thrash_driver, d3d_device, thrash_resolution, hardware_acceleration, triple_buffer), else the
+   table's default. */
+enum { RREG_DRIVER = 0, RREG_DEVICE = 1, RREG_RESOLUTION = 2, RREG_HWACCEL = 3, RREG_TRIPLEBUFFER = 4 };
+void RRegistry_GetString(int key, char *dst, int cap);   /* 0x4b7030 */
+int RRegistry_GetInt(int key);                           /* 0x4b7130 */
+
+/* ---- the options the render system reads (the option records of Options_Parse 0x4b0dc0) ---- */
+
+/* The render options of fe.txt, the settings file the game reads at start (Options_Read 0x4b6450, not
+   ported yet: render_options.c reads these keys from it, with the original's defaults for missing ones). */
+typedef struct {
+    char driver[32];            /* 0x657a38 DRIVER: "registry" = the 3D Setup's choice */
+    int width, height, depth;   /* 0x657a48, 0x657a4c, 0x657a50 */
+    int window;                 /* 0x657a54 */
+    int renderdevice;           /* 0x657a58 */
+    int widescreen;             /* 0x657d5c */
+    int carchrome;              /* 0x657d60: reflections 0 / 1 / 2 */
+    int cardetail;              /* 0x657d68 */
+    int specialfx;              /* 0x657d6c */
+    int adjustableviewdistance; /* 0x657d70 */
+    int headlights;             /* 0x657d78 */
+    int gammacorrection;        /* 0x657d80 */
+    int drawsync;               /* 0x657da0 */
+    int viewdistance;
+} RenderOptions;
+extern RenderOptions g_renderopts;
+void RenderOptions_Load(void);
+
+/* ---- the display mode (0x619780..) ---- */
+
+typedef struct {
+    int32_t stamp;              /* 0x619780: changes with every mode set (cameras reset their viewport) */
+    int32_t width, height;      /* 0x619784, 0x619788 */
+    int32_t bpp;                /* 0x61978c (15 counts as 16) */
+} RenderDisplay;
+extern RenderDisplay g_display;
+
+/* ---- the render-state object (0x38 bytes, 0x537470) ---- */
+
+typedef struct {
+    int32_t v00;                /* +0x00 */
+    int32_t state28;            /* +0x04: setstate 0x28 (3) */
+    int32_t state04;            /* +0x08: setstate 4 (1) */
+    int32_t state39;            /* +0x0c: setstate 0x39 (1) */
+    int32_t cull;               /* +0x10: 1 counter-clockwise faces culled, 2 clockwise (setstate 2) */
+    int32_t state09;            /* +0x14 */
+    int32_t state15;            /* +0x18 */
+    int32_t state0e;            /* +0x1c (alias) */
+    int32_t state16;            /* +0x20 (alias) */
+    uint32_t state17;           /* +0x24 (alias): 0.99999 */
+    int32_t state0f;            /* +0x28: -1 */
+    int32_t state3c;            /* +0x2c */
+    int32_t biasbase;           /* +0x30: depth-bias base */
+    uint32_t state43;           /* +0x34 (alias): 1.0 */
+} RenderState;
+RenderState *RenderState_ctor(RenderState *rs);          /* 0x537470 */
+void RenderState_Send(RenderState *rs);                  /* 0x5374d0 */
+void RenderState_SetCull(RenderState *rs, int cull);     /* 0x537600 */
+
+/* ---- the graphics device (EAGL device, vtable 0x5bc41c; the windowed kind 0x5bc3f0) ---- */
+
+struct RDevice;
+typedef struct {
+    void (*destroy)(struct RDevice *d, int free_it);     /* 0x556e50 */
+    bool (*open)(struct RDevice *d);                     /* 0x556eb0 */
+    void (*begin)(struct RDevice *d);                    /* 0x556f80: drawing to the back buffer */
+    void (*present)(struct RDevice *d);                  /* 0x556f90: page flip */
+    void (*clear)(struct RDevice *d);                    /* 0x556f50 */
+} RDeviceVtbl;
+
+typedef struct RDevice {
+    const RDeviceVtbl *vt;      /* +0x00 */
+    RenderState *rs;            /* +0x04 */
+    uint32_t caps;              /* +0x08: the driver's about block +0x40 */
+    int32_t mode;               /* +0x0c: 1 */
+    const ThrashAbout *about;   /* +0x10 */
+    EaglView *current;          /* +0x14: the view between begin and end (EAGL writes it) */
+    uint32_t pad18[2];
+    TexGraphics *graphics;      /* +0x20 */
+} RDevice;
+
+/* ---- cameras (0x138 bytes, Render_CreateCamera 0x467230) ---- */
+
+/* A camera's frame (0x60 bytes at +0xb8): the input is the orientation (rows: right, up, back) and the
+   eye; RFrame_ToView 0x4661a0 makes the world-to-camera rotation and translation from them. */
+typedef struct {
+    float rot[9];               /* +0x00: world to camera */
+    float trans[3];             /* +0x24 */
+    float orient[9];            /* +0x30 */
+    float eye[3];               /* +0x54 */
+} RFrame;
+
+typedef struct {
+    int32_t stamp;              /* +0x000: the display mode its viewport was set for */
+    int32_t type;               /* +0x004: 0 main, 1 .., 3 overlay, 4 mirror, 5/6 front end */
+    int32_t v008;
+    EaglView *view;             /* +0x00c */
+    float x0, y0;               /* +0x010, +0x014: the viewport, fractions of the screen */
+    float znear;                /* +0x018 */
+    float x1, y1;               /* +0x01c, +0x020 */
+    float zfar;                 /* +0x024 */
+    uint32_t clear;             /* +0x028: clear colour (0 = no clear) */
+    int32_t update[2];          /* +0x02c: type, + 0x030 (camera update, 0x461060) */
+    uint8_t pad034[0x84];
+    RFrame frame;               /* +0x0b8 (eye at +0x10c) */
+    uint8_t flags[5];           /* +0x118..0x11c */
+    uint8_t pad11d[3];
+    float range;                /* +0x120 */
+    float viewdist, viewdist2;  /* +0x124, +0x128 */
+    int32_t v12c;               /* +0x12c */
+    float halffov;              /* +0x130: degrees (45 = 90 degrees across) */
+    uint8_t active;             /* +0x134: between View_Begin and View_End */
+    uint8_t pad135[3];
+} RCamera;
+
+#if UINTPTR_MAX == 0xffffffffu
+_Static_assert(sizeof(RenderState) == 0x38 && sizeof(RCamera) == 0x138 && sizeof(RFrame) == 0x60, "the original's layouts");
+#endif
+
+/* ---- the render system (0x80 bytes at *0x628130) ---- */
+
+typedef struct {
+    int32_t v00;                /* +0x00 */
+    float znear;                /* +0x04: the cameras' near plane, 0.15 */
+    float zfar;                 /* +0x08: far plane, 700 */
+    float depthfactor;          /* +0x0c: View_Begin: far / (far - near) * near */
+    RCamera *camera;            /* +0x10: the camera between View_Begin and View_End */
+    uint8_t pad14[0x44];
+    uint32_t cpu;               /* +0x58: CPU_detect */
+    int32_t v5c;
+    uint8_t windowed;           /* +0x60: 0 (the game always builds the full-screen device) */
+    uint8_t pad61[3];
+    int32_t v64;                /* +0x64 */
+    int32_t mode;               /* +0x68: the video mode set last */
+    TexGraphics *graphics;      /* +0x6c */
+    RDevice *device;            /* +0x70 */
+    TexManager *textures;       /* +0x74 */
+    int32_t v78;
+    EaglView *view2d;           /* +0x7c: the 2D (orthographic) view */
+} RenderSystem;
+
+extern RenderSystem *g_render;      /* 0x628130 */
+extern RenderState *g_racerstate;   /* 0x62814c: the race's copy of the device's render states */
+
+void Render_Init(void);                                  /* 0x4673b0 */
+RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, int windowed); /* 0x467720 */
+void Render_Shutdown(void);                              /* 0x467680 */
+/* The driver opened, its display chosen, the video mode set (GLIDE_env 0x556910, the real library's). */
+bool GLIDE_env(bool windowed, const char *driver, int display, int mode);
+void Render_DisplayInit(void);                           /* 0x44e190 (RTex's display init) */
+void Render_SetupQuality(void);                          /* 0x44ebe0: method key, specials, gamma */
+void Render_SetCull(RenderSystem *r);                    /* 0x467ed0: flips the device's cull */
+void Render_BeginFrame(RenderSystem *r);                 /* 0x468010 */
+void Render_EndFrame(RenderSystem *r);                   /* 0x468030 */
+
+RCamera *Render_CreateCamera(RenderSystem *r, int type, float x0, float y0, float x1, float y1,
+                             uint32_t clear, float znear, float zfar);   /* 0x467230 */
+void RCamera_Free(RCamera *c);
+void RFrame_Init(RFrame *f);                             /* 0x4660a0 */
+void RFrame_ToView(RFrame *f);                           /* 0x4661a0 */
+/* The camera's viewport (when the display mode changed), view matrix and projection. 0x466e70 */
+void RCamera_Setup(RCamera *c);
+void View_Begin(RenderSystem *r, RCamera *c);            /* 0x467170 */
+void View_End(RenderSystem *r);                          /* 0x4671e0 */
+
+/* One race frame (0x468900) for the race renderer: the views, the HUD, the flip. What isn't ported is a
+   pending note (src/render/pending.c; header render_pending.h). */
+typedef struct {
+    int32_t v00;
+    RCamera *main;              /* +0x04 */
+    RCamera *overlay;           /* +0x08 */
+    RCamera *mirror;            /* +0x0c */
+} RaceViews;
+RaceViews *RaceViews_ctor(RaceViews *v);                 /* 0x468da0 */
+void Render_MainViews(RaceViews *v);                     /* 0x468ae0 */
+void Render_Frame(RaceViews *v);                         /* 0x468900 */
