@@ -53,7 +53,11 @@ static bool start_position(const char *track, float pos[3])
     char path[128];
     snprintf(path, sizeof path, "%s%s_fstart.scn", g_track_dir, track);
     size_t n = 0;
-    char *t = (char *)vfs_read_all(path, &n);
+    uint8_t *raw = vfs_read_all(path, &n);
+    if (!raw) return false;
+    char *t = malloc(n + 1);   /* vfs_read_all's data isn't NUL-terminated */
+    if (t) { memcpy(t, raw, n); t[n] = 0; }
+    free(raw);
     if (!t) return false;
     char *e = strstr(t, "TRIGGER_ELEMENT");
     bool ok = e && sscanf(strchr(e, '\n') ? strchr(e, '\n') : e, "%f %f %f", &pos[0], &pos[1], &pos[2]) == 3;
