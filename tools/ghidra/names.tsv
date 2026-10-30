@@ -1844,3 +1844,5 @@
 005a0ce0	UFileHandler_mapview	util	high	UFileHandler: mapped view of the file (0x568350 -> 0x592240)
 005aecb0	SHAPE_loadfile_glue	real	high	SHAPE_loadfile without abort
 005aedf0	MEM_protect	mem	high	VirtualProtect of whole pages (read-only or read-write)
+00574d30	THRASH_nogetstate	render	high	set3d.c: getstate default when the driver lacks it (returns 0) (port: src/real/set3d.c)
+00574d40	THRASH_notfree	render	high	set3d.c: tfree default when the driver lacks it (returns 0)
