@@ -183,7 +183,8 @@ void R3DMaterial_OverrideStream(R3DMaterial *mat, uint32_t id, void *data, uint3
     mat->method->streams[s].data = data;
 }
 
-/* The data of a 'pr' stream: the part's item of a kind (below 0x100) or the object's record of a key. */
+/* The data of a 'pr' stream: the part's item of a kind (below 0x100) or the record of a key in the part's
+   article. */
 static uint8_t *stream_base(R3DPart *part, UData *root, uint16_t kind, uint16_t index)
 {
     if (kind < 0x100) {
@@ -192,8 +193,13 @@ static uint8_t *stream_base(R3DPart *part, UData *root, uint16_t kind, uint16_t 
         if (kind == 0 && part->verts) return (uint8_t *)part->verts;
         return R3DPart_Item(part, kind, index == 0xffff ? 0xffffffffu : index);
     }
-    uint32_t id = (uint32_t)kind << 16 | (index != 0xffff ? index : 0x2020);
-    UData *r = root ? UData_find(root, id) : NULL;
+    /* A record of the part's own article (0x44a249: `mov ecx, [part]` before the lookup 0x59f570), not
+       the object's root: the '$n' face planes, for one, are per part. The id is the kind and the index as
+       is: the original's "no index" test (0x2020) compares the zero-extended 16-bit index with -1, which
+       never matches. */
+    (void)root;
+    uint32_t id = (uint32_t)kind << 16 | index;
+    UData *r = UData_find(part->article, id);
     return r ? UData_data(r) : NULL;
 }
 
