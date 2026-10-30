@@ -1,0 +1,94 @@
+name: CI
+
+# Builds the native core and every test program, the gasm module opennfspu.wasm and the gasm bundles
+# (macOS, Linux, Windows; smoke-tested on macOS and Linux x86_64) on each push / PR.
+# The tests need the original game data (not redistributable): without it they skip, so CI runs them as a
+# smoke test only. Run them locally with your copy of the game (OPENNFSPU_DATA, default ./game).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-Werror
+      - name: build (core + tests)
+        run: cmake --build build -j
+      - name: tests (skip without game data)
+        run: shopt -s nullglob; for t in build/*_test; do "$t" || exit 1; done
+      - name: check Python tools compile
+        run: find tools -name '*.py' -exec python3 -m py_compile {} +
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The SDK version lives in tools/fetch-gasm-sdk.sh (GASM_VERSION).
+      - name: fetch wasi-sdk and the gasm C SDK
+        run: tools/fetch-gasm-sdk.sh
+      - name: configure (gasm)
+        run: >-
+          cmake -S . -B build-gasm -DOPENNFSPU_PLATFORM=gasm -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=.deps/gasm-c-sdk/cmake/gasm-toolchain.cmake
+          -DWASI_SDK_PREFIX="$PWD/.deps/wasi-sdk"
+      - name: build opennfspu.wasm
+        run: |
+          cmake --build build-gasm -j
+          ls -l build-gasm/opennfspu.wasm
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opennfspu-wasm
+          path: build-gasm/opennfspu.wasm
+          retention-days: 14
+
+  # The gasm bundles (tools/package-gasm.sh) from the module above, smoke-tested without game data. The
+  # release workflow (release.yml) does the same for every platform on its own OS, Windows included.
+  gasm-bundle-macos:
+    needs: wasm
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: opennfspu-wasm
+          path: wasm
+      - name: package and smoke test
+        run: |
+          OPENNFSPU_WASM=wasm/opennfspu.wasm tools/package-gasm.sh "0.0.0-ci.${GITHUB_SHA::7}" macos-universal \
+            "$(tools/fetch-gasm-runner.sh macos-universal)" dist
+          tools/smoke-gasm-bundle.sh dist/opennfspu-gasm-*-macos-universal.zip
+
+  gasm-bundle-linux:
+    needs: wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: opennfspu-wasm
+          path: wasm
+      - name: shellcheck the launchers and packaging scripts
+        run: shellcheck tools/*.sh tools/gasm-bundle/*.sh docs/scripts/*.sh
+      - name: package (Linux x86_64 and arm64, Windows x86_64)
+        run: |
+          for p in linux-x86_64 linux-arm64 windows-x86_64; do
+            OPENNFSPU_WASM=wasm/opennfspu.wasm tools/package-gasm.sh "0.0.0-ci.${GITHUB_SHA::7}" "$p" \
+              "$(tools/fetch-gasm-runner.sh "$p")" dist
+          done
+      - name: runtime libraries (ALSA)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libasound2t64
+      - name: smoke test (Linux x86_64)
+        run: tools/smoke-gasm-bundle.sh dist/opennfspu-gasm-*-linux-x86_64.tar.gz

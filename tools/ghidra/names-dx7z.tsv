@@ -1,0 +1,46 @@
+# dx7z.dll (THRASH for Direct3D 7, image base 0x60000000): addr<TAB>name<TAB>module<TAB>confidence<TAB>description
+# Apply: ghidra script run tools/ghidra/ApplyNames.java --project nfspu --program dx7z.dll -- "$PWD/tools/ghidra/names-dx7z.tsv"
+0x60001c30	DX7_StateSlot	thrash	high	state id -> slot in the recorded-state table (ranges at 0x60018098)
+0x60001c80	DX7_RecordState	thrash	high	records a state value for getstate, calls the state callback (setstate 0x27)
+0x60001e80	DX7_SelectDefaultDisplay	thrash	medium	THRASH_DISPLAY env or the given display
+0x60001590	DX7_LockWindowFlags	thrash	high	lockwindow body with DDLOCK flags (0 rw, 1 read-only, 2 write-only)
+0x600013a0	DX7_ResetClip	thrash	high	zeroes the clip rectangle
+0x600020a0	DX7_FindMode	thrash	high	display mode index best matching w, h, bpp
+0x600069a0	DX7_BuildFogTable	thrash	high	256-entry custom fog table from 64 entries, inverted
+0x60006a40	DX7_FlushBatch	thrash	high	draws the batch if it has vertices
+0x60006a50	DX7_DrawBatch	thrash	high	DrawIndexedPrimitive of the batch, resets it
+0x60006ab0	DX7_SetBatchFormat	thrash	high	flush, capacity = 0x1fa0 / stride, buffer choice
+0x60006af0	DX7_BatchTri	thrash	high	one triangle into the batch (bias, flat white, fog table)
+0x60006da0	DX7_BatchTriMesh	thrash	high	indexed triangles into the batch with software culling
+0x600070f0	DX7_BatchQuadMesh	thrash	high	indexed quads into the batch with software culling
+0x60007520	DX7_BatchQuad	thrash	high	one quad (two triangles) into the batch
+0x60007880	DX7_DrawStripDirect	thrash	high	indexed strip straight to the device
+0x60007900	DX7_DrawFanDirect	thrash	high	indexed fan straight to the device
+0x60007980	DX7_BatchLine	thrash	high	one line into the batch
+0x60007b60	DX7_BatchLineMesh	thrash	high	indexed lines into the batch
+0x60007d90	DX7_DrawPoints	thrash	high	points drawn from the caller's vertices, adjusted in place
+0x60007e70	DX7_BeginScene	thrash	high	BeginScene (unlocks first)
+0x60007ee0	DX7_EndScene	thrash	high	flush + EndScene, resets the depth bias
+0x60007f30	DX7_BindTexture	thrash	high	SetTexture; handles < 0x10 unbind stages
+0x60008050	DX7_SetTSS	thrash	high	SetTextureStageState inside a scene after the batch
+0x60008090	DX7_SetRS	thrash	high	SetRenderState inside a scene after the batch
+0x600080d0	DX7_Flip	thrash	high	Flip, or Blt of the back buffer when windowed
+0x60008280	DX7_SurfacesOk	thrash	medium	IsLost on both surfaces
+0x600082c0	DX7_SetMaterialColour	thrash	high	SetMaterial diffuse/ambient from 0xRRGGBB (state 3)
+0x60008380	DX7_Clear	thrash	high	Clear one rect: target unless the z window, z, stencil
+0x600087a0	DX7_ApplyAboutOverrides	thrash	medium	THRASH_<name> environment overrides of the about block
+0x60008730	DX7_EnvOverride	thrash	medium	value or its THRASH_<name> environment override
+0x600089d0	DX7_SetState400	thrash	low	stores setstate 400
+0x6000a040	DX7_CardSubtype	thrash	high	card id from the PCI vendor/device id
+0x6000a430	DX7_StoreState	thrash	high	setstate's default: states only stored
+0x6000a630	DX7_DefaultStates	thrash	high	the states every video mode starts with
+0x6000b1b0	DX7_Abort	thrash	high	abort message (file, line)
+0x6000b180	DX7_Warn	thrash	medium	debug message
+0x6000b930	DX7_CopyBytes	thrash	high	memcpy (SSE / MMX / 3DNow! variants)
+0x6000b9c0	DX7_EnumTextureFormats	thrash	high	texture format table for THRASH_about
+0x6000bb90	DX7_FindPixelFormat	thrash	high	enumerated pixel format matching palette bits / ARGB bits / fourcc
+0x6000bdd0	DX7_CreateTexture	thrash	high	staging + texture surfaces (+ palette) for a talloc record
+0x6000c230	DX7_UploadTexture	thrash	high	tupdate body: Blt level 0, palette, mips
+0x6000c390	DX7_UploadMips	thrash	high	mip levels from the data following level 0
+0x60008550	DX7_AllocTexRecord	thrash	medium	texture record allocation
+0x60008590	DX7_FreeTexRecord	thrash	medium	texture record release

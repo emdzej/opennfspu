@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Play | OpenNFSPU</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Run Need for Speed: Porsche Unleashed (2000) in your browser with OpenNFSPU, using the data from your own copy of the game.">
+<meta name="theme-color" content="#a3121e">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="play.css">
+<script type="importmap">
+{ "imports": {
+  "@emdzej/csfs-core": "./vendor/csfs/core/index.js",
+  "@emdzej/csfs-fsa": "./vendor/csfs/fsa/index.js",
+  "@emdzej/csfs-opfs": "./vendor/csfs/opfs/index.js"
+} }
+</script>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="/"><img src="/favicon.svg" alt="" width="26" height="26"> OpenNFSPU</a>
+  <nav>
+    <a href="/guide/">Guide</a>
+    <a href="/guide/status">Status</a>
+    <a href="/play/" aria-current="page">Play</a>
+    <a href="https://github.com/emdzej/opennfspu">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <section id="setup">
+    <h1>Porsche Unleashed in your browser</h1>
+    <p class="lead">OpenNFSPU runs here as <code>opennfspu.wasm</code> on the
+      <a href="https://gasm.emdzej.pl">gasm</a> runtime: the same module as on the desktop, a port of the
+      original game's code, reading the cars, tracks, sounds and music from <strong>your own copy of Need for
+      Speed: Porsche Unleashed</strong>. Nothing from the game is on this site, and nothing you pick leaves
+      your computer.</p>
+    <p class="lead small">OpenNFSPU is early: the infrastructure and the file format decoders are in place,
+      the game itself is not playable yet. See <a href="/guide/status">Status</a>.</p>
+
+    <div class="cols">
+      <div class="card">
+        <h2>What you need</h2>
+        <ul>
+          <li><strong>Need for Speed: Porsche Unleashed</strong> for Windows, installed and updated to
+            <strong>version 3.5</strong>: the folder with <code>GameData</code>, <code>FEData</code> and
+            <code>Porsche.exe</code>, or an <code>.iso</code> image of it. See <a href="/guide/game-data">Game data</a>.</li>
+          <li>A browser with WebAssembly, Web Workers, WebGL 2 and OffscreenCanvas: a recent Chrome, Edge,
+            Firefox, or Safari 17 and later.</li>
+          <li>About 520 MB of browser storage to import the data (once; later visits start at once), or
+            none to play without importing.</li>
+          <li>A keyboard, or a gamepad.</li>
+        </ul>
+      </div>
+      <div class="card" id="choose">
+        <h2 id="choose-title">Choose your game</h2>
+        <div id="imported" hidden>
+          <p><strong>Imported:</strong> <span id="imported-desc"></span></p>
+          <div class="row">
+            <button id="play-opfs" class="primary">Play</button>
+            <button id="remove">Remove imported data</button>
+          </div>
+          <p class="small" id="storage"></p>
+          <p class="small" id="persist-row" hidden>The browser may clear site data when disk space runs low.
+            <button id="persist" class="link">Keep it</button></p>
+          <p class="small">Or choose the game again below to replace it.</p>
+        </div>
+        <div class="row">
+          <button id="pick-folder" class="primary">Choose your game folder</button>
+          <button id="pick-image">Choose a disc image</button>
+        </div>
+        <p class="small">The installed game, for example
+          <code>C:\Program Files (x86)\EA GAMES\Need For Speed - Porsche Unleashed</code>, or an
+          <code>.iso</code> image of that folder (<a href="/howto/extract-game">how to make one</a>). The setup
+          disc itself won't do: install the game first.</p>
+        <input id="folder-input" type="file" webkitdirectory multiple hidden>
+        <input id="image-input" type="file" accept=".iso,.bin,.ISO,.BIN" hidden>
+
+        <div id="check" hidden>
+          <ul id="check-list" class="checks"></ul>
+          <div class="row" id="check-actions">
+            <button id="import" class="primary">Import and play</button>
+            <button id="play-direct">Play without importing</button>
+          </div>
+          <p class="small">Importing copies the files the game reads into this site's private browser storage
+            (OPFS). Playing without importing reads them from the folder you picked, which you'll need to pick
+            again next time.</p>
+        </div>
+
+        <div id="progress" hidden>
+          <progress id="progress-bar" max="1" value="0"></progress>
+          <p class="small" id="progress-text"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="game" hidden>
+    <div id="stage" class="stage">
+      <canvas id="screen" width="640" height="480" aria-label="Need for Speed: Porsche Unleashed" tabindex="0"></canvas>
+    </div>
+    <div class="toolbar">
+      <button id="fullscreen">Fullscreen</button>
+      <button id="sound">Sound: on</button>
+      <button id="stop">Stop</button>
+      <span id="status" class="small"></span>
+    </div>
+  </section>
+
+  <p id="message" class="message" role="status" hidden></p>
+
+  <section id="controls">
+    <h2>Controls</h2>
+    <p>The game reads the keyboard directly, with the original's default keys. More in
+      <a href="/guide/controls">Controls</a>.</p>
+    <p class="small">Holding Esc for a second stops the game. In fullscreen the browser takes Esc to leave
+      fullscreen. Profiles and options are kept in this browser.</p>
+  </section>
+</main>
+
+<footer class="foot"><p class="powered">Powered by <a href="https://gasm.emdzej.pl"><img src="https://gasm.emdzej.pl/badge/built-for-gasm-dark.svg" alt="Built for gasm" width="120" height="44"></a></p>
+  OpenNFSPU is released under the GPL-3.0. Need for Speed: Porsche Unleashed is &copy; 2000 Electronic Arts.
+  Porsche is a trademark of Dr. Ing. h.c. F. Porsche AG. OpenNFSPU contains no original code or assets and is
+  not affiliated with them.</footer>
+
+<script type="module" src="play.js"></script>
+</body>
+</html>

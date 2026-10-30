@@ -1,0 +1,200 @@
+/* OpenNFSPU theme: restrained, after the look of Porsche Unleashed's frontend: brushed silver and graphite,
+   with the deep red and gold of the site's mark (docs/public/favicon.svg) as the only accents.
+   - metal: silver #c9ccd1, highlight #eef0f2, graphite #2a2d31, carbon #0f1012;
+   - accents: red #a3121e (lighter #d23a44 on dark), gold #d4af37.
+   Light mode is silver paper with graphite text and red links; dark mode is graphite with silver text and
+   the gold as the accent. */
+
+:root {
+  --pu-silver: #c9ccd1;
+  --pu-silver-hi: #eef0f2;
+  --pu-graphite: #2a2d31;
+  --pu-carbon: #0f1012;
+  --pu-red: #a3121e;
+  --pu-red-light: #d23a44;
+  --pu-gold: #d4af37;
+  --pu-gold-light: #e6c766;
+  /* Brushed metal, for the hero name. */
+  --pu-metal: linear-gradient(180deg, #5c6168 0%, #2a2d31 48%, #16181a 52%, #4a4f56 100%);
+  --pu-metal-dark: linear-gradient(180deg, #f4f5f7 0%, #c9ccd1 48%, #9aa0a8 52%, #d8dbdf 100%);
+  /* The racing line: red into gold. */
+  --pu-line: linear-gradient(90deg, var(--pu-red), var(--pu-red-light) 40%, var(--pu-gold) 75%, rgba(212, 175, 55, 0));
+
+  --vp-c-brand-1: #a3121e;
+  --vp-c-brand-2: #b81826;
+  --vp-c-brand-3: #a3121e;
+  --vp-c-brand-soft: rgba(163, 18, 30, 0.1);
+
+  --vp-c-bg: #f7f7f8;
+  --vp-c-bg-alt: #eeeff1;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #e8e9ec;
+  --vp-c-divider: #d5d7db;
+  --vp-c-gutter: #d5d7db;
+  --vp-c-text-1: #1b1d20;
+  --vp-c-text-2: #4d525a;
+
+  --vp-c-tip-1: #4d525a;
+  --vp-c-tip-2: #5f646c;
+  --vp-c-tip-3: #6c727a;
+  --vp-c-tip-soft: rgba(108, 114, 122, 0.12);
+  --vp-c-warning-1: #8a6a10;
+  --vp-c-warning-2: #a07c16;
+  --vp-c-warning-3: var(--pu-gold);
+  --vp-c-warning-soft: rgba(212, 175, 55, 0.16);
+  --vp-c-danger-1: #a3121e;
+  --vp-c-danger-2: #b81826;
+  --vp-c-danger-3: #d23a44;
+  --vp-c-danger-soft: rgba(163, 18, 30, 0.1);
+
+  --vp-button-brand-bg: var(--pu-red);
+  --vp-button-brand-hover-bg: #b81826;
+  --vp-button-brand-active-bg: #8c0f1a;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-alt-bg: #e2e4e7;
+  --vp-button-alt-hover-bg: #d5d7db;
+  --vp-button-alt-text: #1b1d20;
+  --vp-button-alt-hover-text: #0f1012;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: var(--pu-metal);
+  --vp-home-hero-image-background-image: radial-gradient(circle at 50% 40%, rgba(201, 204, 209, 0.9), rgba(163, 18, 30, 0.18) 55%, rgba(15, 16, 18, 0) 75%);
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vp-c-default-soft: rgba(42, 45, 49, 0.07);
+}
+
+.dark {
+  --vp-c-brand-1: var(--pu-gold);
+  --vp-c-brand-2: var(--pu-gold-light);
+  --vp-c-brand-3: #b8952c;
+  --vp-c-brand-soft: rgba(212, 175, 55, 0.14);
+
+  --vp-c-bg: #0f1012;
+  --vp-c-bg-alt: #0a0b0c;
+  --vp-c-bg-elv: #1a1c1f;
+  --vp-c-bg-soft: #1a1c1f;
+  --vp-c-divider: #2c2f34;
+  --vp-c-gutter: #050506;
+  --vp-c-text-1: #e6e8eb;
+  --vp-c-text-2: #a6abb3;
+
+  --vp-c-tip-1: var(--pu-silver);
+  --vp-c-tip-2: #b3b7bd;
+  --vp-c-tip-soft: rgba(201, 204, 209, 0.1);
+  --vp-c-warning-1: var(--pu-gold-light);
+  --vp-c-warning-2: var(--pu-gold);
+  --vp-c-warning-soft: rgba(212, 175, 55, 0.14);
+  --vp-c-danger-1: #e5646b;
+  --vp-c-danger-2: var(--pu-red-light);
+  --vp-c-danger-soft: rgba(210, 58, 68, 0.16);
+
+  --vp-button-brand-bg: var(--pu-red);
+  --vp-button-brand-hover-bg: #b81826;
+  --vp-button-alt-bg: #24272b;
+  --vp-button-alt-hover-bg: #2f3338;
+  --vp-button-alt-text: #e6e8eb;
+  --vp-button-alt-hover-text: #fff;
+
+  --vp-home-hero-name-background: var(--pu-metal-dark);
+  --vp-home-hero-image-background-image: radial-gradient(circle at 50% 40%, rgba(201, 204, 209, 0.28), rgba(163, 18, 30, 0.25) 50%, rgba(15, 16, 18, 0) 75%);
+}
+
+/* The racing line as a thin bar under the navigation. */
+.VPNav::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background: var(--pu-line);
+  pointer-events: none;
+}
+
+.VPNavBarTitle .title {
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.VPHero .text {
+  color: var(--vp-c-text-1);
+}
+
+.VPButton {
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+}
+.VPButton.alt {
+  border: 1px solid var(--vp-c-divider) !important;
+}
+
+/* Feature cards: metal panels with a red edge. */
+.VPFeature {
+  border: 1px solid var(--vp-c-divider) !important;
+  border-left: 3px solid var(--pu-red) !important;
+  background: linear-gradient(160deg, #ffffff, var(--vp-c-bg-soft)) !important;
+}
+.dark .VPFeature {
+  background: linear-gradient(160deg, rgba(58, 61, 66, 0.55), rgba(15, 16, 18, 0.96)) !important;
+  border-color: rgba(201, 204, 209, 0.14) !important;
+  border-left-color: var(--pu-red) !important;
+}
+.dark .VPFeature .title {
+  color: var(--pu-silver-hi);
+}
+
+.VPHero .image-src {
+  border-radius: 6px;
+  max-width: 340px !important;
+}
+@media (min-width: 960px) {
+  .VPHero .image-src { max-width: 460px !important; }
+}
+
+.vp-doc h2 {
+  border-top-color: var(--vp-c-divider);
+}
+
+.vp-doc table th {
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc img {
+  border-radius: 6px;
+}
+
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+
+/* gasm's official "Built for gasm" badge (https://gasm.emdzej.pl/dev/badge): the variant that matches the theme. */
+.gasm-badge-dark { display: none; }
+.dark .gasm-badge-light { display: none; }
+.dark .gasm-badge-dark { display: inline; }
+
+/* Screenshot grids (home, guide). */
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.shots figure { margin: 0; }
+.shots img { width: 100%; border-radius: 6px; box-shadow: 0 0 0 1px var(--vp-c-divider); }
+.shots figcaption { font-size: 0.85em; color: var(--vp-c-text-2); margin-top: 4px; }
+
+/* Keyboard keys in the controls tables: brushed silver. */
+.vp-doc kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 6px;
+  border: 1px solid #a6abb3;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #fbfbfc, #e2e4e7);
+  color: var(--pu-carbon);
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.85em;
+  line-height: 1.6;
+  text-align: center;
+}
+.dark .vp-doc kbd { border-color: #4d525a; background: linear-gradient(180deg, #2f3338, #1f2124); color: var(--pu-silver-hi); }

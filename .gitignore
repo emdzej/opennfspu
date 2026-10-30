@@ -1,0 +1,49 @@
+# Original game data and anything derived from it (copyrighted: never commit)
+/game/
+/porsche.exe
+/dx7z.dll
+/re/
+/out/
+*.iso
+*.ISO
+*.bin
+*.cue
+*.mdf
+*.nrg
+*.rar
+*.viv
+*.fsh
+*.crp
+# synthetic test fixtures (made by the tests' generators, no game data) may use the game's extensions
+!tests/fixtures/**
+
+# Ghidra projects, if kept in the checkout
+*.gpr
+*.rep/
+/ghidra/
+
+# Build output
+/build/
+/build*/
+/dist/
+
+# Downloaded toolchains and runners (tools/fetch-gasm-sdk.sh, tools/fetch-gasm-runner.sh)
+/.deps/
+
+# Docs site (generated: docs/scripts/vendor-web.sh, docs/scripts/copy-wasm.sh)
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/public/play/vendor/
+docs/public/play/*.wasm
+
+# Python
+tools/.venv/
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/

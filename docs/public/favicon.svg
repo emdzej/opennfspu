@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- OpenNFSPU's own mark: a sweeping bend of road in deep red with a gold racing line, on graphite with
+       a silver rim. Colours from docs/.vitepress/theme/porsche.css; tools/gasm-bundle/icon.py draws the
+       same geometry for the app icons. -->
+  <defs>
+    <radialGradient id="g" cx="0.35" cy="0.25" r="0.9">
+      <stop offset="0" stop-color="#4a4e55"/>
+      <stop offset="0.55" stop-color="#1f2124"/>
+      <stop offset="1" stop-color="#0e0f11"/>
+    </radialGradient>
+    <clipPath id="c"><rect x="3.25" y="3.25" width="57.5" height="57.5" rx="10.75"/></clipPath>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="url(#g)"/>
+  <g clip-path="url(#c)" fill="none" stroke-linecap="round">
+    <path d="M12 20 A34 34 0 0 1 46 54" stroke="#050506" stroke-width="10" opacity="0.6" transform="translate(1.5 1.5)"/>
+    <path d="M12 20 A34 34 0 0 1 46 54" stroke="#a3121e" stroke-width="10"/>
+    <path d="M12 20 A34 34 0 0 1 46 54" stroke="#d4af37" stroke-width="1.6"/>
+  </g>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="none" stroke="#c9ccd1" stroke-width="2.5"/>
+</svg>

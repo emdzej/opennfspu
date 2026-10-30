@@ -1,0 +1,6 @@
+-std=c11
+-Isrc
+-I.deps/gasm-c-sdk/include
+-Wall
+-Wextra
+-Wno-unused-parameter

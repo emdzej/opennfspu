@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Porsche Unleashed (gasm)
+GenericName=Racing game
+Comment=OpenNFSPU, a reimplementation of Need for Speed: Porsche Unleashed (2000), on gasm. Needs your installed game (version 3.5).
+Exec="@DIR@/opennfspu.sh"
+Icon=@DIR@/opennfspu.png
+Terminal=false
+Categories=Game;SportsGame;
