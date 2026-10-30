@@ -72,10 +72,9 @@ int EAGL_SetDestStride(int bytes);                                    /* 0x537fc
 int EAGL_SetCodeStride(int bytes);                                    /* 0x537fe0 (0 = 4) */
 uint32_t EAGL_Transform(uint32_t flags, int n, const void *src, void *dst); /* 0x538320 */
 
-/* Clip codes (per vertex, from the transformer): low byte = outside the guard band (0x04 bottom?,
-   see docs/re/eagl.md for the plane bits) | 1 nearer than near | 2 farther than far; bits 8..13 the same
-   planes of the view frustum itself. A primitive is rejected when the AND of its codes & 0x3c03 is set and
-   needs clipping when the OR & 0x3f is. */
+/* Clip codes (per vertex, from the transformer): 1 nearer than near, 2 farther than far, 0x04..0x20 outside
+   the guard band (one bit per side plane), 0x0400..0x2000 outside the view frustum (docs/re/eagl.md). A
+   primitive is rejected when the AND of its codes & 0x3c03 is set and needs clipping when the OR & 0x3f is. */
 enum { EAGL_CODE_REJECT = 0x3c03, EAGL_CODE_CLIP = 0x3f };
 
 /* ---- views ---- */

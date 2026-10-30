@@ -1315,7 +1315,62 @@
 00537010	MOUSE_getstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
 005377c0	FERT_EventPump_v2	fert	struct	Virtual slot 2 of FERT::EventPump (vtable 0x5bb150)
 00537d20	SHAPE_clut	real	high	Named after its own error message (\real\pc\shpclut.c)
+00537ed0	EAGL_SetTransformMatrix	eagl	high	Transformer matrix (NULL = identity 0x5bc660)
+00537ef0	EAGL_SetNearFar	eagl	high	Transformer near/far pair (NULL = 1.0, 65535)
+00537f20	EAGL_SetCodeOutput	eagl	high	Transformer clip-code output
+00537f40	EAGL_SetGuardBand	eagl	high	Guard band shift (|z| * 2^shift for the outer codes)
+00537fa0	EAGL_SetSourceStride	eagl	high	Transformer source stride
+00537fc0	EAGL_SetDestStride	eagl	high	Transformer destination stride
+00537fe0	EAGL_SetCodeStride	eagl	high	Transformer code stride
+00538000	EAGL_CodesNone	eagl	high	Clip-code routine 0 (none)
+00538010	EAGL_CodesPersp	eagl	high	C clip codes, perspective (table 0x5de94c)
+005380c0	EAGL_CodesPerspGB	eagl	high	C clip codes, perspective with guard band (table 0x5de9cc)
+005381a0	EAGL_CodesOrtho	eagl	high	C clip codes, orthographic
+00538240	EAGL_CodesOrthoGB	eagl	high	C clip codes, orthographic with guard band
+00538320	EAGL_Transform	eagl	high	Vertex transformer: routine selection by flags, then the run
+00538430	EAGL_XfPoints3	eagl	high	xyz (w=1) to 4 components, no codes
+00538470	EAGL_XfPoints4	eagl	high	xyzw to 4 components, no codes
+005384b0	EAGL_XfW1Xyz	eagl	high	xyz to xyz + w=1, codes
+00538540	EAGL_XfW1Xyzw	eagl	high	xyzw to xyz + w=1, codes
+005385d0	EAGL_XfGeneral	eagl	high	General C transformer (copy/xform, 1/z or w=1, codes)
+005387a0	EAGL_Device_ctor	eagl	high	Device object: allocates the 0x1182c-byte EAGL context (0x69e0d4); port: EAGL_ContextCreate
+00538820	EAGL_Device_dtor	eagl	high	Frees the context (port: EAGL_ContextFree)
+00538860	EAGL_RSReset	eagl	high	Sends the whole render-state table (0x5ded30 pairs through 0x5ded60 setters)
+005389f0	EAGL_SelectContext	eagl	high	Makes a device's context current (0x69e0d4 = this+0x1c)
+00538a80	EAGL_ViewInit	eagl	high	View ctor: camera stack +0, object stack +0x5c, matrices +0x108/+0x148/+0x188
+00538af0	EAGL_ViewFree	eagl	high	View: frees both matrix stacks
+00538b10	EAGL_ViewSetViewport	eagl	high	View viewport (w, h, x, y, minz, maxz) clamped to the display, off-centre projection scale/offset
+00538df0	EAGL_ViewGetViewport	eagl	high	View viewport getter
+00538e40	EAGL_ViewBegin	eagl	high	Scene begin: current view, projection rebuilt, THRASH_clip to the viewport
 00538ef0	EAGL_EndScene	eagl	med	Wraps THRASH_flushwindow
+00538f20	EAGL_ViewSetPerspective	eagl	high	Projection (fov degrees, aspect, near, far): z' = -z, zscale = far/(far-near), cull tan/cos
+00539040	EAGL_ViewSetOrtho	eagl	high	Orthographic projection (height, near, far)
+005390f0	EAGL_ViewClear	eagl	high	setstate(3, background) + clearwindow
+00539110	EAGL_ViewUpdate	eagl	high	Recombines model*view (+0x188) and *proj (+0x108) when a stack or the projection changed
+005391f0	EAGL_ViewSphereVisible	eagl	high	View-space sphere test (near/far = viewport min/max z, four side planes); ortho: box test
+00539390	EAGL_BoxSphere	eagl	high	Squared distance of a point to a box against r^2
+00539470	EAGL_ViewProject	eagl	high	Points to screen (transformer 0x20b, then viewport and z mapping)
+00539600	EAGL_MatMulInto	eagl	high	thiscall wrapper: out = this * b
+00539620	EAGL_MatMul	eagl	high	4x4 product, row vectors
+00539840	EAGL_MatPostMul	eagl	high	this = this * b
+00539870	EAGL_MatPreMul	eagl	high	this = b * this
+005398a0	EAGL_MatScale	eagl	high	Diagonal matrix (sx, sy, sz, sw)
+005398f0	EAGL_MatTranslation	eagl	high	Translation matrix
+00539940	EAGL_MatAxisAngle	eagl	med	Rotation about an axis (through 0x532430), not ported yet
+00539a00	EAGL_MatIdentity	eagl	high	Identity
+00539a40	EAGL_MatFromRotTrans	eagl	high	3x3 rotation + translation to a 4x4
+00539ab0	EAGL_MatToRotTrans	eagl	high	4x4 to 3x3 rotation + translation
+00539b00	EAGL_MatCopy	eagl	high	Copy
+00539b20	EAGL_MatInvertOrtho	eagl	high	Inverse of rotation + translation (transpose, rotated -t)
+00539bc0	EAGL_StackInit	eagl	high	Matrix stack ctor (capacity), top = identity
+00539c20	EAGL_StackFree	eagl	high	Matrix stack dtor
+00539c30	EAGL_StackPush	eagl	high	Push (copies the top; full stack ignored)
+00539c70	EAGL_StackPop	eagl	high	Pop
+00539ca0	EAGL_StackTop	eagl	high	Top matrix
+00539cb0	EAGL_StackTopForWrite	eagl	high	Top matrix, marked changed (serial++)
+00539cc0	EAGL_MatTransform4	eagl	high	n float4 points through a matrix, strides (in place supported)
+00539e60	EAGL_MatTransform4b	eagl	med	Variant of 0x539cc0 (fixed 16-byte strides), not ported yet
+00539fe0	EAGL_MatTransformPoint	eagl	high	One xyz point (w = 1) through a matrix
 0053a990	STARTUP_init	sys	high	\real\pc\startup.c: window class, icon, cursor
 0053aec0	KeyboardHookProc	sys	med	Low-level keyboard hook (Alt-Tab / Windows key)
 0053b420	WndProc_Key	sys	low	Key message handler (clears key state on key up)
@@ -1330,9 +1385,70 @@
 0053e730	FONT_getstate	real	high	Named after its own error message (\real\cmn\fontattr.c)
 0053e940	FONT_getstatef	real	high	Named after its own error message (\real\cmn\fontattr.c)
 0053eda0	REAL_assert	real	high	REAL library assertion ("Assertion Failed")
+0053ee20	EAGL_RegisterLayerFactory	eagl	high	Adds a factory in front of the chain
+0053eed0	EAGL_MaterialAddLayer	eagl	high	Appends a layer to a material
+0053ef20	EAGL_MaterialDraw	eagl	high	Material slot 1: (streams, prim, n): context reset, runs the layer chain
+0053efa0	EAGL_CreateLayer	eagl	high	Layer factory chain (0x69ebb0), then slot 2 (param)
+0053f010	EAGL_MaterialBind	eagl	high	Stream slots per layer, then dependency resolution
+0053f090	EAGL_LayerInit	eagl	high	Layer base ctor (type, id)
+0053f0c0	EAGL_LayerFree	eagl	high	Layer base dtor (dependency arrays)
+0053f0f0	EAGL_LayerResolve	eagl	high	Finds dependencies (type, id) among the previous layers, their chain positions
+0053f1a0	EAGL_LayerFindPrev	eagl	high	Nearest previous layer of a type (id 0 = any)
+0053f1d0	EAGL_LayerFindNext	eagl	high	Nearest next layer of a type
+0053f200	EAGL_LayerSetParam	eagl	high	Layer slot 2: stores the parameter (+0x14)
+0053f210	EAGL_LayerNext	eagl	high	Layer slot 0 of data layers: just the next layer
 0053f220	EAGL_LayerCoords_v0	eagl	struct	Virtual slot 0 of EAGL::LayerCoords (vtable 0x5b6a34)
+0053f260	EAGL_LayerCoords2_v0	eagl	high	Coords layer for 40-byte vertices (transform stride 0x28)
+0053f2a0	EAGL_LayerIndexCoords_v0	eagl	high	Pre-transformed positions and codes through a byte index list
+0053f370	EAGL_LayerDraw2_ctor	eagl	high	Two-stage draw layer ctor (factory 0x12)
+0053f390	EAGL_LayerDraw_v0	eagl	high	Draw layer: texture/colours/specular/uv from dependencies, kernel per primitive type
+0053f4d0	EAGL_LayerSort_v0	eagl	high	Sort layer: the draw's triangles sorted by depth (+0x117ec)
 0053f4f0	EAGL_LayerState_v0	eagl	struct	Virtual slot 0 of EAGL::LayerState (vtable 0x5b69bc)
+0053f510	EAGL_LayerDraw2_v0	eagl	high	Two-stage draw layer: stage modes from stream 0, kernels 0x542090/0x544780/0x546bb0
+0053f6f0	EAGL_DefaultLayerFactory	eagl	high	EAGL's layer types 0..0x13
+0053fab0	EAGL_LayerDraw_deps	eagl	high	Draw layer dependencies (0x5bbe38: colours, specular, uv, texture)
 0053fb00	SmackAnim_v2	game	struct	Virtual slot 2 of SmackAnim (vtable 0x5b45e4)
+0053fb10	EAGL_LayerDraw2_deps	eagl	high	Two-stage dependencies (0x5bbe58)
+0053fb40	EAGL_Layer_dtor	eagl	high	Layer scalar deleting dtor
+005401e0	EAGL_RSSet	eagl	high	setstate wrapper
+00540200	EAGL_RSSetDepthBias	eagl	high	Depth bias: context +0x1180c (2^-15 units) on DX7, else setstate
+00540240	EAGL_RSSetAlias	eagl	high	setstate through the alias slot 0x6bd858
+00540260	EAGL_RSSetRelativeBias	eagl	high	Depth bias relative to the render-state object's base
+005402b0	EAGL_RSSetBlend	eagl	high	Blend: -1 = src 7, dest 6
+005402f0	EAGL_RSSetCull	eagl	high	Cull: the render-state object's mode or none
+00540320	EAGL_RSProbe	eagl	high	Probes a state (set to its id, restore when refused)
+00540350	EAGL_ContextResetStages	eagl	high	Stage blend 8/0 and one texture coordinate set
+005403c0	EAGL_RSApply	eagl	high	Six render states, only changes sent
+00540400	EAGL_ContextPrimCodes	eagl	high	Per-primitive codes by type (strip, lines, list, quads)
+00540580	EAGL_ContextViewport	eagl	high	View near/far and screen mapping into the context
+00540650	EAGL_ContextTransform	eagl	high	Coords through the combined matrix into the work vertices with codes
+00540920	EAGL_TransformToContext	eagl	high	The same into a caller's arrays (the game's transform layers)
+00540a40	EAGL_DrawStrip	eagl	high	Strip kernel (DX7 path ported)
+00542090	EAGL_DrawStrip2	eagl	med	Two-stage strip kernel (pending)
+00543840	EAGL_DrawList	eagl	high	Triangle-list kernel (DX7 path ported)
+00544780	EAGL_DrawList2	eagl	med	Two-stage list kernel (pending)
+00545830	EAGL_DrawQuads	eagl	med	Quad kernel (pending)
+00546bb0	EAGL_DrawQuads2	eagl	med	Two-stage quad kernel (pending)
+00548120	EAGL_DrawLines	eagl	med	Line kernel (pending)
+00548f80	EAGL_ContextInit	eagl	high	Guard band from the driver (setstate 0x3f vs mode * 1.5), DX7 driver flag
+00549050	EAGL_ContextSetVertexFormat	eagl	high	setstate 0x2a with the stage blends reset
+005490e0	EAGL_SortTriangles	eagl	high	Depth sort of the u16 index list (min z key, MSVC 6 std::sort)
+00549390	EAGL_SortTrianglesInt	eagl	med	The same for the int index list of the non-DX7 path
+00549610	EAGL_ClipOrtho	eagl	med	Orthographic clipper (pending)
+0054bd90	EAGL_ClipPerspective	eagl	high	Perspective clipper, 32-byte vertices, near/far and guard-band planes
+0054e620	EAGL_ClipOrtho2	eagl	low	Clipper for 40-byte vertices (two-stage kernels), ortho
+00550db0	EAGL_ClipPerspective2	eagl	low	Clipper for 40-byte vertices (two-stage kernels), perspective
+00553630	stl_introsort_loop	eagl	high	MSVC 6 std::sort loop on the 12-byte sort records
+00553770	stl_median	eagl	high	Median of three by key
+005537d0	stl_unguarded_partition	eagl	high	Partition around a key
+00553860	stl_insertion_sort	eagl	high	Insertion sort
+00553940	stl_partial_sort	eagl	high	Heap partial sort
+00553a40	stl_unguarded_insertion_sort	eagl	high	Unguarded insertion sort
+00553aa0	stl_pop_heap	eagl	high	Pop heap
+00553b10	stl_unguarded_linear_insert	eagl	high	Unguarded linear insert
+00553b60	stl_make_heap	eagl	high	Make heap
+00553bf0	stl_adjust_heap	eagl	high	Adjust heap
+00553ca0	stl_push_heap	eagl	high	Push heap
 00554930	DTEX_create	render	med	Dynamic texture create ("too many different")
 00554cc0	DTEX_upload	render	med	Dynamic texture upload
 005551a0	DTEX_settexture	render	med	Dynamic texture bind (THRASH_settexture)
@@ -1352,7 +1468,11 @@
 005644b0	TIMER_init	timer	high	\real\pc\inittmr.c: multimedia timer at the given Hz (128 for NFS5)
 005647c0	REAL_abort	real	high	Fatal abort with file/line ("Abort Message")
 00564ba0	SNDAUTHOR	game	high	Named after its own error message
+005659a0	BIG_kind	file	high	\real\cmn\locatbig.c: archive kind from the magic: 1 = 0xC0FB, 2 = BIGF, 0 = neither (port: src/real/locatbig.c)
+005659e0	BIG_headersize	file	high	\real\cmn\locatbig.c: directory size (C0FB: u16 at +2 plus 4; BIGF: u32 BE at +12)
+00565a30	BIG_findentry	file	high	\real\cmn\locatbig.c: directory scan by name (_stricmp) or index; offset/size out, returns the record's name
 00565b70	BIG_locateentry	file	high	\real\cmn\locatbig.c: finds a named entry in a BIGF (VIV) archive directory
+00565d00	BIG_count	file	high	\real\cmn\locatbig.c: entry count (C0FB: u16 at +4; BIGF: u32 BE at +8)
 00567270	FILESYS_completeop	real	high	Named after its own error message (\real\pc\nfile.c)
 00567540	FILESYS_callbackop	real	high	Named after its own error message (\real\pc\nfile.c)
 00567680	FILE_queueop	real	high	Named after its own error message (\real\pc\nfile.c)
@@ -1384,15 +1504,21 @@
 0056c590	STREAM_isendofstream	real	high	Named after its own error message (\real\cmn\stream.c)
 0056c5f0	STREAM_buffersize	real	high	Named after its own error message (\real\cmn\stream.c)
 0056c640	STREAM_bufferusage	real	high	Named after its own error message (\real\cmn\stream.c)
+0056e040	BIG_getnum	file	high	\real\cmn: big-endian n-byte read (byte-swapped word shifted down)
 0056e250	FILE_loadpack	file	high	\real\cmn\loadpack.c: loads a file and unpacks it (RefPack)
 0056e681	Vec3_Dot_impl	math	high	3-component dot product
 005713e0	movdfl	real	high	Named after its own error message (\real\pc\movdfl.c)
 00572070	FONT_dtexdrawquadmesh	real	high	Named after its own error message (\real\cmn\fontdtex.c)
+00572f00	EAGL_XfXyz4	eagl	high	Point xyz (w=1) through a matrix, 4 outputs
+00572f90	EAGL_XfXyz3	eagl	high	Point xyz through a matrix, 3 outputs
+00573000	EAGL_XfXyzw4	eagl	high	Point xyzw through a matrix, 4 outputs
+005730a0	EAGL_XfXyzw3	eagl	high	Point xyzw through a matrix, 3 outputs
 00574a20	createshape	real	high	Named after its own error message (\real\cmn\creates.c)
 00574d50	THRASH_opendll	render	high	\real\patch3\pc\set3d.c: LoadLibrary of the driver DLL (dx7z.dll) and GetProcAddress of every _THRASH_* entry into 0x6bd850..0x6bd8f8
 005753f0	THRASH_drivername	render	med	THRASH_DRIVERNAME setting
 005757a0	DDRAW_init	render	med	\real\pc\ddraw.c: DirectDrawEnumerate/DirectDrawCreate (2D surfaces, display modes)
 0057d530	THRASH_drawtrimesh_glue	render	high	One-call wrapper of THRASH_drawtrimesh
+0057e930	REALGRAPH_clipdispatch	real	high	REALGRAPH polygon clipper by clip mode (0x6abd70: 0, 2..7 -> 0x575e40..0x57b8f0); real library 2D/3D drawing, not EAGL
 00581210	CONN_send	real	high	Named after its own error message (\real\patch3\pc\tcp.c)
 005816e0	TCP_socket	net	med	Socket creation (tcp.c)
 005828d0	SYS_createsync	sys	med	Semaphore / mutex creation
@@ -1788,8 +1914,3 @@
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005af324	crt_5af324	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005659a0	BIG_kind	file	high	\real\cmn\locatbig.c: archive kind from the magic: 1 = 0xC0FB, 2 = BIGF, 0 = neither (port: src/real/locatbig.c)
-005659e0	BIG_headersize	file	high	\real\cmn\locatbig.c: directory size (C0FB: u16 at +2 plus 4; BIGF: u32 BE at +12)
-00565a30	BIG_findentry	file	high	\real\cmn\locatbig.c: directory scan by name (_stricmp) or index; offset/size out, returns the record's name
-00565d00	BIG_count	file	high	\real\cmn\locatbig.c: entry count (C0FB: u16 at +4; BIGF: u32 BE at +8)
-0056e040	BIG_getnum	file	high	\real\cmn: big-endian n-byte read (byte-swapped word shifted down)
