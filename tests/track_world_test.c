@@ -124,6 +124,17 @@ static void check_track(const char *track)
     }
     int unowned = 0;
     for (int k = 0; k < narts; k++) unowned += owner[k] == 0;
+    /* the vertices of every article, through the bundles (cross-checked with out/tools/vtcount.py:
+       alps 173195) */
+    unsigned long verts = 0;
+    for (int bi = 1; bi < w->nbundles; bi++)
+        for (uint32_t i = 0; i < w->bundles[bi]->count; i++) {
+            UData *a = w->bundles[bi]->entries[i].article;
+            for (UData *it = UData_items(a); it < UData_itemsend(a); it++)
+                if (UData_key(it) == 0x76742020) verts += it->count;   /* 'vt  ' */
+        }
+    printf("  %lu vertices\n", verts);
+    if (!strcmp(track, "alps")) CHECK(verts == 173195);
     CHECK(unowned == 0);
     WSceneBundle *sc = (WSceneBundle *)w->scene;
     WInstanceBundle *in = (WInstanceBundle *)w->instances;
