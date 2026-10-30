@@ -3,6 +3,7 @@
    r3dcar.h and docs/re/cars.md. Names the game looks up in its files (section and key names, file name
    formats) and its tables are read from the exe by address. */
 #include "render/r3dcar.h"
+#include "render/rlayers.h"
 #include "exe.h"
 #include "real/mem.h"
 #include "real/set3d.h"
@@ -83,7 +84,10 @@ void R3DCar_Init(R3DCar *car, R3DCarState *state)
     memset(car, 0, sizeof *car);
     car->state = state;
     car->dooraxis[1] = 1.0f;                     /* R3DObject's ctor: (0, 1, 0) */
-    car->materials = calloc(1, sizeof *car->materials);
+    /* The material set with a bank on the graphics object's texture manager (made at the render system's
+       start; without one, textures aren't made). */
+    car->materials = R3DMaterialSet_ctor(calloc(1, sizeof *car->materials),
+                                         g_texgraphics ? g_texgraphics->textures : NULL, car->texinfo);
     /* The hinge angle table (the original's lives with the car's other animation state): one triple per
        kind, all zero until the simulation fills them (R3DCar_v9 0x438370). */
     car->hinge = calloc(CAR_NHINGES, sizeof *car->hinge);
@@ -484,44 +488,11 @@ static void car_build_lods(R3DCar *car)
     car_size(car);
 }
 
-/* ---- materials (0x44a6b0, the part of it that needs no render method) ---- */
-
-static const uint32_t MT = 0x6d742020;   /* 'mt  ' */
-
-static void car_materials(R3DCar *car)
-{
-    R3DMaterialSet *ms = car->materials;
-    UData *root = car->root, *end = UData_itemsend(root);
-    uint32_t maxi = 0;
-    for (UData *r = UData_finditem(root, MT, 0, 0xffffffffu); r != end && UData_key(r) == MT; r++) {
-        uint32_t i = r->info & UDATA_INDEXED ? r->id & 0xffff : 0xffffffffu;
-        if (maxi < i) maxi = i;
-    }
-    ms->count = maxi + 1;
-    ms->mat = calloc(ms->count, sizeof *ms->mat);
-    for (UData *r = UData_finditem(root, MT, 0, 0xffffffffu); r != end && UData_key(r) == MT; r++) {
-        uint32_t i = r->info & UDATA_INDEXED ? r->id & 0xffff : 0xffffffffu;
-        if (i >= ms->count) continue;
-        const uint8_t *d = item_data(r);
-        R3DMaterial *m = calloc(1, sizeof *m);
-        m->index = i;
-        m->mt = d;
-        m->nrefs = (uint32_t)(d[8] | d[9] << 8);
-        m->texture = m->nrefs == 0 ? 0x4e544558u : (uint32_t)le32(d + 0x28);   /* 'XETN' */
-        /* The render method and the texture references (0x44ba40, RTex_Clone): pending. */
-        m->method = R3DMaterial_PendingMethod(car, m);
-        ms->mat[i] = m;
-    }
-}
+/* ---- materials (0x44a6b0: render/rmaterial.c) ---- */
 
 static void car_free_materials(R3DCar *car)
 {
-    R3DMaterialSet *ms = car->materials;
-    if (!ms) return;
-    for (uint32_t i = 0; i < ms->count; i++) free(ms->mat[i]);
-    free(ms->mat);
-    ms->mat = NULL;
-    ms->count = 0;
+    if (car->materials) R3DMaterialSet_Clear(car->materials);
 }
 
 /* ---- loading ---- */
@@ -652,7 +623,7 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
     car_build_lods(car);                     /* slot 18 (nothing for a car), then 0x4424e0 */
     /* R3DObject_LoadHeader 0x4426c0: the texture pages, then the material set (0x44a6b0). */
     R3DCar_PendingTexturePages(car);
-    car_materials(car);
+    R3DMaterialSet_Build(car->materials, car->root, "");
     car->nbound = car_points(car, 0x426e6450u, car->bound, 48, true);     /* 'PdnB' */
     car->nwindow = car_points(car, 0x576e646fu, car->window, 8, false);   /* 'odnW' */
     car->loaded = 1;
@@ -663,6 +634,7 @@ void R3DCar_Free(R3DCar *car)
 {
     car_unload(car);
     IniFile_Free(&car->tpg);
+    R3DMaterialSet_dtor(car->materials);
     free(car->materials);
     car->materials = NULL;
     free(car->hinge);
@@ -777,7 +749,7 @@ void R3DCarLOD_Draw(R3DCarLOD *lod, EaglMatStack *model, uint8_t mask, bool cock
                     if (pass == (pr[0] >> 16 & 1)) {
                         uint32_t mi = pr[1] & 0xffff;
                         R3DMaterial *mat = ms && mi < ms->count ? ms->mat[mi] : NULL;
-                        R3DMaterial_Draw(car, p, mat, pr, it->count, model);
+                        R3DMaterial_DrawList(mat, p, car->root, pr, it->count);
                     }
                     /* The next record while it is still a 'pr' below the range's end. */
                     it++;
@@ -801,7 +773,7 @@ static int table(uint32_t va, int i) { return (int)exe_u32(va + 4u * (unsigned)i
    wheels and glass (0x20). */
 static void car_draw_lods(R3DCar *car, EaglMatStack *model)
 {
-    R3DLOD_PendingBegin(car);   /* 0x44a090 */
+    RLayers_ResetCache();   /* 0x44a090 */
     if (car->nlods == 0) return;
     /* The player's car in the cockpit camera (the camera's car is this one and its view flag is set)
        draws LOD list index 1's interior (0x10) and 0's cockpit-visible parts (0x40) instead: pending

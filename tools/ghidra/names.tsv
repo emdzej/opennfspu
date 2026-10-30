@@ -255,38 +255,48 @@
 00445450	R3DSpecularTextureLayer_v0	render	struct	Virtual slot 0 of R3DSpecularTextureLayer (vtable 0x5b39b4)
 00445a40	R3DSkyMapTextureLayer_v0	render	struct	Virtual slot 0 of R3DSkyMapTextureLayer (vtable 0x5b398c)
 00446060	R3DShadowMapTextureLayer_v0	render	struct	Virtual slot 0 of R3DShadowMapTextureLayer (vtable 0x5b3964)
-00446460	R3DLightLayer_v0	render	struct	Virtual slot 0 of R3DLightLayer (vtable 0x5b393c)
+00446460	R3DLightLayer_v0	render	high	Vertex lighting: ambient + diffuse (n.l) from the light environment 0x6115cc
 00446db0	R3DSpecularLayer_v0	render	struct	Virtual slot 0 of R3DSpecularLayer (vtable 0x5b3c6c)
 00447780	R3DObjectLOD_v1	render	struct	Virtual slot 1 of R3DObjectLOD (vtable 0x5b3890)
 00447790	R3DObjectLOD_v2	render	struct	Virtual slot 2 of R3DObjectLOD (vtable 0x5b3890)
 004477b0	R3DObjectLOD_v5	render	struct	Virtual slot 5 of R3DObjectLOD (vtable 0x5b3890)
 00448a40	Render_LoadCommonFsh	render	high	Loads common.fsh
-00448b60	RCustomLayers_LayerFullAmbient_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerFullAmbient (vtable 0x5b3b1c)
-00448ba0	RCustomLayers_LayerAmbient_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerAmbient (vtable 0x5b3acc)
+00448b60	RCustomLayers_LayerFullAmbient_v0	render	high	Once (0x619760): method data filled white
+00448ba0	RCustomLayers_LayerAmbient_v0	render	high	One colour for every vertex
 00448bf0	RCustomLayers_LayerUVAnimate_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerUVAnimate (vtable 0x5b3bc8)
 00448e30	RCustomLayers_LayerSetAlpha_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerSetAlpha (vtable 0x5b3af4)
-00448eb0	RCustomLayers_LayerTransformCoords_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerTransformCoords (vtable 0x5b3a7c)
+00448eb0	RCustomLayers_LayerTransformCoords_v0	render	high	Transform into the work vertices; back-face cull with the '$n' planes
 00449290	RCustomLayers_LayerTransformIndexCoords_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerTransformIndexCoords (vtable 0x5b3900)
-004492b0	RCustomLayers_LayerTransformIndexCoords_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerTransformIndexCoords (vtable 0x5b3900)
-00449830	RCustomLayers_LayerIndexedUV_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerIndexedUV (vtable 0x5b3a2c)
-00449900	RCustomLayers_LayerIndexedColour_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerIndexedColour (vtable 0x5b3a54)
+004492b0	RCustomLayers_LayerTransformIndexCoords_v0	render	high	Transform the source array (vertex cache 0x613e10), gather by byte indices, back-face cull
+00449830	RCustomLayers_LayerIndexedUV_v0	render	high	UVs gathered by byte indices
+00449900	RCustomLayers_LayerIndexedColour_v0	render	high	Colours gathered by byte indices
 004499c0	RCustomLayers_LayerFalseSort1_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerFalseSort1 (vtable 0x5b3a04)
 00449a10	RCustomLayers_LayerFalseSort2_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerFalseSort2 (vtable 0x5b39dc)
+00449a60	RLayers_Register	render	high	Registers the game's EAGL layer factory; identity byte table 0x618e74
+00449a90	RLayers_Create	render	high	The game's EAGL layer factory: types 0x8001-0x8011, 0x8100-0x8105
 00449f30	RCustomLayers_LayerUVAnimate_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerUVAnimate (vtable 0x5b3bc8)
 00449f80	RCustomLayers_LayerSetAlpha_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerSetAlpha (vtable 0x5b3af4)
 00449fa0	RCustomLayers_LayerTransformCoords_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerTransformCoords (vtable 0x5b3a7c)
-00449fc0	RCustomLayers_LayerUntransformedCoords_v0	render	struct	Virtual slot 0 of RCustomLayers::LayerUntransformedCoords (vtable 0x5b3aa4)
+00449fc0	RCustomLayers_LayerUntransformedCoords_v0	render	high	Coordinates as given (a source layer)
 00449ff0	RCustomLayers_LayerIndexedUV_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerIndexedUV (vtable 0x5b3a2c)
 0044a020	RCustomLayers_LayerIndexedColour_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerIndexedColour (vtable 0x5b3a54)
 0044a060	R3DLightLayer_v8	render	struct	Virtual slot 8 of R3DLightLayer (vtable 0x5b393c)
+0044a090	RLayers_ResetCache	render	high	Empties the TransformIndexCoords vertex cache (View_Begin, R3DObject_DrawLODs)
+0044a0d0	RLayers_SetNoCache	render	high	Bit 9 of a primitive list's type high half: cache off (0x619761)
 0044a0e0	R3DMaterial_SetOverride	render	high	The streams a part replaces during a draw
 0044a110	R3DMaterial_OverrideStream	render	high	Replace one stream by id
-0044a160	R3DMaterial_StreamSlot	render	high	A stream id's slot in the render method
-0044a190	R3DMaterial_Bind	render	high	Binds a 'pr' item's streams and index lists into the render method; returns the primitive type
-0044a520	R3DMaterialSet_ctor	render	med	The object's material set
-0044a6b0	R3DMaterialSet_Build	render	high	RMth, sf / sn shapes, the 'mt' materials and their texture references
-0044ba40	RMethod_Find	render	med	A render method template by name and key
+0044a160	RMethod_Slot	render	high	A stream id's slot: small ids index the sorted table, others are searched
+0044a190	R3DMaterial_Bind	render	high	Binds a material's refs and a 'pr' item's streams and index lists into its method
+0044a4c0	RMethod_Assign	render	high	Sets a method stream by id
+0044a520	R3DMaterialSet_ctor	render	high	Material set: bank, list 0x619768
+0044a5d0	R3DMaterialSet_dtor	render	high	Material set destructor
+0044a6b0	R3DMaterialSet_Build	render	high	RMth templates, sf/sn shapes, mt materials with texture refs and constant streams
+0044ba40	RMethod_Find	render	high	A render method by (method key, material key, name)
+0044bab0	RMethod_Build	render	high	A method from an RMth template (once per keys)
+0044bc40	RMethod_Data	render	high	CMethodData: a layer's shared method data by (type, id)
+0044be40	RMethod_Construct	render	high	The EAGL material of a method: ids sorted/unique, layers by group and material masks, stream slots
 0044c250	EAGL_Material_v0	eagl	struct	Virtual slot 0 of EAGL::Material (vtable 0x5b3c94)
+0044c2c0	RMethod_FindId	render	high	Binary search of a stream id in a method's table
 0044cf80	RTexBank_ctor	render	high	Game texture bank: manager, class, multimap (id,name)->texture
 0044d030	RTexBank_dtor	render	high	Releases the bank's textures and tree
 0044d140	RTexBank_loadfile	render	high	Every image of an FSH into a bank
@@ -307,6 +317,7 @@
 0044dee0	RTex_readdtx	render	high	"%s%s.dtx": texture counts per size/format -> priorities
 0044e240	RTex_levelfor	render	high	Quality level 0..3 from CPU MHz, memory, video memory
 0044e760	Render_DetectCard	render	med	Card-specific workarounds (Trident Blade, Voodoo)
+0044ebe0	Render_SetupQuality	render	med	Render quality from the options: method key 0x6197f8 (1, 3, 4), detail flags
 0044f5b0	RBillBoard_CreateQuads	render	high	RBillBoard.cpp: billboard quads from points
 0044fa10	Track_LoadKeyframes	world	high	Loads <track>_forward.key / _backwards.key (camera/AI keyframes; warns on old versions)
 0044fe60	RDrawAnimArticleBundle_v0	render	struct	Virtual slot 0 of RDrawAnimArticleBundle (vtable 0x5b3cb8)
@@ -355,8 +366,8 @@
 0045f650	Scroller_FreeClouds_v0	render	struct	Virtual slot 0 of Scroller_FreeClouds (vtable 0x5b3f44)
 0045fa40	Sky_LoadText	render	high	Loads Sky\<name>.txt (sky layers)
 00463af0	Camera_Update	camera	low	Per-frame camera/view update (called each tick when paused or replaying)
-00467170	View_Begin	render	med	Sets the view's camera and projection (near/far into 0x628130+0xc) and begins EAGL drawing
-004671e0	View_End	render	med	Ends the view (flushes EAGL)
+00467170	View_Begin	render	high	Vertex cache reset, current view (0x628130+0x10), depth factor, EAGL_ViewBegin, clear, context viewport
+004671e0	View_End	render	high	EAGL_EndScene, view inactive
 004673b0	Render_Init	render	high	Reads the 3D Setup registry choice (driver, resolution), opens the THRASH driver, "Run 3D Setup before running the game."
 00467680	Render_Shutdown	render	med	Closes the driver and the render system
 00467720	Render_CheckDisplay	render	med	Display depth check ("Please set your display to 256 colors or higher")

@@ -19,6 +19,7 @@
 #pragma once
 #include "eagl/eagl.h"
 #include "render/car_ini.h"
+#include "render/rmaterial.h"
 #include "support/udata.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -52,7 +53,7 @@ typedef struct { UData *rec; uint32_t id; } R3DItemCache;
 enum { R3D_VT, R3D_NM, R3D_UV, R3D_DF, R3D_BASE, R3D_PR, R3D_EF, R3D_NKINDS };
 
 /* One part of an LOD (0x54 bytes in the original). */
-typedef struct {
+typedef struct R3DPart {
     UData *article;                 /* +0x00 */
     UData *end;                     /* +0x04: the end of the article's items (a lookup's miss) */
     R3DItemCache cache[R3D_NKINDS]; /* +0x08 (the 'pr' cache at +0x30 is the draw's iterator) */
@@ -74,21 +75,7 @@ typedef struct R3DCarLOD {
     UData *slot[4];        /* +0x14: the articles with a wheel slot (Base + 0x48) */
 } R3DCarLOD;
 
-/* A material of the car's material set (0x1c bytes, built by 0x44a6b0 from the 'mt' items). */
-typedef struct {
-    uint32_t texture;           /* +0x00: the first texture reference's id ('XETN' none) */
-    uint32_t index;             /* +0x04 */
-    uint32_t nrefs;             /* +0x08 */
-    int32_t *override;          /* +0x0c: during a draw, the streams the part replaces (-1) */
-    void *refs;                 /* +0x10 */
-    void *method;               /* +0x14: the render method ('RMth'), pending (car_pending.c) */
-    const uint8_t *mt;          /* +0x18: the 'mt' item's data */
-} R3DMaterial;
-
-typedef struct {
-    R3DMaterial **mat;    /* +0x00 (the set's +0) */
-    uint32_t count;       /* +0x18 */
-} R3DMaterialSet;
+/* Materials (R3DMaterial, R3DMaterialSet): render/rmaterial.h. */
 
 /* An animation slot of the car (8 records of 0x14 bytes from +0x568; 0x4380c0 / 0x4380e0). */
 typedef struct { int pos; int dir; float t; float frames; uint8_t on; } R3DCarAnim;
