@@ -132,6 +132,15 @@ notes go in the sidebar in `docs/.vitepress/config.ts`; dead links fail the buil
 csfs. **Never put game data in `docs/public/`.** `vendor/` is generated from the npm packages pinned in
 `docs/package.json` (`docs/scripts/vendor-web.sh`; keep `@emdzej/gasm-host` equal to `GASM_VERSION`).
 
+## gasm bundles
+
+`tools/fetch-gasm-runner.sh <platform>` fetches the released `gasm-run` with ANGLE + SwiftShader (gasm:gl needs
+them) into `.deps/gasm-runner-<platform>/`; `tools/package-gasm.sh` builds the macOS (universal `.app`), Linux
+and Windows bundles. ANGLE sits next to gasm-run on Linux and Windows; in the `.app` it is in
+`Resources/angle/` and the launcher passes `--gl-lib`, because codesign `--strict` allows only code in
+`Frameworks/` and gasm-run reads SwiftShader's ICD file from the ANGLE folder. `tools/smoke-gasm-bundle.sh`
+checks a bundle without data (`OPENNFSPU_SMOKE_DATA=<folder>[:<iso>]` adds hash runs).
+
 ## Releases
 
 Plain semver tags, **no `v` prefix**: bump `project(OpenNFSPU VERSION ...)` in `CMakeLists.txt`, then
