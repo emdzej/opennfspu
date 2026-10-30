@@ -18,6 +18,7 @@
    original, not the whole layout. */
 #pragma once
 #include "eagl/eagl.h"
+#include "real/texture.h"
 #include "render/car_ini.h"
 #include "render/rmaterial.h"
 #include "support/udata.h"
@@ -28,9 +29,13 @@ enum { CAR_NOPTIONS = 120, CAR_NLODS = 7, CAR_NHINGES = 0x17 };
 
 /* The car's specification (the car state's +0x558): what the renderer reads of it. */
 typedef struct {
+    char licence[32];            /* +0x1c0: the licence plate's text (8 characters are drawn) */
+    uint32_t colours[4];         /* +0x218: the four chosen colours (0xAARRGGBB; +0x21c is the stripe's) */
     int options[CAR_NOPTIONS];   /* +0x32c: forced option values (-1 = the style's) */
+    int racenumber;              /* +0x510: < 0 none */
+    uint32_t scheme;             /* +0x514: the colour package (R3DCar_SetColours) */
     int stretch;                 /* +0x518: nonzero = the model is scaled by 0x5b37c8 */
-    int customtpage;             /* +0x51c */
+    int customtpage;             /* +0x51c: nonzero = the pages are 4444 and start grey, no shapes drawn */
 } R3DCarSpec;
 
 /* The simulation's car as the renderer sees it (R3DObject +0xf4). */
@@ -40,7 +45,7 @@ typedef struct {
     float halfsize[3];           /* +0x3a8: half the bounding box (0x444fc0) */
     float radius;                /* +0x3b4 */
     uint32_t flags;              /* +0x52c: 0x10 = sizes and the wheels' LOD from LOD list index 0 (not 4) */
-    const R3DCarSpec *spec;      /* +0x558 */
+    R3DCarSpec *spec;            /* +0x558 */
     int style;                   /* +0x568 */
     int options[CAR_NOPTIONS];   /* +0x56c */
     float drivercampos[3];       /* +0x10e8 */
@@ -80,19 +85,27 @@ typedef struct R3DCarLOD {
 /* An animation slot of the car (8 records of 0x14 bytes from +0x568; 0x4380c0 / 0x4380e0). */
 typedef struct { int pos; int dir; float t; float frames; uint8_t on; } R3DCarAnim;
 
+struct CarPage;
+struct Texture;
+
 typedef struct R3DCar {
     IniFile tpg;                    /* +0x004: the .tpg */
+    uint32_t colours[18];           /* +0x01c: the recolouring slots of the pages (+0x34: the stripe) */
     float hoodextent;               /* +0x068 */
     float trunkextent;              /* +0x06c */
     float headlightextent;          /* +0x070 */
     float spoilerextent;            /* +0x074 */
+    struct CarPage *pages;          /* +0x078: the texture pages (a vector) */
+    uint32_t npages;
     const void **sf;                /* +0x084: the 'sf' shapes of the .crp by index (a vector) */
     uint32_t nsf;
     void *shape_d, *shape_l;        /* +0x090, +0x094: <car>d.fsh, <car>l.fsh */
-    uint8_t detail;                 /* +0x0aa: > 0x50 takes the low-detail shapes */
+    uint8_t hsv[3];                 /* +0x0a8: hue, saturation, value of colour 0 (0x443bd0); a value above
+                                       0x50 takes the light decals (<car>l.fsh) */
     R3DMaterialSet *materials;      /* +0x0ac */
     R3DCarLOD *lods[CAR_NLODS];     /* +0x0b0: the LOD list (a vector) */
     uint32_t nlods;
+    struct Texture *globaltex[3];   /* +0x0dc: the shared textures of the materials (0x440870) */
     UData *root;                    /* +0x0ec */
     struct R3DCrpEntry *crp;        /* +0x0f0 */
     R3DCarState *state;             /* +0x0f4 */
@@ -112,6 +125,9 @@ typedef struct R3DCar {
     R3DCarAnim anim[8];             /* +0x568 */
     float wheelpos[4][3];           /* +0x6d0: wheel slot offsets (the simulation's) */
     char name[64];                  /* port: the name given to R3DCar_LoadCrp */
+    /* port: the pages' texture states (the original's live on R3DObject_LoadHeader's stack, and the
+       pages keep a pointer to them). */
+    TextureStates pagestates;
 } R3DCar;
 
 /* Game state the renderer reads (globals of the original). */

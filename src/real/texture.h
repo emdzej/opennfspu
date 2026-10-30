@@ -72,6 +72,11 @@ void TEXTURE_sendstage(const TextureStates *s, int stage);
 
 void TextureStates_init(TextureStates *s);             /* 0x537740 */
 void TextureStates_setmipmap(TextureStates *s, int on);   /* 0x537790 */
+/* The other one-state setters of the class (0x5377a0 v[0], 0x5377b0 v[1], 0x5377c0 v[2], 0x5377d0 v[4]);
+   which driver state each index drives is the exe's table of (state, setter) pairs (texture.c). */
+static inline void TextureStates_set(TextureStates *s, int index, int32_t value) { s->v[index] = value; }
+/* 0x5377e0: U and V addressing together (v[5], v[6]). */
+static inline void TextureStates_settile(TextureStates *s, int32_t value) { s->v[5] = s->v[6] = value; }
 
 /* The graphics object: registered (0x540100), its device set, which makes a new manager (0x5401a0), and
    gone (0x540180). */
