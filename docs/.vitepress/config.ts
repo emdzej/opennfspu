@@ -124,6 +124,8 @@ export default defineConfig({
             { text: "THRASH driver", link: "/re/thrash" },
             { text: "EAGL2", link: "/re/eagl" },
             { text: "Track and world", link: "/re/track" },
+            { text: "Scene elements", link: "/re/scene" },
+            { text: "Sky", link: "/re/sky" },
             { text: "Cars", link: "/re/cars" },
             { text: "Textures and rendering", link: "/re/render" },
             { text: "Render system", link: "/re/render-system" },

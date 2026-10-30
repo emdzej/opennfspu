@@ -11,6 +11,8 @@ data from the game.
 | [port-plan.md](port-plan.md) | The porting order toward a first playable race, with sizes and key addresses |
 | [thrash.md](thrash.md) | The THRASH driver interface (dx7z.dll) |
 | [track.md](track.md) | Track loading, the world's article bundles, object list and visibility walls |
+| [scene.md](scene.md) | The .scn scene elements: cameras, sounds, start and end lines, skill tests |
+| [sky.md](sky.md) | The sky: configuration, layers, textures, the light environment |
 | [cars.md](cars.md) | Car models: loading, parts and LODs, the car draw |
 | [render.md](render.md) | Textures from FSH to the driver (depthconv, DTEX, TEXTURE, RTex); the material and render-method map |
 | [render-system.md](render-system.md) | Render_Init, the device, render states and the cull, cameras and views, the race frame |

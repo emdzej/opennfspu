@@ -341,7 +341,15 @@
 00455000	RGenericMovableParticleSystem_v4	render	struct	Virtual slot 4 of RGenericMovableParticleSystem (vtable 0x5b3e24)
 004550b0	Particles_Tick	render	med	Particle systems step, run at 64 Hz catch-up inside Render_Frame
 00455440	Particles_Load	render	high	Loads particle.dat and carpart.dat
+00458a50	Sky_CreateTimeObject	sky	low	operator new 0x10 + 0x458b60 into 0x627e08 (from Render_RaceInit)
+004594d0	Sky_CreateConfig	sky	high	operator new 0x10c + Sky_LoadConfig into 0x627e18 (port: src/render/sky.c)
 00459530	Sky_LoadConfig	render	high	Loads Sky\<name>.bin (SkyCnfig)
+004595d0	SkyConfig_Upgrade	sky	high	The SkyCnfig block from an older version up to 9
+00459820	Sky_CreateLight	sky	high	0x627e1c: the race's weather slot (0x657d9c) or the nearest lower one set
+00459890	Sky_FreeLight	sky	high	Frees 0x627e1c
+004598b0	Sky_LightSlot0	sky	high	Slot 0 (searching down from 0)
+004598f0	Sky_SlotFor	sky	high	The race weather's slot into *out
+00459940	Sky_FrameColour	sky	med	The fog / light colour: two colour sets blended by the time of day
 00459b80	SkyHorizon_v2	render	struct	Virtual slot 2 of SkyHorizon (vtable 0x5b3e54)
 00459bf0	SkyHorizon_v3	render	struct	Virtual slot 3 of SkyHorizon (vtable 0x5b3e54)
 0045a060	SkyHorizon_v1	render	struct	Virtual slot 1 of SkyHorizon (vtable 0x5b3e54)
@@ -388,14 +396,16 @@
 00468da0	RaceViews_ctor	render	high	The race's cameras: main (clear 0xff77bbff), overlay, quarter view
 00468ef0	Render_RaceInit	render	low	Render setup for the race
 00469030	Render_RaceShutdown	render	low	Render teardown after the race
-00469170	CCameraElem_ReplayCamera	scene	med	Replay camera element
+00469170	CCameraElem_ctor	scene	high	Camera element ctor ("Replay Camera") (port: src/game/scene.c)
 00469240	CCameraElem_v0	scene	struct	Virtual slot 0 of CCameraElem (vtable 0x5b4228)
 00469270	CCameraElem_v1	scene	struct	Virtual slot 1 of CCameraElem (vtable 0x5b4228)
 00469800	CCameraElem_v2	scene	struct	Virtual slot 2 of CCameraElem (vtable 0x5b4228)
 00469910	CCameraElem_v10	scene	struct	Virtual slot 10 of CCameraElem (vtable 0x5b4228)
 00469970	CCameraElem_v6	scene	struct	Virtual slot 6 of CCameraElem (vtable 0x5b4228)
 004699a0	CCameraElem_v7	scene	struct	Virtual slot 7 of CCameraElem (vtable 0x5b4228)
-0046a020	CGeomElem_Load	scene	med	Geometry element (.scn)
+00469a00	SceneElem_GetType	scene	high	The int at +0x7c (trigger type, geometry object type) (port: src/game/scene.c)
+00469aa0	CCameraElem_GetType	scene	high	+0xc0: 1 forward race's camera, 2 reverse
+0046a020	CGeomElem_ctor	scene	high	Geometry element ctor: defaults, scale 100%, the scaled matrix (port: scene.c)
 0046a1c0	CGeomElem_v0	scene	struct	Virtual slot 0 of CGeomElem (vtable 0x5b4280)
 0046a200	CGeomElem_v1	scene	struct	Virtual slot 1 of CGeomElem (vtable 0x5b4280)
 0046a900	CGeomElem_v8	scene	struct	Virtual slot 8 of CGeomElem (vtable 0x5b4280)
@@ -404,20 +414,43 @@
 0046abe0	CGeomElem_v7	scene	struct	Virtual slot 7 of CGeomElem (vtable 0x5b4280)
 0046ac00	CGeomElem_v10	scene	struct	Virtual slot 10 of CGeomElem (vtable 0x5b4280)
 0046adc0	CGeomElem_v17	scene	struct	Virtual slot 17 of CGeomElem (vtable 0x5b4280)
-0046b490	CParticleElem_Load	scene	med	Particle system element (.scn)
+0046aea0	CGeomElem_SetScale	scene	high	Scale (percent) and the scaled matrix at +0xa0
+0046af60	CGeomElem_ScaledMatrix	scene	high	Orientation times diag(scale) * 0.01 into +0xa0 and out
+0046b490	CParticleElem_ctor	scene	high	Particle element ctor ("Particle System")
 0046b500	CParticleElem_v0	scene	struct	Virtual slot 0 of CParticleElem (vtable 0x5b44ac)
 0046b530	CParticleElem_v1	scene	struct	Virtual slot 1 of CParticleElem (vtable 0x5b44ac)
 0046b6d0	CParticleElem_v2	scene	struct	Virtual slot 2 of CParticleElem (vtable 0x5b44ac)
 0046b7a0	CParticleElem_v6	scene	struct	Virtual slot 6 of CParticleElem (vtable 0x5b44ac)
 0046b7d0	CParticleElem_v7	scene	struct	Virtual slot 7 of CParticleElem (vtable 0x5b44ac)
+0046bb30	CSceneElem_ctor	scene	high	Scene element base ctor: zero position, identity, empty name, active
 0046bbb0	CSceneElem_v0	scene	struct	Virtual slot 0 of CSceneElem (vtable 0x5b4500)
 0046bbe0	CSceneElem_v6	scene	struct	Virtual slot 6 of CSceneElem (vtable 0x5b4500)
 0046bc10	CSceneElem_v7	scene	struct	Virtual slot 7 of CSceneElem (vtable 0x5b4500)
+0046bd90	CSceneElem_GetPosition	scene	high	+0x08
+0046bdb0	CSceneElem_SetPosition	scene	high	+0x08
+0046bdf0	CSceneElem_GetMatrix	scene	high	+0x14 (3x3)
+0046be10	CSceneElem_SetMatrix	scene	high	+0x14 (3x3)
+0046be30	CSceneElem_GetName	scene	high	+0x38
+0046be40	CSceneElem_SetName	scene	high	+0x38 (strcpy)
 0046c170	Scene_ParseElements	scene	med	Parses .scn elements (AUDIO_ELEMENT, GEOM_ELEMENT, ...)
+0046c5d0	Scene_BuildEventTriggers	scene	high	List 0x62816c: triggers of types other than 0, 1, 2, 6
+0046c820	Scene_BuildLineTriggers	scene	high	List 0x628170: triggers of type 0, 1, 2 (start/end lines)
+0046ca50	Scene_BuildCameras	scene	high	Lists 0x628178 (cameras) and 0x628174 (type-6 triggers)
 0046cc00	Scene_LoadStarts	scene	med	Start grids (_FSTART / _BSTART)
+0046cf60	Scene_Clear	scene	high	Frees the scene's elements and lists
+0046d120	Scene_PlaceGeometry	scene	high	Geometry elements into the world's scene bundle
+0046d1e0	Scene_FindTriggerByType	scene	high	In the line triggers
+0046d230	Scene_FindTriggerById	scene	high	In the line triggers, by +0xd4
 0046d280	Scene_LoadSkillTest	scene	high	Loads _ST<n>.scn ("Failed to load Skill Test")
 0046d550	Scene_LoadStartScenes	scene	med	Loads _FStart.scn / _BStart.scn
+0046d7c0	Scene_EventTriggers	scene	high	0x62816c
+0046d7d0	Scene_CameraTriggers	scene	high	0x628174
+0046d7e0	Scene_FirstCamera	scene	high	Index of the first camera of the race's direction (0x657430), else the first camera
+0046d8b0	Scene_CameraCount	scene	high	Size of 0x628178
+0046d8d0	Scene_Camera	scene	high	Element at index as a camera
+0046d900	Scene_List	scene	high	0x628168
 0046d910	Scene_CountGeom	scene	high	Number of CGeomElem in the scene list 0x628168
+0046db40	CTriggerElem_ctor	scene	high	Trigger element ctor (end points from an unset field; overwritten by every load)
 0046dd00	CTriggerElem_v0	scene	struct	Virtual slot 0 of CTriggerElem (vtable 0x5b4554)
 0046dd30	CTriggerElem_v1	scene	struct	Virtual slot 1 of CTriggerElem (vtable 0x5b4554)
 0046e620	CTriggerElem_v2	scene	struct	Virtual slot 2 of CTriggerElem (vtable 0x5b4554)
@@ -427,6 +460,13 @@
 0046e920	CTriggerElem_v9	scene	struct	Virtual slot 9 of CTriggerElem (vtable 0x5b4554)
 0046ea00	CTriggerElem_v10	scene	struct	Virtual slot 10 of CTriggerElem (vtable 0x5b4554)
 0046eb70	CTriggerElem_v17	scene	struct	Virtual slot 17 of CTriggerElem (vtable 0x5b4554)
+0046ed50	CTriggerElem_GetId	scene	high	+0xd4
+0046ed60	CTriggerElem_SetLink1	scene	high	+0xd8
+0046ed70	CTriggerElem_GetLink1	scene	high	+0xd8
+0046ed80	CTriggerElem_SetLink2	scene	high	+0xdc
+0046ed90	CTriggerElem_GetLink2	scene	high	+0xdc
+0046eda0	CTriggerElem_SetLink3	scene	high	+0xde
+0046edb0	CTriggerElem_GetLink3	scene	high	+0xde
 00470b10	Scene_Tick	scene	low	Per-tick scene elements (animations, triggers)
 00471140	SmackAnim_v1	game	struct	Virtual slot 1 of SmackAnim (vtable 0x5b45e4)
 00471330	SmackAnim_v4	game	struct	Virtual slot 4 of SmackAnim (vtable 0x5b45e4)
@@ -570,6 +610,7 @@
 004a7ef0	Audio_Tick	audio	med	Per-tick audio update (engines, positional sounds)
 004a8260	Audio_LoadSpeech	audio	med	SFXBANK / speech banks
 004a8aa0	Audio_LoadCollisionSounds	audio	med	Collision sound bank (SND_coll)
+004ab3c0	CAudioElem_ctor	scene	high	Audio element ctor ("Audio Element")
 004ab490	CAudioElem_v0	scene	struct	Virtual slot 0 of CAudioElem (vtable 0x5b4b58)
 004ab4c0	CAudioElem_v1	scene	struct	Virtual slot 1 of CAudioElem (vtable 0x5b4b58)
 004ab820	CAudioElem_v2	scene	struct	Virtual slot 2 of CAudioElem (vtable 0x5b4b58)
@@ -577,6 +618,7 @@
 004ab960	CAudioElem_v7	scene	struct	Virtual slot 7 of CAudioElem (vtable 0x5b4b58)
 004abe70	CAudioElem_v15	scene	struct	Virtual slot 15 of CAudioElem (vtable 0x5b4b58)
 004abec0	CAudioElem_v10	scene	struct	Virtual slot 10 of CAudioElem (vtable 0x5b4b58)
+004abf60	CAudioElem_CircleTable	scene	med	Circle points from the radius into 0x6568f0 (editor display)
 004ac9e0	EngineAudio_Load	audio	high	Engine sound banks <car>16.viv / <car>.viv ("Engine Audio")
 004adbf0	Music_LoadSongList	audio	med	Song list
 004aded0	Music_Init	audio	high	Music globals and buffer, zzz<name>.viv (streamed music)
@@ -1413,6 +1455,7 @@
 00532030	CS_leave	sys	high	LeaveCriticalSection wrapper
 005320d0	Vec3_ScaleArray	math	high	Scales n float triples
 00532150	MEM_copy	mem	high	memcpy; MMX path in PACODE 0x5b0480 when available
+005321e0	Mat3_Mul	math	high	3x3 a*b (row-major), the original's per-element addition order (port: src/render/camera_math.c)
 00532430	Mat3_AxisRotation	math	high	3x3 rotation by a fraction of a turn about an axis; the identity at 0
 00532550	Math_SinTurns	math	high	sin(x * 0x5bb2c0)
 00532560	Math_CosTurns	math	high	cos(x * 0x5bb2c0)
@@ -1800,12 +1843,17 @@
 005946a0	REFPACK_copy	file	high	RefPack back-reference byte copy
 00594f50	CONNpackettimeout	real	high	Named after its own error message (\real\cmn\llpacket.c)
 0059d400	Sys_InitPaths	main	med	Game directory from GetModuleFileName (data root for every relative path)
+0059d690	UTIL_loadfileabort	util	high	FILE_loadabort under the search path (NULL if no directory has it)
+0059d760	UTIL_loadfile	util	high	FILE_loadfile under the search path (NULL if missing)
 0059ddf0	UTIL_openfile	util	high	Support/Utility: FILE_openwait under the search path (game dir, CD dir) (port: src/support/ufile.c)
 0059e1d0	UFileFind_v0	util	struct	Virtual slot 0 of UFileFind (vtable 0x5c1820)
+0059e400	UTIL_fopen	util	high	C runtime fopen under the search path (port: src/game/scene_crt.c)
 0059e4d0	UTIL_loadshape	util	high	Support/Utility: SHAPE_loadfile under the search path
 0059e780	MEM_init	mem	high	Object heap (UMemory.cpp): "Insufficient memory to launch application"
 0059e8d0	MEM_shutdown	mem	med	Frees the pools at exit
+0059ea60	ALLOC_alloc	mem	high	The allocator object's alloc (name, size, flags) = MEM_alloc
 0059ea80	MEM_free	mem	high	Free through the allocator object (no null check)
+0059ea90	ALLOC_size	mem	high	The allocator object's size of a block
 0059eaf0	MEM_reserve	mem	high	VirtualAlloc reservation of the main pool
 0059eb40	MEM_release	mem	high	VirtualFree of a pool
 0059eb60	FastBlock_init	mem	med	Fixed-size block pools (FastBlock)

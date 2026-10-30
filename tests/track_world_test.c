@@ -5,6 +5,7 @@
    checked on a synthetic wall, and from each track's first object sphere to the others. Skips (exit 0)
    without data. */
 #include "exe.h"
+#include "game/scene.h"
 #include "game/track.h"
 #include "real/mem.h"
 #include "real/shape.h"
@@ -46,23 +47,12 @@ static void check_texnames(BWorld *w, const char *track)
     MEM_purge(shp);
 }
 
-/* The first trigger of <track>_fstart.scn (the forward start grid): its position. Test code, not the port:
-   the scene parser (Scene_ParseElements 0x46c170) is pending. */
+/* The forward start line, as Track_LoadWorld's scenes have it (game/scene.h). */
 static bool start_position(const char *track, float pos[3])
 {
-    char path[128];
-    snprintf(path, sizeof path, "%s%s_fstart.scn", g_track_dir, track);
-    size_t n = 0;
-    uint8_t *raw = vfs_read_all(path, &n);
-    if (!raw) return false;
-    char *t = malloc(n + 1);   /* vfs_read_all's data isn't NUL-terminated */
-    if (t) { memcpy(t, raw, n); t[n] = 0; }
-    free(raw);
-    if (!t) return false;
-    char *e = strstr(t, "TRIGGER_ELEMENT");
-    bool ok = e && sscanf(strchr(e, '\n') ? strchr(e, '\n') : e, "%f %f %f", &pos[0], &pos[1], &pos[2]) == 3;
-    free(t);
-    return ok;
+    (void)track;
+    float m[9];
+    return Scene_StartLine(pos, m);
 }
 
 /* Objects whose bounding sphere comes within `dist` of the start and that the visibility walls don't hide. */
