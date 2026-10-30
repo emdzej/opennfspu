@@ -113,6 +113,24 @@ export default defineConfig({
           ],
         },
       ],
+      "/": [
+        {
+          text: "Reverse engineering",
+          items: [
+            { text: "Overview", link: "/re/" },
+            { text: "Architecture", link: "/re/architecture" },
+            { text: "Inventory", link: "/re/inventory" },
+            { text: "Port plan", link: "/re/port-plan" },
+            { text: "THRASH driver", link: "/re/thrash" },
+            { text: "EAGL2", link: "/re/eagl" },
+            { text: "File formats", link: "/formats" },
+          ],
+        },
+        {
+          text: "Internals",
+          items: [{ text: "Porting conventions", link: "/internals/porting" }],
+        },
+      ],
     },
 
     socialLinks: [{ icon: "github", link: "https://github.com/emdzej/opennfspu" }],

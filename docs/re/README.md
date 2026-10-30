@@ -10,6 +10,7 @@ data from the game.
 | [inventory.md](inventory.md) | Address ranges to modules with function counts, imports, the 360 RTTI classes and their vtables, key globals |
 | [port-plan.md](port-plan.md) | The porting order toward a first playable race, with sizes and key addresses |
 | [thrash.md](thrash.md) | The THRASH driver interface (dx7z.dll) |
+| [eagl.md](eagl.md) | EAGL2: matrices, the transformer, views, materials and layers, the draw kernels down to THRASH |
 | [../formats.md](../formats.md) | Data file formats |
 
 ## Tooling
