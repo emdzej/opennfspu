@@ -4,6 +4,7 @@
    every material's texture name is an entry of the track's shape file. Line of sight through the walls is
    checked on a synthetic wall, and from each track's first object sphere to the others. Skips (exit 0)
    without data. */
+#include "eagl_fake_thrash.h"
 #include "exe.h"
 #include "game/scene.h"
 #include "game/track.h"
@@ -200,6 +201,7 @@ int main(void)
     if (!vfs_mount_default() || !vfs_exists("Porsche.exe")) { printf("track_world_test: no game data, skipped\n"); return 0; }
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("FAIL %s\n", err); return 1; }
+    fake_install_graphics();   /* the track's material set makes textures (Track_LoadWorld, 0x44a6b0) */
     check_segments();
     int n = 0;
     CHECK(Track_FindCrp(list_track, &n) == 15);

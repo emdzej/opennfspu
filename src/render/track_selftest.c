@@ -9,7 +9,9 @@
 #include "render/render.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
+#include "platform.h"
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -32,24 +34,34 @@ static void set_env(void)
     g_rlayer_lights = env;
 }
 
-/* The camera a few metres behind and above the start line, looking along it. The start line's matrix
-   rows are the trigger's axes; its third row is the direction of the race. */
+/* The camera a few metres behind and above the start line, looking along it and slightly down. The start
+   line's matrix rows are its axes: the first is the race's direction (the road runs along it), the second
+   up; the scene and the world have up = +y (the second row is (0, 1, 0)). */
 static void place_camera(const float pos[3], const float m[9])
 {
     RFrame *f = &camera->frame;
-    float fx = m[6], fy = m[7], fz = m[8];
-    f->eye[0] = pos[0] - fx * 8.0f;
-    f->eye[1] = pos[1] - fy * 8.0f - 2.5f;   /* y is down */
-    f->eye[2] = pos[2] - fz * 8.0f;
-    /* forward level, right = forward x up (up is -y), then up = right x forward */
+    float fx = m[0], fz = m[2];
+    {   /* --param yaw=<degrees> turns the heading */
+        char v[16];
+        if (plat_param("yaw", v, sizeof v)) {
+            float a = (float)atof(v) * 3.14159265f / 180.0f, c = cosf(a), s2 = sinf(a);
+            float nx = fx * c - fz * s2, nz = fx * s2 + fz * c;
+            fx = nx;
+            fz = nz;
+        }
+    }
     float n = sqrtf(fx * fx + fz * fz);
     if (n < 1e-6f) { fx = 0; fz = 1; n = 1; }
     fx /= n;
     fz /= n;
-    float bx = -fx, by = 0.12f, bz = -fz;   /* back, tilted so the view looks slightly down */
-    float bn = sqrtf(bx * bx + by * by + bz * bz);
+    f->eye[0] = pos[0] - fx * 8.0f;
+    f->eye[1] = pos[1] + 2.5f;
+    f->eye[2] = pos[2] - fz * 8.0f;
+    /* back (towards the eye), up a little; right = up x back (up (0, 1, 0)); up' = back x right; the rows
+       (-right, up', forward) as the car viewer's (a proper rotation) */
+    float bx = -fx, by = 0.12f, bz = -fz, bn = sqrtf(bx * bx + by * by + bz * bz);
     bx /= bn; by /= bn; bz /= bn;
-    float rx = -bz, rz = bx, rn = sqrtf(rx * rx + rz * rz);
+    float rx = bz, rz = -bx, rn = sqrtf(rx * rx + rz * rz);
     rx /= rn;
     rz /= rn;
     float ux = by * rz, uy = bz * rx - bx * rz, uz = -by * rx;
