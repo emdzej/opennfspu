@@ -10,7 +10,7 @@ set(PU_WARN -Wall -Wextra -Wno-unused-parameter)
 # The portable core: everything except host backends (no platform headers). The THRASH driver
 # (src/render/thrash*.c) is the only GL user; the native build leaves it out (tests and tools run without
 # a GPU).
-file(GLOB CORE_SRC CONFIGURE_DEPENDS src/*.c src/real/*.c src/eagl/*.c src/front/*.c src/game/*.c src/render/*.c)
+file(GLOB CORE_SRC CONFIGURE_DEPENDS src/*.c src/real/*.c src/support/*.c src/eagl/*.c src/front/*.c src/game/*.c src/render/*.c)
 file(GLOB GL_SRC CONFIGURE_DEPENDS src/render/thrash*.c)
 set(HOST_SRC src/vfs_host.c src/platform_host.c)
 foreach(f ${HOST_SRC} src/platform_gasm.c src/app.c)

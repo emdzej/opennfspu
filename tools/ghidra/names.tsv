@@ -1419,11 +1419,6 @@
 0059f9d0	REAL_errorbox	sys	med	"Error: terminate execution?" (IsDebuggerPresent)
 0059fc60	UFileFind_find	file	med	FindFirstFile/FindNextFile directory enumeration
 005a0b80	UFileHandler_v0	util	struct	Virtual slot 0 of UFileHandler (vtable 0x5c18ec)
-005a0bf0	crt_5a0bf0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0c40	crt_5a0c40	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0c80	crt_5a0c80	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0cb0	crt_5a0cb0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0ce0	crt_5a0ce0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005a0cf0	crt_5a0cf0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005a0cf5	crt_5a0cf5	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005a0d0c	crt_5a0d0c	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
@@ -1779,11 +1774,9 @@
 005aea9f	crt_5aea9f	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005aeb00	crt_5aeb00	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005aeb10	SHAPE_loadfile	file	high	\real\cmn\loadshp.c: loads an FSH (SHPI) shape file
-005aecb0	real_5aecb0	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aecd0	real_5aecd0	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aed20	real_5aed20	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aed30	real_5aed30	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
-005aedf0	real_5aedf0	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aee40	real_5aee40	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
@@ -1793,3 +1786,61 @@
 00565a30	BIG_findentry	file	high	\real\cmn\locatbig.c: directory scan by name (_stricmp) or index; offset/size out, returns the record's name
 00565d00	BIG_count	file	high	\real\cmn\locatbig.c: entry count (C0FB: u16 at +4; BIGF: u32 BE at +8)
 0056e040	BIG_getnum	file	high	\real\cmn: big-endian n-byte read (byte-swapped word shifted down)
+00531a10	MEM_alloc	mem	high	EA real heap allocation (name, size, flags: pool nibble, 0x10 top, 0x20 best fit); 16-byte header 'MB' (port: src/real/mem.c)
+00531e20	MEM_initblock	mem	high	Fills a block header ('MB', flags, size, links; optional name, 'BEND' guard)
+00533900	FILE_openwait	file	high	Opens a file on its device and waits (name, mode, priority, &handle) (port: src/real/file.c)
+00533960	FILE_readwait	file	high	Reads (handle, offset, dst, len, priority) in 8 KB pieces and waits
+00533990	FILE_readpieces	file	high	The 8 KB-piece read loop with an operation callback
+00533b10	FILE_closewait	file	high	Closes a file and waits
+00533b50	FILE_sizewait	file	high	File size and waits
+00533c70	FILE_existswait	file	high	Whether a file exists, waits
+00536450	SYNCTASK_run	real	high	\real\cmn\systask.c: runs due periodic tasks when the timer ticked (port: src/real/systask.c)
+00537ca0	SHAPE_count	real	high	Shape file entry count (+8) (port: src/real/shape.c)
+00537cd0	SHAPE_entryname	real	high	Shape file entry i's 4-byte name, 0 past the end
+00537d00	SHAPE_typevalid	real	high	Shape record type table 0x5de890 lookup
+005563a0	MEM_size	mem	high	Size asked for of a heap block (header +4)
+00568310	FILE_device	file	high	\real\pc\nfile.c: device of a path (drive letter - '@'; 0 with '|' or no letter)
+00569d40	FILE_exists	file	high	FILE_existswait at the hlsfile priority
+00569e20	FILE_getsize	file	high	Public FILE_size (no abort)
+00569e60	FILE_loadabort	file	high	Public FILE_load that aborts on failure
+00569fc0	FILE_loadfile	file	high	Public FILE_load (no abort)
+0056a0e0	FILE_loadatfile	file	high	Public FILE_loadat (no abort)
+0056a280	FILE_loadbigheaderabort	file	high	Public FILE_loadbigheader that aborts on failure
+0056a4c0	FILE_loadbigheaderfile	file	high	Public FILE_loadbigheader (no abort)
+0056e190	FILE_loadpackfile	file	high	\real\cmn\loadpack.c: load + unpack (no abort)
+00571150	UNPACK_dispatch	file	high	Codec dispatch: 0x10 RefPack, 0x18, 0x30/32/34, 0x46 (port: src/real/pack.c)
+00571240	UNPACK_size	file	high	Unpacked size of a packed block, 0 if not packed
+005933f0	UNPACK_type46	file	med	Codec of type 0x46 (unused by the data)
+005935b0	UNPACK_type30	file	med	Codec of types 0x30/0x32/0x34 (unused by the data)
+005941b0	UNPACK_type18	file	med	Codec of type 0x18 (unused by the data)
+00594510	REFPACK_decode	file	high	RefPack (0x10FB) decoder
+005946a0	REFPACK_copy	file	high	RefPack back-reference byte copy
+0059ddf0	UTIL_openfile	util	high	Support/Utility: FILE_openwait under the search path (game dir, CD dir) (port: src/support/ufile.c)
+0059e4d0	UTIL_loadshape	util	high	Support/Utility: SHAPE_loadfile under the search path
+0059f020	UData_name	util	high	CUData: the 'Name' item's data (port: src/support/udata.c)
+0059f050	UData_dz	util	high	CUData: the 'dz' item's data (index or 'dz  ')
+0059f0a0	UData_copy	util	high	CUData copy (owned data copied, else absolute pointer)
+0059f150	UData_init	util	high	CUData record owning a copy of data
+0059f1d0	UData_dtor	util	high	CUData: frees owned data
+0059f1f0	UData_set	util	high	CUData: replaces the data (keeps the block if it fits within 256 bytes)
+0059f270	UData_fromdata	util	high	Identity cast of a file's data to its root record
+0059f280	UData_countarticles	util	high	CUData: sub-articles with a key
+0059f2e0	UData_findarticle	util	high	CUData: binary search of sub-articles by id or id+index range
+0059f390	UData_lowerbound	util	high	CUData: binary search of records by raw id (first of equal run)
+0059f440	UData_countitems	util	high	CUData: items with a key
+0059f4b0	UData_finditem	util	high	CUData: binary search of items by id or id+index range
+0059f570	UData_find	util	high	CUData: item by raw id (binary if sorted, else linear)
+0059f620	UData_children	util	high	CUData: first child record (relative: in 16-byte units)
+0059f630	UDataFile_ctor	util	high	Chunk data file object (handler, data, size, reserved, done)
+0059f650	UDataFile_dtor	util	high	Chunk data file: drops the data
+0059f6a0	UDataFile_load	util	high	Chunk data file: mapped view or read, unpacked into reserved pages
+0059f900	UDataFile_free	util	high	Chunk data file: drops the data unconditionally
+0059f940	UDataFile_root	util	high	Chunk data file: the data (pages made read-only the first time)
+005a0b30	UFileHandler_ctor	util	high	UFileHandler constructor (priority 100, vtable 0x5c18ec)
+005a0bf0	UFileHandler_open	util	high	UFileHandler: open under the search path (mode bit 0 read, 8 mapped)
+005a0c40	UFileHandler_read	util	high	UFileHandler: read from the position, advances it
+005a0c80	UFileHandler_size	util	high	UFileHandler: size
+005a0cb0	UFileHandler_close	util	high	UFileHandler: close
+005a0ce0	UFileHandler_mapview	util	high	UFileHandler: mapped view of the file (0x568350 -> 0x592240)
+005aecb0	SHAPE_loadfile_glue	real	high	SHAPE_loadfile without abort
+005aedf0	MEM_protect	mem	high	VirtualProtect of whole pages (read-only or read-write)
