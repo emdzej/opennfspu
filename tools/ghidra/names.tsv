@@ -481,11 +481,21 @@
 00471ad0	Track_Load	world	high	Loads the track (crp + scn + support files); "ERROR - Couldn't load track"
 00471ba0	BWorld_DeInit	world	high	Frees the track world
 00471bf0	Track_FindCrp	world	high	Lists *.crp in a folder ("No *.crp files in %s")
+004731a0	WSurface_FindBelow	world	high	The polygon under a point nearest in height among those with surface bits
+00473290	WSurface_FindAbove	world	high	The polygon above a point by more than 3.5, its flags
+00473fc0	WSurface_Update	world	high	A surface tracker's polygon for a point (kept while still on it)
+00474280	WSurface_ComputeNormal	world	high	The tracker's polygon normal and in-plane edge direction
+00474380	WSurface_Normal	world	high	The tracker's normal (computed on demand)
+00474390	WSurface_Slope	world	high	The tracker's in-plane direction (computed on demand)
+004744a0	WSurface_HeightAt	world	high	The ground height under a point
+00474550	WSurface_Vertex	world	high	The tracker's polygon vertex i (the zero vector without one)
 004749e0	stl_uninit_copy_ptr	stl	med	std::uninitialized_copy of pointers (vector growth)
 00474a70	PCollidableBundle_v0	world	struct	Virtual slot 0 of PCollidableBundle (vtable 0x5b465c)
+00474b20	PCollideArticleBundle_ctor	world	high	The article bundle's collision object
 00474b40	PCollideArticleBundle_v0	world	struct	Virtual slot 0 of PCollideArticleBundle (vtable 0x5b4674)
 00474b70	PCollideArticleBundle_v3	world	struct	Virtual slot 3 of PCollideArticleBundle (vtable 0x5b4674)
 00474b80	PCollideArticleBundle_v4	world	struct	Virtual slot 4 of PCollideArticleBundle (vtable 0x5b4674)
+00475040	PCollideArticleBundle_Build	world	high	An article bundle's collision elements (polygons, objects)
 00475c10	World_LoadSpecFile	world	high	Loads Tr<nn>.bin ("REQUEST FOR SPEC FILE %d WHEN ONLY %d EXIST")
 00475da0	WAnimatableArticleBundle_v0	world	struct	Virtual slot 0 of WAnimatableArticleBundle (vtable 0x5b469c)
 00475ee0	WAnimatableBundle_v0	world	struct	Virtual slot 0 of WAnimatableBundle (vtable 0x5b46a8)
@@ -528,12 +538,25 @@
 00483350	WStaticBundle_ctor	world	high	WStaticBundle (0x34), vtable 0x5b4814
 00483370	WStaticBundle_v0	world	struct	Virtual slot 0 of WStaticBundle (vtable 0x5b4814)
 004833a0	WStaticBundle_load	world	high	Takes every article left; drawing (0x450b10) and collision (0x474b20) objects
+004835e0	WTree_ctor	world	high	The collision quadtree (half size, levels)
+00483780	WTree_dtor	world	high	Deletes the elements and cells
+00483870	WTree_Add	world	high	Adds elements to the tree and inserts them
+004839b0	WTreeCell_ctor	world	high	A child cell of a quadrant
+00483a80	WTreeCell_dtor	world	high	A cell and its children
+00483bd0	WTreeCell_Split	world	high	Hands a full leaf's elements to new children
+00484100	WTreeCell_Touches	world	high	Element centre in the cell or bounds over it
+00484230	WTreeCell_Contains	world	high	Point in the cell's square
+004842e0	WTree_LeafAt	world	high	The leaf a point falls in
+00484410	WTree_LeavesNear	world	high	The leaves within a radius of a point
+004848c0	WTreeCell_Insert	world	high	Inserts an element into the cells it touches
+00485070	WTreeElem_Edge_ctor	world	high	A road edge from a .edg record
 00485180	WTreeElem_Edge_v0	world	struct	Virtual slot 0 of WTreeElem_Edge (vtable 0x5b484c)
 004851d0	WTreeElem_v0	world	struct	Virtual slot 0 of WTreeElem (vtable 0x5b4868)
 00485220	WTreeElem_Edge_v1	world	struct	Virtual slot 1 of WTreeElem_Edge (vtable 0x5b484c)
 00485260	WTreeElem_Edge_v4	world	struct	Virtual slot 4 of WTreeElem_Edge (vtable 0x5b484c)
 004852b0	WTreeElem_Edge_v2	world	struct	Virtual slot 2 of WTreeElem_Edge (vtable 0x5b484c)
 00485320	WTreeElem_Edge_v5	world	struct	Virtual slot 5 of WTreeElem_Edge (vtable 0x5b484c)
+00485330	WTreeElem_Quad_ctor	world	high	A collision quad
 004854e0	WTreeElem_Quad_v0	world	struct	Virtual slot 0 of WTreeElem_Quad (vtable 0x5b4880)
 00485530	WTreeElem_Quad_v1	world	struct	Virtual slot 1 of WTreeElem_Quad (vtable 0x5b4880)
 004855a0	WTreeElem_Quad_v2	world	struct	Virtual slot 2 of WTreeElem_Quad (vtable 0x5b4880)
@@ -542,6 +565,7 @@
 00485a60	WTreeElem_Quad_v6	world	struct	Virtual slot 6 of WTreeElem_Quad (vtable 0x5b4880)
 00485a80	WTreeElem_Quad_v10	world	struct	Virtual slot 10 of WTreeElem_Quad (vtable 0x5b4880)
 00485aa0	WTreeElem_Quad_v5	world	struct	Virtual slot 5 of WTreeElem_Quad (vtable 0x5b4880)
+00485ba0	WTreeElem_Tri_ctor	world	high	A collision triangle
 00485d30	WTreeElem_Tri_v8	world	struct	Virtual slot 8 of WTreeElem_Tri (vtable 0x5b48b0)
 00485d40	WTreeElem_Tri_v0	world	struct	Virtual slot 0 of WTreeElem_Tri (vtable 0x5b48b0)
 00485d90	WTreeElem_Tri_v1	world	struct	Virtual slot 1 of WTreeElem_Tri (vtable 0x5b48b0)
@@ -562,6 +586,7 @@
 00487410	BWorld_ctor	world	high	The track world (0x3c)
 00487650	Track_LoadWorld	world	high	Loads <track>.crp, animdefs.txt and <track>.jnc (junctions)
 00487940	World_BuildBundles	world	high	Article bundles in order (scene, instance, anim, mid-ground, static, line), object list, edges, Vis
+00487df0	Track_LoadEdgeFile	world	high	Reads <track>.edg into edge elements
 00488000	Track_LoadEdges	world	high	Loads <track>.edg (road edges)
 004889d0	BWorld_LoadVis	world	high	The root's 'Vis ' records as visibility walls (BWorld +0x28/+0x2c/+0x30)
 00488ac0	WVis_blocked	world	high	Sight line crosses an enabled visibility wall
@@ -571,6 +596,8 @@
 00489130	R3DTypes_W3DObjectBundle_v1	render	struct	Virtual slot 1 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
 00489760	WObjectRef_set	world	high	{bundle, 0, index}
 00489bf0	World_SegmentsCross	world	high	Ground-plane segment intersection, parameters in [0, 1]
+00489f90	Plane_HeightAt	world	high	The height of a plane through a point at (x, z)
+00489fd0	Quad_Warp	world	high	Distance of a quad's fourth vertex from the plane of the first three
 0048aca0	CConClient_v0	scene	struct	Virtual slot 0 of CConClient (vtable 0x5b4968)
 0048aeb0	NetLobby_Connect	net	med	fsNet / porsche-entry.earacing.com online lobby
 0048b270	CConHost_v0	scene	struct	Virtual slot 0 of CConHost (vtable 0x5b4978)
@@ -1884,6 +1911,9 @@
 0059f970	NFS_ErrorHandler	sys	med	Fatal error handler installed in 0x5debf0 (file/line in 0x5deb74/0x5deb78)
 0059f9d0	REAL_errorbox	sys	med	"Error: terminate execution?" (IsDebuggerPresent)
 0059fc60	UFileFind_find	file	med	FindFirstFile/FindNextFile directory enumeration
+005a0930	Prim_Count	util	high	Primitives in an index list of a type
+005a0970	Prim_Indices	util	high	The vertex indices of primitive k
+005a0a00	Prim_FindStream	util	high	The nth stream of a primitive list with an item id
 005a0b30	UFileHandler_ctor	util	high	UFileHandler constructor (priority 100, vtable 0x5c18ec)
 005a0b80	UFileHandler_v0	util	struct	Virtual slot 0 of UFileHandler (vtable 0x5c18ec)
 005a0bf0	UFileHandler_open	util	high	UFileHandler: open under the search path (mode bit 0 read, 8 mapped)

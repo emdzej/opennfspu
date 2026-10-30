@@ -1,6 +1,7 @@
 /* Track loading (see track.h). */
 #include "game/track.h"
 #include "game/track_pending.h"
+#include "game/wtree.h"
 #include "real/real.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -105,8 +106,9 @@ void BWorld_BuildBundles(BWorld *w)
 
     free(arts);
     /* Then the line bundle (0x479890 with the 0x10 object), the links, Track_LoadEdges 0x488000, the
-       sync tasks, the visibility walls and the two 0x488820 passes. */
+       sync tasks, the visibility walls and the two 0x488820 passes (the edges here, the walls below). */
     World_BuildBundles(w);
+    Track_LoadEdges(w);                      /* 0x488000 */
     BWorld_LoadVis(w);
 }
 
@@ -125,6 +127,7 @@ void BWorld_free(BWorld *w)
 {
     if (!w) return;
     for (int i = 0; i < w->nbundles; i++) W3DObjectBundle_delete(w->bundles[i]);
+    WTree_delete(w->tree);                   /* 0x487850: 0x483780 */
     free(w->objects);
     free(w->vis);
     free(w->vis_off);
@@ -159,7 +162,8 @@ bool Track_LoadWorld(BWorld *w, const char *path)
     char defs[256];
     snprintf(defs, sizeof defs, "%s%s", g_track_dir, "animdefs.txt");
     WMidGround_LoadObjectDefs(defs);
-    w->lines = WLineSet_new(8192.0f, 15);    /* 0x46000000 */
+    w->tree = WTree_new(8192.0f, 15);        /* 0x4835e0 (0x46000000) */
+    g_wtree = w->tree;
     BWorld_BuildBundles(w);
     Road_new();                              /* 0x47fbd0 */
     World_LoadSim(w->root);                  /* 0x47ff20 */

@@ -10,10 +10,11 @@
 | The original program read at run time (`Porsche.exe` 3.5, size and CRC-32 checked) | in place |
 | The 3D driver (THRASH, the original's Direct3D 7 path) on OpenGL ES 3.0, EAGL2 | in place |
 | Textures, car models with their texture pages and colours | in place (no environment maps, decals or licence plates yet) |
-| Tracks: loading, scenes and start grids, the world draw | in progress (all objects tested instead of the visibility grid; no sky yet) |
+| Tracks: loading, scenes and start grids, the world draw, the sky's horizon | in progress (all objects tested instead of the visibility grid; no clouds yet) |
+| Track road and collision: road nodes, the collision tree of polygons and road edges, the ground under a point | in progress (no roadside collision objects yet) |
 | Cameras | in progress (fixed viewer cameras; the race cameras aren't ported) |
 | Frontend (menus, showroom, Evolution, Factory Driver) | not started |
-| Simulation (handling, damage, AI, police) | not started |
+| Simulation (handling, damage, AI, police) | in progress (car specs, engine model and integrators; no forces yet) |
 | Sound, music, speech | not started |
 | Multiplayer | out of scope for now |
 

@@ -35,7 +35,7 @@ typedef struct {
     W3DObjectBundle *instances;/* +0x18 */
     W3DObjectBundle *scene;    /* +0x1c */
     W3DObjectBundle *anim;     /* +0x20 */
-    void *lines;               /* +0x24: 0x4835e0 */
+    struct WTree *tree;        /* +0x24: the collision tree (game/wtree.h) */
     uint32_t nvis;             /* +0x28 */
     WVisWall *vis;             /* +0x2c */
     uint8_t *vis_off;          /* +0x30: per wall, set = ignored */

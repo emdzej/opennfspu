@@ -3,6 +3,7 @@
 #include "eagl/eagl.h"
 #include "exe.h"
 #include "game/track_pending.h"
+#include "game/wtree.h"
 #include "render/rdraw.h"
 #include <stdlib.h>
 #include <string.h>
