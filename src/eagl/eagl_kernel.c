@@ -18,6 +18,7 @@
    result once more (multi-pass). */
 #include "eagl/eagl.h"
 #include "eagl/eagl_pending.h"
+#include "real/texture.h"
 #include "pending.h"
 #include "real/set3d.h"
 #include <string.h>
@@ -62,7 +63,8 @@ static void reset_format(EaglContext *c)
 static void submit(EaglContext *c, uint32_t unindexed_prim, bool sort)
 {
     if (!c->out_nindices) return;
-    TEXTURE_select(c->texture, 0);
+    /* The manager of the graphics object ((*0x69ed0c)[1]): the draw's texture on stage 0, none on 1. */
+    if (g_texgraphics && g_texgraphics->textures) TEXTURE_select(g_texgraphics->textures, c->texture, NULL);
     reset_format(c);
     c->draw.prim = 4;
     c->draw.fvf = 0x1c4;

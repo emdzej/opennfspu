@@ -2,11 +2,6 @@
 #include "eagl/eagl_pending.h"
 #include "pending.h"
 
-void TEXTURE_select(void *tex, int stage)
-{
-    PENDING_NOTE(0x535fb0, "TEXTURE_select");
-}
-
 EaglLayer *EAGL_PendingLayerEnvColour(EaglLayer *l, EaglStream *s0, EaglStream *s1)
 {
     PENDING_NOTE(0x5741f0, "EAGL layer 0xc (environment colour)");
