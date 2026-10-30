@@ -2,7 +2,7 @@
    port's driver where EAGL asks (about: "DX7 3rash", mode 1 = 640x480, a +-2048 guard band) and keeps
    every primitive passed to setstate(0x1b3), so the tests can check the exact vertex and index stream. */
 #pragma once
-#include "render/thrash.h"
+#include "real/set3d.h"
 #include <string.h>
 
 typedef struct {
@@ -14,12 +14,12 @@ typedef struct {
 static FakePrim fake_prims[16];
 static int fake_nprims;
 static int fake_states[0x400];      /* last value per state id (low 16 bits) */
-static int fake_clip[4];
+static int fake_cliprect[4];
 
 static ThrashMode fake_modes[6];
 static ThrashAbout fake_about;
 
-const ThrashAbout *THRASH_about(void)
+const ThrashAbout *fake_about_fn(void)
 {
     if (!fake_about.size) {
         fake_about.signature = 0x44334437;
@@ -34,7 +34,7 @@ const ThrashAbout *THRASH_about(void)
     return &fake_about;
 }
 
-uintptr_t THRASH_setstate(uint32_t state, uintptr_t value)
+uintptr_t fake_setstate(uint32_t state, uintptr_t value)
 {
     if (state == THRASH_STATE_GUARDBAND) {
         float *g = (float *)value;
@@ -61,16 +61,26 @@ uintptr_t THRASH_setstate(uint32_t state, uintptr_t value)
     return 1;
 }
 
-intptr_t THRASH_getstate(uint32_t state) { return fake_states[state & 0x3ff]; }
+intptr_t fake_getstate(uint32_t state) { return fake_states[state & 0x3ff]; }
 
-int THRASH_clip(int x0, int y0, int x1, int y1)
+int fake_clip(int x0, int y0, int x1, int y1)
 {
-    fake_clip[0] = x0;
-    fake_clip[1] = y0;
-    fake_clip[2] = x1;
-    fake_clip[3] = y1;
+    fake_cliprect[0] = x0;
+    fake_cliprect[1] = y0;
+    fake_cliprect[2] = x1;
+    fake_cliprect[3] = y1;
     return 1;
 }
 
-bool THRASH_flushwindow(void) { return true; }
-void THRASH_clearwindow(void) {}
+bool fake_flushwindow(void) { return true; }
+void fake_clearwindow(void) {}
+void fake_pageflip(void) {}
+
+/* The fake as a driver in the original's pointer table (real/set3d.h): EAGL calls THRASH.fn.x(). */
+static const ThrashDll fake_dll = {
+    .name = "fake", .about = fake_about_fn, .clearwindow = fake_clearwindow, .clip = fake_clip,
+    .flushwindow = fake_flushwindow, .getstate = fake_getstate, .pageflip = fake_pageflip, .setstate = fake_setstate,
+};
+
+/* Straight into the table: THRASH_opendll insists on a complete driver, as the original does. */
+static void fake_install(void) { THRASH.fn = fake_dll; }

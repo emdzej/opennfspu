@@ -128,7 +128,7 @@ static void setup_view(void)
     view.znear = 1;
     view.zfar = 1000;
     EAGL_ViewBegin(&view);
-    CHECK(fake_clip[0] == 0 && fake_clip[1] == 0 && fake_clip[2] == 640 && fake_clip[3] == 480);
+    CHECK(fake_cliprect[0] == 0 && fake_cliprect[1] == 0 && fake_cliprect[2] == 640 && fake_cliprect[3] == 480);
     CHECK(view.proj.m[10] == -1.0f && NEAR(view.proj.m[0], 1.0f, 1e-5f) && NEAR(view.proj.m[5], -0.75f, 1e-5f));
     CHECK(NEAR(view.zscale, 1000.0f / 999.0f, 1e-6f));
     float p[4] = {0, 0, -10, 1}, s[4];
@@ -306,6 +306,7 @@ static void test_sort(void)
 int main(void)
 {
     if (!vfs_mount_default() || !vfs_exists("Porsche.exe")) { printf("eagl_test: no game data, skipped\n"); return 0; }
+    fake_install();
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("eagl_test: %s\n", err); return 1; }
     test_math();

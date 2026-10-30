@@ -3,7 +3,7 @@
 #include "eagl/eagl.h"
 #include "eagl/eagl_pending.h"
 #include "exe.h"
-#include "render/thrash.h"
+#include "real/set3d.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,8 +36,8 @@ void EAGL_ContextInit(EaglContext *c, int mode)
 {
     int shift = 0;
     float gb[4];
-    const ThrashAbout *about = THRASH_about();
-    if (THRASH_setstate(THRASH_STATE_GUARDBAND, (uintptr_t)gb) && about && mode > 0 && mode < about->nmodes &&
+    const ThrashAbout *about = THRASH.fn.about();
+    if (THRASH.fn.setstate(THRASH_STATE_GUARDBAND, (uintptr_t)gb) && about && mode > 0 && mode < about->nmodes &&
         (float)about->modes[mode].width * 1.5f < gb[1] && (float)about->modes[mode].height * 1.5f < gb[3]) {
         shift = 1;
         c->flags |= EAGL_CF_GUARDBAND;
@@ -52,13 +52,13 @@ void EAGL_ContextResetStages(EaglContext *c)
     c->twouv = -1;
     c->blend1 = -1;
     c->blend0 = -1;
-    THRASH_setstate(0x29, 8);
+    THRASH.fn.setstate(0x29, 8);
     c->blend0 = 8;
     if (c->blend1 != 0) {
-        THRASH_setstate(0x10029, 0);
+        THRASH.fn.setstate(0x10029, 0);
         c->blend1 = 0;
     }
-    THRASH_setstate(0x2a, 0);
+    THRASH.fn.setstate(0x2a, 0);
     c->twouv = 0;
 }
 
@@ -67,17 +67,17 @@ void EAGL_ContextSetVertexFormat(EaglContext *c, int twouv)
     if (c->twouv == twouv) return;
     if (twouv == 0) {
         if (c->blend0 != 8) {
-            THRASH_setstate(0x29, 8);
+            THRASH.fn.setstate(0x29, 8);
             c->blend0 = 8;
         }
         if (c->blend1 != 0) {
-            THRASH_setstate(0x10029, 0);
+            THRASH.fn.setstate(0x10029, 0);
             c->blend1 = 0;
         }
-        THRASH_setstate(0x2a, 0);
+        THRASH.fn.setstate(0x2a, 0);
         c->twouv = 0;
     } else if (twouv == 1) {
-        THRASH_setstate(0x2a, 1);
+        THRASH.fn.setstate(0x2a, 1);
         c->twouv = 1;
     }
 }
@@ -238,7 +238,7 @@ static void rs_load(void)
     rs_loaded = true;
 }
 
-void EAGL_RSSet(uint32_t s, uintptr_t v) { THRASH_setstate(s, v); }
+void EAGL_RSSet(uint32_t s, uintptr_t v) { THRASH.fn.setstate(s, v); }
 
 /* Depth bias: with the DX7 path the kernels add it to z themselves (2^-15 units), else THRASH does. */
 void EAGL_RSSetDepthBias(uint32_t s, int v)
@@ -247,34 +247,34 @@ void EAGL_RSSetDepthBias(uint32_t s, int v)
         g_eagl->depthbias = (float)v * 3.0517578125e-05f;
         return;
     }
-    THRASH_setstate(s, (uintptr_t)v);
+    THRASH.fn.setstate(s, (uintptr_t)v);
 }
 
-void EAGL_RSSetAlias(uint32_t s, uintptr_t v) { THRASH_setstate(s, v); }
+void EAGL_RSSetAlias(uint32_t s, uintptr_t v) { THRASH.fn.setstate(s, v); }
 
 void EAGL_RSSetRelativeBias(uint32_t s, int v) { EAGL_RSSetDepthBias(s, rs_bias_base + v); }
 
 void EAGL_RSSetBlend(uint32_t s, int v)
 {
     if (v == -1) {
-        THRASH_setstate(0x194, 7);
-        THRASH_setstate(0x195, 6);
+        THRASH.fn.setstate(0x194, 7);
+        THRASH.fn.setstate(0x195, 6);
         return;
     }
-    THRASH_setstate(s, (uintptr_t)v);
+    THRASH.fn.setstate(s, (uintptr_t)v);
 }
 
 void EAGL_RSSetCull(uint32_t s, int v)
 {
     (void)s;
-    THRASH_setstate(2, v == 1 ? (uintptr_t)rs_cull_mode : 0);
+    THRASH.fn.setstate(2, v == 1 ? (uintptr_t)rs_cull_mode : 0);
 }
 
 void EAGL_RSProbe(uint32_t s)
 {
-    intptr_t old = THRASH_getstate(s);
-    if (!THRASH_setstate(s, s)) {
-        THRASH_setstate(s, (uintptr_t)old);
+    intptr_t old = THRASH.fn.getstate(s);
+    if (!THRASH.fn.setstate(s, s)) {
+        THRASH.fn.setstate(s, (uintptr_t)old);
         rs_value[0] = (int32_t)old;
     }
 }

@@ -1,7 +1,7 @@
 /* EAGL views (0x538a80..0x539470): the camera and object matrix stacks, projection, viewport, the
    per-frame scene begin / end, and the sphere test the renderers cull with. */
 #include "eagl/eagl.h"
-#include "render/thrash.h"
+#include "real/set3d.h"
 #include <math.h>
 #include <string.h>
 
@@ -168,20 +168,20 @@ void EAGL_ViewBegin(EaglView *v)
     g_eagl->view = v;
     if (v->projection == 0) EAGL_ViewSetPerspective(v, v->fov, v->aspect, v->znear, v->zfar);
     else if (v->projection == 1) EAGL_ViewSetOrtho(v, v->ortho_height, v->ortho_near, v->ortho_far);
-    THRASH_clip(ftol(v->vp_x), ftol(v->vp_y), ftol(v->vp_w + v->vp_x), ftol(v->vp_h + v->vp_y));
+    THRASH.fn.clip(ftol(v->vp_x), ftol(v->vp_y), ftol(v->vp_w + v->vp_x), ftol(v->vp_h + v->vp_y));
 }
 
 void EAGL_ViewEnd(EaglView *v)
 {
-    THRASH_flushwindow();
+    THRASH.fn.flushwindow();
     if (v->owner) ((EaglOwner *)v->owner)->current = NULL;
     g_eagl->view = NULL;
 }
 
 void EAGL_ViewClear(EaglView *v)
 {
-    THRASH_setstate(3, v->background);
-    THRASH_clearwindow();
+    THRASH.fn.setstate(3, v->background);
+    THRASH.fn.clearwindow();
 }
 
 /* Recombines model * view (when either stack changed) and that times the projection (when it or the

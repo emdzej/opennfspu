@@ -19,7 +19,7 @@
 #include "eagl/eagl.h"
 #include "eagl/eagl_pending.h"
 #include "pending.h"
-#include "render/thrash.h"
+#include "real/set3d.h"
 #include <string.h>
 
 #define VSTRIDE 8   /* floats per work vertex (32 bytes, one texture coordinate set) */
@@ -47,14 +47,14 @@ static void reset_format(EaglContext *c)
 {
     if (!c->twouv) return;
     if (c->blend0 != 8) {
-        THRASH_setstate(0x29, 8);
+        THRASH.fn.setstate(0x29, 8);
         c->blend0 = 8;
     }
     if (c->blend1 != 0) {
-        THRASH_setstate(0x10029, 0);
+        THRASH.fn.setstate(0x10029, 0);
         c->blend1 = 0;
     }
-    THRASH_setstate(0x2a, 0);
+    THRASH.fn.setstate(0x2a, 0);
     c->twouv = 0;
 }
 
@@ -78,7 +78,7 @@ static void submit(EaglContext *c, uint32_t unindexed_prim, bool sort)
         c->draw.indices = NULL;
         c->draw.nindices = 0;
     }
-    THRASH_setstate(THRASH_STATE_DRAWPRIMITIVE, (uintptr_t)&c->draw);
+    THRASH.fn.setstate(THRASH_STATE_DRAWPRIMITIVE, (uintptr_t)&c->draw);
 }
 
 /* Copies a clipped polygon's attributes after it (rhw only for new positions). */

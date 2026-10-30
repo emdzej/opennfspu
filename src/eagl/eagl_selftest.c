@@ -4,7 +4,7 @@
    materials and the kernels exactly as the game's renderers use them. Call once per frame after
    THRASH_setvideomode (it clears, draws and flips; the caller presents). */
 #include "eagl/eagl.h"
-#include "render/thrash.h"
+#include "real/set3d.h"
 #include <math.h>
 #include <string.h>
 
@@ -90,10 +90,10 @@ static void draw(float (*pos)[4], uint32_t *col, int prim, int n, const EaglMatr
 void EAGL_selftest(void)
 {
     if (!ready) setup();
-    THRASH_setstate(THRASH_STATE_SHADE, 1);
-    THRASH_setstate(THRASH_STATE_ZBUFFER, 1);
-    THRASH_setstate(THRASH_STATE_CULL, 0);
-    THRASH_setstate(THRASH_STATE_BLEND, 0);
+    THRASH.fn.setstate(THRASH_STATE_SHADE, 1);
+    THRASH.fn.setstate(THRASH_STATE_ZBUFFER, 1);
+    THRASH.fn.setstate(THRASH_STATE_CULL, 0);
+    THRASH.fn.setstate(THRASH_STATE_BLEND, 0);
     EAGL_ViewClear(&view);
     EAGL_ViewBegin(&view);
     EaglMatrix m;
@@ -107,6 +107,6 @@ void EAGL_selftest(void)
     draw(floor_pos, floor_col, 1, 2 * 21, &m);
     draw(wide_pos, wide_col, 3, 3, &m);
     EAGL_ViewEnd(&view);
-    THRASH_pageflip();
+    THRASH.fn.pageflip();
     frame++;
 }
