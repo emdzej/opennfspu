@@ -196,7 +196,7 @@ int main(void)
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("car_load_test: %s\n", err); return 1; }
     ini_test();   /* the vector getters read their sscanf formats from the exe */
-    fake_install();
+    fake_install_graphics();
     THRASH.fn.setstate = count_setstate;
     EAGL_ContextCreate();
     EAGL_ContextInit(g_eagl, 1);

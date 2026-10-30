@@ -3,6 +3,8 @@
    binding finds it (R3DMaterial_Bind 0x44a190: a record of the part's own article) must hold one plane per
    triangle, and each plane must lie along its triangle's normal. A plane taken from anywhere else (the
    object's root, as the port once did) culls faces at random. Skips without data. */
+#include "eagl_fake_thrash.h"
+#include "eagl_fake_thrash.h"
 #include "exe.h"
 #include "render/r3dcar.h"
 #include "support/udata.h"
@@ -110,8 +112,12 @@ int main(void)
         printf("rlayers_planes_test: no game data, skipped\n");
         return 0;
     }
+    fake_install_graphics();   /* car loading uploads its texture pages through the driver */
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("rlayers_planes_test: %s\n", err); return 1; }
+    /* Loading a car composes its texture pages through DTEX, which asks the driver (always open in the
+       original): the recording fake stands in. */
+    fake_install_graphics();
     vfs_list("GameData/CarModel", collect, NULL);
     for (int i = 0; i < nnames; i++) check_car(names[i]);
     long usable = tris - degenerate;

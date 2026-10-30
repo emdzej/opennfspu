@@ -463,8 +463,11 @@ void THRASH_drawpointstrip8(int count, const void *verts)
 /* Bytes per pixel by format (0x600201c8). */
 static const int format_bytes[16] = {0, 1, 1, 2, 2, 3, 4, 2, 1, 2, 2, 0, 0, 0, 0, 0};
 /* The format table of THRASH_about (0x60018030, filled by FUN_6000b9c0): what the card takes. */
-static uint32_t texformats[16];
-static const uint32_t cluts[4] = {0, 0, 0, 0};   /* 0x60018078: no clut formats */
+/* 16 format codes; DTEX scans 1..ntexformats inclusive (0x554720 in the exe), so it reads one entry past the
+   table: in the DLL that is the first word of the clut table that follows (0x60018078, 0). The 17th entry
+   here is that zero. */
+static uint32_t texformats[17];
+static const uint32_t cluts[5] = {0, 0, 0, 0, 0};   /* 0x60018078: no clut formats (+1: DTEX scans 1..ncluts) */
 
 static bool format_supported(int f)
 {
