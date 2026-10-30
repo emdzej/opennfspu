@@ -78,7 +78,10 @@ static void place_camera(float yaw, float pitch, float dist)
     rx /= rn;
     rz /= rn;
     float ux = by * rz - bz * ry, uy = bz * rx - bx * rz, uz = bx * ry - by * rx;
-    float o[9] = {rx, ry, rz, ux, uy, uz, -bx, -by, -bz};
+    /* A proper rotation (determinant +1): with (right, up, back) right-handed as built above, the rows
+       (-right, up, forward) keep the handedness the game's cameras have; the rows (right, up, forward)
+       are a mirror, which flips every triangle's screen winding against the race view's cull (2). */
+    float o[9] = {-rx, -ry, -rz, ux, uy, uz, -bx, -by, -bz};
     memcpy(f->orient, o, sizeof o);
 }
 
