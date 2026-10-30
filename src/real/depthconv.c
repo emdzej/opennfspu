@@ -689,3 +689,23 @@ uint8_t *SHAPE_create(int width, int height, int bpp, unsigned memflags)
     s[0] = probe[0];
     return s;
 }
+
+/* ---- row kernels for the blitter ---- */
+
+DepthKernel DEPTH_rowkernel(const uint8_t *shape, uint32_t target, int variant)
+{
+    int si = DEPTH_shapeindex(shape[0]), ti = DEPTH_shapeindex(target);
+    if (step_type(si, ti) != target) return NULL;   /* more than one step: the whole shape is converted */
+    DepthKernel k = step_kernel(si, ti, variant);
+    uint8_t to[4] = {(uint8_t)target};
+    int sbits = SHAPE_typevalid(shape), tbits = SHAPE_typevalid(to);
+    if (sbits < 9 && tbits > 8) {
+        /* A palette to a direct colour: the palette is converted once into the kernels' table. */
+        int n = 1 << sbits;
+        DEPTH_clut = getclutptr(shape, DEPTH_clutbuf);
+        if (target == 0x6d) DEPTH_kernel(0x5702f0)(DEPTH_clutbuf, DEPTH_clut, n);
+        else if (tbits == 15) DEPTH_kernel(variant ? 0x5700e0 : 0x570120)(DEPTH_clutbuf, DEPTH_clut, n);
+        else if (tbits == 16) DEPTH_kernel(variant ? 0x570270 : 0x5702c0)(DEPTH_clutbuf, DEPTH_clut, n);
+    }
+    return k;
+}

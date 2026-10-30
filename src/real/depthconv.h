@@ -61,6 +61,10 @@ extern uint32_t REAL_syspalette[256];
 /* A kernel: n pixels from src to dst. Exposed for the tests. */
 typedef void (*DepthKernel)(void *dst, const void *src, int n);
 DepthKernel DEPTH_kernel(uint32_t address);
+/* The row kernel converting a shape's pixels to a type in one step (variant: the transparency-aware
+   kernels), NULL if it takes more than one (then the blitter converts the whole shape). From a palette to
+   direct colour, the palette is converted into DEPTH_clutbuf first. 0x534900 */
+DepthKernel DEPTH_rowkernel(const uint8_t *shape, uint32_t target, int variant);
 
 /* A new, empty shape of width x height at bpp bits (1, 4, 8, 15, 16, 24, 32; 0 = the display's), header
    cleared, pixels not; NULL for bad sizes or depths. createshape 0x574a20 (\real\cmn\creates.c) */

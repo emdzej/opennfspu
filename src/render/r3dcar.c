@@ -9,6 +9,7 @@
 #include "real/set3d.h"
 #include "real/shape.h"
 #include "render/car_pending.h"
+#include "render/carpages.h"
 #include "support/ufile.h"
 #include <math.h>
 #include <stdio.h>
@@ -555,7 +556,7 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
         snprintf(path, sizeof path, exe_str(0x5cdce4), name);    /* "%s.crp" */
     /* The global textures the car's materials share (race: 'SPC1'..'SPC3', front end 'FEDU', 'FE  ',
        'FESH'): pending with the texture system. */
-    R3DCar_PendingGlobalTextures(car);
+    R3DCar_GlobalTextures(car);
     car->crp = crp_acquire(path);
     if (!car->crp) {
         /* The original loads a stand-in car ("%seden2" under its car directory) unless this was it. */
@@ -606,13 +607,13 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
     }
     if (car->textures) {
         char fsh[260];
-        if (!g_r3d_frontend && car->detail > 0x50) {
+        if (!g_r3d_frontend && car->hsv[2] > 0x50) {
             snprintf(fsh, sizeof fsh, exe_str(0x5cdc30), name);   /* "%sl.fsh" */
             car->shape_l = UTIL_loadshape(fsh, 0);
         } else {
             snprintf(fsh, sizeof fsh, exe_str(0x5cdc38), name);   /* "%sd.fsh" */
             car->shape_d = UTIL_loadshape(fsh, 0);
-            if (g_r3d_frontend || car->detail > 0x50) {
+            if (g_r3d_frontend || car->hsv[2] > 0x50) {
                 snprintf(fsh, sizeof fsh, exe_str(0x5cdc30), name);
                 car->shape_l = UTIL_loadshape(fsh, 0);
             }
@@ -622,8 +623,7 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
     }
     car_build_lods(car);                     /* slot 18 (nothing for a car), then 0x4424e0 */
     /* R3DObject_LoadHeader 0x4426c0: the texture pages, then the material set (0x44a6b0). */
-    R3DCar_PendingTexturePages(car);
-    R3DMaterialSet_Build(car->materials, car->root, "");
+    R3DObject_LoadHeader(car);   /* the pages, then the material set */
     car->nbound = car_points(car, 0x426e6450u, car->bound, 48, true);     /* 'PdnB' */
     car->nwindow = car_points(car, 0x576e646fu, car->window, 8, false);   /* 'odnW' */
     car->loaded = 1;
