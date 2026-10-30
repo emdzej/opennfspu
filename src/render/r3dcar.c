@@ -9,6 +9,7 @@
 #include "real/set3d.h"
 #include "real/shape.h"
 #include "render/car_pending.h"
+#include "render/render.h"
 #include "support/ufile.h"
 #include <math.h>
 #include <stdio.h>
@@ -800,7 +801,7 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
 {
     if (!car->loaded) return;
     R3DCarState *st = car->state;
-    R3DObject_PendingRenderState(car);   /* 0x467ed0 */
+    Render_SetCull(g_render);   /* 0x467ed0: the car's mirrored axes flip the winding */
     EAGL_StackPush(model);
     /* The centre: the car's up (rotation row 1) times its half height (R3DCar_v5 0x43a340). */
     float c[3] = {st->rot[3] * st->halfsize[1], st->rot[4] * st->halfsize[1], st->rot[5] * st->halfsize[1]};
@@ -816,5 +817,5 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
     EAGL_MatPostMul(EAGL_StackTopForWrite(model), &m);
     car_draw_lods(car, model);
     EAGL_StackPop(model);
-    R3DObject_PendingRenderState(car);
+    Render_SetCull(g_render);
 }
