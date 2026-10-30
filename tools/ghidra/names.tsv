@@ -179,18 +179,53 @@
 004376a0	HYesNoOverlay_v9	hud	struct	Virtual slot 9 of HYesNoOverlay (vtable 0x5b3554)
 00437740	R3DBase_v0	render	struct	Virtual slot 0 of R3DBase (vtable 0x5b358c)
 00437780	R3DCar_LoadTpg	render	high	Loads <car>.tpg (car texture page groups)
+00437850	R3DCar_ctor	render	high	R3DCar constructor (after R3DObject_ctor 0x4413f0)
+00437980	R3DCar_dtor	render	high	R3DCar_v0: destructor
 00437a30	R3DCar_LoadStyles	render	med	Car styles: geometry and texture per style
+00438000	R3DCar_AnimReset	render	med	Resets an animation slot
+004380c0	R3DCar_AnimFrames	render	high	The animation slot's frame count (+0x574 + 0x14 * slot)
+004380e0	R3DCar_SetAnimFrames	render	med	Sets that frame count
+00438140	R3DCar_WheelPos	render	high	The wheel slot offset at +0x6d0 + 12 * slot
 004382f0	R3DCar_v7	render	struct	Virtual slot 7 of R3DCar (vtable 0x5b3620)
 00438350	R3DCar_v8	render	struct	Virtual slot 8 of R3DCar (vtable 0x5b3620)
+00438370	R3DCar_Animate	render	med	R3DCar_v9: hinge angles (wheel spin and steer, hood, trunk, ...) from the simulation car
 00439290	R3DCar_v6	render	struct	Virtual slot 6 of R3DCar (vtable 0x5b3620)
 00439e10	R3DCar_v12	render	struct	Virtual slot 12 of R3DCar (vtable 0x5b3620)
 00439ec0	R3DCar_v13	render	struct	Virtual slot 13 of R3DCar (vtable 0x5b3620)
+0043a340	R3DCar_Centre	render	high	R3DCar_v5: the car's up times its half height
+0043a3c0	R3DCar_DrawLODs	render	high	R3DCar_v14: the race's window reflections, then R3DObject_DrawLODs
 0043a490	R3DCar_v15	render	struct	Virtual slot 15 of R3DCar (vtable 0x5b3620)
+0043acd0	R3DCar_LODCount	render	high	R3DCar_v16: 7
+0043ace0	R3DCar_NewLOD	render	high	R3DCar_v17: a R3DCarLOD (0x24 bytes) for an LOD number
+0043ad20	R3DLOD_v6	render	low	Empty
+0043ad30	R3DCarLOD_dtor	render	high	R3DCarLOD_v0
+0043ad60	R3DLOD_dtor	render	high	R3DLOD_v0
+0043ad80	R3DCar_PreLOD	render	high	R3DCar_v19: styles, the spec's forced options, animation slot reset
+0043b040	R3DCar_PostLOD	render	med	R3DCar_v20: after the LODs are built
 0043b150	R3DCar_v22	render	struct	Virtual slot 22 of R3DCar (vtable 0x5b3620)
 0043b4e0	R3DCar_v23	render	struct	Virtual slot 23 of R3DCar (vtable 0x5b3620)
 0043ba70	R3DCar_v24	render	struct	Virtual slot 24 of R3DCar (vtable 0x5b3620)
+0043c0e0	R3DCarLOD_Build	render	high	R3DCarLOD_v1: the parts of every 'Arti' with an entry for this LOD (option filter, sorted by the Base key)
+0043c600	UData_Data	render	high	Inline copy of an item's data pointer
+0043c610	R3DItemCache_ctor	render	med	An empty part item cache entry
+0043c620	R3DItemCache_Find	render	high	A cached exact-id lookup
+0043c650	R3DItemCache_FindIndex	render	high	A cached lookup with the index merged into the id
+0043c690	R3DPart_ItemCount	render	high	Element count of a part's item of a kind
+0043c700	R3DPart_Item	render	high	Data of a part's item of a kind (table 0x5e5084: vt nm uv df Base pr ef) through its cache
+0043c760	R3DCarLOD_Draw	render	high	R3DCarLOD_v2: two passes, tr / wheel slot / hinge matrices, the 'pr' lists of the entry's range
+0043cc80	R3DItemCache_FindRange	render	high	The first item of an id with an index in a range
+0043d730	R3DCarLOD_v3	render	low	Not ported (250 lines)
+0043ddc0	R3DCarLOD_Bounds	render	high	R3DCarLOD_v4: min / max of the parts' vertices through their tr
+0043dff0	R3DCarLOD_Free	render	high	R3DCarLOD_v5
+0043e640	R3DCarLOD_SortLoop	render	high	MSVC 6 std::sort introsort loop over 12-byte part records (key byte at +8)
+0043e840	R3DCarLOD_InsertionSort	render	high	std::sort's insertion sort
+0043e950	R3DCarLOD_UnguardedInsertion	render	high	std::sort's unguarded insertion
+0043e9c0	R3DCarLOD_MakeHeap	render	high	std::sort's heap fallback
+0043eb10	R3DCarLOD_AdjustHeap	render	high	std::sort's heap adjust
 0043ee50	R3DCarParticle_v0	render	struct	Virtual slot 0 of R3DCarParticle (vtable 0x5b3794)
 0043f590	R3DCarParticle_Tick	render	low	Per-tick car particle effects
+0043ff80	R3DCrp_Acquire	render	high	The .crp cache: by name, refcount at +0xa4
+004400b0	R3DCrp_Release	render	med	Drops a .crp cache reference
 00440900	R3DCar_LoadEnvMap	render	med	Loads <car>.env and <car>.map
 00441680	R3DTypes_W3DObjectBundle_v9	render	struct	Virtual slot 9 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
 00441690	R3DTypes_W3DObjectBundle_v4	render	struct	Virtual slot 4 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
@@ -198,19 +233,25 @@
 004416f0	R3DTypes_W3DObjectBundle_v0	render	struct	Virtual slot 0 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
 00441710	R3DObject_v0	render	struct	Virtual slot 0 of R3DObject (vtable 0x5b37f0)
 00441940	R3DCar_LoadCrp	render	high	Loads <car>.crp (car geometry; drivercampos)
+00442320	R3DObject_Unload	render	high	R3DObject slot 2: frees what a load made
+004424e0	R3DObject_BuildLODs	render	high	The LODs between the pre / post hooks, then the size
 004426c0	R3DObject_LoadHeader	render	med	CRP header: numtpages, numfiles
+004433c0	R3DObject_Draw	render	high	Model matrix from the car state, then slot 14
 00443540	THRASH_setstate_glue	render	high	One-call wrapper of THRASH_setstate
 00443570	R3DCar_TickAll	render	med	Virtual slot 8 (+0x20) of every R3DCar in the list 0x6115f0 (link at +0x474)
 00443690	R3DCar_LoadCommon	render	high	Shared car art: carcmn.fsh, racedecal.ffn, license.ffn, packages.ini (shadow, intglass)
+00443e40	R3DCar_Hinge	render	high	The hinge angle triple of a kind (+0x2d0 + 12 * kind)
 00443e90	R3DCar_LoadDetails	render	med	file%d.details: mirrors and offsets
 00444040	R3DObject_v11	render	struct	Virtual slot 11 of R3DObject (vtable 0x5b37f0)
 00444050	R3DObject_v12	render	struct	Virtual slot 12 of R3DObject (vtable 0x5b37f0)
 004447b0	R3DCar_LoadTextures	render	med	Per-file textures (license plates, race decals)
 00444ce0	R3DObject_v13	render	struct	Virtual slot 13 of R3DObject (vtable 0x5b37f0)
 00444cf0	R3DObject_v5	render	struct	Virtual slot 5 of R3DObject (vtable 0x5b37f0)
+00444d30	R3DObject_DrawLODs	render	high	R3DObject_v14: which LOD draws which parts (view masks 0x10/0x20/0x40/0x50/0x80)
 00444ef0	R3DObject_v15	render	struct	Virtual slot 15 of R3DObject (vtable 0x5b37f0)
 00444f50	R3DObject_v17	render	struct	Virtual slot 17 of R3DObject (vtable 0x5b37f0)
 00444f90	R3DObjectLOD_v0	render	struct	Virtual slot 0 of R3DObjectLOD (vtable 0x5b3890)
+00444fc0	R3DObject_Size	render	high	Half size and radius from LOD list index 4 (0 with flags 0x10)
 00445450	R3DSpecularTextureLayer_v0	render	struct	Virtual slot 0 of R3DSpecularTextureLayer (vtable 0x5b39b4)
 00445a40	R3DSkyMapTextureLayer_v0	render	struct	Virtual slot 0 of R3DSkyMapTextureLayer (vtable 0x5b398c)
 00446060	R3DShadowMapTextureLayer_v0	render	struct	Virtual slot 0 of R3DShadowMapTextureLayer (vtable 0x5b3964)
@@ -238,10 +279,33 @@
 00449ff0	RCustomLayers_LayerIndexedUV_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerIndexedUV (vtable 0x5b3a2c)
 0044a020	RCustomLayers_LayerIndexedColour_v3	render	struct	Virtual slot 3 of RCustomLayers::LayerIndexedColour (vtable 0x5b3a54)
 0044a060	R3DLightLayer_v8	render	struct	Virtual slot 8 of R3DLightLayer (vtable 0x5b393c)
+0044a0e0	R3DMaterial_SetOverride	render	high	The streams a part replaces during a draw
+0044a110	R3DMaterial_OverrideStream	render	high	Replace one stream by id
+0044a160	R3DMaterial_StreamSlot	render	high	A stream id's slot in the render method
+0044a190	R3DMaterial_Bind	render	high	Binds a 'pr' item's streams and index lists into the render method; returns the primitive type
+0044a520	R3DMaterialSet_ctor	render	med	The object's material set
+0044a6b0	R3DMaterialSet_Build	render	high	RMth, sf / sn shapes, the 'mt' materials and their texture references
+0044ba40	RMethod_Find	render	med	A render method template by name and key
 0044c250	EAGL_Material_v0	eagl	struct	Virtual slot 0 of EAGL::Material (vtable 0x5b3c94)
-0044d250	RTex_Clone	render	med	Texture clone (":CLONE")
-0044d5e0	RTex_ShrinkMip	render	med	Mipmap reduction ("ShrinkMIP")
-0044d6b0	RTex_ConvertShape	render	med	FSH shape to texture conversion ("RTex:SHPconv")
+0044cf80	RTexBank_ctor	render	high	Game texture bank: manager, class, multimap (id,name)->texture
+0044d030	RTexBank_dtor	render	high	Releases the bank's textures and tree
+0044d140	RTexBank_loadfile	render	high	Every image of an FSH into a bank
+0044d1f0	RTexBank_find	render	high	First texture of a key
+0044d250	RTexBank_get	render	high	Texture of a key with states: existing, ":CLONE" copy, or new (was RTex_Clone)
+0044d420	RTexBank_states	render	high	States with mipmapping per class
+0044d480	RTexBank_insert	render	high	A copy of a texture into a bank
+0044d530	RTexBank_clear	render	high	Releases the bank's textures
+0044d5e0	RTex_shrinkmip	render	high	Next mip level as its own shape ("ShrinkMIP")
+0044d6b0	RTex_convertshape	render	high	Shape prepared per quality class ("RTex:SHPconv")
+0044d870	RTex_reload	render	high	Shape into an existing texture
+0044d8e0	RTex_make	render	high	Texture of a shape for a class ("CAR0"+n names)
+0044dd20	RTex_defaultprios	render	high	Priority table 0x5ce71c
+0044dd30	RTex_setprios	render	high	DTEX priorities from 6-byte rows
+0044dde0	RTex_setuppriorities	render	high	Track .dtx or per-quality priorities
+0044de80	RTex_detectquality	render	high	Quality level from the machine
+0044deb0	RTex_quality	render	high	Class row of the quality table 0x5ce59c (RTex_Info)
+0044dee0	RTex_readdtx	render	high	"%s%s.dtx": texture counts per size/format -> priorities
+0044e240	RTex_levelfor	render	high	Quality level 0..3 from CPU MHz, memory, video memory
 0044e760	Render_DetectCard	render	med	Card-specific workarounds (Trident Blade, Voodoo)
 0044f5b0	RBillBoard_CreateQuads	render	high	RBillBoard.cpp: billboard quads from points
 0044fa10	Track_LoadKeyframes	world	high	Loads <track>_forward.key / _backwards.key (camera/AI keyframes; warns on old versions)
@@ -1240,6 +1304,24 @@
 00522590	FEWordWrapAccessorWatch_v22	frontend	struct	Virtual slot 22 of FEWordWrapAccessorWatch (vtable 0x5baef4)
 005225e0	FEWordWrapAccessorWatch_v15	frontend	struct	Virtual slot 15 of FEWordWrapAccessorWatch (vtable 0x5baef4)
 00522740	FEWordWrapAccessorWatch_v1	frontend	struct	Virtual slot 1 of FEWordWrapAccessorWatch (vtable 0x5baef4)
+00523200	IniFile_Parse	render	high	INI text: parse into the file object (car_ini.c)
+00523230	IniFile_Load	render	high	INI text: read the file under the search path and parse it
+00523320	IniFile_Free	render	high	INI text: free the data and the text
+00523350	IniFile_GetInt	render	high	INI text: atoi of the current section's key, else the default
+00523380	IniFile_GetBool	render	high	INI text: GetInt != 0
+005233a0	IniFile_GetFloat	render	high	INI text: atof of the key, else the default
+005233d0	IniFile_GetVec3	render	high	INI text: sscanf "%f,%f,%f" (0x5dd988) over the default
+00523440	IniFile_GetVec4	render	high	INI text: sscanf "%f,%f,%f,%f" (0x5dd994)
+005234c0	IniData_Parse	render	high	INI text: copy the text, find the sections ([name], up to 700)
+005235f0	IniData_NextLine	render	high	INI text: past the line end and the blanks after it
+00523640	IniData_Trim	render	high	INI text: blanks and tabs off both ends, in place
+00523680	IniData_Free	render	high	INI text: the buffer and the object
+005236a0	IniData_SelectSection	render	high	INI text: find + load a section (its keys split in place)
+005236d0	IniData_LoadSection	render	high	INI text: split the section's key=value lines (up to 100)
+00523830	IniData_FindSection	render	high	INI text: section index by name (strcmp), NULL = the current
+005238b0	IniData_FindKey	render	high	INI text: key index in the current section
+00523920	IniData_Get	render	high	INI text: the value of a key or NULL
+00523950	IniData_Value	render	high	INI text: value by index
 00524460	FERT_Control_v0	fert	struct	Virtual slot 0 of FERT::Control (vtable 0x5bafd4)
 005246a0	FERT_Control_Parse	fert	med	Parses a control (parts, states)
 00524f70	FERT_Control_v14	fert	struct	Virtual slot 14 of FERT::Control (vtable 0x5bafd4)
@@ -1282,6 +1364,10 @@
 00532030	CS_leave	sys	high	LeaveCriticalSection wrapper
 005320d0	Vec3_ScaleArray	math	high	Scales n float triples
 00532150	MEM_copy	mem	high	memcpy; MMX path in PACODE 0x5b0480 when available
+00532430	Mat3_AxisRotation	math	high	3x3 rotation by a fraction of a turn about an axis; the identity at 0
+00532550	Math_SinTurns	math	high	sin(x * 0x5bb2c0)
+00532560	Math_CosTurns	math	high	cos(x * 0x5bb2c0)
+00532640	Vec3_Normalize	math	high	v * (1 / length)
 00532680	Vec3_Dot	math	high	3-component dot product (thunk to 0x56e681)
 005328f0	INPUT_init	input	high	DirectInput device setup
 00533900	FILE_openwait	file	high	Opens a file on its device and waits (name, mode, priority, &handle) (port: src/real/file.c)
@@ -1292,20 +1378,54 @@
 00533c70	FILE_existswait	file	high	Whether a file exists, waits
 005342f0	THRASH_pageflip_glue	render	high	One-call wrapper of THRASH_pageflip
 00534300	THRASH_flushwindow_glue	render	high	One-call wrapper of THRASH_flushwindow
+00534350	DEPTH_shapeindex	real	high	depthconv.c: shape type -> kernel table index (0..7)
 00534440	getclutptr	real	high	Named after its own error message (\real\cmn\depthconv.c)
 005345a0	getclut16ptr	real	high	Named after its own error message (\real\cmn\depthconv.c)
 00534750	getclut16aptr	real	high	Named after its own error message (\real\cmn\depthconv.c)
+00534900	DEPTH_convfn	real	med	depthconv.c: the kernel for a single-step conversion (movdfl's direct path)
 00534ab0	SHAPE_converttype	real	high	Named after its own error message (\real\cmn\depthconv.c)
 00534e50	TEXTURE_converttype	real	high	Named after its own error message (\real\cmn\depthconv.c)
+005350b0	DEPTH_texindex	real	high	depthconv.c: THRASH format -> kernel table index (table 0x5de574)
+005350d0	DEPTH_indextex	real	high	depthconv.c: kernel index -> THRASH format (table 0x5de5ac)
+005350f0	DEPTH_bpptotype	real	high	depthconv.c: bit depth (or DirectDraw masks) -> shape type
 00535470	WINDOW_create	real	high	Named after its own error message (\real\cmn\createw.c)
-005358c0	TEXTURE_setstate_glue	render	med	Wrapper of THRASH_setstate for texture state
-00535930	TEXTURE_name	render	low	tex%d names
+00535710	TEXTURE_initstates	real	high	Static init of the texture-stage state cache 0x5de6bc (port: src/real/texture.c)
+005357d0	TEXTURE_setmipmap	real	high	Mipmap state setter (3 = trilinear when 0x69dd1d)
+00535800	TEXTURE_setaddress	real	high	Address-mode setter (joint U/V state 0xd when the driver lacks separate ones)
+00535870	TEXTURE_sendstates	real	high	Sends the whole stage-state cache
+005358b0	TEXTURE_settrilinear	real	high	Sets 0x69dd1d
+005358c0	TexManager_ctor	real	high	Texture manager (vtable 0x5bb6c8): probes U/V address states (was TEXTURE_setstate_glue)
+00535910	TexManager_dtor	real	high	Texture manager destructor
+00535930	Texture_fromshape	real	high	Texture (0x54, vtable 0x5bb6d4) from a shape: DTEX_new + DTEX_load (was TEXTURE_name)
+00535aa0	Texture_dtor	real	high	Texture destructor (shared DTEX by refcount)
+00535af0	Texture_fromrecords	real	high	Texture from a pixel record and a palette record
+00535c40	Texture_empty	real	high	Texture without pixels
+00535d20	Texture_info	real	high	DTEX format and shape of a texture
+00535d60	Texture_invalidate	real	high	DTEX_invalidate
+00535d70	TEXTURE_sendstage	real	high	Sends a stage's states that differ from the cache
+00535dc0	TexManager_begin	real	high	Textures to the card: DTEX_uploadall (race / FE screen start)
+00535df0	TexManager_end	real	high	DTEX_resetall
+00535e10	TEXTURE_setdtex	real	high	Sets 0x5de6b8 (DTEX on), re-uploads when live
+00535e40	TEXTURE_islive	real	high	0x69dd1e
+00535e50	Texture_dtorbase	real	high	Texture destructor without delete
+00535e90	Texture_copy	real	high	Texture copy sharing the DTEX texture
+00535ef0	TexManager_create	real	high	Manager vtable slot 2: texture from a shape (or empty)
+00535f50	TexManager_createrecords	real	high	Manager vtable slot 1: texture from pixel and palette records
+00535f90	TexManager_release	real	high	Deletes a texture, count--
+00535fb0	TEXTURE_select	real	high	Selects stage 0/1 textures (DTEX_settexture) and their states
+00536110	TexManager_restore	real	high	Sends states and textures again
+005361d0	Texture_commit	real	high	DTEX 0x555390 (does nothing)
+005361e0	Texture_setstates	real	high	Sets a texture's 7 states, sent if selected
+00536280	Texture_reload	real	high	New pixels into a texture (DTEX_new if none)
+00536310	Texture_rename	real	high	Name (19 chars)
 00536350	SYNCTASK_add	real	high	Named after its own error message (\real\cmn\systask.c)
 00536450	SYNCTASK_run	real	high	\real\cmn\systask.c: runs due periodic tasks when the timer ticked (port: src/real/systask.c)
 00536a80	FEAliasedPositionableAccessor_v29	frontend	struct	Virtual slot 29 of FEAliasedPositionableAccessor (vtable 0x5b4be4)
 00536bc0	MOUSE_init	input	high	\real\patch3\pc\mouse.c: DirectInput mouse
 00536e30	MOUSE_setstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
 00537010	MOUSE_getstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
+00537740	TextureStates_init	real	high	Default texture states 0,1,0,0,0,0,0
+00537790	TextureStates_setmipmap	real	high	states[3]
 005377c0	FERT_EventPump_v2	fert	struct	Virtual slot 2 of FERT::EventPump (vtable 0x5bb150)
 00537ca0	SHAPE_count	real	high	Shape file entry count (+8) (port: src/real/shape.c)
 00537cd0	SHAPE_entryname	real	high	Shape file entry i's 4-byte name, 0 past the end
@@ -1352,6 +1472,7 @@
 00539870	EAGL_MatPreMul	eagl	high	this = b * this
 005398a0	EAGL_MatScale	eagl	high	Diagonal matrix (sx, sy, sz, sw)
 005398f0	EAGL_MatTranslation	eagl	high	Translation matrix
+00539940	EAGL_MatAxisAngle	eagl	high	Rotation of degrees about an axis (fraction of a turn, 0x532430); ported in render/r3dcar.c
 00539a00	EAGL_MatIdentity	eagl	high	Identity
 00539a40	EAGL_MatFromRotTrans	eagl	high	3x3 rotation + translation to a 4x4
 00539ab0	EAGL_MatToRotTrans	eagl	high	4x4 to 3x3 rotation + translation
@@ -1405,6 +1526,9 @@
 0053fb00	SmackAnim_v2	game	struct	Virtual slot 2 of SmackAnim (vtable 0x5b45e4)
 0053fb10	EAGL_LayerDraw2_deps	eagl	high	Two-stage dependencies (0x5bbe58)
 0053fb40	EAGL_Layer_dtor	eagl	high	Layer scalar deleting dtor
+00540100	TexGraphics_register	eagl	med	Sets 0x69ed0c (graphics object: device + texture manager)
+00540180	TexGraphics_unregister	eagl	med	Deletes the manager, clears 0x69ed0c
+005401a0	TexGraphics_setdevice	eagl	high	Device + a new texture manager
 005401e0	EAGL_RSSet	eagl	high	setstate wrapper
 00540200	EAGL_RSSetDepthBias	eagl	high	Depth bias: context +0x1180c (2^-15 units) on DX7, else setstate
 00540240	EAGL_RSSetAlias	eagl	high	setstate through the alias slot 0x6bd858
@@ -1444,11 +1568,40 @@
 00553b60	stl_make_heap	eagl	high	Make heap
 00553bf0	stl_adjust_heap	eagl	high	Adjust heap
 00553ca0	stl_push_heap	eagl	high	Push heap
+00553d20	DTEX_initpool	real	high	dyntexture.c: texture memory pool (VirtualAlloc)
+00554070	DTEX_score	real	high	dyntexture.c: format fit score (hook 0x5df2c8)
+00554290	DTEX_probeblend	real	med	dyntexture.c: getstate/setstate 10 probe (result unused)
+00554580	DTEX_choose	real	high	dyntexture.c: best driver format/palette format by score
+00554690	DTEX_setpalettepref	real	high	dyntexture.c: 8-bit list head 2 or 4 (0x5dedf4)
+005546b0	DTEX_setprefs	real	high	dyntexture.c: preference list of a format (0x5def98)
+005546c0	DTEX_new	real	high	dyntexture.c: texture object (0x38) for a source format
+00554830	DTEX_bufferheader	real	high	dyntexture.c: shape header of a texture's buffer
+00554880	DTEX_poolalloc	real	high	dyntexture.c: MEM_alloc from the pool
+005548b0	DTEX_ensurepool	real	high	dyntexture.c: pool at 12 MiB, smaller on failure
+005548f0	DTEX_allocobject	real	high	dyntexture.c: cleared 0x38 object from the pool
 00554930	DTEX_create	render	med	Dynamic texture create ("too many different")
+00554a20	DTEX_free	real	high	dyntexture.c: DTEX_destroy
+00554ad0	DTEX_load	real	high	dyntexture.c: converts pixels/palette into the texture
+00554b40	DTEX_info	real	high	dyntexture.c: serial, shape, pixels, palette, format, source format
+00554b90	DTEX_invalidate	real	high	dyntexture.c: needs re-upload
 00554cc0	DTEX_upload	render	med	Dynamic texture upload
+00554da0	DTEX_callhook	real	high	dyntexture.c: upload hook 0x6a3a50
+00554e40	DTEX_uploadall	real	high	dyntexture.c: all textures by type in priority passes
+00555000	DTEX_prio	real	high	dyntexture.c: priority of a pass
+00555090	DTEX_resetall	real	high	dyntexture.c: treset, handles cleared
+005550f0	DTEX_destroyall	real	high	dyntexture.c: types and pool gone
+00555160	DTEX_freepool	real	high	dyntexture.c: VirtualFree
 005551a0	DTEX_settexture	render	med	Dynamic texture bind (THRASH_settexture)
+00555210	DTEX_touch	real	high	dyntexture.c: LRU, takes the oldest texture's card memory
+00555390	DTEX_commit	real	high	dyntexture.c: empty
+005553a0	DTEX_setprio	real	high	dyntexture.c: priority of a type for a pass
+00555400	DTEX_sethook	real	high	dyntexture.c: upload hook
+00555410	DTEX_convert	real	high	dyntexture.c: TEXTURE_converttype with fallbacks
+005554e0	DTEX_l8to4444	real	high	dyntexture.c: 8-bit A4L4 to 4444
+00555530	DTEX_halve	real	high	dyntexture.c: half-size shape (every other pixel)
 00555920	CPU_detect	sys	high	CPUID vendor (GenuineIntel, AuthenticAMD): MMX/3DNow paths
 005563a0	MEM_size	mem	high	Size asked for of a heap block (header +4)
+005563f0	TEXTURE_formatof	real	high	Shape/palette record type -> THRASH format code
 00556910	GLIDE_env	render	med	Glide environment (SST_VIDEO_24BPP, FX_GLIDE_NO_SPLASH)
 0055d580	ICMP_init	net	med	ICMP.DLL ping (lobby ping meter)
 0055e220	TapiSelectModem	real	high	Named after its own error message (\real\pc\tapipkt.c)
@@ -1508,19 +1661,63 @@
 0056c590	STREAM_isendofstream	real	high	Named after its own error message (\real\cmn\stream.c)
 0056c5f0	STREAM_buffersize	real	high	Named after its own error message (\real\cmn\stream.c)
 0056c640	STREAM_bufferusage	real	high	Named after its own error message (\real\cmn\stream.c)
+0056d510	BFILE_open	real	high	Buffered stdio file (fopen, size by seeking, 4 KB buffer)
+0056d640	BFILE_close	real	high	Buffered stdio file: fclose and free
+0056d670	BFILE_read	real	high	Buffered stdio file: read through the 4 KB buffer
+0056d850	BFILE_size	real	high	Buffered stdio file: the size found at open
+0056d870	BFILE_alloc	real	high	MEM_alloc with the default flags (0x5deb60)
+0056d890	BFILE_free	real	high	MEM_purge
 0056e040	BIG_getnum	file	high	\real\cmn: big-endian n-byte read (byte-swapped word shifted down)
 0056e190	FILE_loadpackfile	file	high	\real\cmn\loadpack.c: load + unpack (no abort)
 0056e250	FILE_loadpack	file	high	\real\cmn\loadpack.c: loads a file and unpacks it (RefPack)
 0056e681	Vec3_Dot_impl	math	high	3-component dot product
+0056fe80	DEPTH_k_copy4	real	high	Kernel: 4-bit copy
+0056fea0	DEPTH_k_p8_p4	real	high	Kernel: 8-bit to 4-bit indices
+0056ff00	DEPTH_k_p4_p8	real	high	Kernel: 4-bit to 8-bit indices
+0056ff40	DEPTH_k_copy8	real	high	Kernel: 8-bit copy
+0056ff60	DEPTH_k_565_p8	real	high	Kernel: 565 to 8-bit (colour match)
+00570010	DEPTH_k_swap555	real	high	Kernel: 15-bit red/blue swap
+00570050	DEPTH_k_565_1555a	real	high	Kernel: 565 to 1555, black transparent
+005700a0	DEPTH_k_565_555	real	high	Kernel: 565 to 555
+005700e0	DEPTH_k_8888_1555t	real	high	Kernel: 8888 to 1555, alpha < 0x40 transparent
+00570120	DEPTH_k_8888_1555	real	high	Kernel: 8888 to 1555
+00570150	DEPTH_k_p4_16	real	high	Kernel: 4-bit through the 16-bit palette buffer
+005701a0	DEPTH_k_p8_16	real	high	Kernel: 8-bit through the 16-bit palette buffer
+005701d0	DEPTH_k_1555_565	real	high	Kernel: 1555 to 565
+00570220	DEPTH_k_copy16	real	high	Kernel: 16-bit copy
+00570240	DEPTH_k_low16	real	high	Kernel: low halves of 32-bit entries
+00570270	DEPTH_k_8888_565t	real	high	Kernel: 8888 to 565 for palettes (0 = transparent)
+005702c0	DEPTH_k_8888_565	real	high	Kernel: 8888 to 565
+005702f0	DEPTH_k_8888_4444	real	high	Kernel: 8888 to 4444
+00570350	DEPTH_k_565_4444	real	high	Kernel: 565 to 4444, colour key
+005703c0	DEPTH_k_8888_565a	real	high	Kernel: 8888 to 565 keeping alpha byte
+00570400	DEPTH_k_p8_888	real	high	Kernel: 8-bit to 24-bit through the 32-bit palette
+00570440	DEPTH_k_565_888	real	high	Kernel: 565 to 24-bit
+005704b0	DEPTH_k_copy24	real	high	Kernel: 24-bit copy
+005704d0	DEPTH_k_8888_888	real	high	Kernel: 8888 to 24-bit
+00570500	DEPTH_k_p8_8888	real	high	Kernel: 8-bit through the 32-bit palette pointer 0x5de2f8
+00570530	DEPTH_k_1555_8888	real	high	Kernel: 1555 to 8888, colour key
+005705d0	DEPTH_k_565_8888	real	high	Kernel: 565 to 8888, colour key
+00570650	DEPTH_k_4444_8888	real	high	Kernel: 4444 to 8888
+005706d0	DEPTH_k_a555_8888	real	high	Kernel: alpha + 555 in 32 bits to 8888 (clut 0x2e)
+00570740	DEPTH_k_a565_8888	real	high	Kernel: alpha + 565 in 32 bits to 8888 (clut 0x2c)
+005707b0	DEPTH_k_888_8888	real	high	Kernel: 24-bit to 8888
+00570830	DEPTH_k_copy32	real	high	Kernel: 32-bit copy
+00570da0	DEPTH_pal666	real	high	Palette: 6-bit RGB to 8888 (entry 255 transparent)
+00570f10	DEPTH_pal888	real	high	Palette: 24-bit RGB to 8888 (entry 255 transparent)
+005710a0	SHAPE_rowbytes	real	high	Bytes per shape row
+005710e0	SHAPE_unpack	real	high	Unpacked copy of a packed shape record ("unshp")
 00571150	UNPACK_dispatch	file	high	Codec dispatch: 0x10 RefPack, 0x18, 0x30/32/34, 0x46 (port: src/real/pack.c)
 00571240	UNPACK_size	file	high	Unpacked size of a packed block, 0 if not packed
 005713e0	movdfl	real	high	Named after its own error message (\real\pc\movdfl.c)
 00572070	FONT_dtexdrawquadmesh	real	high	Named after its own error message (\real\cmn\fontdtex.c)
+00572ce0	DEPTH_to565	real	high	8888 -> 565
+00572d0b	DEPTH_to1555	real	high	8888 -> 1555 (0 stays 0)
 00572f00	EAGL_XfXyz4	eagl	high	Point xyz (w=1) through a matrix, 4 outputs
 00572f90	EAGL_XfXyz3	eagl	high	Point xyz through a matrix, 3 outputs
 00573000	EAGL_XfXyzw4	eagl	high	Point xyzw through a matrix, 4 outputs
 005730a0	EAGL_XfXyzw3	eagl	high	Point xyzw through a matrix, 3 outputs
-00574a20	createshape	real	high	Named after its own error message (\real\cmn\creates.c)
+00574a20	SHAPE_create	real	high	createshape (creates.c)
 00574d30	THRASH_nogetstate	render	high	set3d.c: getstate default when the driver lacks it (returns 0) (port: src/real/set3d.c)
 00574d40	THRASH_notfree	render	high	set3d.c: tfree default when the driver lacks it (returns 0)
 00574d50	THRASH_opendll	render	high	\real\patch3\pc\set3d.c: LoadLibrary of the driver DLL (dx7z.dll) and GetProcAddress of every _THRASH_* entry into 0x6bd850..0x6bd8f8
@@ -1557,6 +1754,7 @@
 0059ed70	operator_new_tag	mem	high	new(size, tag)
 0059eda0	operator_new_array	mem	med	new[] ("new[]" tag)
 0059ee00	operator_delete	mem	high	delete through the allocator object (slot 2), null-safe
+0059efd0	UData_Transform	util	high	A part's 'tr' matrix (index -1: 'tr  ')
 0059f020	UData_name	util	high	CUData: the 'Name' item's data (port: src/support/udata.c)
 0059f050	UData_dz	util	high	CUData: the 'dz' item's data (index or 'dz  ')
 0059f0a0	UData_copy	util	high	CUData copy (owned data copied, else absolute pointer)
@@ -1950,81 +2148,3 @@
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005af324	crt_5af324	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-00523200	IniFile_Parse	render	high	INI text: parse into the file object (car_ini.c)
-00523230	IniFile_Load	render	high	INI text: read the file under the search path and parse it
-00523320	IniFile_Free	render	high	INI text: free the data and the text
-00523350	IniFile_GetInt	render	high	INI text: atoi of the current section's key, else the default
-00523380	IniFile_GetBool	render	high	INI text: GetInt != 0
-005233a0	IniFile_GetFloat	render	high	INI text: atof of the key, else the default
-005233d0	IniFile_GetVec3	render	high	INI text: sscanf "%f,%f,%f" (0x5dd988) over the default
-00523440	IniFile_GetVec4	render	high	INI text: sscanf "%f,%f,%f,%f" (0x5dd994)
-005234c0	IniData_Parse	render	high	INI text: copy the text, find the sections ([name], up to 700)
-005235f0	IniData_NextLine	render	high	INI text: past the line end and the blanks after it
-00523640	IniData_Trim	render	high	INI text: blanks and tabs off both ends, in place
-00523680	IniData_Free	render	high	INI text: the buffer and the object
-005236a0	IniData_SelectSection	render	high	INI text: find + load a section (its keys split in place)
-005236d0	IniData_LoadSection	render	high	INI text: split the section's key=value lines (up to 100)
-00523830	IniData_FindSection	render	high	INI text: section index by name (strcmp), NULL = the current
-005238b0	IniData_FindKey	render	high	INI text: key index in the current section
-00523920	IniData_Get	render	high	INI text: the value of a key or NULL
-00523950	IniData_Value	render	high	INI text: value by index
-0056d510	BFILE_open	real	high	Buffered stdio file (fopen, size by seeking, 4 KB buffer)
-0056d640	BFILE_close	real	high	Buffered stdio file: fclose and free
-0056d670	BFILE_read	real	high	Buffered stdio file: read through the 4 KB buffer
-0056d850	BFILE_size	real	high	Buffered stdio file: the size found at open
-0056d870	BFILE_alloc	real	high	MEM_alloc with the default flags (0x5deb60)
-0056d890	BFILE_free	real	high	MEM_purge
-00437850	R3DCar_ctor	render	high	R3DCar constructor (after R3DObject_ctor 0x4413f0)
-00437980	R3DCar_dtor	render	high	R3DCar_v0: destructor
-00438140	R3DCar_WheelPos	render	high	The wheel slot offset at +0x6d0 + 12 * slot
-004380c0	R3DCar_AnimFrames	render	high	The animation slot's frame count (+0x574 + 0x14 * slot)
-004380e0	R3DCar_SetAnimFrames	render	med	Sets that frame count
-00438000	R3DCar_AnimReset	render	med	Resets an animation slot
-00438370	R3DCar_Animate	render	med	R3DCar_v9: hinge angles (wheel spin and steer, hood, trunk, ...) from the simulation car
-0043a340	R3DCar_Centre	render	high	R3DCar_v5: the car's up times its half height
-0043a3c0	R3DCar_DrawLODs	render	high	R3DCar_v14: the race's window reflections, then R3DObject_DrawLODs
-0043ad20	R3DLOD_v6	render	low	Empty
-0043ad30	R3DCarLOD_dtor	render	high	R3DCarLOD_v0
-0043ad60	R3DLOD_dtor	render	high	R3DLOD_v0
-0043ad80	R3DCar_PreLOD	render	high	R3DCar_v19: styles, the spec's forced options, animation slot reset
-0043acd0	R3DCar_LODCount	render	high	R3DCar_v16: 7
-0043ace0	R3DCar_NewLOD	render	high	R3DCar_v17: a R3DCarLOD (0x24 bytes) for an LOD number
-0043b040	R3DCar_PostLOD	render	med	R3DCar_v20: after the LODs are built
-0043c0e0	R3DCarLOD_Build	render	high	R3DCarLOD_v1: the parts of every 'Arti' with an entry for this LOD (option filter, sorted by the Base key)
-0043c600	UData_Data	render	high	Inline copy of an item's data pointer
-0043c610	R3DItemCache_ctor	render	med	An empty part item cache entry
-0043c620	R3DItemCache_Find	render	high	A cached exact-id lookup
-0043c650	R3DItemCache_FindIndex	render	high	A cached lookup with the index merged into the id
-0043c690	R3DPart_ItemCount	render	high	Element count of a part's item of a kind
-0043c700	R3DPart_Item	render	high	Data of a part's item of a kind (table 0x5e5084: vt nm uv df Base pr ef) through its cache
-0043c760	R3DCarLOD_Draw	render	high	R3DCarLOD_v2: two passes, tr / wheel slot / hinge matrices, the 'pr' lists of the entry's range
-0043cc80	R3DItemCache_FindRange	render	high	The first item of an id with an index in a range
-0043d730	R3DCarLOD_v3	render	low	Not ported (250 lines)
-0043ddc0	R3DCarLOD_Bounds	render	high	R3DCarLOD_v4: min / max of the parts' vertices through their tr
-0043dff0	R3DCarLOD_Free	render	high	R3DCarLOD_v5
-0043e640	R3DCarLOD_SortLoop	render	high	MSVC 6 std::sort introsort loop over 12-byte part records (key byte at +8)
-0043e840	R3DCarLOD_InsertionSort	render	high	std::sort's insertion sort
-0043e950	R3DCarLOD_UnguardedInsertion	render	high	std::sort's unguarded insertion
-0043e9c0	R3DCarLOD_MakeHeap	render	high	std::sort's heap fallback
-0043eb10	R3DCarLOD_AdjustHeap	render	high	std::sort's heap adjust
-0043ff80	R3DCrp_Acquire	render	high	The .crp cache: by name, refcount at +0xa4
-004400b0	R3DCrp_Release	render	med	Drops a .crp cache reference
-00442320	R3DObject_Unload	render	high	R3DObject slot 2: frees what a load made
-004424e0	R3DObject_BuildLODs	render	high	The LODs between the pre / post hooks, then the size
-004433c0	R3DObject_Draw	render	high	Model matrix from the car state, then slot 14
-00443e40	R3DCar_Hinge	render	high	The hinge angle triple of a kind (+0x2d0 + 12 * kind)
-00444d30	R3DObject_DrawLODs	render	high	R3DObject_v14: which LOD draws which parts (view masks 0x10/0x20/0x40/0x50/0x80)
-00444fc0	R3DObject_Size	render	high	Half size and radius from LOD list index 4 (0 with flags 0x10)
-0044a0e0	R3DMaterial_SetOverride	render	high	The streams a part replaces during a draw
-0044a110	R3DMaterial_OverrideStream	render	high	Replace one stream by id
-0044a160	R3DMaterial_StreamSlot	render	high	A stream id's slot in the render method
-0044a190	R3DMaterial_Bind	render	high	Binds a 'pr' item's streams and index lists into the render method; returns the primitive type
-0044a520	R3DMaterialSet_ctor	render	med	The object's material set
-0044a6b0	R3DMaterialSet_Build	render	high	RMth, sf / sn shapes, the 'mt' materials and their texture references
-0044ba40	RMethod_Find	render	med	A render method template by name and key
-0059efd0	UData_Transform	util	high	A part's 'tr' matrix (index -1: 'tr  ')
-00539940	EAGL_MatAxisAngle	eagl	high	Rotation of degrees about an axis (fraction of a turn, 0x532430); ported in render/r3dcar.c
-00532430	Mat3_AxisRotation	math	high	3x3 rotation by a fraction of a turn about an axis; the identity at 0
-00532550	Math_SinTurns	math	high	sin(x * 0x5bb2c0)
-00532560	Math_CosTurns	math	high	cos(x * 0x5bb2c0)
-00532640	Vec3_Normalize	math	high	v * (1 / length)

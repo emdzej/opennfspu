@@ -2,9 +2,6 @@
 #pragma once
 #include "eagl/eagl.h"
 
-/* EA real library, texture state (0x535fb0, a method of the render-state object's texture manager
-   (*0x69ed0c)[1]): selects tex on stage (DTEX_settexture, then the texture's own states). */
-void TEXTURE_select(void *tex, int stage);
 
 /* Layers whose code is in the real library's range: environment colour (0x5741f0, factory 0xc),
    normals (0x574770, factory 0xd), indexed uv through a vertex list (0x574880, factory 0xf). */
