@@ -12,6 +12,7 @@
 #include "render/track_selftest.h"
 #include "render/render.h"
 #include "render/thrash.h"
+#include "static_init.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -21,6 +22,7 @@ static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_s
 
 bool app_init(void)
 {
+    PORT_StaticInit();   /* the original's global constructors, before WinMain */
     char err[256], m[300];
     if (!exe_init(err, sizeof err)) {
         snprintf(m, sizeof m, "OpenNFSPU: %s", err);

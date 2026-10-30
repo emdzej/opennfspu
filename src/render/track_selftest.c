@@ -86,6 +86,15 @@ static bool load(const char *name)
             scene_mat(e, m);
         }
     }
+    /* The heading (a viewer's choice until the race's car placement is ported): the start line's second
+       direction vector (+0xc8) when its flag (+0xe8) is set, which runs along the road on the tracks that
+       have one; else the first row, which does on the others. */
+    SceneElem *t = Scene_FindTriggerByType(2);
+    if (t && scene_i32(t, 0xe8)) {
+        m[0] = scene_f32(t, 0xc8);
+        m[1] = scene_f32(t, 0xcc);
+        m[2] = scene_f32(t, 0xd0);
+    }
     place_camera(pos, m);
     set_env();
     RLists_Init();
