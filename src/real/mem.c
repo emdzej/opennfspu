@@ -10,7 +10,10 @@ void *MEM_alloc(const char *name, int size, unsigned flags)
     (void)name;
     if (size < 0) return NULL;
     int body = size < 8 ? 8 : size;
-    MemBlock *b = malloc(sizeof *b + (size_t)body);
+    /* Zeroed: the original's blocks hold whatever the heap held, and some of it reaches the output (the
+       parts of a car's texture pages nothing draws over); zero makes every run and every data source give
+       the same bytes. */
+    MemBlock *b = calloc(1, sizeof *b + (size_t)body);
     if (!b) return NULL;   /* the original calls its out-of-memory hook (0x69cb00) and retries */
     b->tag = MEM_TAG_USED;
     b->flags = (uint16_t)flags;

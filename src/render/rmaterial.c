@@ -266,6 +266,7 @@ void R3DMaterial_DrawList(R3DMaterial *mat, R3DPart *part, UData *root, const ui
 R3DMaterialSet *R3DMaterialSet_ctor(R3DMaterialSet *ms, TexManager *m, int texclass)
 {
     memset(ms, 0, sizeof *ms);
+    ms->manager = m;
     RTexBank_ctor(&ms->bank, m, texclass);
     ms->current = -1;
     ms->next = sets;
@@ -391,7 +392,9 @@ void R3DMaterialSet_Build(R3DMaterialSet *ms, UData *root, const char *dir)
             const uint8_t *ref = d + 0x20 + 0x2c * i;
             uint32_t sid = rd32(ref), id = rd32(ref + 4), name = rd32(ref + 8);
             const TextureStates *st = (const TextureStates *)(const void *)(ref + 0x10);
-            Texture *tex = g_rtex_global ? RTexBank_find(g_rtex_global, id, name) : NULL;
+            /* Both the lookup and the clone go to the set's own bank (set+0xc at 0x44ab94 and 0x44abfc):
+               the texture pages the car composed are there, under (id, page). */
+            Texture *tex = RTexBank_find(&ms->bank, id, name);
             if (!tex || memcmp(&tex->states, st, sizeof *st)) {
                 const uint8_t *shape = shape_find(keys, nkeys, id, name);
                 if (shape) tex = RTexBank_get(&ms->bank, shape, id, name, st, 1, true, 0);

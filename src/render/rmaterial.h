@@ -47,7 +47,9 @@ typedef struct {
 typedef struct R3DMaterialSet {
     R3DMaterial **mat;          /* +0x00 */
     void *shapes;               /* +0x04: (cleared; the original's tree node) */
-    RTexBank bank;              /* +0x08: textures made from the object's shapes */
+    TexManager *manager;        /* +0x08: the constructor's manager */
+    RTexBank bank;              /* +0x0c: the object's textures (the original's bank is 12 bytes; the port's
+                                   is longer, so the fields below are past their original offsets) */
     uint32_t count;             /* +0x18 */
     int32_t current;            /* +0x1c: -1 */
     uint32_t pad20;

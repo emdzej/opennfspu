@@ -3,9 +3,11 @@
    parameter). The frame goes the race's way: the device's begin, the main view's cull (Render_MainViews
    0x468ae0), a render-system camera (Render_CreateCamera 0x467230) through View_Begin / View_End, the page
    flip. The car draws through its render methods (rmaterial.c, rlayers.c) under a fixed light environment of
-   the port's (the game's comes from the track or the showroom scene); textures are pending with the texture
-   pages (0x4426c0). */
+   the port's (the game's comes from the track or the showroom scene), with the shared art loaded and a
+   specification of four colours. */
 #include "render/car_selftest.h"
+#include "real/texture.h"
+#include "render/carpages.h"
 #include "eagl/eagl.h"
 #include "real/set3d.h"
 #include "render/r3dcar.h"
@@ -20,6 +22,10 @@ static bool ready;
 static char loaded[64];
 static RCamera *camera;
 static R3DCarState state;
+/* The car's specification as the front end would fill it: four colours (body, stripe, interior, wheels:
+   the port's choice of a silver car with a dark interior; the original's come from the player's pick),
+   no licence text, no race number, colour package 0. */
+static R3DCarSpec spec;
 static R3DCar car;
 static int frame;
 
@@ -44,6 +50,7 @@ static void setup(void)
 {
     camera = Render_CreateCamera(g_render, 0, 0, 0, 1, 1, 0xff202830u, g_render->znear, g_render->zfar);
     set_env();
+    R3DCar_LoadCommon();   /* carcmn.fsh, the shared pages and the colour packages (0x443690), once */
     ready = true;
 }
 
@@ -52,10 +59,21 @@ static bool load(const char *name)
     if (car.loaded || car.state) R3DCar_Free(&car);
     memset(&state, 0, sizeof state);
     state.rot[0] = state.rot[4] = state.rot[8] = 1;
+    memset(&spec, 0, sizeof spec);
+    spec.colours[0] = 0xffb8bcc0u;
+    spec.colours[1] = 0xff202020u;
+    spec.colours[2] = 0xff303030u;
+    spec.colours[3] = 0xffc0c0c0u;
+    spec.racenumber = -1;
+    for (int i = 0; i < CAR_NOPTIONS; i++) spec.options[i] = -1;
+    state.spec = &spec;
     R3DCar_Init(&car, &state);
     char path[96];
     snprintf(path, sizeof path, "GameData\\CarModel\\%s", name);
     g_r3d_frontend = 1;
+    /* The colours before the load, as CarSpecs_Load does (0x410fcf, then the load through the vtable):
+       the pages are tinted with them while they are composed. */
+    R3DCar_SetColours(&car, 0);
     R3DCar_LoadCrp(&car, path);
     snprintf(loaded, sizeof loaded, "%s", name);
     return car.loaded;
@@ -91,11 +109,14 @@ bool CAR_selftest(const char *name)
     if (!ready) setup();
     if (strcmp(loaded, name) && !load(name)) return false;
     place_camera(0.6f + (float)frame * 0.01f, 0.28f, 4.2f);
+    TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     Render_BeginFrame(g_render);
+    if (tm) TexManager_begin(tm);   /* textures to the card for the frame, as the race frame does */
     RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 1 : 2);
     View_Begin(g_render, camera);
     R3DCar_Draw(&car, &camera->view->model);
     View_End(g_render);
+    if (tm) TexManager_end(tm);
     Render_EndFrame(g_render);
     frame++;
     return true;
