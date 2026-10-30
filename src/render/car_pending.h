@@ -19,6 +19,4 @@ void R3DCar_PendingDecals(R3DCar *car);
 /* R3DObject_LoadHeader 0x4426c0: the texture pages ([tpageN.details], [fileN.details]) composed from the
    .fsh files (R3DCar_LoadDetails 0x443e90, TEXTURE 0x5356c0, DTEX). */
 void R3DCar_PendingTexturePages(R3DCar *car);
-/* 0x467ed0: the render system's cull state. */
-void R3DObject_PendingRenderState(R3DCar *car);
 

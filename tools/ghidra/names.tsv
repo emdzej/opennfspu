@@ -315,9 +315,10 @@
 0044de80	RTex_detectquality	render	high	Quality level from the machine
 0044deb0	RTex_quality	render	high	Class row of the quality table 0x5ce59c (RTex_Info)
 0044dee0	RTex_readdtx	render	high	"%s%s.dtx": texture counts per size/format -> priorities
+0044e190	Render_DisplayInit	render	high	Display mode globals (0x619780..), card detection, quality, 2D window size
 0044e240	RTex_levelfor	render	high	Quality level 0..3 from CPU MHz, memory, video memory
 0044e760	Render_DetectCard	render	med	Card-specific workarounds (Trident Blade, Voodoo)
-0044ebe0	Render_SetupQuality	render	med	Render quality from the options: method key 0x6197f8 (1, 3, 4), detail flags
+0044ebe0	Render_SetupQuality	render	high	Gamma, specials, car detail and the render method key 0x6197f8 from the options
 0044f5b0	RBillBoard_CreateQuads	render	high	RBillBoard.cpp: billboard quads from points
 0044fa10	Track_LoadKeyframes	world	high	Loads <track>_forward.key / _backwards.key (camera/AI keyframes; warns on old versions)
 0044fe60	RDrawAnimArticleBundle_v0	render	struct	Virtual slot 0 of RDrawAnimArticleBundle (vtable 0x5b3cb8)
@@ -366,17 +367,25 @@
 0045f650	Scroller_FreeClouds_v0	render	struct	Virtual slot 0 of Scroller_FreeClouds (vtable 0x5b3f44)
 0045fa40	Sky_LoadText	render	high	Loads Sky\<name>.txt (sky layers)
 00463af0	Camera_Update	camera	low	Per-frame camera/view update (called each tick when paused or replaying)
+004660a0	RFrame_Init	render	high	Camera frame: orientation and rotation identity, eye and translation zero
+004661a0	RFrame_ToView	render	high	Frame to world-to-camera rotation (transposed, forward negated) and translation
+00466df0	RCamera_Letterbox	render	med	Widescreen: the main camera's y range (0.15 .. 0.85)
+00466e70	RCamera_Setup	render	high	Viewport on mode change, view matrix from the frame, perspective
 00467170	View_Begin	render	high	Vertex cache reset, current view (0x628130+0x10), depth factor, EAGL_ViewBegin, clear, context viewport
 004671e0	View_End	render	high	EAGL_EndScene, view inactive
+00467230	Render_CreateCamera	render	high	Camera (0x138): EAGL view, viewport fractions, near, far, clear, half fov 45 (port: render.c)
 004673b0	Render_Init	render	high	Reads the 3D Setup registry choice (driver, resolution), opens the THRASH driver, "Run 3D Setup before running the game."
+00467640	NFSRegistryManager_ctor	render	high	Registry manager (0x118 bytes, vtable 0x5b3fbc): company, product
 00467680	Render_Shutdown	render	med	Closes the driver and the render system
 00467720	Render_CheckDisplay	render	med	Display depth check ("Please set your display to 256 colors or higher")
 00467e80	Render_GrowTextures	render	med	Increases the texture allocation ("Increased texture allocation passed/FAILED")
+00467ed0	Render_SetCull	render	high	Swaps the device render state's cull between 1 and 2
 00467f00	Render_SetVideoMode	render	high	Sets width, height, bpp (front end 640x480x16)
 00468010	Render_BeginFrame	render	high	Device begin (vtable +8) and THRASH_sync when enabled
 00468030	Render_EndFrame	render	high	Device present (vtable +0xc, page flip)
 00468900	Render_Frame	render	high	One rendered frame: views, world, cars, HUD, flip
 00468ae0	Render_MainViews	render	low	Draws the race views
+00468da0	RaceViews_ctor	render	high	The race's cameras: main (clear 0xff77bbff), overlay, quarter view
 00468ef0	Render_RaceInit	render	low	Render setup for the race
 00469030	Render_RaceShutdown	render	low	Render teardown after the race
 00469170	CCameraElem_ReplayCamera	scene	med	Replay camera element
@@ -408,6 +417,7 @@
 0046cc00	Scene_LoadStarts	scene	med	Start grids (_FSTART / _BSTART)
 0046d280	Scene_LoadSkillTest	scene	high	Loads _ST<n>.scn ("Failed to load Skill Test")
 0046d550	Scene_LoadStartScenes	scene	med	Loads _FStart.scn / _BStart.scn
+0046d910	Scene_CountGeom	scene	high	Number of CGeomElem in the scene list 0x628168
 0046dd00	CTriggerElem_v0	scene	struct	Virtual slot 0 of CTriggerElem (vtable 0x5b4554)
 0046dd30	CTriggerElem_v1	scene	struct	Virtual slot 1 of CTriggerElem (vtable 0x5b4554)
 0046e620	CTriggerElem_v2	scene	struct	Virtual slot 2 of CTriggerElem (vtable 0x5b4554)
@@ -426,9 +436,12 @@
 004714d0	QuatAnim_v1	game	struct	Virtual slot 1 of QuatAnim (vtable 0x5b460c)
 00471590	CamAnim_v0	scene	struct	Virtual slot 0 of CamAnim (vtable 0x5b4634)
 004715d0	CamAnim_v1	scene	struct	Virtual slot 1 of CamAnim (vtable 0x5b4634)
+00471660	Track_NewCamAnims	world	high	Makes the camera-animation holder (global 0x628938, scale 1/64)
+004717b0	Track_LoadCamAnims	world	high	One 0x20-byte record per 'CmAn' item of the track root (port: src/game/track.c)
 00471ad0	Track_Load	world	high	Loads the track (crp + scn + support files); "ERROR - Couldn't load track"
 00471ba0	BWorld_DeInit	world	high	Frees the track world
 00471bf0	Track_FindCrp	world	high	Lists *.crp in a folder ("No *.crp files in %s")
+004749e0	stl_uninit_copy_ptr	stl	med	std::uninitialized_copy of pointers (vector growth)
 00474a70	PCollidableBundle_v0	world	struct	Virtual slot 0 of PCollidableBundle (vtable 0x5b465c)
 00474b40	PCollideArticleBundle_v0	world	struct	Virtual slot 0 of PCollideArticleBundle (vtable 0x5b4674)
 00474b70	PCollideArticleBundle_v3	world	struct	Virtual slot 3 of PCollideArticleBundle (vtable 0x5b4674)
@@ -436,20 +449,29 @@
 00475c10	World_LoadSpecFile	world	high	Loads Tr<nn>.bin ("REQUEST FOR SPEC FILE %d WHEN ONLY %d EXIST")
 00475da0	WAnimatableArticleBundle_v0	world	struct	Virtual slot 0 of WAnimatableArticleBundle (vtable 0x5b469c)
 00475ee0	WAnimatableBundle_v0	world	struct	Virtual slot 0 of WAnimatableBundle (vtable 0x5b46a8)
+004776a0	WAnimBundle_ctor	world	high	WAnimBundle (0x38), vtable 0x5b46b8
 004776d0	WAnimBundle_v0	world	struct	Virtual slot 0 of WAnimBundle (vtable 0x5b46b8)
 00477740	WAnimBundle_v5	world	struct	Virtual slot 5 of WAnimBundle (vtable 0x5b46b8)
-00477780	WAnimBundle_v1	world	struct	Virtual slot 1 of WAnimBundle (vtable 0x5b46b8)
+00477780	WAnimBundle_load	world	high	Takes the articles with an 'Anqt' item (port: src/game/world.c)
+00477b30	WArticleBundle_ctor	world	high	W3DObjectBundle('Arti') + cache NULL, vtable 0x5b46e8
 00477b60	WArticleBundle_v0	world	struct	Virtual slot 0 of WArticleBundle (vtable 0x5b46e8)
-00477bd0	WArticleBundle_v1	world	struct	Virtual slot 1 of WArticleBundle (vtable 0x5b46e8)
+00477bd0	WArticleBundle_load	world	high	Takes every article given
+00477ca0	WArticleBundle_buildcache	world	high	64-byte lookup cache per entry, then slot 10
+00477cd0	WArticleBundle_fillcache	world	high	Each cache: the article, the end of its items, empty pairs
+00477d40	WArticleBundle_sphere	world	high	Entry's bounding sphere from Base +0x2c/+0x3c (moved by the entry matrix when transformed)
+00477ed0	WArticleBundle_box	world	high	Entry's bounding box from Base +0x14/+0x20
+00477fd0	WInstanceBundle_ctor	world	high	WInstanceBundle (0x44), vtable 0x5b4718
 00478000	WInstanceBundle_v0	world	struct	Virtual slot 0 of WInstanceBundle (vtable 0x5b4718)
 00478050	WInstanceBundle_v5	world	struct	Virtual slot 5 of WInstanceBundle (vtable 0x5b4718)
-00478130	WInstanceBundle_v1	world	struct	Virtual slot 1 of WInstanceBundle (vtable 0x5b4718)
+00478130	WInstanceBundle_load	world	high	Placed objects ('tr' without Base 0x8000) with their 'tr' rotation and position; keeps the prototypes
+004785d0	WSceneBundle_findproto	world	high	Prototype index of a Base type, -1 if none
 00479c80	WLineBundle_v0	world	struct	Virtual slot 0 of WLineBundle (vtable 0x5b4750)
 00479e20	World_Tick	world	low	Per-tick world update
 00479f50	WLineBundle_v3	world	struct	Virtual slot 3 of WLineBundle (vtable 0x5b4750)
 00479f90	WLineBundle_v4	world	struct	Virtual slot 4 of WLineBundle (vtable 0x5b4750)
+0047cb40	WMidGroundBundle_ctor	world	high	WMidGroundBundle (0x34), vtable 0x5b477c
 0047cb70	WMidGroundBundle_v0	world	struct	Virtual slot 0 of WMidGroundBundle (vtable 0x5b477c)
-0047cba0	WMidGroundBundle_v1	world	struct	Virtual slot 1 of WMidGroundBundle (vtable 0x5b477c)
+0047cba0	WMidGroundBundle_load	world	high	Takes Base & 0x6000; entry flag 0x400000 without 0x2000
 0047cdc0	WMidGroundBundle_v3	world	struct	Virtual slot 3 of WMidGroundBundle (vtable 0x5b477c)
 0047ced0	WMidGroundBundle_v2	world	struct	Virtual slot 2 of WMidGroundBundle (vtable 0x5b477c)
 0047d570	WMidGround_ParseAudio	world	med	Track object definitions: section:audio
@@ -457,11 +479,15 @@
 0047dbb0	WMidGround_ParseAnim	world	med	section:anim
 0047e680	WMidGround_ParsePiece	world	med	section:piece
 0047ea60	WMidGround_ParseObjectDefs	world	med	objectDefs (animdefs.txt)
+0047ec50	WObjectDefs_find	world	med	animdefs.txt definition of a Base type (default: the first)
+00482550	WSceneBundle_ctor	world	high	WSceneBundle (0x4c), vtable 0x5b47e0
 00482580	WSceneBundle_v0	world	struct	Virtual slot 0 of WSceneBundle (vtable 0x5b47e0)
 004825b0	WSceneBundle_v5	world	struct	Virtual slot 5 of WSceneBundle (vtable 0x5b47e0)
-00482680	WSceneBundle_v1	world	struct	Virtual slot 1 of WSceneBundle (vtable 0x5b47e0)
+00482680	WSceneBundle_load	world	high	Prototypes ('tr' + Base 0x8000) and up to 64 instance slots ("DFLT" placeholders at y 9999)
+00482bb0	WSceneBundle_place	world	high	Next instance slot gets a type's prototype at a position and rotation
+00483350	WStaticBundle_ctor	world	high	WStaticBundle (0x34), vtable 0x5b4814
 00483370	WStaticBundle_v0	world	struct	Virtual slot 0 of WStaticBundle (vtable 0x5b4814)
-004833a0	WStaticBundle_v1	world	struct	Virtual slot 1 of WStaticBundle (vtable 0x5b4814)
+004833a0	WStaticBundle_load	world	high	Takes every article left; drawing (0x450b10) and collision (0x474b20) objects
 00485180	WTreeElem_Edge_v0	world	struct	Virtual slot 0 of WTreeElem_Edge (vtable 0x5b484c)
 004851d0	WTreeElem_v0	world	struct	Virtual slot 0 of WTreeElem (vtable 0x5b4868)
 00485220	WTreeElem_Edge_v1	world	struct	Virtual slot 1 of WTreeElem_Edge (vtable 0x5b484c)
@@ -492,9 +518,19 @@
 00486cf0	WTreeElem_BoxObject_v0	world	struct	Virtual slot 0 of WTreeElem_BoxObject (vtable 0x5b4938)
 00486d40	WTreeElem_BoxObject_v6	world	struct	Virtual slot 6 of WTreeElem_BoxObject (vtable 0x5b4938)
 00486f80	WTreeElem_BoxObject_v7	world	struct	Virtual slot 7 of WTreeElem_BoxObject (vtable 0x5b4938)
+004872a0	WVisWall_set	world	high	Visibility wall from two points (ground-plane segment, length^2 and its inverse)
+00487410	BWorld_ctor	world	high	The track world (0x3c)
 00487650	Track_LoadWorld	world	high	Loads <track>.crp, animdefs.txt and <track>.jnc (junctions)
+00487940	World_BuildBundles	world	high	Article bundles in order (scene, instance, anim, mid-ground, static, line), object list, edges, Vis
 00488000	Track_LoadEdges	world	high	Loads <track>.edg (road edges)
+004889d0	BWorld_LoadVis	world	high	The root's 'Vis ' records as visibility walls (BWorld +0x28/+0x2c/+0x30)
+00488ac0	WVis_blocked	world	high	Sight line crosses an enabled visibility wall
+00488d20	WObjectList_push	world	high	std::vector<WObjectRef>::push_back (8-byte records)
+00489030	WObjectRef_copy	world	high	Copies an object reference
+00489090	W3DObjectBundle_ctor	world	high	R3DTypes::W3DObjectBundle (0x30): kind, serial (0x5d0608), world context
 00489130	R3DTypes_W3DObjectBundle_v1	render	struct	Virtual slot 1 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
+00489760	WObjectRef_set	world	high	{bundle, 0, index}
+00489bf0	World_SegmentsCross	world	high	Ground-plane segment intersection, parameters in [0, 1]
 0048aca0	CConClient_v0	scene	struct	Virtual slot 0 of CConClient (vtable 0x5b4968)
 0048aeb0	NetLobby_Connect	net	med	fsNet / porsche-entry.earacing.com online lobby
 0048b270	CConHost_v0	scene	struct	Virtual slot 0 of CConHost (vtable 0x5b4978)
@@ -562,6 +598,8 @@
 004b6de0	Sys_InitInput	main	low	Input setup called from Sys_Init
 004b6f40	Options_RenderDriver	options	med	"Thrash Driver" / "D3D Device" settings
 004b6fa0	RegistryManager_v0	game	struct	Virtual slot 0 of RegistryManager (vtable 0x5b3fcc)
+004b7030	NFSRegistry_GetString	render	high	3D Setup value by index (table 0x5d6f28); writes the default when missing (port: RRegistry_GetString)
+004b7130	NFSRegistry_GetInt	render	high	3D Setup number by index (port: RRegistry_GetInt)
 004b71e0	Options_Language	options	med	Language setting (English default)
 004b74e0	NFSRegistryManager_v0	game	struct	Virtual slot 0 of NFSRegistryManager (vtable 0x5b3fbc)
 004b7b70	FEAccessor_v0	frontend	struct	Virtual slot 0 of FEAccessor (vtable 0x5b4bbc)
@@ -1435,6 +1473,9 @@
 00536bc0	MOUSE_init	input	high	\real\patch3\pc\mouse.c: DirectInput mouse
 00536e30	MOUSE_setstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
 00537010	MOUSE_getstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
+00537470	RenderState_ctor	render	high	Render-state object (0x38): defaults, sent (0x5374d0), stage states (0x535870)
+005374d0	RenderState_Send	render	high	The render-state object's states to EAGL
+00537600	RenderState_SetCull	render	high	Stores the cull (+0x10); sent only when 0x5ded4c is 1 (never)
 00537740	TextureStates_init	real	high	Default texture states 0,1,0,0,0,0,0
 00537790	TextureStates_setmipmap	real	high	states[3]
 005377c0	FERT_EventPump_v2	fert	struct	Virtual slot 2 of FERT::EventPump (vtable 0x5bb150)
@@ -1613,7 +1654,14 @@
 00555920	CPU_detect	sys	high	CPUID vendor (GenuineIntel, AuthenticAMD): MMX/3DNow paths
 005563a0	MEM_size	mem	high	Size asked for of a heap block (header +4)
 005563f0	TEXTURE_formatof	real	high	Shape/palette record type -> THRASH format code
+005567f0	RDeviceWindowed_ctor	render	high	Windowed graphics device (vtable 0x5bc3f0; unused)
 00556910	GLIDE_env	render	med	Glide environment (SST_VIDEO_24BPP, FX_GLIDE_NO_SPLASH)
+00556a30	RDevice_DisplaySize	render	high	Width and height of the display (0x5deac8, 0x5deacc)
+00556e30	RDevice_ctor	render	high	Full-screen graphics device (vtable 0x5bc41c)
+00556eb0	RDevice_Open	render	high	GLIDE_env, texture manager, about block, render states, font, EAGL context
+00556f50	RDevice_Clear	render	high	Background, clip to the display, clearwindow
+00556f80	RDevice_Begin	render	high	THRASH_window(2)
+00556f90	RDevice_Present	render	high	THRASH_pageflip
 0055d580	ICMP_init	net	med	ICMP.DLL ping (lobby ping meter)
 0055e220	TapiSelectModem	real	high	Named after its own error message (\real\pc\tapipkt.c)
 0055e720	Hangup	game	high	Named after its own error message

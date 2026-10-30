@@ -1,5 +1,5 @@
-/* Application states (see app.h). For now: the exe check and the THRASH driver brought up as the game
-   does (THRASH_init, then mode 1 = 640x480 at 16 bits); the front end and the race come as they are
+/* Application states (see app.h). For now: the exe check and the render system brought up as the game
+   does (Render_Init: the 3D Setup's driver "dx7z", mode 1 = 640x480 at 16 bits); the front end and the race come as they are
    ported (docs/re/port-plan.md, docs/guide/status.md). --param thrash_test=1 draws the driver's self-test
    scene instead of a blank frame, thrash_test=2 EAGL's;
    car=<name> shows a car (CAR_selftest). */
@@ -9,6 +9,7 @@
 #include "eagl/eagl.h"
 #include "real/set3d.h"
 #include "render/car_selftest.h"
+#include "render/render.h"
 #include "render/thrash.h"
 #include <stdio.h>
 #include <string.h>
@@ -24,10 +25,13 @@ bool app_init(void)
         plat_log(m);
         return false;
     }
-    /* The driver as the game binds it: the DLL's exports into the table (THRASH_opendll 0x574d50). */
+    /* The port's drivers, what LoadLibrary would find (THRASH_opendll 0x574d50), then the game's start:
+       the options (fe.txt), the render system (Render_Init 0x4673b0). */
     THRASH_registerdll(&THRASH_dx7z);
-    if (!THRASH_opendll("dx7z") || !THRASH.fn.init() || !THRASH.fn.setvideomode(1, 2, 1)) {
-        plat_log("OpenNFSPU: the THRASH driver could not start (OpenGL ES 3.0 needed)");
+    RenderOptions_Load();
+    Render_Init();
+    if (!g_render || !g_render->device || !g_render->device->rs) {
+        plat_log("OpenNFSPU: the render system could not start (OpenGL ES 3.0 needed)");
         return false;
     }
     char v[8];
@@ -53,4 +57,4 @@ bool app_frame(void)
 
 void app_audio(float *stereo, unsigned frames) { memset(stereo, 0, (size_t)frames * 2 * sizeof *stereo); }
 
-void app_exit(void) { THRASH.fn.restore(); }
+void app_exit(void) { Render_Shutdown(); }
