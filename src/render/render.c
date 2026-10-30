@@ -178,6 +178,9 @@ void Render_DisplayInit(void)
 /* 0x44ebe0. The globals other than the method key stay in this module until their readers are ported
    (shadows 0x6197e5, particles 0x6197e0, specials 0x6197ec/0x6197f0/0x6197f4, car detail 0x6197c4). */
 static int specials_level;          /* 0x6197f4 */
+uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it in this build */
+uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
+static int card_type;               /* 0x6197b0: Render_DetectCard's card (pending: 0, never 0xe) */
 static int car_detail;              /* 0x6197c4 */
 
 void Render_SetupQuality(void)
@@ -189,9 +192,11 @@ void Render_SetupQuality(void)
     g_rmethod_key = 0;
     if (g_renderopts.headlights == 1) g_rmethod_key = 8;
     TEXTURE_settrilinear(false);
+    g_render_extras = card_type != 0xe;
+    g_render_skiplod0 = 0;
     switch (g_renderopts.specialfx) {
-    case 0: specials_level = 0; break;
-    case 1: specials_level = 1; break;
+    case 0: specials_level = 0; g_render_extras = 0; break;
+    case 1: specials_level = 1; g_render_extras = 0; break;
     case 2: specials_level = 2; break;
     default:
         specials_level = 3;

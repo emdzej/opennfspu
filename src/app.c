@@ -9,13 +9,15 @@
 #include "eagl/eagl.h"
 #include "real/set3d.h"
 #include "render/car_selftest.h"
+#include "render/track_selftest.h"
 #include "render/render.h"
 #include "render/thrash.h"
 #include <stdio.h>
 #include <string.h>
 
 static int selftest;   /* --param thrash_test: 1 the THRASH scene, 2 the EAGL scene */
-static char car_name[64];   /* --param car=<name>: that car in the viewer (GameData/CarModel/<name>.crp) */
+static char car_name[64];     /* --param car=<name>: that car in the viewer (GameData/CarModel/<name>.crp) */
+static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 
 bool app_init(void)
 {
@@ -37,13 +39,15 @@ bool app_init(void)
     char v[8];
     selftest = plat_param("thrash_test", v, sizeof v) ? v[0] - '0' : 0;
     if (!plat_param("car", car_name, sizeof car_name)) car_name[0] = 0;
+    if (!plat_param("track", track_name, sizeof track_name)) track_name[0] = 0;
     return true;
 }
 
 bool app_frame(void)
 {
     if (plat_frame_shown()) {
-        if (car_name[0]) CAR_selftest(car_name);
+        if (track_name[0]) TRACK_selftest(track_name);
+        else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
         else {

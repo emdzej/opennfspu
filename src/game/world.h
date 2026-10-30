@@ -175,3 +175,12 @@ _Static_assert(sizeof(WSceneBundle) == 0x4c && sizeof(WInstanceBundle) == 0x44 &
 _Static_assert(sizeof(WArticleCache) == 0x40 && sizeof(WBundleEntry) == 8, "the caches and entries");
 #endif
 _Static_assert(sizeof(WPlaced) == 0x38 && sizeof(WVisWall) == 0x1c, "the placement and wall records");
+
+/* One object of the visibility pass (the per-object part of 0x47f8a0): skipped if already queued this
+   frame, outside the view's sphere test, behind a visibility wall, or beyond the distance (far objects,
+   the entry flags 0x400020: 700 m, or 600 m with 0x400000; others the camera's view distance, against
+   their nearest point by the pass's square-root estimate); else handed to its draw object (slot 1) with
+   the squared distance. viewdist2 is the camera's (+0x128). */
+struct EaglView;
+void World_VisitObject(W3DObjectBundle *b, int index, struct EaglView *view, const float eye[3], float viewdist2,
+                       const WVisWall *walls, const uint8_t *disabled, uint32_t nwalls);

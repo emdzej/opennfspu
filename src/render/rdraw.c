@@ -1,0 +1,234 @@
+/* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
+#include "render/rdraw.h"
+#include "exe.h"
+#include "game/track.h"
+#include "game/world.h"
+#include "pending.h"
+#include "render/r3dcar.h"
+#include "render/render.h"
+#include "render/rmaterial.h"
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+RDrawBundle *g_rdraw_list;
+uint32_t g_rdraw_key;
+
+static uint32_t kind_id(int kind) { return exe_u32(0x5e5084 + 4u * (unsigned)kind); }
+
+static uint32_t rd32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
+static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
+
+/* The entry's article cache as the part the item lookups take: the bundle's caches are 0x40 bytes with
+   the part's first fields (article, end of its items, seven {record, id} slots), which is how the
+   original passes them to R3DPart_Item and the material code. The port copies them into a part and back,
+   since its part is longer. */
+static WArticleCache *entry_cache(RDrawBundle *d, int index)   /* 0x477bc0 */
+{
+    return &((WArticleBundle *)d->bundle)->cache[index];
+}
+
+static void part_from(R3DPart *p, const WArticleCache *c)
+{
+    memset(p, 0, sizeof *p);
+    memcpy(p, c, sizeof *c);
+}
+
+static void part_back(WArticleCache *c, const R3DPart *p) { memcpy(c, p, sizeof *c); }
+
+/* x87 fistp in the default mode: round to nearest, ties to even. */
+static uint32_t fround(float v) { return (uint32_t)(int64_t)rintf(v); }
+
+/* The current record of a kind's slot (0x451070 with index -1). */
+static UData *slot_rec(const R3DPart *p, int kind) { return p->cache[kind].rec; }
+
+/* The first item of a kind with an index in [lo, hi) into the slot; its data, NULL if none. 0x4510d0 */
+static const uint32_t *first_item(R3DPart *p, int kind, uint32_t lo, uint32_t hi)
+{
+    UData *it = UData_finditem(p->article, kind_id(kind), lo, hi);
+    p->cache[kind].rec = it;
+    p->cache[kind].id = it != p->end ? it->id : 0;
+    return it != p->end ? UData_data(it) : NULL;
+}
+
+/* The next record while it is the same kind with an index below hi, else the end. 0x450fc0 */
+static const uint32_t *next_item(R3DPart *p, int kind, uint32_t hi)
+{
+    UData *it = p->cache[kind].rec;
+    if (it == p->end) return NULL;
+    it++;
+    uint32_t key = kind_id(kind);
+    if (it != p->end && UData_key(it) == key && (it->info & UDATA_INDEXED ? it->id & 0xffff : 0xffffffffu) < hi) {
+        p->cache[kind].rec = it;
+        p->cache[kind].id = it->id;
+        return UData_data(it);
+    }
+    p->cache[kind].rec = p->end;
+    p->cache[kind].id = 0;
+    return NULL;
+}
+
+/* ---- the base's methods ---- */
+
+static void bundle_dtor(RDrawObject *o, int free_self)   /* 0x450b30 (0x44fe60 for the base) */
+{
+    RDrawBundle *d = (RDrawBundle *)o, **pp = &g_rdraw_list;
+    while (*pp && *pp != d) pp = &(*pp)->next;
+    if (*pp) *pp = d->next;
+    free(d->visited);
+    if (free_self) free(d);
+}
+
+static void bundle_s4(RDrawObject *o) {}   /* 0x44fe50 */
+
+/* The world bundle's sphere of the entry (its slot 3). 0x451170 */
+static void bundle_sphere(RDrawObject *o, int index, float out[4])
+{
+    RDrawBundle *d = (RDrawBundle *)o;
+    /* Slot 3 of the article bundles is 0x477d40; the instance and scene bundles' 0x478630 (their own
+       transforms) and the mid-ground's 0x47cdc0 aren't ported apart from it. */
+    WArticleBundle_sphere((WArticleBundle *)d->bundle, index, out);
+}
+
+/* The entry's draw flags from its Base flags. 0x4511b0 */
+static uint32_t bundle_flags(RDrawObject *o, int index)
+{
+    RDrawBundle *d = (RDrawBundle *)o;
+    R3DPart p;
+    part_from(&p, entry_cache(d, index));
+    const uint8_t *base = R3DPart_Item(&p, R3D_BASE, 0xffffffffu);
+    part_back(entry_cache(d, index), &p);
+    uint32_t f = base ? rd32(base) : 0, r = 2;
+    if (f & 1) r = 10;
+    if (f & 2) r |= 0x40;
+    if (f & 0x40) r |= 0x200;
+    if (f & 0x10) r |= 4;
+    if (f & 8) r |= 0x10;
+    if (f & 0x800) r |= 0x80;
+    if (f & 0x1000) r |= 0x400;
+    return r;
+}
+
+/* ---- RDrawArticleBundle ---- */
+
+/* The level of detail for the distance and the queued lists. 0x450cb0 */
+static void article_queue(RDrawObject *o, int index, float dist2)
+{
+    RDrawBundle *d = (RDrawBundle *)o;
+    WArticleCache *c = entry_cache(d, index);
+    R3DPart p;
+    part_from(&p, c);
+    const uint8_t *base = R3DPart_Item(&p, R3D_BASE, 0xffffffffu);
+    if (!base) goto done;
+    uint32_t nlod = rd32(base + 0xc), lod = 0;
+    if (g_render_skiplod0 && nlod > 1 && !(rd32(base) & 0x10000)) lod = 1;
+    if (lod >= nlod) goto done;
+    /* The first level whose distance (u16 at +0xa of each 12-byte entry from +0x64) squared exceeds the
+       squared distance, as an integer (__ftol) compared in floats. */
+    float d2 = (float)(int32_t)dist2;
+    while ((float)rd16(base + 0x64 + 12 * lod + 0xa) * (float)rd16(base + 0x64 + 12 * lod + 0xa) <= d2)
+        if (++lod >= nlod) goto done;
+    const uint8_t *e = base + 0x64 + 12 * lod;
+    RListEntry q = {NULL, o, 0, (uint16_t)index, fround(dist2)};
+    const RCamera *cam = g_render ? g_render->camera : NULL;
+    /* The camera's point at +0x34 (kept by the camera behaviours, not ported: the eye until then). */
+    const float *cp = cam ? cam->frame.eye : NULL;
+    if (e[0]) {
+        uint32_t lo = rd16(e + 4), hi = rd16(e + 6);
+        for (const uint32_t *pr = first_item(&p, R3D_PR, lo, hi); pr; pr = next_item(&p, R3D_PR, hi)) {
+            q.item = slot_rec(&p, R3D_PR);
+            float dx = 0, dy = 0, dz = 0;
+            if (cp) {
+                float cx, cy, cz;
+                memcpy(&cx, pr + 2, 4);
+                memcpy(&cy, pr + 3, 4);
+                memcpy(&cz, pr + 4, 4);
+                dx = cx - cp[0];
+                dy = cy - cp[1];
+                dz = cz - cp[2];
+            }
+            q.key = fround(dx * dx + dy * dy + dz * dz);
+            uint32_t f = pr[0];
+            if (f & 0x20000) {
+                q.key += pr[1] & 0xffff0000u;
+                RLists_Insert(RLIST_PRIORITY, &q);
+            } else if (f & 0x10000)
+                RLists_Insert(RLIST_OPAQUE, &q);
+            else if (f & 0x100000)
+                RLists_Insert(RLIST_TRANSLUCENT, &q);
+            else if ((f & 0x40000) && g_render_extras)
+                RLists_Insert(RLIST_OPAQUE, &q);
+        }
+    }
+    if (e[1]) {
+        for (const uint32_t *ef = first_item(&p, R3D_EF, 0, 0xffff); ef; ef = next_item(&p, R3D_EF, 0xffff)) {
+            q.item = slot_rec(&p, R3D_EF);
+            q.key = fround(dist2);
+            RLists_Insert(RLIST_EFFECTS, &q);   /* 0x466a20 */
+        }
+    }
+done:
+    part_back(c, &p);
+}
+
+/* A queued primitive list through its material. 0x450b70 */
+static void article_draw(RDrawObject *o, int index, const RListEntry *e)
+{
+    RDrawBundle *d = (RDrawBundle *)o;
+    WArticleCache *c = entry_cache(d, index);
+    UData *rec = e->item;
+    const uint32_t *pr = UData_data(rec);
+    /* The world context (+0x2c of the bundle) is the track renderer, whose first field is the material
+       array. */
+    R3DMaterialSet *ms = d->bundle->world;
+    uint32_t mi = pr[1] & 0xffff;
+    R3DMaterial *mat = ms && mi < ms->count ? ms->mat[mi] : NULL;
+    g_rdraw_key = e->key;
+    R3DPart p;
+    part_from(&p, c);
+    R3DMaterial_DrawList(mat, &p, g_world ? g_world->root : NULL, pr, rec->count);
+    part_back(c, &p);
+    if (mat) mat->override = NULL;   /* +0x0c */
+}
+
+/* An article's effect ('ef'): road markers (2), particle emitters (3), lights (4). 0x450be0 */
+static void article_special(RDrawObject *o, int index, const RListEntry *e)
+{
+    const uint32_t *ef = UData_data((UData *)e->item);
+    switch (ef ? ef[0] : 0) {
+    case 2: PENDING_NOTE(0x451810, "the effect type 2 draw"); break;
+    case 3: PENDING_NOTE(0x455020, "the effect particle emitter (RGenericParticleSystem)"); break;
+    case 4: if (g_render_extras) PENDING_NOTE(0x455f60, "the effect light"); break;
+    }
+}
+
+static const RDrawVtbl article_vtbl = {bundle_dtor, article_queue, article_draw, article_special,
+                                       bundle_s4, bundle_sphere, bundle_flags};
+
+/* The base (0x44fca0): the bundle, the visited marks (one per entry, 100 when the count is 10000 or
+   more), the link into the list of draw objects. */
+static RDrawBundle *bundle_ctor(RDrawBundle *d, W3DObjectBundle *b)
+{
+    d->bundle = b;
+    uint32_t n = b->count > 9999 ? 100 : b->count;
+    d->visited = calloc(n ? n : 1, 1);
+    d->next = g_rdraw_list;
+    g_rdraw_list = d;
+    return d;
+}
+
+RDrawBundle *RDrawArticleBundle_ctor(RDrawBundle *d, W3DObjectBundle *b)
+{
+    bundle_ctor(d, b);
+    d->bundle2 = b;
+    d->base.vt = &article_vtbl;
+    return d;
+}
+
+void RDraw_ClearVisited(void)
+{
+    for (RDrawBundle *d = g_rdraw_list; d; d = d->next) {
+        uint32_t n = d->bundle->count > 9999 ? 100 : d->bundle->count;
+        memset(d->visited, 0, n);
+    }
+}

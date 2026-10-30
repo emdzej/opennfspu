@@ -3,6 +3,7 @@
 #include "eagl/eagl.h"
 #include "exe.h"
 #include "game/track_pending.h"
+#include "render/rdraw.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -459,4 +460,48 @@ bool WVis_blocked(const WVisWall *walls, const uint8_t *disabled, uint32_t n, co
         } else if (World_SegmentsCross(sight, wall, NULL) && w->high) return true;
     }
     return false;
+}
+
+/* ------------------------------------------------------------------ the visibility pass */
+
+static float exe_f32(uint32_t va)
+{
+    uint32_t u = exe_u32(va);
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
+
+void World_VisitObject(W3DObjectBundle *b, int index, EaglView *view, const float eye[3], float viewdist2,
+                       const WVisWall *walls, const uint8_t *disabled, uint32_t nwalls)
+{
+    RDrawBundle *d = b->draw;
+    if (!d || d->visited[index]) return;
+    d->visited[index] = 1;
+    float s[4];
+    d->base.vt->sphere(&d->base, index, s);
+    if (!EAGL_ViewSphereVisible(view, s, s[3])) return;
+    uint32_t flags = b->entries[index].flags;
+    bool far = (flags & 0x400020) != 0;
+    if (walls && WVis_blocked(walls, disabled, nwalls, s, eye, far)) return;
+    float dx = s[0] - eye[0], dy = s[1] - eye[1], dz = s[2] - eye[2];
+    float d2 = dx * dx + dy * dy + dz * dz;
+    if (!far) {
+        /* The square root by halving the float's bits and rebiasing ((i >> 1) + 0x1fc00000), less the
+           radius, at least 0x5b23f8 (0): the distance to the nearest point, compared squared. */
+        int32_t i;
+        memcpy(&i, &d2, 4);
+        i = (i >> 1) + 0x1fc00000;
+        float r;
+        memcpy(&r, &i, 4);
+        r -= s[3];
+        float lo = exe_f32(0x5b23f8);
+        if (r < lo) r = lo;
+        if (viewdist2 <= r * r) return;
+        d->base.vt->queue(&d->base, index, r * r);
+    } else if (flags & 0x400000) {
+        if (exe_f32(0x5b47a8) <= d2) return;
+        d->base.vt->queue(&d->base, index, d2);
+    } else if (d2 < exe_f32(0x5b47ac))
+        d->base.vt->queue(&d->base, index, d2);
 }

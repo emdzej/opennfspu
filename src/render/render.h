@@ -156,6 +156,8 @@ typedef struct {
 } RenderSystem;
 
 extern RenderSystem *g_render;      /* 0x628130 */
+extern uint8_t g_render_skiplod0;   /* 0x6197e5: draw objects start at their second LOD */
+extern uint8_t g_render_extras;     /* 0x6197e6: the extra 'pr' lists (0x40000) and the effects lists */
 extern RenderState *g_racerstate;   /* 0x62814c: the race's copy of the device's render states */
 
 void Render_Init(void);                                  /* 0x4673b0 */
