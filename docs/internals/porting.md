@@ -39,6 +39,14 @@ exe, no pasted decompiler output, cite the original) come first; this page is ab
   `exe.h` (`exe_data`, `exe_u32`, `exe_str` by virtual address), copied into the module at init. Never
   type the values into the source.
 
+## Static initializers
+
+The original's global objects are constructed by MSVC's startup before `WinMain`, from the table at
+0x5cb004..0x5cb780 (479 function pointers, `__xc_a`..`__xc_z`); nothing calls them directly, so a search for
+callers finds none. When a module you port has an entry there (search the table for the function's address),
+add the call to `PORT_StaticInit` (`src/static_init.c`) in the table's order. Missing one is a silent
+behaviour change: `TEXTURE_initstates` (0x535710) missing left every texture clamped.
+
 ## Not yet ported
 
 - A call into code nobody has ported yet goes to a function with the original's name, declared in the

@@ -25,8 +25,9 @@ Rendering goes through EA's **THRASH** driver interface (`_THRASH_*`, 42 entry p
 loads from `Drivers/dx7z.dll` (Direct3D 7) or `voodoo2z.dll` (Glide). The port implements THRASH on OpenGL ES
 3.0 (`gasm:gl`; WebGL 2 in browsers) following dx7z.dll, and ports the game above it unchanged in structure.
 
-**State:** early. File layer (directories, ISO 9660 + Joliet images), exe check, gasm backend with GL, THRASH
-scaffold. Next: format loaders, THRASH, the function inventory and port plan (`docs/re/`).
+**State:** early (docs/guide/status.md). THRASH, EAGL2, the real library's files/shapes/textures, cars (textured,
+coloured) and the track world draw are ported; viewers: `--param car=<name>`, `--param track=<name>`. Next: sky,
+cameras, then one car driving (docs/re/port-plan.md step 4).
 
 ## Hard rules
 
@@ -111,6 +112,9 @@ Data: asset `cd` (or `iso`, `rom`) = disc image, else the folder's files as asse
   auto-analysis (385 functions).
 - Full dumps for grepping: `ghidra script run tools/ghidra/DumpAllNamed.java --project nfspu --program
   porsche.exe -- "$PWD/re/all.c"` (and `dx7z.dll` -> `re/dx7z.c`); `re/funcs.txt` is the address/name list.
+- Global constructors run from MSVC's static-initializer table 0x5cb004..0x5cb780 before `WinMain` (no direct
+  callers): ported ones go into `PORT_StaticInit` (`src/static_init.c`) in table order
+  (docs/internals/porting.md).
 - Source-file strings (`\real\pc\startup.c`, `d:\Nfs\Nfs5\frontend\fert\src\Window.cpp`, ...) identify modules.
 - Maps and plan: `docs/re/architecture.md`, `docs/re/inventory.md`, `docs/re/port-plan.md`, `docs/re/thrash.md`.
 
