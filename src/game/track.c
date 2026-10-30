@@ -161,7 +161,8 @@ bool Track_LoadWorld(BWorld *w, const char *path)
     WMidGround_LoadObjectDefs(defs);
     w->lines = WLineSet_new(8192.0f, 15);    /* 0x46000000 */
     BWorld_BuildBundles(w);
-    World_LoadSim(w->root);                  /* 0x47fbd0, 0x47ff20 */
+    Road_new();                              /* 0x47fbd0 */
+    World_LoadSim(w->root);                  /* 0x47ff20 */
     snprintf(crp, sizeof crp, "%s.jnc", w->name);
     World_LoadJunctions(crp);
     return true;
