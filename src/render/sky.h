@@ -38,3 +38,9 @@ int Sky_SlotFor(int weather);                    /* the slot index the above pic
    (pending). `reload` frees the previous one first. Sky_LoadFsh 0x45da90 */
 void Sky_LoadFsh(const char *name, bool reload);
 const uint8_t *Sky_Fsh(void);                    /* 0x627e50 */
+
+/* The sky object (0x45d6c0, the global 0x627e48), made by Sky_LoadFsh: the texture object first (0x460910,
+   or on a reload 0x460b90 for the new file), then the sky (render/sky_draw.c). */
+void Sky_Create(const char *name, bool reload);
+void Sky_DrawBefore(void);   /* 0x45d690: the update (0x45cef0) and the draw (0x45d3b0) of the main view's sky */
+void Sky_DrawAfter(void);    /* 0x45d6b0: the pass after the world (0x45d060) */

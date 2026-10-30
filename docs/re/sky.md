@@ -38,3 +38,30 @@ The sky object and its layers (`Sky_LoadText` 0x45fa40, the `SkyLevel_BasicSky` 
 `_FreeClouds` classes 0x45a980-0x45c9c0, `SkyMapSource_Texture` / `_Noise`, `Scroller_BasicSky` /
 `_FreeClouds` 0x45e780-0x45f730), the horizon (`SkyHorizon_*` 0x459b80-0x45a060), the sky's texture
 object (0x460910 / 0x460b90), the frame colour 0x459940 and the draw.
+
+
+## The sky object and the horizon (ported)
+
+`Sky_LoadFsh` (0x45da90) ends by making the texture object (0x460910, 0x238 bytes at 0x627e4c: the file, 40
+shape slots looked up by name with 0x460a10, their names, their textures made on first use with 'SKY ' and
+class 1 by 0x460b40; a reload, 0x460b90, looks the names up in the new file) and the sky (0x45d6c0, 100
+bytes at 0x627e48: the configuration, the light slot, the keyframe tracks, one level per counted block of
+Sky\<name>.txt, the horizon last). Port: `render/sky_tex.c`, `sky_levels.c`, `sky_draw.c`, `sky_text.c`.
+
+The world draw calls 0x45d690 (the update 0x45cef0, then the draw 0x45d3b0) when the camera's +0x12c is
+set. The draw sets the camera's near and far planes to 0.15 and 700 (0x467060), turns state 0x39 off and
+state 0x28 to 7, takes the heading (the forward row's angle to +z in turns, 0x532850, the other way round for
+negative x), puts the frame's eye at the origin (the sky moves with the camera), draws the levels flagged
+0x400 (they block the sun), the sun (0x460150, pending), the other levels, and puts everything back.
+
+The horizon (SkyHorizon, 0x459a20) is a band of 16 quads 400 from the eye, from the configuration's +0x14
+up by +0x18, starting at its angle +0x04: texture 'hor<level>' or 'horz', colours from 'hzcl' (a 16 x 2
+image: per segment the top and bottom colours, rotated by +0x08), texture coordinates from the tile table at
++0x1c (+0x0c columns, +0x10 rows, a flip byte each). It is stored twice, so the quarter turn either side of
+the heading (0x45a060) is one contiguous range. It draws through the render system's mesh helper (0x468180,
+`render/rmesh.c`) and EAGL's quad kernel (0x545830).
+
+Pending: the sky levels (SkyLevel_BasicSky 0x45acb0, _MultiSky 0x45b460, _FreeClouds 0x45be40, their
+scrollers and map sources: the clouds), the keyframe tracks and the weather regions' blend along the track
+(0x45a180.., 0x4812a0), the sky colour and fog (0x45cbb0, 0x45d1a0, 0x45d270), the sun and lens flare
+(0x4600b0, 0x460150), the after-the-world pass (0x45d060).

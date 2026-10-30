@@ -35,13 +35,6 @@ void EAGL_DrawLines(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
     c->flags &= 0xffffff07u;
 }
 
-void EAGL_DrawQuads(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
-                    int stamp_diffuse, int stamp_specular, int stamp_uv)
-{
-    PENDING_NOTE(0x545830, "EAGL_DrawQuads");
-    c->flags &= 0xffffff07u;
-}
-
 void EAGL_DrawTwoStage(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, int mode0, int mode1,
                        const int16_t *stamps)
 {

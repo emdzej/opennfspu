@@ -1,6 +1,7 @@
 /* The sky's configuration (render/sky.c) for every sky in GameData\Track\Sky: loads, ends at version 9,
    the version-7 files (default, Monaco) get the version-8/9 fields, weather slots resolve inside the
    block, the texture file loads. Skips (exit 0) without data. */
+#include "eagl_fake_thrash.h"
 #include "exe.h"
 #include "game/track.h"
 #include "real/mem.h"
@@ -31,6 +32,7 @@ int main(void)
     if (!vfs_mount_default() || !vfs_exists("Porsche.exe")) { printf("sky_test: no game data, skipped\n"); return 0; }
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("%s\n", err); return 1; }
+    fake_install_graphics();   /* Sky_LoadFsh makes the sky, whose pieces make textures */
     char dir[260];
     snprintf(dir, sizeof dir, "%sSky", g_track_dir);
     static Names l;
@@ -67,7 +69,9 @@ int main(void)
             set += s == wthr;
         }
         Sky_FreeLight();
-        Sky_LoadFsh(l.n[i], i > 0);
+        /* As a race loads its track's sky (Render_RaceInit 0x468ef0: not a reload; a reload, 0x45dbc0, gives
+           the same track's textures a new file of the same shapes). */
+        Sky_LoadFsh(l.n[i], false);
         CHECK(Sky_Fsh() != NULL && !memcmp(Sky_Fsh(), "SHPI", 4));
         printf("  %-12s v%d -> 9, %d of 4 weather slots set\n", l.n[i], ver, set);
         free(raw);

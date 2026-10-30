@@ -59,7 +59,8 @@ static void reset_format(EaglContext *c)
     c->twouv = 0;
 }
 
-/* The draw at the end of every kernel (the THRASH primitive lives in the context, +0x117f0). */
+/* The draw at the end of every kernel (the THRASH primitive lives in the context, +0x117f0): an indexed
+   list, or with every vertex inside and unindexed_prim non-zero, the vertices as they are. */
 static void submit(EaglContext *c, uint32_t unindexed_prim, bool sort)
 {
     if (!c->out_nindices) return;
@@ -70,7 +71,7 @@ static void submit(EaglContext *c, uint32_t unindexed_prim, bool sort)
     c->draw.fvf = 0x1c4;
     c->draw.verts = c->verts;
     if (sort && c->sort) EAGL_SortTriangles(c);
-    if (!(c->flags & EAGL_CF_INSIDE)) {
+    if (!(c->flags & EAGL_CF_INSIDE) || !unindexed_prim) {
         c->draw.nverts = c->out_nverts;
         c->draw.indices = c->indices;
         c->draw.nindices = c->out_nindices;
@@ -220,6 +221,128 @@ void EAGL_DrawList(EaglContext *c, const uint32_t *diffuse, const uint32_t *spec
         }
     }
     submit(c, 4, true);
+    c->flags &= 0xffffff07u;
+}
+
+/* ---- quads (0x545830) ---- */
+
+/* Four vertices per quad, one {reject, clip} code pair per quad. A quad inside the guard band is projected
+   and drawn as the triangles (0, 1, 2) and (0, 2, 3); one that needs clipping goes through the clipper as
+   those two triangles, each polygon projected after the input vertices and fanned. The result is always
+   an indexed list (even with every vertex inside: unlike the list kernel there is no unindexed draw). */
+void EAGL_DrawQuads(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
+                    int sd, int ss, int su)
+{
+    take_stamps(c, &diffuse, &specular, &uv, sd, ss, su);
+    uint32_t f = c->flags;
+    if (!(f & EAGL_CF_DX7)) {
+        pending_glide_path(c);
+        return;
+    }
+    float *v = (float *)c->verts;
+    int n = c->nverts;
+    EaglClipFn clip = (f & EAGL_CF_ORTHO) ? EAGL_ClipOrtho : EAGL_ClipPerspective;
+    bool has_s = f & EAGL_CF_SPECULAR, moved = f & EAGL_CF_TRANSFORMED, has_uv = f & EAGL_CF_UV;
+    bool has_d = f & EAGL_CF_DIFFUSE, uv2 = f & EAGL_CF_UV2;
+    int nquads = (n + 3) / 4;   /* the loops round up */
+    bool inside = f & EAGL_CF_INSIDE;
+    if (diffuse && !has_d) {
+        if (!inside) {
+            for (int q = 0; q < nquads; q++)
+                if (c->primcodes[q][0] == 0)
+                    for (int k = 0; k < 4; k++) v[(4 * q + k) * VSTRIDE + 4] = ufloat(diffuse[4 * q + k]);
+        } else {
+            for (int i = 0; i < n; i++) v[i * VSTRIDE + 4] = ufloat(diffuse[i]);
+        }
+        has_d = true;
+    }
+    if (specular && !has_s) {
+        if (!inside) {
+            for (int q = 0; q < nquads; q++)
+                if (c->primcodes[q][0] == 0)
+                    for (int k = 0; k < 4; k++) v[(4 * q + k) * VSTRIDE + 5] = ufloat(specular[4 * q + k]);
+        } else {
+            for (int i = 0; i < n; i++) v[i * VSTRIDE + 5] = ufloat(specular[i]);
+        }
+        has_s = true;
+    }
+    if (uv && !has_uv) {
+        if (!inside) {
+            for (int q = 0; q < nquads; q++)
+                if (c->primcodes[q][0] == 0)
+                    for (int k = 0; k < 4; k++) {
+                        v[(4 * q + k) * VSTRIDE + 6] = uv[2 * (4 * q + k)];
+                        v[(4 * q + k) * VSTRIDE + 7] = uv[2 * (4 * q + k) + 1];
+                    }
+        } else {
+            for (int i = 0; i < n; i++) {
+                v[i * VSTRIDE + 6] = uv[2 * i];
+                v[i * VSTRIDE + 7] = uv[2 * i + 1];
+            }
+        }
+        has_uv = true;
+    }
+    if (uv2 || has_uv || has_s || has_d || moved) {
+        uint16_t *idx = c->indices;
+        int nout = n;
+        if (!inside) {
+            float *out = v + n * VSTRIDE;
+            uint16_t base = 0;
+            for (int q = 0; q < nquads; q++, base += 4) {
+                float *qv = v + 4 * q * VSTRIDE;
+                if (c->primcodes[q][0] == 0 && c->primcodes[q][1] == 0) {
+                    if (moved) {
+                        for (int k = 0; k < 4; k++) project(c, qv + k * VSTRIDE);
+                        idx[0] = base;
+                        idx[1] = (uint16_t)(base + 1);
+                        idx[2] = (uint16_t)(base + 2);
+                        idx[3] = base;
+                        idx[4] = (uint16_t)(base + 2);
+                        idx[5] = (uint16_t)(base + 3);
+                        idx += 6;
+                    }
+                } else if (c->primcodes[q][0] == 0) {
+                    static const int tri[2][3] = {{0, 1, 2}, {0, 2, 3}};
+                    for (int h = 0; h < 2; h++) {
+                        float *poly;
+                        int cnt;
+                        clip(tri[h][0], tri[h][1], tri[h][2], c->primcodes[q][1], c->guardband, qv, has_d, has_s, has_uv,
+                             uv2, c->znear, c->zfar, &poly, &cnt);
+                        if (cnt <= 2) continue;
+                        if (moved) {
+                            for (int k = 0; k < cnt; k++) project_to(c, poly + k * VSTRIDE, out + k * VSTRIDE);
+                            for (int k = 0; k < cnt - 2; k++) {
+                                idx[0] = (uint16_t)nout;
+                                idx[1] = (uint16_t)(nout + 1 + k);
+                                idx[2] = (uint16_t)(nout + 2 + k);
+                                idx += 3;
+                            }
+                            nout += cnt;
+                        }
+                        copy_attrs(out, poly, cnt, moved, has_d, has_s, has_uv, uv2);
+                        out += cnt * VSTRIDE;
+                    }
+                }
+            }
+        } else if (moved) {
+            for (int i = 0; i < n; i++) project(c, v + i * VSTRIDE);
+            for (int q = 0; q < nquads; q++) {
+                uint16_t b = (uint16_t)(4 * q);
+                idx[0] = b;
+                idx[1] = (uint16_t)(b + 1);
+                idx[2] = (uint16_t)(b + 2);
+                idx[3] = b;
+                idx[4] = (uint16_t)(b + 2);
+                idx[5] = (uint16_t)(b + 3);
+                idx += 6;
+            }
+        }
+        if (moved) {
+            c->out_nverts = (uint16_t)nout;
+            c->out_nindices = (uint16_t)(idx - c->indices);
+        }
+    }
+    submit(c, 0, true);   /* always indexed */
     c->flags &= 0xffffff07u;
 }
 

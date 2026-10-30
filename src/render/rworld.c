@@ -8,6 +8,7 @@
 #include "render/render.h"
 #include "render/render_pending.h"
 #include "render/rlists.h"
+#include "render/sky.h"
 
 /* RenderState setters (0x5375e0: +0x0c and state 0x39; 0x5375a0: +0x04 and state 0x28). */
 static void rs_set39(RenderState *rs, int v)
@@ -44,7 +45,7 @@ void Render_PendingWorld(RCamera *c)
 {
     PENDING_NOTE(0x452590, "Render_World: 0x452590");
     PENDING_NOTE(0x451f70, "Render_World: 0x451f70");
-    if (c->v12c != 0) PENDING_NOTE(0x45d690, "the sky (Sky_Draw)");
+    if (c->v12c != 0) Sky_DrawBefore();   /* (and 0x657db4, 0x619799 clear: replay / front-end flags) */
     if (c->flags[2]) world_pass(c);                            /* +0x11a */
     if (c->flags[3]) PENDING_NOTE(0x534000, "THRASH_setstate_glue (+0x11b)");
     rs_set39(g_render->device->rs, 1);
@@ -52,6 +53,6 @@ void Render_PendingWorld(RCamera *c)
     RLists_Flush();                                            /* 0x4671d0 */
     PENDING_NOTE(0x455130, "Render_World: 0x455130 (particles)");
     PENDING_NOTE(0x43f610, "Render_World: 0x43f610 (the cars)");
-    if (c->v12c == 2) PENDING_NOTE(0x45d6b0, "the sky's second pass");
+    if (c->v12c == 2) Sky_DrawAfter();
     PENDING_NOTE(0x458ef0, "Render_World: 0x458ef0");
 }

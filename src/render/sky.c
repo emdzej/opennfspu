@@ -174,6 +174,5 @@ void Sky_LoadFsh(const char *name, bool reload)
         snprintf(path, sizeof path, exe_str(0x5cf11c), g_track_dir);
         g_sky_fsh = UTIL_loadfileabort(path, 0);
     }
-    PENDING_NOTE(0x460910, "sky texture object (0x460910 / 0x460b90)");
-    PENDING_NOTE(0x45d6c0, "sky object: Sky_LoadText 0x45fa40, the sky levels and scrollers");
+    Sky_Create(name, reload);   /* the texture object (0x460910 / 0x460b90) and the sky (0x45d6c0) */
 }

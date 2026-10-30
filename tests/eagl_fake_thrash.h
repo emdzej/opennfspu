@@ -4,6 +4,7 @@
 #pragma once
 #include "real/set3d.h"
 #include "real/texture.h"
+#include "render/rlayers.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -123,5 +124,6 @@ static inline void fake_install_graphics(void)
         g = calloc(1, sizeof *g);
         TexGraphics_register(g);
         TexGraphics_setdevice(g, &device);
+        RLayers_Register();   /* the game's layer factory (0x449a60), as Render_Init registers it */
     }
 }

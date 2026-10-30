@@ -14,17 +14,15 @@
    a space), each closed with a NUL; the length of what was kept. 0x45f9d0 */
 static int tokenize(char *p, char *end)
 {
+    /* The original tests the byte before the bound, reading one past the end; whatever is there, it stops
+       at the end the same way, so the port tests the bound first. */
     char *out = p, *in = p;
     for (; in < end; in++) {
-        while ((*in == '\n' || *in == '\r' || *in == ' ' || *in == '\t') && in < end) in++;
-        while (*in != '\n' && *in != '\r' && *in != '\t') {
-            if (in >= end) goto done;
-            *out++ = *in++;
-        }
+        while (in < end && (*in == '\n' || *in == '\r' || *in == ' ' || *in == '\t')) in++;
+        while (in < end && *in != '\n' && *in != '\r' && *in != '\t') *out++ = *in++;
         if (in >= end) break;
         *out++ = 0;
     }
-done:
     if (out[-1] != 0) *out++ = 0;
     return (int)(out - p);
 }
