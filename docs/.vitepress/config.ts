@@ -123,6 +123,7 @@ export default defineConfig({
             { text: "Port plan", link: "/re/port-plan" },
             { text: "THRASH driver", link: "/re/thrash" },
             { text: "EAGL2", link: "/re/eagl" },
+            { text: "Cars", link: "/re/cars" },
             { text: "File formats", link: "/formats" },
           ],
         },
