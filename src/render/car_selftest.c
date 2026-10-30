@@ -14,7 +14,9 @@
 #include "render/render.h"
 #include "render/rlayers.h"
 #include "render/rmaterial.h"
+#include "platform.h"
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -61,6 +63,8 @@ static bool load(const char *name)
     state.rot[0] = state.rot[4] = state.rot[8] = 1;
     memset(&spec, 0, sizeof spec);
     spec.colours[0] = 0xffb8bcc0u;
+    char v[16];   /* --param colour=<rrggbb>: the body colour instead of silver */
+    if (plat_param("colour", v, sizeof v)) spec.colours[0] = 0xff000000u | (uint32_t)strtoul(v, NULL, 16);
     spec.colours[1] = 0xff202020u;
     spec.colours[2] = 0xff303030u;
     spec.colours[3] = 0xffc0c0c0u;
