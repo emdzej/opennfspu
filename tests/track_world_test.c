@@ -46,6 +46,44 @@ static void check_texnames(BWorld *w, const char *track)
     MEM_purge(shp);
 }
 
+/* The first trigger of <track>_fstart.scn (the forward start grid): its position. Test code, not the port:
+   the scene parser (Scene_ParseElements 0x46c170) is pending. */
+static bool start_position(const char *track, float pos[3])
+{
+    char path[128];
+    snprintf(path, sizeof path, "%s%s_fstart.scn", g_track_dir, track);
+    size_t n = 0;
+    char *t = (char *)vfs_read_all(path, &n);
+    if (!t) return false;
+    char *e = strstr(t, "TRIGGER_ELEMENT");
+    bool ok = e && sscanf(strchr(e, '\n') ? strchr(e, '\n') : e, "%f %f %f", &pos[0], &pos[1], &pos[2]) == 3;
+    free(t);
+    return ok;
+}
+
+/* Objects whose bounding sphere comes within `dist` of the start and that the visibility walls don't hide. */
+static void check_start_view(BWorld *w, const char *track)
+{
+    float start[3];
+    if (!start_position(track, start)) { printf("  no start grid\n"); return; }
+    const float dist = 300.0f;
+    int near = 0, seen = 0;
+    for (uint32_t i = 0; i < w->nobjects; i++) {
+        WObjectRef *o = &w->objects[i];
+        if (o->bundle == w->scene) continue;   /* scene slots are placed later */
+        float s[4];
+        WArticleBundle_sphere((WArticleBundle *)o->bundle, o->index, s);
+        float dx = s[0] - start[0], dz = s[2] - start[2];
+        if (sqrtf(dx * dx + dz * dz) - s[3] > dist) continue;
+        near++;
+        if (!w->nvis || !WVis_blocked(w->vis, w->vis_off, w->nvis, start, s, false)) seen++;
+    }
+    printf("  start (%.1f, %.1f, %.1f): %d objects within %.0f m, %d not behind a visibility wall\n",
+           start[0], start[1], start[2], near, dist, seen);
+    CHECK(near > 0 && seen > 0 && seen <= near);
+    CHECK(near < (int)w->nobjects);   /* the start sees a part of the track, not all of it */
+}
+
 static void check_track(const char *track)
 {
     char path[128];
@@ -117,6 +155,7 @@ static void check_track(const char *track)
         CHECK(blocked < lines);
     }
     check_texnames(w, track);
+    check_start_view(w, track);
     free(owner);
     BWorld_free(w);
 }

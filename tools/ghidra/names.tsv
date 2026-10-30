@@ -379,18 +379,18 @@
 00475ee0	WAnimatableBundle_v0	world	struct	Virtual slot 0 of WAnimatableBundle (vtable 0x5b46a8)
 004776d0	WAnimBundle_v0	world	struct	Virtual slot 0 of WAnimBundle (vtable 0x5b46b8)
 00477740	WAnimBundle_v5	world	struct	Virtual slot 5 of WAnimBundle (vtable 0x5b46b8)
-00477780	WAnimBundle_v1	world	struct	Virtual slot 1 of WAnimBundle (vtable 0x5b46b8)
+00477780	WAnimBundle_load	world	high	Takes the articles with an 'Anqt' item (port: src/game/world.c)
 00477b60	WArticleBundle_v0	world	struct	Virtual slot 0 of WArticleBundle (vtable 0x5b46e8)
-00477bd0	WArticleBundle_v1	world	struct	Virtual slot 1 of WArticleBundle (vtable 0x5b46e8)
+00477bd0	WArticleBundle_load	world	high	Takes every article given
 00478000	WInstanceBundle_v0	world	struct	Virtual slot 0 of WInstanceBundle (vtable 0x5b4718)
 00478050	WInstanceBundle_v5	world	struct	Virtual slot 5 of WInstanceBundle (vtable 0x5b4718)
-00478130	WInstanceBundle_v1	world	struct	Virtual slot 1 of WInstanceBundle (vtable 0x5b4718)
+00478130	WInstanceBundle_load	world	high	Placed objects ('tr' without Base 0x8000) with their 'tr' rotation and position; keeps the prototypes
 00479c80	WLineBundle_v0	world	struct	Virtual slot 0 of WLineBundle (vtable 0x5b4750)
 00479e20	World_Tick	world	low	Per-tick world update
 00479f50	WLineBundle_v3	world	struct	Virtual slot 3 of WLineBundle (vtable 0x5b4750)
 00479f90	WLineBundle_v4	world	struct	Virtual slot 4 of WLineBundle (vtable 0x5b4750)
 0047cb70	WMidGroundBundle_v0	world	struct	Virtual slot 0 of WMidGroundBundle (vtable 0x5b477c)
-0047cba0	WMidGroundBundle_v1	world	struct	Virtual slot 1 of WMidGroundBundle (vtable 0x5b477c)
+0047cba0	WMidGroundBundle_load	world	high	Takes Base & 0x6000; entry flag 0x400000 without 0x2000
 0047cdc0	WMidGroundBundle_v3	world	struct	Virtual slot 3 of WMidGroundBundle (vtable 0x5b477c)
 0047ced0	WMidGroundBundle_v2	world	struct	Virtual slot 2 of WMidGroundBundle (vtable 0x5b477c)
 0047d570	WMidGround_ParseAudio	world	med	Track object definitions: section:audio
@@ -400,9 +400,9 @@
 0047ea60	WMidGround_ParseObjectDefs	world	med	objectDefs (animdefs.txt)
 00482580	WSceneBundle_v0	world	struct	Virtual slot 0 of WSceneBundle (vtable 0x5b47e0)
 004825b0	WSceneBundle_v5	world	struct	Virtual slot 5 of WSceneBundle (vtable 0x5b47e0)
-00482680	WSceneBundle_v1	world	struct	Virtual slot 1 of WSceneBundle (vtable 0x5b47e0)
+00482680	WSceneBundle_load	world	high	Prototypes ('tr' + Base 0x8000) and up to 64 instance slots ("DFLT" placeholders at y 9999)
 00483370	WStaticBundle_v0	world	struct	Virtual slot 0 of WStaticBundle (vtable 0x5b4814)
-004833a0	WStaticBundle_v1	world	struct	Virtual slot 1 of WStaticBundle (vtable 0x5b4814)
+004833a0	WStaticBundle_load	world	high	Takes every article left; drawing (0x450b10) and collision (0x474b20) objects
 00485180	WTreeElem_Edge_v0	world	struct	Virtual slot 0 of WTreeElem_Edge (vtable 0x5b484c)
 004851d0	WTreeElem_v0	world	struct	Virtual slot 0 of WTreeElem (vtable 0x5b4868)
 00485220	WTreeElem_Edge_v1	world	struct	Virtual slot 1 of WTreeElem_Edge (vtable 0x5b484c)
@@ -1967,3 +1967,30 @@
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005af324	crt_5af324	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
+00471660	Track_NewCamAnims	world	high	Makes the camera-animation holder (global 0x628938, scale 1/64)
+004717b0	Track_LoadCamAnims	world	high	One 0x20-byte record per 'CmAn' item of the track root (port: src/game/track.c)
+004749e0	stl_uninit_copy_ptr	stl	med	std::uninitialized_copy of pointers (vector growth)
+004776a0	WAnimBundle_ctor	world	high	WAnimBundle (0x38), vtable 0x5b46b8
+00477b30	WArticleBundle_ctor	world	high	W3DObjectBundle('Arti') + cache NULL, vtable 0x5b46e8
+00477ca0	WArticleBundle_buildcache	world	high	64-byte lookup cache per entry, then slot 10
+00477cd0	WArticleBundle_fillcache	world	high	Each cache: the article, the end of its items, empty pairs
+00477d40	WArticleBundle_sphere	world	high	Entry's bounding sphere from Base +0x2c/+0x3c (moved by the entry matrix when transformed)
+00477ed0	WArticleBundle_box	world	high	Entry's bounding box from Base +0x14/+0x20
+00477fd0	WInstanceBundle_ctor	world	high	WInstanceBundle (0x44), vtable 0x5b4718
+004785d0	WSceneBundle_findproto	world	high	Prototype index of a Base type, -1 if none
+00482550	WSceneBundle_ctor	world	high	WSceneBundle (0x4c), vtable 0x5b47e0
+00482bb0	WSceneBundle_place	world	high	Next instance slot gets a type's prototype at a position and rotation
+00483350	WStaticBundle_ctor	world	high	WStaticBundle (0x34), vtable 0x5b4814
+0047cb40	WMidGroundBundle_ctor	world	high	WMidGroundBundle (0x34), vtable 0x5b477c
+0047ec50	WObjectDefs_find	world	med	animdefs.txt definition of a Base type (default: the first)
+00487410	BWorld_ctor	world	high	The track world (0x3c)
+00487940	World_BuildBundles	world	high	Article bundles in order (scene, instance, anim, mid-ground, static, line), object list, edges, Vis
+004872a0	WVisWall_set	world	high	Visibility wall from two points (ground-plane segment, length^2 and its inverse)
+00488ac0	WVis_blocked	world	high	Sight line crosses an enabled visibility wall
+004889d0	BWorld_LoadVis	world	high	The root's 'Vis ' records as visibility walls (BWorld +0x28/+0x2c/+0x30)
+00488d20	WObjectList_push	world	high	std::vector<WObjectRef>::push_back (8-byte records)
+00489030	WObjectRef_copy	world	high	Copies an object reference
+00489090	W3DObjectBundle_ctor	world	high	R3DTypes::W3DObjectBundle (0x30): kind, serial (0x5d0608), world context
+00489760	WObjectRef_set	world	high	{bundle, 0, index}
+00489bf0	World_SegmentsCross	world	high	Ground-plane segment intersection, parameters in [0, 1]
+0046d910	Scene_CountGeom	scene	high	Number of CGeomElem in the scene list 0x628168
