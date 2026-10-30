@@ -48,7 +48,7 @@ scaffold. Next: format loaders, THRASH, the function inventory and port plan (`d
 
 | Path | What |
 |---|---|
-| `src/` | Portable core. File layer `vfs.c` (from OpenRF/OpenGTA: directories, ISO 9660 images with Joliet names), `exe.c` (the original exe read at runtime), `app.c` (per-frame state machine). Backends: `vfs_host.c` (POSIX, native tests), `platform_gasm.c` (the only file that includes `gasm.h`) |
+| `src/` | Portable core. `pending.h`: calls into code not ported yet (docs/internals/porting.md). File layer `vfs.c` (from OpenRF/OpenGTA: directories, ISO 9660 images with Joliet names), `exe.c` (the original exe read at runtime), `app.c` (per-frame state machine). Backends: `vfs_host.c` + `platform_host.c` (native tests), `platform_gasm.c` (the only file that includes `gasm.h`) |
 | `src/render/` | `thrash.c`: the THRASH driver on GLES 3 (the only GL user; not in the native build). EAGL and the game renderer to come |
 | `src/real/`, `src/eagl/`, `src/front/`, `src/game/` | EA real library, EAGL2, front end, game (to come; mirror the original's modules) |
 | `tests/` | Headless tests (`*_test.c`, one executable each, `ctest`) against the real data; skip without it |
