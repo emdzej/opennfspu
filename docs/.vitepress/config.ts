@@ -123,6 +123,7 @@ export default defineConfig({
             { text: "Port plan", link: "/re/port-plan" },
             { text: "THRASH driver", link: "/re/thrash" },
             { text: "EAGL2", link: "/re/eagl" },
+            { text: "Track and world", link: "/re/track" },
             { text: "Cars", link: "/re/cars" },
             { text: "Textures and rendering", link: "/re/render" },
             { text: "Render system", link: "/re/render-system" },
