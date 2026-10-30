@@ -1291,13 +1291,21 @@
 0052b140	FERT_DataPart_v2	fert	struct	Virtual slot 2 of FERT::DataPart (vtable 0x5bb240)
 0052b170	FERT_DataPart_v1	fert	struct	Virtual slot 1 of FERT::DataPart (vtable 0x5bb240)
 0052c140	FERT_ListControls	fert	med	*.ctr / *.scr enumeration with descriptions
+00531a10	MEM_alloc	mem	high	EA real heap allocation (name, size, flags: pool nibble, 0x10 top, 0x20 best fit); 16-byte header 'MB' (port: src/real/mem.c)
 00531d00	MEM_purge	mem	high	EA real heap free: unlinks the block and marks it free ('FB')
+00531e20	MEM_initblock	mem	high	Fills a block header ('MB', flags, size, links; optional name, 'BEND' guard)
 00532020	CS_enter	sys	high	EnterCriticalSection wrapper
 00532030	CS_leave	sys	high	LeaveCriticalSection wrapper
 005320d0	Vec3_ScaleArray	math	high	Scales n float triples
 00532150	MEM_copy	mem	high	memcpy; MMX path in PACODE 0x5b0480 when available
 00532680	Vec3_Dot	math	high	3-component dot product (thunk to 0x56e681)
 005328f0	INPUT_init	input	high	DirectInput device setup
+00533900	FILE_openwait	file	high	Opens a file on its device and waits (name, mode, priority, &handle) (port: src/real/file.c)
+00533960	FILE_readwait	file	high	Reads (handle, offset, dst, len, priority) in 8 KB pieces and waits
+00533990	FILE_readpieces	file	high	The 8 KB-piece read loop with an operation callback
+00533b10	FILE_closewait	file	high	Closes a file and waits
+00533b50	FILE_sizewait	file	high	File size and waits
+00533c70	FILE_existswait	file	high	Whether a file exists, waits
 005342f0	THRASH_pageflip_glue	render	high	One-call wrapper of THRASH_pageflip
 00534300	THRASH_flushwindow_glue	render	high	One-call wrapper of THRASH_flushwindow
 00534440	getclutptr	real	high	Named after its own error message (\real\cmn\depthconv.c)
@@ -1309,11 +1317,15 @@
 005358c0	TEXTURE_setstate_glue	render	med	Wrapper of THRASH_setstate for texture state
 00535930	TEXTURE_name	render	low	tex%d names
 00536350	SYNCTASK_add	real	high	Named after its own error message (\real\cmn\systask.c)
+00536450	SYNCTASK_run	real	high	\real\cmn\systask.c: runs due periodic tasks when the timer ticked (port: src/real/systask.c)
 00536a80	FEAliasedPositionableAccessor_v29	frontend	struct	Virtual slot 29 of FEAliasedPositionableAccessor (vtable 0x5b4be4)
 00536bc0	MOUSE_init	input	high	\real\patch3\pc\mouse.c: DirectInput mouse
 00536e30	MOUSE_setstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
 00537010	MOUSE_getstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
 005377c0	FERT_EventPump_v2	fert	struct	Virtual slot 2 of FERT::EventPump (vtable 0x5bb150)
+00537ca0	SHAPE_count	real	high	Shape file entry count (+8) (port: src/real/shape.c)
+00537cd0	SHAPE_entryname	real	high	Shape file entry i's 4-byte name, 0 past the end
+00537d00	SHAPE_typevalid	real	high	Shape record type table 0x5de890 lookup
 00537d20	SHAPE_clut	real	high	Named after its own error message (\real\pc\shpclut.c)
 00537ed0	EAGL_SetTransformMatrix	eagl	high	Transformer matrix (NULL = identity 0x5bc660)
 00537ef0	EAGL_SetNearFar	eagl	high	Transformer near/far pair (NULL = 1.0, 65535)
@@ -1453,6 +1465,7 @@
 00554cc0	DTEX_upload	render	med	Dynamic texture upload
 005551a0	DTEX_settexture	render	med	Dynamic texture bind (THRASH_settexture)
 00555920	CPU_detect	sys	high	CPUID vendor (GenuineIntel, AuthenticAMD): MMX/3DNow paths
+005563a0	MEM_size	mem	high	Size asked for of a heap block (header +4)
 00556910	GLIDE_env	render	med	Glide environment (SST_VIDEO_24BPP, FX_GLIDE_NO_SPLASH)
 0055d580	ICMP_init	net	med	ICMP.DLL ping (lobby ping meter)
 0055e220	TapiSelectModem	real	high	Named after its own error message (\real\pc\tapipkt.c)
@@ -1480,11 +1493,19 @@
 00567810	FILE_startdevice	real	high	Named after its own error message (\real\pc\nfile.c)
 005679b0	FILE_devicethread	file	high	\real\pc\nfile.c: file device thread (async operations)
 005681d0	FILESYS_atomic	real	high	Named after its own error message (\real\pc\nfile.c)
+00568310	FILE_device	file	high	\real\pc\nfile.c: device of a path (drive letter - '@'; 0 with '|' or no letter)
 00569b50	framerate	real	high	Named after its own error message (\real\cmn\frate.c)
+00569d40	FILE_exists	file	high	FILE_existswait at the hlsfile priority
 00569da0	FILE_size	real	high	Named after its own error message (\real\cmn\hlsfile.c)
+00569e20	FILE_getsize	file	high	Public FILE_size (no abort)
+00569e60	FILE_loadabort	file	high	Public FILE_load that aborts on failure
 00569ea0	FILE_load	file	high	\real\cmn\hlsfile.c: loads a whole file
+00569fc0	FILE_loadfile	file	high	Public FILE_load (no abort)
 0056a050	FILE_loadat	real	high	Named after its own error message (\real\cmn\hlsfile.c)
+0056a0e0	FILE_loadatfile	file	high	Public FILE_loadat (no abort)
+0056a280	FILE_loadbigheaderabort	file	high	Public FILE_loadbigheader that aborts on failure
 0056a2c0	FILE_loadbigheader	file	high	\real\cmn\hlsfile.c: reads a BIGF (VIV) header
+0056a4c0	FILE_loadbigheaderfile	file	high	Public FILE_loadbigheader (no abort)
 0056a550	FILE_save	file	high	\real\cmn\hlsfile.c: writes a file
 0056ada0	STREAM_create	real	high	Named after its own error message (\real\cmn\stream.c)
 0056afe0	STREAM_setfilter	real	high	Named after its own error message (\real\cmn\stream.c)
@@ -1505,8 +1526,11 @@
 0056c5f0	STREAM_buffersize	real	high	Named after its own error message (\real\cmn\stream.c)
 0056c640	STREAM_bufferusage	real	high	Named after its own error message (\real\cmn\stream.c)
 0056e040	BIG_getnum	file	high	\real\cmn: big-endian n-byte read (byte-swapped word shifted down)
+0056e190	FILE_loadpackfile	file	high	\real\cmn\loadpack.c: load + unpack (no abort)
 0056e250	FILE_loadpack	file	high	\real\cmn\loadpack.c: loads a file and unpacks it (RefPack)
 0056e681	Vec3_Dot_impl	math	high	3-component dot product
+00571150	UNPACK_dispatch	file	high	Codec dispatch: 0x10 RefPack, 0x18, 0x30/32/34, 0x46 (port: src/real/pack.c)
+00571240	UNPACK_size	file	high	Unpacked size of a packed block, 0 if not packed
 005713e0	movdfl	real	high	Named after its own error message (\real\pc\movdfl.c)
 00572070	FONT_dtexdrawquadmesh	real	high	Named after its own error message (\real\cmn\fontdtex.c)
 00572f00	EAGL_XfXyz4	eagl	high	Point xyz (w=1) through a matrix, 4 outputs
@@ -1514,6 +1538,8 @@
 00573000	EAGL_XfXyzw4	eagl	high	Point xyzw through a matrix, 4 outputs
 005730a0	EAGL_XfXyzw3	eagl	high	Point xyzw through a matrix, 3 outputs
 00574a20	createshape	real	high	Named after its own error message (\real\cmn\creates.c)
+00574d30	THRASH_nogetstate	render	high	set3d.c: getstate default when the driver lacks it (returns 0) (port: src/real/set3d.c)
+00574d40	THRASH_notfree	render	high	set3d.c: tfree default when the driver lacks it (returns 0)
 00574d50	THRASH_opendll	render	high	\real\patch3\pc\set3d.c: LoadLibrary of the driver DLL (dx7z.dll) and GetProcAddress of every _THRASH_* entry into 0x6bd850..0x6bd8f8
 005753f0	THRASH_drivername	render	med	THRASH_DRIVERNAME setting
 005757a0	DDRAW_init	render	med	\real\pc\ddraw.c: DirectDrawEnumerate/DirectDrawCreate (2D surfaces, display modes)
@@ -1528,9 +1554,16 @@
 005862e0	UNRELY_init	net	med	\real\cmn\unrely.c: unreliable packet layer
 005885b0	NET_killplayer	real	high	Named after its own error message (\real\patch3\cmn\netgathr.c)
 00591750	FILE_mapview	file	med	Memory-mapped file open (CreateFileMapping/MapViewOfFile)
+005933f0	UNPACK_type46	file	med	Codec of type 0x46 (unused by the data)
+005935b0	UNPACK_type30	file	med	Codec of types 0x30/0x32/0x34 (unused by the data)
+005941b0	UNPACK_type18	file	med	Codec of type 0x18 (unused by the data)
+00594510	REFPACK_decode	file	high	RefPack (0x10FB) decoder
+005946a0	REFPACK_copy	file	high	RefPack back-reference byte copy
 00594f50	CONNpackettimeout	real	high	Named after its own error message (\real\cmn\llpacket.c)
 0059d400	Sys_InitPaths	main	med	Game directory from GetModuleFileName (data root for every relative path)
+0059ddf0	UTIL_openfile	util	high	Support/Utility: FILE_openwait under the search path (game dir, CD dir) (port: src/support/ufile.c)
 0059e1d0	UFileFind_v0	util	struct	Virtual slot 0 of UFileFind (vtable 0x5c1820)
+0059e4d0	UTIL_loadshape	util	high	Support/Utility: SHAPE_loadfile under the search path
 0059e780	MEM_init	mem	high	Object heap (UMemory.cpp): "Insufficient memory to launch application"
 0059e8d0	MEM_shutdown	mem	med	Frees the pools at exit
 0059ea80	MEM_free	mem	high	Free through the allocator object (no null check)
@@ -1541,15 +1574,35 @@
 0059ed70	operator_new_tag	mem	high	new(size, tag)
 0059eda0	operator_new_array	mem	med	new[] ("new[]" tag)
 0059ee00	operator_delete	mem	high	delete through the allocator object (slot 2), null-safe
+0059f020	UData_name	util	high	CUData: the 'Name' item's data (port: src/support/udata.c)
+0059f050	UData_dz	util	high	CUData: the 'dz' item's data (index or 'dz  ')
+0059f0a0	UData_copy	util	high	CUData copy (owned data copied, else absolute pointer)
+0059f150	UData_init	util	high	CUData record owning a copy of data
+0059f1d0	UData_dtor	util	high	CUData: frees owned data
+0059f1f0	UData_set	util	high	CUData: replaces the data (keeps the block if it fits within 256 bytes)
+0059f270	UData_fromdata	util	high	Identity cast of a file's data to its root record
+0059f280	UData_countarticles	util	high	CUData: sub-articles with a key
+0059f2e0	UData_findarticle	util	high	CUData: binary search of sub-articles by id or id+index range
+0059f390	UData_lowerbound	util	high	CUData: binary search of records by raw id (first of equal run)
+0059f440	UData_countitems	util	high	CUData: items with a key
+0059f4b0	UData_finditem	util	high	CUData: binary search of items by id or id+index range
+0059f570	UData_find	util	high	CUData: item by raw id (binary if sorted, else linear)
+0059f620	UData_children	util	high	CUData: first child record (relative: in 16-byte units)
+0059f630	UDataFile_ctor	util	high	Chunk data file object (handler, data, size, reserved, done)
+0059f650	UDataFile_dtor	util	high	Chunk data file: drops the data
+0059f6a0	UDataFile_load	util	high	Chunk data file: mapped view or read, unpacked into reserved pages
+0059f900	UDataFile_free	util	high	Chunk data file: drops the data unconditionally
+0059f940	UDataFile_root	util	high	Chunk data file: the data (pages made read-only the first time)
 0059f970	NFS_ErrorHandler	sys	med	Fatal error handler installed in 0x5debf0 (file/line in 0x5deb74/0x5deb78)
 0059f9d0	REAL_errorbox	sys	med	"Error: terminate execution?" (IsDebuggerPresent)
 0059fc60	UFileFind_find	file	med	FindFirstFile/FindNextFile directory enumeration
+005a0b30	UFileHandler_ctor	util	high	UFileHandler constructor (priority 100, vtable 0x5c18ec)
 005a0b80	UFileHandler_v0	util	struct	Virtual slot 0 of UFileHandler (vtable 0x5c18ec)
-005a0bf0	crt_5a0bf0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0c40	crt_5a0c40	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0c80	crt_5a0c80	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0cb0	crt_5a0cb0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
-005a0ce0	crt_5a0ce0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
+005a0bf0	UFileHandler_open	util	high	UFileHandler: open under the search path (mode bit 0 read, 8 mapped)
+005a0c40	UFileHandler_read	util	high	UFileHandler: read from the position, advances it
+005a0c80	UFileHandler_size	util	high	UFileHandler: size
+005a0cb0	UFileHandler_close	util	high	UFileHandler: close
+005a0ce0	UFileHandler_mapview	util	high	UFileHandler: mapped view of the file (0x568350 -> 0x592240)
 005a0cf0	crt_5a0cf0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005a0cf5	crt_5a0cf5	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005a0d0c	crt_5a0d0c	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
@@ -1905,11 +1958,11 @@
 005aea9f	crt_5aea9f	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005aeb00	crt_5aeb00	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005aeb10	SHAPE_loadfile	file	high	\real\cmn\loadshp.c: loads an FSH (SHPI) shape file
-005aecb0	real_5aecb0	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
+005aecb0	SHAPE_loadfile_glue	real	high	SHAPE_loadfile without abort
 005aecd0	real_5aecd0	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aed20	real_5aed20	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aed30	real_5aed30	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
-005aedf0	real_5aedf0	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
+005aedf0	MEM_protect	mem	high	VirtualProtect of whole pages (read-only or read-write)
 005aee40	real_5aee40	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
