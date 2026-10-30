@@ -148,7 +148,8 @@ if [ "$SAVE" = 1 ] && [ "$DRY" = 0 ]; then
 fi
 
 if [ -d "$DATAP" ]; then DATA=(--asset-dir "$DATAP"); else DATA=(--asset "cd=$DATAP"); fi
-CMD=("$HERE/gasm-run" "$RES/opennfspu.wasm" "${DATA[@]}" "$@")
+# ANGLE (with SwiftShader for --gl-software) is in Resources/angle/ (see package-gasm.sh).
+CMD=("$HERE/gasm-run" "$RES/opennfspu.wasm" --gl-lib "$RES/angle" "${DATA[@]}" "$@")
 if [ "$DRY" = 1 ]; then printf '%q ' "${CMD[@]}"; echo; exit 0; fi
 
 mkdir -p "$LOGDIR"

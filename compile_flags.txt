@@ -1,4 +1,4 @@
--std=c11
+-std=gnu11
 -Isrc
 -I.deps/gasm-c-sdk/include
 -Wall

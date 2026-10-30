@@ -15,7 +15,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # ANGLE (libEGL, libGLESv2, SwiftShader + its ICD file) for gasm:gl, from the runner dir
-# (tools/fetch-gasm-runner.sh), with its notices. gasm-run finds it next to itself or in ../Frameworks (.app).
+# (tools/fetch-gasm-runner.sh), with its notices. gasm-run finds it next to itself (Linux, Windows); the .app keeps it in Resources/angle/ (--gl-lib).
 angle() {
   local dest=$1 f n=0
   for f in "$RUNDIR"/*EGL* "$RUNDIR"/*GLESv2* "$RUNDIR"/*swiftshader* "$RUNDIR"/ANGLE-NOTICES.txt; do
@@ -127,9 +127,12 @@ case "$PLATFORM" in
 macos-*)
   APP="$OUT/Porsche Unleashed (gasm).app"
   rm -rf "$APP"
-  mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
+  mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
   cp "$RUNDIR/gasm-run" "$APP/Contents/MacOS/gasm-run"
-  angle "$APP/Contents/Frameworks"
+  # ANGLE stays together in Resources/angle/ (the launcher passes --gl-lib): gasm-run reads SwiftShader's
+  # ICD file from the same folder, and Frameworks/ may hold only code (codesign --strict).
+  mkdir -p "$APP/Contents/Resources/angle"
+  angle "$APP/Contents/Resources/angle"
   fill "$SRC/launch-macos.sh" "$APP/Contents/MacOS/OpenNFSPU"
   chmod +x "$APP/Contents/MacOS/OpenNFSPU" "$APP/Contents/MacOS/gasm-run"
   cp "$WASM" "$APP/Contents/Resources/opennfspu.wasm"
@@ -156,7 +159,7 @@ macos-*)
 </dict></plist>
 PLIST
   if command -v codesign >/dev/null; then
-    for f in "$APP/Contents/Frameworks"/*.dylib; do codesign --force --sign - "$f"; done
+    for f in "$APP/Contents/Resources/angle"/*.dylib; do codesign --force --sign - "$f"; done
     codesign --force --sign - "$APP/Contents/MacOS/gasm-run"
     codesign --force --sign - "$APP"   # ad hoc (not notarized)
     codesign --verify --strict "$APP"
