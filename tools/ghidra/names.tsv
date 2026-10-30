@@ -179,31 +179,16 @@
 004376a0	HYesNoOverlay_v9	hud	struct	Virtual slot 9 of HYesNoOverlay (vtable 0x5b3554)
 00437740	R3DBase_v0	render	struct	Virtual slot 0 of R3DBase (vtable 0x5b358c)
 00437780	R3DCar_LoadTpg	render	high	Loads <car>.tpg (car texture page groups)
-00437980	R3DCar_v0	render	struct	Virtual slot 0 of R3DCar (vtable 0x5b3620)
 00437a30	R3DCar_LoadStyles	render	med	Car styles: geometry and texture per style
 004382f0	R3DCar_v7	render	struct	Virtual slot 7 of R3DCar (vtable 0x5b3620)
 00438350	R3DCar_v8	render	struct	Virtual slot 8 of R3DCar (vtable 0x5b3620)
-00438370	R3DCar_v9	render	struct	Virtual slot 9 of R3DCar (vtable 0x5b3620)
 00439290	R3DCar_v6	render	struct	Virtual slot 6 of R3DCar (vtable 0x5b3620)
 00439e10	R3DCar_v12	render	struct	Virtual slot 12 of R3DCar (vtable 0x5b3620)
 00439ec0	R3DCar_v13	render	struct	Virtual slot 13 of R3DCar (vtable 0x5b3620)
-0043a340	R3DCar_v5	render	struct	Virtual slot 5 of R3DCar (vtable 0x5b3620)
-0043a3c0	R3DCar_v14	render	struct	Virtual slot 14 of R3DCar (vtable 0x5b3620)
 0043a490	R3DCar_v15	render	struct	Virtual slot 15 of R3DCar (vtable 0x5b3620)
-0043acd0	R3DCar_v16	render	struct	Virtual slot 16 of R3DCar (vtable 0x5b3620)
-0043ace0	R3DCar_v17	render	struct	Virtual slot 17 of R3DCar (vtable 0x5b3620)
-0043ad30	R3DCarLOD_v0	render	struct	Virtual slot 0 of R3DCarLOD (vtable 0x5b36ac)
-0043ad60	R3DLOD_v0	render	struct	Virtual slot 0 of R3DLOD (vtable 0x5b36cc)
-0043ad80	R3DCar_v19	render	struct	Virtual slot 19 of R3DCar (vtable 0x5b3620)
-0043b040	R3DCar_v20	render	struct	Virtual slot 20 of R3DCar (vtable 0x5b3620)
 0043b150	R3DCar_v22	render	struct	Virtual slot 22 of R3DCar (vtable 0x5b3620)
 0043b4e0	R3DCar_v23	render	struct	Virtual slot 23 of R3DCar (vtable 0x5b3620)
 0043ba70	R3DCar_v24	render	struct	Virtual slot 24 of R3DCar (vtable 0x5b3620)
-0043c0e0	R3DCarLOD_v1	render	struct	Virtual slot 1 of R3DCarLOD (vtable 0x5b36ac)
-0043c760	R3DCarLOD_v2	render	struct	Virtual slot 2 of R3DCarLOD (vtable 0x5b36ac)
-0043d730	R3DCarLOD_v3	render	struct	Virtual slot 3 of R3DCarLOD (vtable 0x5b36ac)
-0043ddc0	R3DCarLOD_v4	render	struct	Virtual slot 4 of R3DCarLOD (vtable 0x5b36ac)
-0043dff0	R3DCarLOD_v5	render	struct	Virtual slot 5 of R3DCarLOD (vtable 0x5b36ac)
 0043ee50	R3DCarParticle_v0	render	struct	Virtual slot 0 of R3DCarParticle (vtable 0x5b3794)
 0043f590	R3DCarParticle_Tick	render	low	Per-tick car particle effects
 00440900	R3DCar_LoadEnvMap	render	med	Loads <car>.env and <car>.map
@@ -223,7 +208,6 @@
 004447b0	R3DCar_LoadTextures	render	med	Per-file textures (license plates, race decals)
 00444ce0	R3DObject_v13	render	struct	Virtual slot 13 of R3DObject (vtable 0x5b37f0)
 00444cf0	R3DObject_v5	render	struct	Virtual slot 5 of R3DObject (vtable 0x5b37f0)
-00444d30	R3DObject_v14	render	struct	Virtual slot 14 of R3DObject (vtable 0x5b37f0)
 00444ef0	R3DObject_v15	render	struct	Virtual slot 15 of R3DObject (vtable 0x5b37f0)
 00444f50	R3DObject_v17	render	struct	Virtual slot 17 of R3DObject (vtable 0x5b37f0)
 00444f90	R3DObjectLOD_v0	render	struct	Virtual slot 0 of R3DObjectLOD (vtable 0x5b3890)
@@ -1368,7 +1352,6 @@
 00539870	EAGL_MatPreMul	eagl	high	this = b * this
 005398a0	EAGL_MatScale	eagl	high	Diagonal matrix (sx, sy, sz, sw)
 005398f0	EAGL_MatTranslation	eagl	high	Translation matrix
-00539940	EAGL_MatAxisAngle	eagl	med	Rotation about an axis (through 0x532430), not ported yet
 00539a00	EAGL_MatIdentity	eagl	high	Identity
 00539a40	EAGL_MatFromRotTrans	eagl	high	3x3 rotation + translation to a 4x4
 00539ab0	EAGL_MatToRotTrans	eagl	high	4x4 to 3x3 rotation + translation
@@ -1967,3 +1950,81 @@
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005af324	crt_5af324	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
+00523200	IniFile_Parse	render	high	INI text: parse into the file object (car_ini.c)
+00523230	IniFile_Load	render	high	INI text: read the file under the search path and parse it
+00523320	IniFile_Free	render	high	INI text: free the data and the text
+00523350	IniFile_GetInt	render	high	INI text: atoi of the current section's key, else the default
+00523380	IniFile_GetBool	render	high	INI text: GetInt != 0
+005233a0	IniFile_GetFloat	render	high	INI text: atof of the key, else the default
+005233d0	IniFile_GetVec3	render	high	INI text: sscanf "%f,%f,%f" (0x5dd988) over the default
+00523440	IniFile_GetVec4	render	high	INI text: sscanf "%f,%f,%f,%f" (0x5dd994)
+005234c0	IniData_Parse	render	high	INI text: copy the text, find the sections ([name], up to 700)
+005235f0	IniData_NextLine	render	high	INI text: past the line end and the blanks after it
+00523640	IniData_Trim	render	high	INI text: blanks and tabs off both ends, in place
+00523680	IniData_Free	render	high	INI text: the buffer and the object
+005236a0	IniData_SelectSection	render	high	INI text: find + load a section (its keys split in place)
+005236d0	IniData_LoadSection	render	high	INI text: split the section's key=value lines (up to 100)
+00523830	IniData_FindSection	render	high	INI text: section index by name (strcmp), NULL = the current
+005238b0	IniData_FindKey	render	high	INI text: key index in the current section
+00523920	IniData_Get	render	high	INI text: the value of a key or NULL
+00523950	IniData_Value	render	high	INI text: value by index
+0056d510	BFILE_open	real	high	Buffered stdio file (fopen, size by seeking, 4 KB buffer)
+0056d640	BFILE_close	real	high	Buffered stdio file: fclose and free
+0056d670	BFILE_read	real	high	Buffered stdio file: read through the 4 KB buffer
+0056d850	BFILE_size	real	high	Buffered stdio file: the size found at open
+0056d870	BFILE_alloc	real	high	MEM_alloc with the default flags (0x5deb60)
+0056d890	BFILE_free	real	high	MEM_purge
+00437850	R3DCar_ctor	render	high	R3DCar constructor (after R3DObject_ctor 0x4413f0)
+00437980	R3DCar_dtor	render	high	R3DCar_v0: destructor
+00438140	R3DCar_WheelPos	render	high	The wheel slot offset at +0x6d0 + 12 * slot
+004380c0	R3DCar_AnimFrames	render	high	The animation slot's frame count (+0x574 + 0x14 * slot)
+004380e0	R3DCar_SetAnimFrames	render	med	Sets that frame count
+00438000	R3DCar_AnimReset	render	med	Resets an animation slot
+00438370	R3DCar_Animate	render	med	R3DCar_v9: hinge angles (wheel spin and steer, hood, trunk, ...) from the simulation car
+0043a340	R3DCar_Centre	render	high	R3DCar_v5: the car's up times its half height
+0043a3c0	R3DCar_DrawLODs	render	high	R3DCar_v14: the race's window reflections, then R3DObject_DrawLODs
+0043ad20	R3DLOD_v6	render	low	Empty
+0043ad30	R3DCarLOD_dtor	render	high	R3DCarLOD_v0
+0043ad60	R3DLOD_dtor	render	high	R3DLOD_v0
+0043ad80	R3DCar_PreLOD	render	high	R3DCar_v19: styles, the spec's forced options, animation slot reset
+0043acd0	R3DCar_LODCount	render	high	R3DCar_v16: 7
+0043ace0	R3DCar_NewLOD	render	high	R3DCar_v17: a R3DCarLOD (0x24 bytes) for an LOD number
+0043b040	R3DCar_PostLOD	render	med	R3DCar_v20: after the LODs are built
+0043c0e0	R3DCarLOD_Build	render	high	R3DCarLOD_v1: the parts of every 'Arti' with an entry for this LOD (option filter, sorted by the Base key)
+0043c600	UData_Data	render	high	Inline copy of an item's data pointer
+0043c610	R3DItemCache_ctor	render	med	An empty part item cache entry
+0043c620	R3DItemCache_Find	render	high	A cached exact-id lookup
+0043c650	R3DItemCache_FindIndex	render	high	A cached lookup with the index merged into the id
+0043c690	R3DPart_ItemCount	render	high	Element count of a part's item of a kind
+0043c700	R3DPart_Item	render	high	Data of a part's item of a kind (table 0x5e5084: vt nm uv df Base pr ef) through its cache
+0043c760	R3DCarLOD_Draw	render	high	R3DCarLOD_v2: two passes, tr / wheel slot / hinge matrices, the 'pr' lists of the entry's range
+0043cc80	R3DItemCache_FindRange	render	high	The first item of an id with an index in a range
+0043d730	R3DCarLOD_v3	render	low	Not ported (250 lines)
+0043ddc0	R3DCarLOD_Bounds	render	high	R3DCarLOD_v4: min / max of the parts' vertices through their tr
+0043dff0	R3DCarLOD_Free	render	high	R3DCarLOD_v5
+0043e640	R3DCarLOD_SortLoop	render	high	MSVC 6 std::sort introsort loop over 12-byte part records (key byte at +8)
+0043e840	R3DCarLOD_InsertionSort	render	high	std::sort's insertion sort
+0043e950	R3DCarLOD_UnguardedInsertion	render	high	std::sort's unguarded insertion
+0043e9c0	R3DCarLOD_MakeHeap	render	high	std::sort's heap fallback
+0043eb10	R3DCarLOD_AdjustHeap	render	high	std::sort's heap adjust
+0043ff80	R3DCrp_Acquire	render	high	The .crp cache: by name, refcount at +0xa4
+004400b0	R3DCrp_Release	render	med	Drops a .crp cache reference
+00442320	R3DObject_Unload	render	high	R3DObject slot 2: frees what a load made
+004424e0	R3DObject_BuildLODs	render	high	The LODs between the pre / post hooks, then the size
+004433c0	R3DObject_Draw	render	high	Model matrix from the car state, then slot 14
+00443e40	R3DCar_Hinge	render	high	The hinge angle triple of a kind (+0x2d0 + 12 * kind)
+00444d30	R3DObject_DrawLODs	render	high	R3DObject_v14: which LOD draws which parts (view masks 0x10/0x20/0x40/0x50/0x80)
+00444fc0	R3DObject_Size	render	high	Half size and radius from LOD list index 4 (0 with flags 0x10)
+0044a0e0	R3DMaterial_SetOverride	render	high	The streams a part replaces during a draw
+0044a110	R3DMaterial_OverrideStream	render	high	Replace one stream by id
+0044a160	R3DMaterial_StreamSlot	render	high	A stream id's slot in the render method
+0044a190	R3DMaterial_Bind	render	high	Binds a 'pr' item's streams and index lists into the render method; returns the primitive type
+0044a520	R3DMaterialSet_ctor	render	med	The object's material set
+0044a6b0	R3DMaterialSet_Build	render	high	RMth, sf / sn shapes, the 'mt' materials and their texture references
+0044ba40	RMethod_Find	render	med	A render method template by name and key
+0059efd0	UData_Transform	util	high	A part's 'tr' matrix (index -1: 'tr  ')
+00539940	EAGL_MatAxisAngle	eagl	high	Rotation of degrees about an axis (fraction of a turn, 0x532430); ported in render/r3dcar.c
+00532430	Mat3_AxisRotation	math	high	3x3 rotation by a fraction of a turn about an axis; the identity at 0
+00532550	Math_SinTurns	math	high	sin(x * 0x5bb2c0)
+00532560	Math_CosTurns	math	high	cos(x * 0x5bb2c0)
+00532640	Vec3_Normalize	math	high	v * (1 / length)
