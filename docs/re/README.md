@@ -11,6 +11,7 @@ data from the game.
 | [port-plan.md](port-plan.md) | The porting order toward a first playable race, with sizes and key addresses |
 | [thrash.md](thrash.md) | The THRASH driver interface (dx7z.dll) |
 | [cars.md](cars.md) | Car models: loading, parts and LODs, the car draw |
+| [render.md](render.md) | Textures from FSH to the driver (depthconv, DTEX, TEXTURE, RTex); the material and render-method map |
 | [eagl.md](eagl.md) | EAGL2: matrices, the transformer, views, materials and layers, the draw kernels down to THRASH |
 | [../formats.md](../formats.md) | Data file formats |
 
