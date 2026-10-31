@@ -63,6 +63,10 @@ void SndMix_SetPitch(int i, int pitch);
 int SndMix_Position(int i);
 /* The one-pole lowpass (0x599690): made below 1, removed from 1 on. */
 void SndMix_SetLowpass(int i, float c);
+/* The reverb on the sends with a preset (0x598ac0: "FX", the stages' filter counts at +4, ...), and off
+   (0x58ff60 with 0). */
+void SndMix_ReverbSet(int rate, const uint8_t *preset);
+void SndMix_ReverbOff(void);
 /* The voice-end callback (0x6b15e8): a source's decoder ran out. */
 extern void (*g_snd_source_end)(int i);
 

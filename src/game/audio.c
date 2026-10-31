@@ -7,6 +7,7 @@
 #include "game/scene.h"
 #include "game/music.h"
 #include "game/track.h"
+#include "game/wtree.h"
 #include "game/input.h"
 #include "pending.h"
 #include "render/r3dcar.h"
@@ -39,6 +40,8 @@ static void engines_free(void);
 static void stream_close(void);
 static int stream_bank(int type, int idx, bool look);
 static int32_t s_thunder_wait, s_thunder = -1, s_thunder_angle;   /* 0x656494, 0x656834, 0x656498 */
+static int8_t s_revlevel;          /* 0x656869: the reverb's send, 8 in the open, 100 under a roof */
+static bool s_revset;              /* 0x656868 */
 static int32_t s_nearvol = 0x80;   /* 0x655f34: 0x80 less the cars close to the listener */
 typedef struct {
     int32_t slot;      /* 0x6564a0: the SND bank */
@@ -58,6 +61,11 @@ bool Audio_Init(void)
     int voices = (int32_t)exe_u32(0x5b4b08 + 4u * (uint32_t)q);
     int quality = (int32_t)exe_u32(0x5b4b20 + 4u * (uint32_t)q);
     s_on = SND_Init(rate, 2, voices, quality);
+    /* 0x4ab240 at the high qualities: the software reverb on (the default preset), no sends yet (the
+       hardware's with 3D sound, 0x655d40: none here) */
+    if (s_on && q < 2) SND_SetFx(0x20, 0, 0x28, NULL);
+    s_revlevel = 0;
+    s_revset = false;
     if (s_on) Music_Init(0x40000, 0x8000, exe_str(0x5d13f8));   /* (the game calls Audio_Init with 0x40000, 0x8000) */
     PENDING_NOTE(0x4ab280, "the speech (0x4ab280)");
     return s_on;
@@ -144,7 +152,7 @@ static int play_once(int bank, int patch, int angle, int vol, int bend, int pitc
             v = (int8_t)((opt(0x5d14d4) * g_audio_fx * vol * 0x55) >> 0x15);
             if (0x2f < patch) {
                 p.f0a = (int8_t)(0x7f - vel);
-                PENDING_NOTE(0x656869, "the reverb's level under roofs (0x656869)");
+                v = (int8_t)(((0x96 - s_revlevel) * v) / 0x96);   /* (quieter the more the reverb sends) */
             }
         }
     }
@@ -1042,7 +1050,33 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     int half = speed >> 1;
     int windvel = half + 0x40 < 0x7f ? half + 0x40 : 0x7f;
     int lift = rpmvol < 0x97 ? (rpmvol < 0 ? 0 : rpmvol) : 0x96;
-    PENDING_NOTE(0x565150, "the reverb's sends under roofs (the car's 0x473290 test)");
+    /* The reverb under roofs (a surface above whose flags are negative: 0x473290): its sends up to 100
+       at once (the hardware's to 50), else down to 8 by 0x20 a tick; at the low qualities reset first. */
+    int16_t roof = (int16_t)WSurface_FindAbove(&c->body, CAR_F(c, 0x330), NULL);
+    if (1 < g_sound_quality && s_revset) {
+        SND_SetGroupVolume(0, 0);
+        s_revlevel = 0;
+        s_revset = false;
+    }
+    if (roof < 0) {
+        if (g_race_players != 1 && s_revlevel < 100) {
+            s_revlevel = 100;
+            SND_SetGroupVolume(0x80, 0x32);
+            SND_SetGroupVolume(0x20, 100);
+            s_revset = true;
+        }
+    } else if (s_revlevel < 8) {
+        s_revlevel = 8;
+        SND_SetGroupVolume(0x80, 4);
+        SND_SetGroupVolume(0x20, 8);
+        s_revset = true;
+    } else if (8 < s_revlevel) {
+        int l = s_revlevel - 0x20 < 9 ? 8 : s_revlevel - 0x20;
+        s_revlevel = (int8_t)l;
+        SND_SetGroupVolume(0x80, l >> 1);
+        SND_SetGroupVolume(0x20, l);
+        s_revset = true;
+    }
     if (*CAR_I(c, 0x540) != 0) type = 4;
     int view, wind = half;
     switch (g_racecam[0].mode) {
@@ -1433,6 +1467,11 @@ void Audio_StartRace(void)
     s_ev_on = true;
     elems_reset();
     Music_FadeOut(0x5dc);
+    if (s_revset) {
+        SND_SetGroupVolume(0, 0);
+        s_revlevel = 0;
+        s_revset = false;
+    }
     if (!s_on || opt(0x5d1750) <= 0) return;
     /* 0x4a8670: the opponents' engine banks (and the rain's) read before the start */
     PENDING_NOTE(0x657a24, "the rain's bank before the start (the weather)");

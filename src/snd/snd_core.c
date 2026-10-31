@@ -842,6 +842,55 @@ void SND_Fill(int16_t *out, int n)
     }
 }
 
+/* ---- the effects (0x5650f0 .. 0x58ff60) ---- */
+
+/* Per group (0x6b4948, 0x10 bytes): its mode (0 off, 1 its own preset, else the default) and preset. */
+static struct { int32_t mode; const uint8_t *preset; } s_fx[32];
+
+/* The effect of the bits' kinds switched (0x590000 -> 0x58ff60): 0x20 the software reverb (group 0's
+   preset when its mode is 1, else the exe's default at 0x5e25b0), 0x80 the hardware's. */
+static void fx_apply(uint32_t bits)
+{
+    int mode = s_fx[bits & 0x1f].mode;
+    if (bits & 0x80) PENDING_NOTE(0x58e530, "the hardware (DirectSound 3D) reverb");
+    if (bits & 0x20) {
+        if (mode == 0) SndMix_ReverbOff();
+        else SndMix_ReverbSet(s_rate, mode == 1 && s_fx[0].preset ? s_fx[0].preset : exe_data(0x5e25b0, 0x30));
+    }
+}
+
+/* A group's send levels (0x565150): 0x20 the software's, 0x80 the hardware's (both without either);
+   each playing voice's sends recomputed (0x590050, 0x589b20, 0x598c60). */
+int SND_SetGroupVolume(uint32_t bits, int vol)
+{
+    int g = (int)(bits & 0xffffff1f) & 0x1f;
+    if (!(bits & 0xe0)) bits |= 0xe0;
+    if (bits & 0x20) s_groupvol[g][0] = (int8_t)vol;
+    if (bits & 0x80) s_groupvol[g][1] = (int8_t)vol;
+    if (!s_on) return 0;
+    for (int i = 0; i < s_nvoices; i++) {
+        int v = voice_of(s_voice[i].handle);
+        if (v < 0) continue;
+        int at = -1;
+        while (next_of_group(v, &at)) {
+            voice_group(g, &s_voice[at]);
+            dev_gain(&s_dev[at], s_voice[at].grp[0]);
+        }
+    }
+    return 0;
+}
+
+/* An effect set (0x5650f0): its mode and preset, then the group's level (0 when off). */
+void SND_SetFx(uint32_t bits, int level, int mode, const uint8_t *preset)
+{
+    int g = (int)(bits & 0x1f);
+    if (!(bits & 0xe0)) bits |= 0xe0;
+    s_fx[g].mode = mode;
+    s_fx[g].preset = preset;
+    if (s_on) fx_apply(bits);
+    SND_SetGroupVolume(bits, mode == 0 ? 0 : level);
+}
+
 bool SND_Init(int rate, int channels, int voices, int quality)
 {
     SND_Shutdown();
@@ -855,8 +904,8 @@ bool SND_Init(int rate, int channels, int voices, int quality)
     s_bank = calloc((size_t)s_nbanks, sizeof *s_bank);
     if (!s_voice || !s_dev || !s_bank) return false;
     for (int i = 0; i < s_nvoices; i++) s_voice[i].handle = -1;
-    for (int g = 0; g < 32; g++) s_groupvol[g][0] = s_groupvol[g][1] = 0x7f;
-    /* (the groups' volumes are the reverb's sends, 0x565150 -> 0x590050, 0x598c60; the reverb isn't ported) */
+    memset(s_groupvol, 0, sizeof s_groupvol);   /* (set only by 0x565150) */
+    memset(s_fx, 0, sizeof s_fx);
     s_master = 0x7f;
     s_ticks = 0;
     pan_table();

@@ -78,6 +78,28 @@ static void play(void)
     long tail = 0;
     for (int i = 32000; i < 64000; i++) tail += out[i] < 0 ? -out[i] : out[i];
     CHECK(tail == 0);
+    /* With the reverb on (0x5650f0, the default preset) and group 0's send up (0x565150): a tail after
+       the sample's end. */
+    SND_SetFx(0x20, 0, 0x28, NULL);
+    SND_SetGroupVolume(0x20, 100);
+    h = SND_Play(slot, 0, &p);
+    SND_Fill(out, 32000 / 4);
+    SND_Fill(out, 32000 / 2);
+    CHECK(!SND_Playing(h));
+    long wet = 0, late = 0;
+    for (int i = 0; i < 32000 / 2 * 2; i++) wet += out[i] < 0 ? -out[i] : out[i];
+    for (int i = 32000 / 4 * 2; i < 32000 / 2 * 2; i++) late += out[i] < 0 ? -out[i] : out[i];
+    printf("  with the reverb: %ld after the sample's end (%ld in its last quarter second)\n", wet, late);
+    CHECK(wet > 0);
+    long q[6];
+    for (int k = 0; k < 6; k++) {   /* the tail falling away, quarter second by quarter second */
+        SND_Fill(out, 32000 / 4);
+        q[k] = 0;
+        for (int i = 0; i < 32000 / 4 * 2; i++) q[k] += out[i] < 0 ? -out[i] : out[i];
+        q[k] /= 32000 / 2;
+    }
+    printf("  its tail's means: %ld %ld %ld %ld %ld %ld\n", q[0], q[1], q[2], q[3], q[4], q[5]);
+    CHECK(q[5] < q[0] / 4 + 1);
     SND_Shutdown();
     free(b);
 }

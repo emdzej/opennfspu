@@ -210,3 +210,40 @@ Otherwise it says:
 
 The gap lines need the player faster than 13.39. The end-of-race lines belong to the result screens
 (HCongrats, HTrackRecords, HTournamentStandings), which aren't ported yet.
+
+## Reverb
+
+SND's software reverb (0x598ac0 .. 0x598c30) is switched on by 0x5650f0, which routes through 0x590000
+to 0x58ff60. With bit 0x20, the mode picks the preset: 1 means group 0's own, anything else the default
+at 0x5e25b0.
+
+A preset (`"FX"`) gives the filter count of each of three stages at +4, a gain byte at +7, and from +8
+four bytes per filter:
+- the delay in ms (big-endian 16 bits), which becomes the next prime number of samples at the rate;
+- a, the allpass coefficient, in 127ths;
+- b, the damping, in 127ths.
+
+Each filter is an allpass: the output is the delayed sample less a times the input, and the line takes
+back the input plus a times the output. That feedback goes through a one-pole lowpass with weights
+b·g and (1 - b)·g, where g = (gain byte + 100) / 350. Stage 0 runs in series on the send bus. Stages 1
+and 2 run from it into two more buses (odd output channels take stage 2's when stage 1 has filters).
+The default preset has four filters in stage 0 only: 100, 70, 49 and 34 ms, with a of 64 or 76 and b
+of 0 or 95, all at g = 1. Every output channel gets its output.
+
+Each source sends its decoded samples times its level (0x598840): the master volume times the voice's
+group send times 1.5. The reverb runs after the sources (0x598890) and goes quiet 2000 blocks after
+the last send.
+
+A voice's send is its patch's tag 0x13 times its play's +0x0a times its group's level (0x589b20), each
+over 127. 0x565150 sets the group levels (0x20 the software's, 0x80 the hardware's) and recomputes the
+send of every voice playing. The levels start at zero.
+
+The game:
+- Switches the reverb on at the high qualities (0x4ab240; with no sends yet).
+- Each tick, tests the player's car for a roof above it (a surface with negative flags, 0x473290).
+  Under a roof the send goes straight to 100, the hardware's to 50. In the open it drops by 0x20 a tick
+  to 8, the hardware's to half of that. At the low qualities it is reset each tick first.
+- Makes the collision bank's patches above 0x2f quieter by (150 - send) / 150 (0x4a96b0).
+- Resets the send at the race start.
+
+The hardware reverb (DirectSound 3D, 0x58e530) isn't ported.

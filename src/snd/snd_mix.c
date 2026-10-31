@@ -722,6 +722,133 @@ void SndMix_Release(int i)
     s->state = 0;
 }
 
+/* ---- the reverb (0x598ac0 .. 0x598c30) ----
+
+   Up to three stages of filters (a preset's counts at +4; 0x6b0800), each filter a delay line of a prime
+   number of samples (+8: its ms, big-endian) with a damped allpass: the delayed sample less the input
+   times a (+10) is the output, the output times a plus the input goes back into the line through a
+   one-pole lowpass of b (+11) scaled by (+7's byte + 100) / 350. Stage 0's filters run in series on the
+   send bus; stages 1 and 2 (when there are filters) from it into two more buses. The sources send their
+   output by their level (0x598840); the stages run after the sources, into every output channel
+   (0x598890), and rest 2000 blocks after the last send. */
+typedef struct {
+    int32_t w, r, len;        /* +0x00: the write and read counts down, the line's length */
+    float *buf;               /* +0x0c */
+    float a, na;              /* +0x10, +0x14 */
+    float lp;                 /* +0x18: the lowpass's state */
+    float b, nb;              /* +0x1c, +0x20 */
+} RevFilter;
+static RevFilter s_rev[12];       /* 0x6b0820 */
+static int32_t s_revn[3];         /* 0x6b0800 */
+static float s_bus[3][BLOCK];     /* 0x6b09c0, 0x6b0dc0, 0x6b11c0 */
+static int32_t s_revidle = 2000;  /* 0x6b15c0 */
+static bool s_revon;              /* (the hooks 0x6b15f0 .. 0x6b15f8 set) */
+
+static void rev_free(void)   /* 0x598c30 */
+{
+    for (int i = 0; i < 12; i++) {
+        free(s_rev[i].buf);
+        s_rev[i].buf = NULL;
+    }
+}
+
+static int prime_from(int n)   /* 0x598a80 */
+{
+    for (;; n++) {
+        int k = 2;
+        if (1 < n)
+            for (; k <= n && n % k != 0; k++) {}
+        if (k == n) return n;
+    }
+}
+
+void SndMix_ReverbSet(int rate, const uint8_t *preset)   /* 0x598ac0 */
+{
+    rev_free();
+    int f = 0;
+    for (int st = 0; st < 3; st++) {
+        s_revn[st] = preset[4 + st];
+        for (int k = 0; k < s_revn[st] && f < 12; k++, f++) {
+            const uint8_t *q = preset + 10 + f * 4;
+            RevFilter *r = &s_rev[f];
+            float bb = (float)(int8_t)q[1] * K(0x5b4a78);
+            float g = (float)(preset[7] + 100);
+            r->b = g * bb * K(0x5b73f4);
+            r->nb = g * (K(0x5b24a8) - bb) * K(0x5b73f4);
+            float aa = (float)(int8_t)q[0] * K(0x5b4a78);
+            r->a = aa;
+            r->na = -aa;
+            int ms = (int16_t)(q[-2] << 8 | q[-1]);
+            int len = prime_from((int)((float)rate * ((float)ms * K(0x5b3060))));
+            r->buf = calloc((size_t)(len < 1 ? 1 : len), sizeof *r->buf);
+            r->len = r->r = len;
+            r->w = 0;
+            r->lp = 0;
+        }
+    }
+    s_revidle = 2000;   /* 0x598820 */
+    memset(s_bus[0], 0, sizeof s_bus[0]);
+    s_revon = true;
+}
+
+void SndMix_ReverbOff(void)
+{
+    s_revon = false;
+    rev_free();
+}
+
+/* One filter over n samples (0x59bad0), the line read and written backwards. */
+static void rev_run(RevFilter *r, int n, const float *in, float *out)
+{
+    float *wp = r->buf + r->w, *rp = r->buf + r->r;
+    for (int i = 0; i < n; i++) {
+        float lp = r->lp, b = r->b;
+        float y = in[i] * r->na + *--rp;
+        float w = y * r->a + in[i];
+        out[i] = y;
+        *--wp = w;
+        r->lp = w * r->nb + lp * b;
+        *wp = r->lp;
+    }
+}
+
+static void reverb(int n)   /* 0x598890 */
+{
+    if (2000 <= ++s_revidle) return;
+    const float *in = s_bus[0];
+    float *out = s_bus[0];
+    int f = 0;
+    for (int st = 0; st < 3; st++)
+        for (int k = 0; k < s_revn[st]; k++, f++) {
+            if (st == 1) {
+                if (k == 0) out = s_bus[1];
+                else if (k == 1) in = s_bus[1];
+            } else if (st == 2) {
+                if (k == 0) {
+                    in = s_bus[0];
+                    out = s_bus[2];
+                } else if (k == 1) in = s_bus[2];
+            }
+            RevFilter *r = &s_rev[f];
+            for (int left = n; 0 < left;) {
+                if (r->w < 1) r->w = r->len;
+                if (r->r < 1) r->r = r->len;
+                int c = left < r->w ? left : r->w;
+                if (r->r < c) c = r->r;
+                int at = n - left;
+                rev_run(r, c, in + at, out + at);
+                r->w -= c;
+                r->r -= c;
+                left -= c;
+            }
+        }
+    for (int c = 0; c < s_nch; c++) {
+        const float *b = (c & 1) && s_revn[1] ? s_bus[2] : s_revn[2] ? s_bus[1] : s_bus[0];
+        for (int k = 0; k < n; k++) s_acc[c][k] += b[k];
+    }
+    memset(s_bus[0], 0, (size_t)n * sizeof *s_bus[0]);
+}
+
 /* A block of n samples (at most 256): each playing source into the sums by its levels, then each output
    channel to 16 bits (0x59a100: the float rounded by adding 1.5 x 2^23, its low 20 bits saturated). */
 static void block(int n, int16_t **dest)
@@ -744,8 +871,13 @@ static void block(int n, int16_t **dest)
             for (int c = 0; c < s_nch; c++)
                 if (s->chan[c] != 0.0f)
                     for (int k = 0; k < rest; k++) s_acc[c][done + k] += s_dec[k] * s->chan[c];
+            if (s_revon && s->level != 0.0f) {   /* 0x598840: the send */
+                for (int k = 0; k < rest; k++) s_bus[0][done + k] += s_dec[k] * s->level;
+                s_revidle = 0;
+            }
         }
     }
+    if (s_revon) reverb(n);
     for (int c = 0; c < s_nch; c++) {
         for (int k = 0; k < n; k++) {
             float f = s_acc[c][k] + K(0x5c1800);
@@ -792,6 +924,7 @@ void SndMix_Init(int nsources, int nchannels, int rate)   /* 0x597fe0 */
 
 void SndMix_Free(void)
 {
+    SndMix_ReverbOff();
     if (s_src)
         for (int i = 0; i < s_nsrc; i++)
             for (SndNode *n = s_src[i].chain; n;) {
