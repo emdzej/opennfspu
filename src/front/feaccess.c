@@ -1,6 +1,7 @@
 /* The front end's data accessors (feaccess.h). */
 #include "front/feaccess.h"
 #include "front/fe_parts.h"
+#include "exe.h"
 #include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,15 +10,17 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST } AccKind;
 
 struct FEAccessor {
     char name[64];
     AccKind kind;
     int pos, count, min;
+    uint32_t list;   /* ACC_LIST: the exe's zero-ended string ids (FEListAccessor 0x4bb260) */
 };
 
-static FEAccessor s_acc[8];   /* 0x65b3a8 */
+enum { NACC = 64 };
+static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
 static int s_tracks[32], s_ntracks;   /* the records with a model (0x691d00) */
@@ -25,7 +28,7 @@ static int s_cars[160], s_ncars;      /* (0x6919f0) */
 
 static FEAccessor *add(const char *name, AccKind kind, int count, int min, int pos)
 {
-    if (s_nacc == 8) return NULL;
+    if (s_nacc == NACC) return NULL;
     FEAccessor *a = &s_acc[s_nacc++];
     snprintf(a->name, sizeof a->name, "%s", name);
     a->kind = kind;
@@ -51,7 +54,7 @@ static bool fe_key(const char *key, char *out, size_t cap)
         char *e = strpbrk(l, "\r\n");
         if (e) *e++ = 0;
         while (*l == ' ') l++;
-        if (!strncmp(l, key, kl) && (l[kl] == ' ' || l[kl] == '=')) {
+        if (!strncasecmp(l, key, kl) && (l[kl] == ' ' || l[kl] == '=')) {
             char *q = strchr(l, '=');
             if (q) {
                 q++;
@@ -68,6 +71,71 @@ static bool fe_key(const char *key, char *out, size_t cap)
 
 static const char *trk_name(int i) { return (const char *)s_trk + TRK_SIZE * s_tracks[i] + 8; }
 static const char *car_file(int i) { return (const char *)s_car + CAR_SIZE * s_cars[i] + 0x7f; }
+
+/* An option's value from fe.txt by its key in the options' table (Options_Parse 0x4b0db0 fills it with
+   (id, target, key) triples: the keys' addresses are its instruction operands). */
+static int option(uint32_t key, int def)
+{
+    char v[64];
+    return fe_key(exe_str(key), v, sizeof v) ? atoi(v) : def;
+}
+
+static int list_count(uint32_t list)
+{
+    int n = 0;
+    while (n < 64 && exe_u32(list + 4u * (unsigned)n)) n++;
+    return n;
+}
+
+/* The audio data area (FEdaAudio_v0 0x4e3fb0): the five levels 0..127 (FEIntAccessor 0x4b9ef0, options
+   0x37 .. 0x3b), the 3D mode and the quality (FEListAccessor 0x4bb260, options 0x36, 0x35, the string
+   lists 0x5b6c1c, 0x5b6c08). (The CD player's accessors and the levels' callbacks into the sound pend.) */
+static void audio(void)
+{
+    static const struct { const char *name; uint32_t key; } lv[5] = {
+        {"Audio.MusicLevel", 0x5d618c}, {"Audio.SfxLevel", 0x5d6180}, {"Audio.EngineLevel", 0x5d6174},
+        {"Audio.SpeechLevel", 0x5d6168}, {"Audio.AmbientLevel", 0x5d6158}};
+    for (int i = 0; i < 5; i++) add(lv[i].name, ACC_INT, 0x80, 0, option(lv[i].key, 0x7f));
+    FEAccessor *a = add("Audio.Mode", ACC_LIST, list_count(0x5b6c1c), 0, option(0x5d6198, 0));
+    if (a) a->list = 0x5b6c1c;
+    a = add("Audio.Quality", ACC_LIST, list_count(0x5b6c08), 0, option(0x5d61a0, 0));
+    if (a) a->list = 0x5b6c08;
+}
+
+static void add_list(const char *name, uint32_t list, uint32_t key)   /* FEListAccessor 0x4bb260 */
+{
+    FEAccessor *a = add(name, ACC_LIST, list_count(list), 0, option(key, 0));
+    if (a) a->list = list;
+}
+
+/* The display data area (FEdaDisplay_v0 0x4e4610): the HUD's choices (options 0x5b .. 0x69). */
+static void display(void)
+{
+    static const struct { const char *name; uint32_t list, key; } d[14] = {
+        {"Display.ScreenLayout", 0x5b6d18, 0x5d5fbc}, {"Display.Speedometer", 0x5b6d08, 0x5d5fb0},
+        {"Display.SpeedUnits", 0x5b6cfc, 0x5d5fa4},   {"Display.Tach", 0x5b6cec, 0x5d5f94},
+        {"Display.Damage", 0x5b6cd8, 0x5d5f84},       {"Display.Map", 0x5b6cc4, 0x5d5f80},
+        {"Display.MapScale", 0x5b6cac, 0x5d5f74},     {"Display.OppList", 0x5b6c9c, 0x5d5f64},
+        {"Display.SplitTimes", 0x5b6c88, 0x5d5f58},   {"Display.DispCols", 0x5b6c78, 0x5d5f48},
+        {"Display.Translucency", 0x5b6c6c, 0x5d5f28}, {"Display.RearView", 0x5b6c60, 0x5d5f18},
+        {"Display.RecordTime", 0x5b6c54, 0x5d5f0c},   {"Display.Gear", 0x5b6c48, 0x5d5f04}};
+    for (int i = 0; i < 14; i++) add_list(d[i].name, d[i].list, d[i].key);
+}
+
+/* The graphics data area (FEdaGraphics_v0 0x4e4e00): the renderer's choices (options 0x44 .. 0x54) and the
+   gamma (0x4d, 0..400 from 100). (Graphics.Resolutions, the display modes' list 0x4bc2f0, pends.) */
+static void graphics(void)
+{
+    static const struct { const char *name; uint32_t list, key; } g[11] = {
+        {"Graphics.WideScreen", 0x5b6da4, 0x5d60ec}, {"Graphics.CarChrome", 0x5b6d94, 0x5d60e0},
+        {"Graphics.CarDetail", 0x5b6d94, 0x5d60d4},  {"Graphics.SpecialFX", 0x5b6d80, 0x5d60c8},
+        {"Graphics.ViewDistance", 0x5b6d80, 0x5d6094}, {"Graphics.TripleBuffer", 0x5b6da4, 0x5d60ac},
+        {"Graphics.Headlights", 0x5b6d74, 0x5d6088}, {"Graphics.LensFlare", 0x5b6da4, 0x5d607c},
+        {"Graphics.TextureDetail", 0x5b6d5c, 0x5d6050}, {"Graphics.Reflections", 0x5b6d94, 0x5d6014},
+        {"Graphics.SkyRendering", 0x5b6d4c, 0x5d6004}};
+    for (int i = 0; i < 11; i++) add_list(g[i].name, g[i].list, g[i].key);
+    add("Graphics.GammaCorrection", ACC_INT, 401, 0, option(0x5d606c, 100));
+}
 
 void FEData_Init(void)
 {
@@ -100,6 +168,9 @@ void FEData_Init(void)
     for (int i = 0; i < s_ncars; i++)
         if (!strcasecmp(car_file(i), "964")) cp = i;
     add("zMergedList.Car", ACC_CAR, s_ncars, 0, cp);
+    audio();
+    display();
+    graphics();
     add("OpponentCar.Car", ACC_CAR, s_ncars, 0, cp);
 }
 
@@ -139,8 +210,22 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_CAR:
         snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_cars[a->pos] + 0x34);
         return b;
+    case ACC_LIST:
+        return FEStrings_Get((int32_t)exe_u32(a->list + 4u * (unsigned)a->pos));
     }
     return "";
+}
+
+const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
+{
+    static char b[16];
+    if (!arg || !*arg || !strcmp(arg, "SHORT")) return FEAccess_Text(a);
+    if (!strcmp(arg, "PERCENT")) {   /* 0x4bc0e0 */
+        int p = a->count < 2 ? 100 : a->pos * 100 / (a->count - 1);
+        snprintf(b, sizeof b, "%d", p > 99 ? 100 : p);
+        return b;
+    }
+    return arg;
 }
 
 const char *FEAccess_CarFile(const FEAccessor *a)

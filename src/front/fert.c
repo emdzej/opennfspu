@@ -353,6 +353,7 @@ void FertControl_free(FertControl *c)
     for (int i = 0; i < c->nchildren; i++) FertControl_free(c->children[i]);
     free(c->children);
     FertControl_free(c->screen);
+    FertControl_free(c->sub);
     free(c);
 }
 

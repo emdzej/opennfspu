@@ -134,6 +134,7 @@ typedef struct FertControl {
     struct FertControl *hover;       /* +0x110 of a window: the control under the mouse */
     struct FertControl *focus;       /* +0x120 of a window */
     int32_t mouse[2];                /* +0x114 */
+    struct FertControl *sub;         /* a panel's screen (FEPanel +0x14c: its layout "filename", open) */
 } FertControl;
 
 FertControl *FertControl_new(bool window);   /* 0x523f60 (Control), 0x527bc0 (Window) */

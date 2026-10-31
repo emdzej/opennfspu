@@ -49,7 +49,14 @@ static bool before(const Item *a, const Item *b)
 {
     float za = depth_of(a), zb = depth_of(b);
     if (za == zb) {
-        if ((uint32_t)a->order == (uint32_t)b->order) return tex_key(a->tex) < tex_key(b->tex);
+        if ((uint32_t)a->order == (uint32_t)b->order) {
+            /* The original's last key is the textures' pointers, its heap's order. A text queued with
+               the same order as the image before it (a text takes the count, an image counts first) is
+               drawn over it: the port puts texts after quads there, as the original's screens show (a
+               selected tab's caption over its highlight). */
+            if (a->kind != b->kind) return a->kind == 0;
+            return tex_key(a->tex) < tex_key(b->tex);
+        }
         return (uint32_t)a->order < (uint32_t)b->order;
     }
     return zb < za;

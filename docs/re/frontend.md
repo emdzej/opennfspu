@@ -80,6 +80,34 @@ objects don't, and where the original makes up for it is not found yet. Until th
 front-end object with that half turn added, about the point the original's draw puts at its position
 (`FE3DObject_Draw`).
 
+## Overlays, panels and data areas
+
+- **Overlay screens** (the application's +0xe4, 0x4e1010): a screen's `screen` id names the layout drawn
+  over the room and under the screen. With the rooms' detail on (0x5d9d38) the ids map as follows:
+  `ID_SCREEN` is `screenempty`, `ID_DARKOVAL` `screendarkoval`, `ID_FULLOVAL` `screenfulloval`,
+  `ID_MOVIEOVAL` `screenmovieoval` and `ID_OPTIONOVAL` `screenoptionoval`. In the options opened from
+  the race, the last is `screenoptionovallite`. These overlays are the translucent arcs, ovals and frames
+  around the menus.
+- **Panels** (`NFS5.PANEL`, FEPanel 0x4ce480 ..) hold the screen of their `filename`, loaded when opened
+  (0x4ce4d0) and dropped when closed (0x4ce540). They start closed and hidden. Events go on to the
+  panel's screen (0x4ce570), and its area rect is the layout editor's.
+- **Radio groups** (`NFS5.RADIOGROUP`, FERadioGroup 0x4cf8a0 ..) are panels open from the start. Their
+  screen's tab buttons (FERadioItem) each name a panel. Choosing one opens that panel and closes the one
+  open before (0x4cf960). The options screen is one: a group of five tabs over five panels, two of which
+  hold groups of their own.
+- **Data areas** (FEda*) make the accessors. Their values start from the options in fe.txt, each with
+  its key from the options' table (Options_Parse 0x4b0db0, (id, target, key) triples).
+  - FEdaAudio (0x4e3fb0): five levels 0..127 (options 0x37..0x3b), mode and quality (0x36, 0x35).
+  - FEdaDisplay (0x4e4610): the HUD's 14 choices (0x5b..0x69).
+  - FEdaGraphics (0x4e4e00): the renderer's (0x44..0x54) and the gamma (0x4d).
+  - An int accessor's text for the argument PERCENT is its position in per cent (0x4bc0e0).
+  - A list accessor's items are string ids from a zero-ended list.
+- **Control draws** the port has beside the GoTo buttons and the combo boxes:
+  - the gouraud box (0x4c9a10): four corner colours, each corner moved by its offsets;
+  - the indicator bar (0x4ca170 -> 0x521530): its accessor's share as two gouraud halves, set by a click
+    (0x4c9f50);
+  - the accessor watch: its accessor's text in its label.
+
 ## The port's order
 
 1. FERT's model: templates, layouts, controls, parts, attributes. Check: every template and layout

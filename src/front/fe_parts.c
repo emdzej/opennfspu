@@ -122,6 +122,8 @@ static int shape_x(const uint8_t *sh) { return (int32_t)((uint32_t)rd32(sh + 0xc
 static int shape_y(const uint8_t *sh) { return (int32_t)((uint32_t)rd32(sh + 0xc) << 4) >> 20; }
 
 void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy);
+bool (*FE_ControlDrawHook)(FertControl *c, int32_t ox, int32_t oy);
+static void FEGouraudBox_Draw(FertControl *c, int32_t ox, int32_t oy);
 
 static void lower(char *dst, size_t cap, const char *src)
 {
@@ -410,13 +412,25 @@ void FEWindow_Draw(FertControl *w)
     for (int i = w->nchildren - 1; 0 <= i; i--) {   /* 0x528390: last first */
         FertControl *c = w->children[i];
         if (!strcmp(c->id, "NFS5.3DCAR")) continue;
+        if (!strcmp(c->id, "NFS5.PANEL") || !strcmp(c->id, "NFS5.RADIOGROUP")) {
+            /* FEPanel 0x4ce720: its screen when open (its area is the layout editor's) */
+            if (c->sub && !(c->feflags & 0x20)) FEWindow_Draw(c->sub);
+            continue;
+        }
+        if (!strcmp(c->id, "NFS5.HUD")) {
+            /* FEHudDisplayControl (vtable 0x5b603c): the race HUD's preview with the display settings */
+            PENDING_NOTE(0x4caea0, "FEHudDisplayControl: the HUD's preview");
+            continue;
+        }
         if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) {
             /* FEMovieCircle_v15 0x4cd520: its stencil shapes cut the movie (FEMovieBox_v15) into the oval;
                none of its parts is drawn plainly. The movies aren't ported: nothing until they are. */
             PENDING_NOTE(0x4cd520, "FEMovieCircle: the movie in the oval (the stencil, FEMovieBox)");
             continue;
         }   /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
-        if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, 0, 0);
+        if (FE_ControlDrawHook && FE_ControlDrawHook(c, 0, 0)) continue;
+        if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, 0, 0);
+        else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, 0, 0);
         else FEControl_Draw(c, 0, 0);
     }
 }
@@ -545,4 +559,32 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
     FE2D_Rect(x, y, 1.0f, (float)(data_int(c, "stemleftheight", 0) + (r[3] - r[1])), k);
     FE2D_Rect(x + w, y, 1.0f, (float)(data_int(c, "stemrightheight", 0) + (r[3] - r[1])), k);
     /* (the glint sweeping along the bar, 0x51f660: pending) */
+}
+
+static uint32_t data_colour(const FertControl *c, const char *name)
+{
+    for (int k = 0; k < c->nparts; k++) {
+        FertAttr *a = FertAttrList_find(&c->parts[k]->attrs, name);
+        if (a) return a->type == FATTR_COLOR || a->type == FATTR_INT ? FertAttr_color(a) : (uint32_t)strtoul(FertAttr_str(a), NULL, 0);
+    }
+    return 0;
+}
+
+/* A gouraud box (FEGouraudBoxControl_v15 0x4c9a10, its values 0x4c9920): its four corners' colours, each
+   corner moved by its offsets; its area rect is the layout editor's. */
+static void FEGouraudBox_Draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return;
+    int32_t pos[2] = {0, 0}, size[2] = {0, 0};
+    FertAttr *a = FertAttrList_find(&c->attrs, "pos");
+    if (a) FertAttr_point(a, pos);
+    a = FertAttrList_find(&c->attrs, "size");
+    if (a) FertAttr_point(a, size);
+    float x = (float)(pos[0] + ox), y = (float)(pos[1] + oy), w = (float)size[0], h = (float)size[1];
+    int al = 0xff;   /* (0x4c8410: the fade) */
+    FE2D_DepthStep();
+    quad4(x + (float)data_int(c, "ULoffX", 0), y + (float)data_int(c, "ULoffY", 0), fade(data_colour(c, "cUL"), al),
+          x + w + (float)data_int(c, "URoffX", 0), y + (float)data_int(c, "URoffY", 0), fade(data_colour(c, "cUR"), al),
+          x + (float)data_int(c, "BLoffX", 0), y + h + (float)data_int(c, "BLoffy", 0), fade(data_colour(c, "cBL"), al),
+          x + w + (float)data_int(c, "BRoffX", 0), y + h + (float)data_int(c, "BRoffY", 0), fade(data_colour(c, "cBR"), al));
 }

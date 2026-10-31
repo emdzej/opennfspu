@@ -2568,3 +2568,9 @@
 00415130	Race_PauseCheck	race	high	Input_Action 8: pause when no modal screen; in the replay, the race's end
 00435ee0	HUD_DropShadow	hud	high	Two quads (dx, dy) out from a rect's bottom and right (tables 0x5b3418, 0x5b3428)
 00436090	HUD_Inset	hud	high	Four quads inside a rect (tables 0x5b3438 ..)
+004ce4d0	FEPanel_Open	frontend	high	Loads the panel's screen (data.filename) and shows it
+004ce540	FEPanel_Close	frontend	high	Drops the panel's screen, hides it
+004ce570	FEPanel_Event	frontend	high	Passes events on to the panel's screen
+004cf960	FERadioGroup_Select	frontend	high	The chosen item's panel opened, the open one closed
+004bc0e0	FEAccessor_TextArg	frontend	high	SHORT: the item's text; PERCENT: the position in per cent
+00521530	FE_DrawIndicatorBar	frontend	med	Two gouraud halves cut at a share, c0/c50/c100, a drop shadow

@@ -25,6 +25,9 @@ void FEAccess_SetPos(FEAccessor *a, int pos);
 /* The text of the current item. */
 const char *FEAccess_Text(const FEAccessor *a);
 
+/* Its text for a control's argument (slot 5, 0x4bc0e0): SHORT the item's, PERCENT the position in
+   per cent, another argument itself (the kinds' own arguments pend). */
+const char *FEAccess_TextArg(const FEAccessor *a, const char *arg);
 /* A car accessor's current car file (its .crp's name), NULL for other kinds. */
 const char *FEAccess_CarFile(const FEAccessor *a);
 

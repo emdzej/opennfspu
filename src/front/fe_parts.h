@@ -46,3 +46,9 @@ void FEPart_Draw(FertPart *p, int32_t ox, int32_t oy);
 void FEControl_Draw(FertControl *c, int32_t ox, int32_t oy);
 /* A window: its controls, the last first (0x528390). */
 void FEWindow_Draw(FertControl *w);
+
+/* The application's own draws for controls whose look follows its data (an accessor's value): true when
+   it drew the control (the window's draw then skips it). */
+extern bool (*FE_ControlDrawHook)(FertControl *c, int32_t ox, int32_t oy);
+/* The front end's styles (0x520780 ..), for the application's draws. */
+void FEStyle_DropShadow(float x, float y, float w, float h, int a, int dx, int dy);
