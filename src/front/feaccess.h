@@ -13,6 +13,7 @@
    Positions start from fe.txt's race description, what the original's options hold. */
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct FEAccessor FEAccessor;
 
@@ -35,3 +36,11 @@ const char *FEAccess_CarFile(const FEAccessor *a);
 const char *FEData_Track(void);
 const char *FEData_Car(void);
 int FEData_Opponents(void);
+
+/* The dealer's car bought into the player's save (0x5012a0): 0 done, else the message's string id (too
+   little money 0x322, too many cars 0x3d), -1 without a car or a save. */
+int FEData_BuyCar(void);
+/* A part's value (an nfs5.prt record's +0x164). */
+int32_t FEData_PartValue(int32_t id);
+/* A car accessor's current car's nfs5.car record (an owned car's copy), NULL for other kinds. */
+const uint8_t *FEAccess_CarRecord(const FEAccessor *a);

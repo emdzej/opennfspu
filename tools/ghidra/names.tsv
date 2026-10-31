@@ -2582,3 +2582,9 @@
 00501fa0	Tournament_Load	frontend	high	Seven ints, int bytes, the tournaments (0xd40 each)
 004dba30	FE_MoneyText	frontend	high	Money with the thousands grouped by the strings 0x6a4 .. 0x6a7
 004bd180	FEAccountDisplayControl_Draw	frontend	high	Its parts, then the money right-aligned a character at a time
+004f34c0	FE_LoadCarLists	frontend	high	The car lists; the dealer's: racing cars whose years hold the career's year, not kept from sale, sorted
+004f13c0	FECar_Before	frontend	high	Car order: +0x1b0, +0x1ac, then the first year
+004ed8b0	FECar_Price	frontend	high	A record's price this year: +0x208, after the first year times the year's factor (+0x20c) / 100
+005012a0	FE_BuyCar	frontend	high	The dealer's car into the owned ones; messages 0x322 (money), 0x3d (80 cars)
+004ee230	FECar_Setup	frontend	high	A new owned car: lowest free id, the record at +4, colours +0x674.., state, stock parts
+00502870	FE_CareerYear	frontend	high	The career's year (0x5db75c, the save's Tournament first int)

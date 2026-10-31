@@ -323,6 +323,17 @@ static void callback(const char *cb)
         for (int i = 0; w && i < w->nchildren; i++)
             if (!strcmp(w->children[i]->name, "ID_audio_panel") && w->children[i]->sub)
                 select_panel(w->children[i]->sub, cb[0] == 'S' ? "ID_PLAYLISTPANEL" : "ID_MAINSCREENPANEL");
+    } else if (!strcmp(cb, "DEALERCARINC") || !strcmp(cb, "DEALERCARDEC")) {
+        /* FEDealershipCallbackList_v57 / v58 (0x50e600, 0x50e630): the dealer's next or last car */
+        FEAccessor *a = FEAccess_Find("DealerCar.Car");
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[9] == 'I' ? 1 : -1));
+    } else if (!strcmp(cb, "BUYCAR")) {
+        int m = FEData_BuyCar();   /* (FEDealershipCallbackList_v55 0x50e5f0) */
+        if (m > 0) {
+            char b[200];
+            snprintf(b, sizeof b, "front end: %s (the message box 0x512d00: pending)", FEStrings_Get(m));
+            plat_log(b);
+        }
     } else if (!strcmp(cb, "QUIT")) {
         s_result = FE_QUIT;
     } else if (!strcmp(cb, "PLAYGAME")) {

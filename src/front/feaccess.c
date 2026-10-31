@@ -2,7 +2,9 @@
 #include "front/feaccess.h"
 #include "front/fe_parts.h"
 #include "exe.h"
+#include "pending.h"
 #include "game/options.h"
+#include "front/fesave.h"
 #include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +13,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -27,6 +29,7 @@ static int s_nacc;
 static uint8_t *s_trk, *s_car;
 static int s_tracks[32], s_ntracks;   /* the records with a model (0x691d00) */
 static int s_cars[160], s_ncars;      /* (0x6919f0) */
+static int s_dealer[160], s_ndealer;  /* 0x691a00: the cars the dealer sells this year */
 
 static FEAccessor *add(const char *name, AccKind kind, int count, int min, int pos)
 {
@@ -138,6 +141,76 @@ static void graphics(void)
     if (a) a->key = 0x5d606c;
 }
 
+static int16_t rec16(const uint8_t *r, int off) { int16_t v; memcpy(&v, r + off, 2); return v; }
+static int32_t rec32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
+
+int32_t FEData_PartValue(int32_t id)   /* (0x49c3e0's record) */
+{
+    static uint8_t *prt;
+    static size_t nprt;
+    if (!prt) prt = vfs_read_all("FEData\\Data\\nfs5.prt", &nprt);   /* (0x5d0c4c) */
+    for (size_t i = 0; prt && (i + 1) * 0x168 <= nprt; i++)
+        if (rec16(prt + 0x168 * i, 0) == id) return rec32(prt + 0x168 * i, 0x164);
+    return 0;
+}
+
+/* The career's year (0x502870: the save's Tournament section's first int, 0x5db75c). */
+static int career_year(void)
+{
+    Save *sv = FESave_Current();
+    for (int i = 0; sv && i < sv->nsec; i++)
+        if (!strcmp(sv->sec[i].name, "Tournament") && sv->sec[i].size >= 4) {
+            int32_t y;
+            memcpy(&y, sv->sec[i].data, 4);
+            return y;
+        }
+    return 1950;
+}
+
+/* 0x4f13c0: by +0x1b0, then +0x1ac, then the first year. */
+static bool car_before(const uint8_t *a, const uint8_t *b)
+{
+    if (rec32(a, 0x1b0) != rec32(b, 0x1b0)) return rec32(a, 0x1b0) < rec32(b, 0x1b0);
+    if (rec32(a, 0x1ac) != rec32(b, 0x1ac)) return rec32(a, 0x1ac) < rec32(b, 0x1ac);
+    return rec16(a, 0x1f8) < rec16(b, 0x1f8);
+}
+
+/* The dealer's cars (FE_LoadCarLists 0x4f34c0): the racing ones (+0x1f4 kind 0) made in a span of
+   years (+0x1f8 .. +0x202) that has this year, not kept from sale (+0x204 not 2 or 3); in order
+   (0x4f05c0: a[i] and a[j] swapped while a[j] goes before). */
+static void dealer_list(size_t n)
+{
+    int year = career_year();
+    s_ndealer = 0;
+    for (size_t i = 0; s_car && (i + 1) * CAR_SIZE <= n && s_ndealer < 160; i++) {
+        const uint8_t *r = s_car + CAR_SIZE * i;
+        int av = rec16(r, 0x204);
+        if (rec16(r, 0x1f4) == 0 && rec16(r, 0x1f8) <= year && year <= rec16(r, 0x202) && av != 2 && av != 3)
+            s_dealer[s_ndealer++] = (int)i;
+    }
+    for (int i = 0; i < s_ndealer; i++)
+        for (int j = i + 1; j < s_ndealer; j++)
+            if (car_before(s_car + CAR_SIZE * s_dealer[j], s_car + CAR_SIZE * s_dealer[i])) {
+                int t = s_dealer[i];
+                s_dealer[i] = s_dealer[j];
+                s_dealer[j] = t;
+            }
+}
+
+/* A car's price this year (0x4ed8b0): its price (+0x208), after its first year that times its year's
+   factor (+0x20c, one a year) over 100. */
+static int32_t car_price(const uint8_t *r)
+{
+    int year = career_year(), first = rec16(r, 0x1f8);
+    int32_t base = rec32(r, 0x208);
+    if (first < year) {
+        float f;
+        memcpy(&f, r + 0x20c + 4 * (year - first), 4);
+        return (int32_t)((float)base * f) / 100;
+    }
+    return base;
+}
+
 void FEData_Init(void)
 {
     if (s_nacc) return;
@@ -173,6 +246,10 @@ void FEData_Init(void)
     display();
     graphics();
     add("OpponentCar.Car", ACC_CAR, s_ncars, 0, cp);
+    dealer_list(n);
+    add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
+    add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
+    add("Tournament.Data", ACC_TDATA, 1, 0, 0);          /* FETournamentDataAccessor (0x5b81f0) */
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -186,7 +263,16 @@ FEAccessor *FEAccess_Find(const char *path)
     return NULL;
 }
 
-int FEAccess_Count(const FEAccessor *a) { return a->count; }
+static void refresh(const FEAccessor *c)
+{
+    FEAccessor *a = (FEAccessor *)c;
+    if (a->kind != ACC_OWNED) return;
+    Save *sv = FESave_Current();
+    a->count = sv ? sv->ncars : 0;
+    if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
+}
+
+int FEAccess_Count(const FEAccessor *a) { refresh(a); return a->count; }
 int FEAccess_Pos(const FEAccessor *a) { return a->pos; }
 
 void FEAccess_SetPos(FEAccessor *a, int pos)
@@ -199,6 +285,7 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
 const char *FEAccess_Text(const FEAccessor *a)
 {
     static char b[64];
+    refresh(a);
     if (!a->count) return "";
     switch (a->kind) {
     case ACC_INT:
@@ -214,13 +301,53 @@ const char *FEAccess_Text(const FEAccessor *a)
         return b;
     case ACC_LIST:
         return FEStrings_Get((int32_t)exe_u32(a->list + 4u * (unsigned)a->pos));
+    case ACC_DEALER:
+        snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x34);
+        return b;
+    case ACC_OWNED: {
+        Save *sv = FESave_Current();
+        snprintf(b, sizeof b, "%s", sv ? (const char *)sv->cars[a->pos].rec + 4 + 0x34 : "");
+        return b;
+    }
+    case ACC_TDATA:
+        return "";
     }
     return "";
 }
 
+const uint8_t *FEAccess_CarRecord(const FEAccessor *a);
+
 const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
 {
     static char b[16];
+    if (a->kind == ACC_TDATA) {   /* 0x5058a0 */
+        Save *sv = FESave_Current();
+        if (arg && !strcmp(arg, "CASH")) return FE_MoneyText(sv ? sv->money : 0);
+        if (arg && !strcmp(arg, "DEALERCARPRICE")) {
+            FEAccessor *d = FEAccess_Find("DealerCar.Car");
+            return d && d->count ? FE_MoneyText(car_price(s_car + CAR_SIZE * s_dealer[d->pos])) : "";
+        }
+        return "";   /* (the other data: pending) */
+    }
+    if (arg && !strcmp(arg, "CLASSLISTING")) {   /* the car accessors' (0x4f0130 ..): "%s %s" 0x5da730 */
+        const uint8_t *r = FEAccess_CarRecord(a);
+        static char cb[96];
+        if (!r) return "";
+        const char *c1 = FEStrings_Get(rec32(r, 0x1b0) - 10), *c2 = FEStrings_Get(rec32(r, 0x1ac) + 0xd);
+        snprintf(cb, sizeof cb, "%s %s", c1 ? c1 : "", c2 ? c2 : "");
+        return cb;
+    }
+    if (a->kind == ACC_OWNED && arg) {   /* FEOwnedCarAccessor's (0x4f8xxx) */
+        refresh(a);
+        Save *sv = FESave_Current();
+        if (!sv || !a->count) return "";
+        if (!strcmp(arg, "PURCHASEPRICE")) return FE_MoneyText(rec32(sv->cars[a->pos].rec, 0x6a4));
+        if (!strcmp(arg, "CURRENTVALUE")) {
+            PENDING_NOTE(0x4f83f0, "the owned car's value (mileage, damage and parts tables)");
+            return "";
+        }
+        if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
+    }
     if (!arg || !*arg || !strcmp(arg, "SHORT")) return FEAccess_Text(a);
     if (!strcmp(arg, "PERCENT")) {   /* 0x4bc0e0 */
         int p = a->count < 2 ? 100 : a->pos * 100 / (a->count - 1);
@@ -230,9 +357,98 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
     return arg;
 }
 
+const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
+{
+    if (!a) return NULL;
+    refresh(a);
+    if (!a->count) return NULL;
+    if (a->kind == ACC_CAR) return s_car + CAR_SIZE * s_cars[a->pos];
+    if (a->kind == ACC_DEALER) return s_car + CAR_SIZE * s_dealer[a->pos];
+    if (a->kind == ACC_OWNED) {
+        Save *sv = FESave_Current();
+        return sv ? sv->cars[a->pos].rec + 4 : NULL;
+    }
+    return NULL;
+}
+
 const char *FEAccess_CarFile(const FEAccessor *a)
 {
-    return a && a->kind == ACC_CAR && a->count ? car_file(a->pos) : NULL;
+    if (!a) return NULL;
+    refresh(a);
+    if (!a->count) return NULL;
+    if (a->kind == ACC_CAR) return car_file(a->pos);
+    if (a->kind == ACC_DEALER) return (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x7f;
+    if (a->kind == ACC_OWNED) {
+        Save *sv = FESave_Current();
+        return sv ? (const char *)sv->cars[a->pos].rec + 4 + 0x7f : NULL;
+    }
+    return NULL;
+}
+
+/* Buying the dealer's car (FEDealershipCallbackList_v55 0x50e5f0 -> 0x5012a0): not with too little money
+   (the message 0x322) or 80 cars already (0x3d); else a new car of the record (0x4eda40 -> 0x4ee230: the
+   lowest id no car has, the record, its colours, its state, its stock parts installed, 0x4ee030), the
+   price it cost at +0x6a4, the cars in order (0x4f0550), the money less the price. */
+int FEData_BuyCar(void)
+{
+    FEAccessor *d = FEAccess_Find("DealerCar.Car");
+    Save *sv = FESave_Current();
+    if (!d || !d->count || !sv) return -1;
+    const uint8_t *r = s_car + CAR_SIZE * s_dealer[d->pos];
+    int32_t price = car_price(r);
+    if (sv->money < price) return 0x322;
+    if (sv->ncars >= 0x50) return 0x3d;
+    SaveCar *nc = realloc(sv->cars, sizeof *nc * (size_t)(sv->ncars + 1));
+    if (!nc) return -1;
+    sv->cars = nc;
+    SaveCar *c = &sv->cars[sv->ncars];
+    memset(c, 0, sizeof *c);
+    int32_t id = 0;   /* the lowest id of no car (the owned and the used ones: 0x69188c) */
+    for (bool again = true; again;) {
+        again = false;
+        for (int i = 0; i < sv->ncars && !again; i++) if (rec32(sv->cars[i].rec, 0) == id) id++, again = true;
+        for (int i = 0; i < sv->nused && !again; i++) if (rec32(sv->used[i].rec, 0) == id) id++, again = true;
+    }
+    memcpy(c->rec, &id, 4);
+    memcpy(c->rec + 4, r, CAR_SIZE);
+    /* +0x674 .. +0x688: the accessor's colours (slots 0x74 .. 0x88: pending, 0) */
+    c->rec[0x6a0] = 1;
+    memcpy(c->rec + 0x6a4, &price, 4);
+    static const float f50 = 50.0f, f1 = 1.0f, f30 = 30.0f;
+    memcpy(c->rec + 0x6d0, &f50, 4);
+    memcpy(c->rec + 0x6d4, &f50, 4);
+    memcpy(c->rec + 0x6d8, &f50, 4);
+    memcpy(c->rec + 0x6e8, &f1, 4);
+    memcpy(c->rec + 0x6ec, &f30, 4);
+    memcpy(c->rec + 0x6f0, &f30, 4);
+    memcpy(c->rec + 0x714, c->rec + 0x6d0, 0x11 * 4);
+    /* the stock parts (the record's list +0x3bc), each with its nfs5.prt value (+0x164), as both the
+       car's parts and its installed ones */
+    int np = rec16(r, 0x3bc);
+    if (np < 0 || np > 64) np = 0;
+    c->parts = np ? calloc((size_t)np * 2, sizeof *c->parts) : NULL;
+    if (np && !c->parts) np = 0;
+    for (int i = 0; i < np; i++) {
+        int32_t pid = rec16(r, 0x3be + 2 * i);
+        int32_t v = FEData_PartValue(pid);
+        c->parts[i][0] = c->parts[np + i][0] = pid;
+        c->parts[i][1] = c->parts[np + i][1] = v;
+    }
+    c->ninstalled = c->nother = np;
+    sv->ncars++;
+    for (int i = 0; i < sv->ncars; i++)   /* 0x4f0550 */
+        for (int j = i + 1; j < sv->ncars; j++)
+            if (car_before(sv->cars[j].rec + 4, sv->cars[i].rec + 4)) {
+                SaveCar t = sv->cars[i];
+                sv->cars[i] = sv->cars[j];
+                sv->cars[j] = t;
+            }
+    int32_t cost = price;   /* (clamped to 999999999 each way) */
+    if (cost > 999999999) cost = 999999999;
+    if (cost < -999999999) cost = -999999999;
+    sv->money -= cost;
+    FESave_Write();
+    return 0;
 }
 
 const char *FEData_Track(void)

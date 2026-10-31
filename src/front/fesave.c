@@ -205,7 +205,7 @@ Save *FESave_Current(void)
     s_tried = true;
     snprintf(s_name, sizeof s_name, "%s", exe_str(0x5d9a44));   /* "XXDefXX": the default player */
     char path[128];
-    snprintf(path, sizeof path, "SaveData/%s.sav", s_name);   /* ("%s%s.sav" 0x5d9a4c in SaveData\, 0x65b360) */
+    snprintf(path, sizeof path, "%s.sav", s_name);   /* ("%s%s.sav" 0x5d9a4c in SaveData\, 0x65b360: the user's files are flat) */
     size_t n = 0;
     uint8_t *d = plat_load_user_file(path, &n);
     if (!d) {
@@ -228,7 +228,7 @@ bool FESave_Write(void)
     uint8_t *b = Save_Serialize(&s_save, &n);
     if (!b) return false;
     char path[128];
-    snprintf(path, sizeof path, "SaveData/%s.sav", s_name);
+    snprintf(path, sizeof path, "%s.sav", s_name);
     bool ok = plat_save_user_file(path, b, n);
     free(b);
     return ok;
