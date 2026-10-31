@@ -91,19 +91,33 @@
 0041be60	HCheat_v0	hud	struct	Virtual slot 0 of HCheat (vtable 0x5b2944)
 0041bfe0	HCheat_v1	hud	struct	Virtual slot 1 of HCheat (vtable 0x5b2944)
 0041c100	HCheat_v9	hud	struct	Virtual slot 9 of HCheat (vtable 0x5b2944)
+0041c760	HComboTextVisual_init	hud	med	Ported in src/game/hud.c / hud_config.c
 0041c850	HComboTextVisual_v0	hud	struct	Virtual slot 0 of HComboTextVisual (vtable 0x5b297c)
+0041c8e0	HComboTextVisual_draw	hud	med	Ported in src/game/hud.c / hud_config.c
+0041c930	HComboTextVisual_setpos	hud	med	Ported in src/game/hud.c / hud_config.c
+0041ca10	HComboTextVisual_setsize	hud	med	Ported in src/game/hud.c / hud_config.c
 0041ca30	HComboTextVisual_v2	hud	struct	Virtual slot 2 of HComboTextVisual (vtable 0x5b297c)
 0041cf70	HCongrats_v0	hud	struct	Virtual slot 0 of HCongrats (vtable 0x5b2a40)
 0041d070	HCongrats_v1	hud	struct	Virtual slot 1 of HCongrats (vtable 0x5b2a40)
 0041dd60	HCongrats_v5	hud	struct	Virtual slot 5 of HCongrats (vtable 0x5b2a40)
 0041e160	HCongrats_v3	hud	struct	Virtual slot 3 of HCongrats (vtable 0x5b2a40)
+0041e180	HUD_Loc	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e190	HUD_LoadStrings	hud	high	Loads hud.loc (localised HUD strings)
+0041e2e0	HUD_FreeStrings	hud	med	Ported in src/game/hud.c / hud_config.c
+0041e560	HUD_TraysOn	hud	med	Ported in src/game/hud.c / hud_config.c
+0041e5b0	HUD_TraysOff	hud	med	Ported in src/game/hud.c / hud_config.c
+0041e5e0	HUD_NoTrays	hud	med	Ported in src/game/hud.c / hud_config.c
+0041e920	HUD_GearShown	hud	med	Ported in src/game/hud.c / hud_config.c
 0041ea70	HUD_LoadLayout	hud	med	Loads a .hud layout (1.hud, nfs5-1.hud)
+0041f7c0	HUD_LoadLayouts	hud	med	Ported in src/game/hud.c / hud_config.c
+0041fb60	HUD_LayoutPixels	hud	med	Ported in src/game/hud.c / hud_config.c
+00420510	HUD_SchemeColour	hud	med	Ported in src/game/hud.c / hud_config.c
 004211f0	FastAlloc_alloc	mem	high	STL allocator: small blocks (<=256 B) from per-size free lists, else heap
 004215a0	HDial_v0	hud	struct	Virtual slot 0 of HDial (vtable 0x5b2aac)
 00421ad0	HExit_v0	hud	struct	Virtual slot 0 of HExit (vtable 0x5b2b0c)
 00421b40	HExit_v1	hud	struct	Virtual slot 1 of HExit (vtable 0x5b2b0c)
 00421b90	HExit_v9	hud	struct	Virtual slot 9 of HExit (vtable 0x5b2b0c)
+00421c60	HGear_init	hud	med	Ported in src/game/hud.c / hud_config.c
 00421ca0	HGear_v0	hud	struct	Virtual slot 0 of HGear (vtable 0x5b2b44)
 00421cd0	HGear_v1	hud	struct	Virtual slot 1 of HGear (vtable 0x5b2b44)
 00421db0	HGear_v2	hud	struct	Virtual slot 2 of HGear (vtable 0x5b2b44)
@@ -123,7 +137,9 @@
 00424420	HUD_Init	hud	med	Builds the race HUD (H* visuals) for the race type
 004257d0	HUD_DrawOverlay	hud	low	Draws the HUD overlays (pause, messages)
 00425910	HUD_Draw	hud	low	Draws the HUD visuals for a view
+00425de0	HUD_ShowFront	hud	med	Ported in src/game/hud.c / hud_config.c
 00425eb0	HUD_HandleInput	hud	med	Mouse/keys to the HUD's visual list (pause menu etc.); returns the chosen action
+00426760	HUD_ApplyLayout	hud	med	Ported in src/game/hud.c / hud_config.c
 00427a20	HUD_LoadArt	hud	med	Loads the HUD art (pic16.fsh)
 00428350	HInfo_v0	hud	struct	Virtual slot 0 of HInfo (vtable 0x5b2bfc)
 00428390	HInfo_v1	hud	struct	Virtual slot 1 of HInfo (vtable 0x5b2bfc)
@@ -184,7 +200,10 @@
 00430c70	HTextEntryVisual_v0	hud	struct	Virtual slot 0 of HTextEntryVisual (vtable 0x5b3160)
 00430d00	HTextEntryVisual_v6	hud	struct	Virtual slot 6 of HTextEntryVisual (vtable 0x5b3160)
 00430db0	HTextEntryVisual_v7	hud	struct	Virtual slot 7 of HTextEntryVisual (vtable 0x5b3160)
+00430e50	HTextVisual_init	hud	med	Ported in src/game/hud.c / hud_config.c
 004310d0	HTextVisual_v0	hud	struct	Virtual slot 0 of HTextVisual (vtable 0x5b3184)
+00431230	HTextVisual_print	hud	med	Ported in src/game/hud.c / hud_config.c
+00431360	HTextVisual_extent	hud	med	Ported in src/game/hud.c / hud_config.c
 00431620	HTime_v0	hud	struct	Virtual slot 0 of HTime (vtable 0x5b31a0)
 00431650	HTime_v1	hud	struct	Virtual slot 1 of HTime (vtable 0x5b31a0)
 00431760	HTime_v2	hud	struct	Virtual slot 2 of HTime (vtable 0x5b31a0)
@@ -202,7 +221,17 @@
 00433920	HTrackRecords_v1	hud	struct	Virtual slot 1 of HTrackRecords (vtable 0x5b32b0)
 00433980	HTrackRecords_v2	hud	struct	Virtual slot 2 of HTrackRecords (vtable 0x5b32b0)
 00433c50	HTrackRecords_v5	hud	struct	Virtual slot 5 of HTrackRecords (vtable 0x5b32b0)
+00433ef0	HTray_init	hud	med	Ported in src/game/hud.c / hud_config.c
 00433fc0	HTray_v0	hud	struct	Virtual slot 0 of HTray (vtable 0x5b3318)
+00434000	HTray_setsize	hud	med	Ported in src/game/hud.c / hud_config.c
+00434070	HTray_draw	hud	med	Ported in src/game/hud.c / hud_config.c
+00434240	HTray_place	hud	med	Ported in src/game/hud.c / hud_config.c
+00434270	HTray_corners	hud	med	Ported in src/game/hud.c / hud_config.c
+004343f0	HTray_setstate	hud	med	Ported in src/game/hud.c / hud_config.c
+00434550	HTray_colours	hud	med	Ported in src/game/hud.c / hud_config.c
+00434590	HTray_side	hud	med	Ported in src/game/hud.c / hud_config.c
+00434600	HTray_slide	hud	med	Ported in src/game/hud.c / hud_config.c
+00434950	HTray_progress	hud	med	Ported in src/game/hud.c / hud_config.c
 00435640	HTime_Format	hud	med	Race time text (9:59.99 cap)
 004366a0	HVisual_v0	hud	struct	Virtual slot 0 of HVisual (vtable 0x5b34bc)
 00436880	HWinnings_v0	hud	struct	Virtual slot 0 of HWinnings (vtable 0x5b34d8)

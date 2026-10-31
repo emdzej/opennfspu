@@ -11,8 +11,12 @@
 
 typedef struct HudVisual HudVisual;
 typedef struct {
-    void (*destroy)(HudVisual *v);   /* slot 0 */
-    void (*draw)(HudVisual *v);      /* slot 1 */
+    void (*destroy)(HudVisual *v);                /* slot 0 */
+    void (*draw)(HudVisual *v);                   /* slot 1 */
+    void (*reset)(HudVisual *v);                  /* slot 2: the layout again (0x426760) */
+    void (*setstate)(HudVisual *v, int32_t s);    /* slot 5: 0x537790, the trays' 0x4343f0 */
+    void (*setpos)(HudVisual *v, int x, int y);   /* slot 12 */
+    int (*progress)(HudVisual *v);                /* slot 14: of the fade, 0..100 (0x434950) */
 } HudVisualVtbl;
 
 struct HudVisual {

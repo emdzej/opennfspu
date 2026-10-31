@@ -26,6 +26,8 @@ typedef struct {
     uint8_t inset;               /* +0x109: half a texel in from the mirrored edges */
 } HudArt;
 
+extern const char *g_hud_dir;   /* 0x65b310: GameData\DashHud\ */
+
 /* Image `index` of DashHud\<name>.fsh at (x, y), w x h. single: the page holds that image only. 0x422e10 */
 HudArt *HudArt_load(const char *name, int index, int x, int y, int w, int h, bool now, bool centred, bool single);
 void HudArt_free(HudArt *a);
