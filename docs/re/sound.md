@@ -124,3 +124,29 @@ Before the race 0x4a8670 reads the opponents' engine banks and the rain's, then 
 (0x4af390) the sounds of elements near the road's first node, each with a time limit of 0x280 timer
 ticks. The 0x4aed00 loop over the world's animated objects, which have sound lists of their own, is
 pending.
+
+## The listener and the triggers
+
+0x465360 puts the listener at the camera's eye. Its velocity (0x655e44) is the velocity of the car the
+camera follows, except under the TV cameras (modes 0xc and 0xe), where it is null. Every Doppler factor
+subtracts it from the source's velocity, so in the car and chase views the player's own engine is not
+shifted. With a listener velocity, the player's speed term passed to 0x4a9e20 (0x655f5c) is zero, and a
+near car's speed is relative to the viewport's car.
+
+Scene_Tick (0x470b10) tests the first race car against each event trigger, on every odd tick. The car
+has to pass all four tests:
+- Position (0x470620). A line trigger needs one of the car's wheel diagonals to cross it; a sphere
+  trigger needs the car's centre within the radius.
+- Facing (0x470a30): above 0.5 against the car's forward axis.
+- Direction (0x470920): above 0.5 against its direction of motion.
+- Speed window (0x470ac0).
+
+What a hit does:
+- Type 4 sets the linked kind-1 sound element's trigger flag.
+- Type 7 moves the linked animated object (0x482fa0, pending).
+- Type 3 runs the tests over the racer count but indexes the race car list, and does nothing either way.
+
+A trigger with +0x9c set fires only once. Only castle and forest have sound triggers (five in all).
+
+Sim_Step ramps the effects volume (0x5d1744) from zero over ticks 0x11 to 0x50, keeping the option's
+value in 0x657ca4.
