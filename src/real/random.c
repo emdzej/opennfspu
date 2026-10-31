@@ -29,7 +29,7 @@ uint32_t REAL_rand(void)
     }
     /* w[0] took the sum without a carry out; then the counter, and on its wrap the chain of increments. */
     if (++w[5] == 0 && ++w[4] == 0 && ++w[3] == 0 && ++w[2] == 0 && ++w[1] == 0) w[0]++;
-    return w[0] & 0xffff;
+    return w[0];
 }
 
 void REAL_srand(uint32_t n)
@@ -43,4 +43,4 @@ void REAL_srand(uint32_t n)
     w[5] = w[4] + 0xd1a9fbe7u;
 }
 
-float REAL_randf(void) { return (float)((double)REAL_rand() * (1.0 / 65536.0)); }
+float REAL_randf(void) { return (float)((double)(REAL_rand() & 0xffff) * (1.0 / 65536.0)); }   /* the AX half */

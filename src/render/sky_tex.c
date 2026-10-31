@@ -58,3 +58,9 @@ Texture *SkyTextures_texture(SkyTextures *t, int i)
         t->tex[i] = RTex_make(t->shape[i], 0x534b5920u, 1, g_render ? g_render->textures : NULL, 0);   /* 'SKY ' */
     return t->tex[i];
 }
+
+bool SkyTextures_opaque(SkyTextures *t, int i)
+{
+    uint32_t f = TEXTURE_formatof(t->shape[i]);
+    return f == 3 || f == 4 || f == 5;
+}

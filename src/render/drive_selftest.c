@@ -23,6 +23,7 @@
 #include "render/render_pending.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
+#include "render/noise.h"
 #include "render/sky.h"
 #include <math.h>
 #include <stdlib.h>
@@ -117,6 +118,7 @@ static bool load(const char *track, const char *carname)
     snprintf(g_track_name, sizeof g_track_name, "%s", track);
     Track_Load();
     if (!g_world || !g_world->root) return false;
+    Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sky_LoadFsh(g_track_name, false);
     RaceViews_ctor(&views);
     if (!RaceSetup_SingleCar(carname)) return false;

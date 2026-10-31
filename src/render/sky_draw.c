@@ -278,8 +278,49 @@ static uint32_t SkyColour_worldFogColour(const SkyColourTrack *t, float w)
 
 /* ---- the lightning (0x45cb00 .. 0x45cdb0) ---- */
 
-static void lightning_create(SkyConfig *c)   /* 0x45cb00 (the colour grid 0x45ca40 to come) */
+static int32_t g_colourgrid[49][4];   /* 0x627e3c (0x310 bytes) */
+
+/* The lightning's colours (0x45ca40): the sky file's 7 x 7 shape 'ltmp' as (a, r, g, b) cells, else all
+   0xff. */
+static void colourgrid_create(SkyTextures *t)
 {
+    int slot = t ? SkyTextures_find(t, exe_str(0x5cf110)) : -1;
+    const uint8_t *shape = slot >= 0 ? SkyTextures_shape(t, slot) : NULL;
+    if (!shape) {
+        for (int i = 0; i < 49; i++) g_colourgrid[i][0] = g_colourgrid[i][1] = g_colourgrid[i][2] = g_colourgrid[i][3] = 0xff;
+        return;
+    }
+    const uint8_t *p = shape + 0x10;
+    for (int i = 0; i < 49; i++, p += 4) {
+        g_colourgrid[i][0] = p[3];
+        g_colourgrid[i][1] = p[2];
+        g_colourgrid[i][2] = p[1];
+        g_colourgrid[i][3] = p[0];
+    }
+}
+
+const int32_t *Sky_ColourCell(int a, int b) { return g_colourgrid[a * 7 + 0x18 + b]; }   /* 0x45cae0 */
+
+bool Sky_LightningActive(void) { return g_lightning && g_lightning->active; }
+
+/* 0x45cdb0: the record's index from the level's list (0x5cf0a0) at round(trunc(r * 3) - 0.5), which
+   rounds to even: 0, 0 or 2. */
+void Sky_LightningFlash(float pos[2], int32_t rec[5], int *level)
+{
+    SkyLightning *l = g_lightning;
+    pos[0] = l->x;
+    pos[1] = l->y;
+    int k = (int)(REAL_randf() * 3.0f);   /* 0x5b2600; _ftol */
+    int i = (int)lrintf((float)k - 0.5f);
+    uint32_t list = exe_u32(0x5cf0a0 + 4 * (uint32_t)l->level);
+    uint32_t r = exe_u32(list + 4 * (uint32_t)i);
+    for (int w = 0; w < 5; w++) rec[w] = (int32_t)exe_u32(0x5cf018 + r * 0x14 + 4 * (uint32_t)w);
+    *level = l->level;
+}
+
+static void lightning_create(SkyConfig *c)   /* 0x45cb00 */
+{
+    colourgrid_create(g_skytex);
     free(g_lightning);
     g_lightning = calloc(1, sizeof *g_lightning);
     if (!g_lightning) return;
@@ -356,10 +397,13 @@ static Sky *Sky_ctor(Sky *s, const char *name)
     for (int i = 0; i < text.count; i++) {
         uint32_t f = SkyText_record(&text, i)->flags;
         /* The record's type picks the level (0x45acb0 basic 0x5c bytes; 0x45b460 multi 0x88 with mode 0..3
-           for 4, 8, 0x10, 0x20; 0x45be40 free clouds 0xfc). Not ported yet: the original adds a slot for
-           each (NULL when the allocation fails); the port adds nothing until they are. */
-        if (f & 2) PENDING_NOTE(0x45acb0, "SkyLevel_BasicSky");
-        else if (f & 0x3c) PENDING_NOTE(0x45b460, "SkyLevel_MultiSky");
+           for 4, 8, 0x10, 0x20; 0x45be40 free clouds 0xfc), a slot each (NULL when the allocation fails).
+           The port adds no slot for the ones not ported yet. */
+        if (f & 2) {
+            SkyBasic *b = malloc(sizeof *b);
+            if (b) SkyBasic_ctor(b, SkyText_record(&text, i), g_skytex, s->config, (f & 0x200) == 0x200);
+            if (s->nlayers < 9) s->layer[s->nlayers++] = b ? &b->base : NULL;
+        } else if (f & 0x3c) PENDING_NOTE(0x45b460, "SkyLevel_MultiSky");
         else if (f & 0x40) PENDING_NOTE(0x45be40, "SkyLevel_FreeClouds");
     }
     SkyHorizon *h = malloc(sizeof *h);
@@ -398,11 +442,12 @@ static void sky_update(Sky *s)
     s->lasttick = now;
     float blend = s->blend ? SkyTrack_value(s->blend, s->region) : 0;
     float a = -cfg_f(s->config, 0x3c), b = -cfg_f(s->config, 0xb3c);
-    float pa[2], pb[2];
+    /* x, -, z (the original's [1] is a stack word never set) */
+    float pa[3] = {0}, pb[3] = {0};
     pa[0] = (float)(sin_turns(a) * (double)s->eye[2] + (double)(float)(cos_turns(a) * (double)s->eye[0]));
-    pa[1] = (float)((double)(float)(cos_turns(a) * (double)s->eye[2]) - sin_turns(a) * (double)s->eye[0]);
+    pa[2] = (float)((double)(float)(cos_turns(a) * (double)s->eye[2]) - sin_turns(a) * (double)s->eye[0]);
     pb[0] = (float)(sin_turns(b) * (double)s->eye[2] + (double)(float)(cos_turns(b) * (double)s->eye[0]));
-    pb[1] = (float)((double)(float)(cos_turns(b) * (double)s->eye[2]) - sin_turns(b) * (double)s->eye[0]);
+    pb[2] = (float)((double)(float)(cos_turns(b) * (double)s->eye[2]) - sin_turns(b) * (double)s->eye[0]);
     for (int i = 0; i < s->nlayers; i++)
         if (s->layer[i]) s->layer[i]->vt->update(s->layer[i], pa, pb, blend, ticks);
     if (s->colour && g_lightning)

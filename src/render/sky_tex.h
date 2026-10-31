@@ -2,6 +2,7 @@
    that the sky's pieces asked for by name, and their textures, made on first use. */
 #pragma once
 #include "real/texture.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 enum { SKYTEX_MAX = 40 };
@@ -29,3 +30,5 @@ int SkyTextures_find(SkyTextures *t, const char *name);
 static inline const uint8_t *SkyTextures_shape(SkyTextures *t, int i) { return t->shape[i]; }   /* 0x460b30 */
 /* The slot's texture (RTex_make with 'SKY ', class 1, on first use). 0x460b40 */
 Texture *SkyTextures_texture(SkyTextures *t, int i);
+/* Whether the slot's shape has no alpha (its format 3, 4 or 5). 0x460c00 */
+bool SkyTextures_opaque(SkyTextures *t, int i);

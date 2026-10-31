@@ -52,7 +52,7 @@ static void base_init(SkyLevel *l, const SkyLevelVtbl *vt, uint32_t flags)
 
 /* ---- SkyHorizon ---- */
 
-static void horizon_update(SkyLevel *l, const float a[2], const float b[2], float blend, int ticks) {}   /* 0x46bc30 */
+static void horizon_update(SkyLevel *l, const float a[3], const float b[3], float blend, int ticks) {}   /* 0x46bc30 */
 
 /* The segments in view (0x45a060): the heading against the horizon's rotation (+0x04 of the
    configuration, in turns), the quads from a quarter turn left of it to a quarter turn right, one more

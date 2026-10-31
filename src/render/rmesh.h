@@ -46,5 +46,10 @@ void RMesh_stageIndexed(RMesh *m, int stage, Texture *tex, void *blend, void *uv
 void RMesh_setPositions(RMesh *m, void *positions, int nverts);                   /* 0x468650 */
 void RMesh_setUVs(RMesh *m, int stage, void *uvs);                                /* 0x468680 */
 void RMesh_setColours(RMesh *m, int stage, void *colours);                        /* 0x4686c0 */
+/* An indexed mesh's index streams: the positions' (0x468700), a stage's uv's (0x468730) and colours'
+   (0x468770). */
+void RMesh_setIndexPositions(RMesh *m, void *idx, uint32_t info);
+void RMesh_setIndexUVs(RMesh *m, int stage, void *idx, uint32_t info);
+void RMesh_setIndexColours(RMesh *m, int stage, void *idx, uint32_t info);
 /* Draws n vertices (-1: all). 0x468350 */
 void RMesh_draw(RMesh *m, int n);

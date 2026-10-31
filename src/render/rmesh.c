@@ -127,6 +127,10 @@ void RMesh_setColours(RMesh *m, int stage, void *colours)
     *slot(m, stage, m->slot_colour) = (EaglStream){(uint32_t)m->nverts << 2, colours};
 }
 
+void RMesh_setIndexPositions(RMesh *m, void *idx, uint32_t info) { m->streams[m->slot_pos2] = (EaglStream){info, idx}; }
+void RMesh_setIndexUVs(RMesh *m, int stage, void *idx, uint32_t info) { *slot(m, stage, m->slot_iuv) = (EaglStream){info, idx}; }
+void RMesh_setIndexColours(RMesh *m, int stage, void *idx, uint32_t info) { *slot(m, stage, m->slot_icolour) = (EaglStream){info, idx}; }
+
 void RMesh_draw(RMesh *m, int n)
 {
     if (n == -1) n = m->nverts;

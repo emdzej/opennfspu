@@ -9,6 +9,7 @@
 #include "render/render.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
+#include "render/noise.h"
 #include "render/sky.h"
 #include "platform.h"
 #include <math.h>
@@ -77,6 +78,7 @@ static bool load(const char *name)
     snprintf(g_track_name, sizeof g_track_name, "%s", name);
     Track_Load();
     if (!g_world || !g_world->root) return false;
+    Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sky_LoadFsh(g_track_name, false);   /* as Render_RaceInit (0x468ef0) does */
     RaceViews_ctor(&views);
     camera = views.main;
