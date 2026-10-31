@@ -44,8 +44,8 @@ static void set_env(void)   /* the track viewer's light until the sky's is porte
 
 /* The cars through their renderers, their states taken from the simulation. The port's R3DCar_Draw takes
    its flips as the car viewer's y-down camera needs them, while the simulation's world is y-up: the
-   car's side and up rows go to the renderer negated (and its centre, the up row times the half height,
-   with them), which draws the car upright with the winding the draw's cull flip expects. To fold into
+   car's up row goes to the renderer negated (and its centre, the up row times the half height, with
+   it), which draws the car upright with the winding the draw's cull flip expects. To fold into
    R3DCar_Draw and the car viewer when the race's car draw (0x43f610) is ported. */
 static void draw_cars(RCamera *c)
 {
@@ -55,8 +55,7 @@ static void draw_cars(RCamera *c)
         if (!r || !r->state) continue;
         const float *m = CAR_F(car, 0x364), *p = CAR_F(car, 0x330);
         R3DCarState *st = r->state;
-        for (int k = 0; k < 6; k++) st->rot[k] = -m[k];
-        for (int k = 6; k < 9; k++) st->rot[k] = m[k];
+        for (int k = 0; k < 9; k++) st->rot[k] = k >= 3 && k < 6 ? -m[k] : m[k];
         float h = st->halfsize[1];
         for (int k = 0; k < 3; k++) st->pos[k] = p[k] - 2.0f * m[3 + k] * h;
         R3DCar_Draw(r, &c->view->model);
@@ -135,7 +134,9 @@ static bool load(const char *track, const char *carname)
     if (n < 1e-6f) { fx = 0; fz = 1; n = 1; }
     fx /= n;
     fz /= n;
-    float rot[9] = {fz, 0, -fx, 0, 1, 0, fx, 0, fz};
+    /* Rows right, up, forward with right = (-fz, 0, fx): the left-handed frame of the original's Direct3D
+       world (positive steering turns towards the first row). */
+    float rot[9] = {-fz, 0, fx, 0, 1, 0, fx, 0, fz};
     memcpy(CAR_F(c, 0x364), rot, sizeof rot);
     float *p = CAR_F(c, 0x330);
     p[0] = pos[0] + fx * 4.0f;
@@ -162,15 +163,15 @@ static void read_controls(Car *c)
     uint8_t keys[KEY_COUNT] = {0};
     bool kb = plat_keys(keys);
     uint32_t pad = plat_pad(0);
-    static int autodrive = -1;   /* --param autodrive=1: full throttle (for headless runs) */
+    static int autodrive = -1;   /* --param autodrive=1: full throttle, 2: and right, 3: and left (headless runs) */
     if (autodrive < 0) {
         char v[8];
         autodrive = plat_param("autodrive", v, sizeof v) ? v[0] - '0' : 0;
     }
-    bool up = autodrive == 1 || (kb && (keys[0xc8] || keys[0x11])) || (pad & (PAD_A | PAD_UP));
+    bool up = autodrive >= 1 || (kb && (keys[0xc8] || keys[0x11])) || (pad & (PAD_A | PAD_UP));
     bool down = (kb && (keys[0xd0] || keys[0x1f])) || (pad & (PAD_B | PAD_DOWN));
-    bool left = (kb && (keys[0xcb] || keys[0x1e])) || (pad & PAD_LEFT);
-    bool right = (kb && (keys[0xcd] || keys[0x20])) || (pad & PAD_RIGHT);
+    bool left = autodrive == 3 || (kb && (keys[0xcb] || keys[0x1e])) || (pad & PAD_LEFT);
+    bool right = autodrive == 2 || (kb && (keys[0xcd] || keys[0x20])) || (pad & PAD_RIGHT);
     bool hand = (kb && keys[0x39]) || (pad & PAD_X);
     c->b[0xd7c] = up ? 0xff : 0;
     c->b[0xd7d] = down ? 0xff : 0;
