@@ -1,5 +1,6 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "game/ai.h"
 #include "game/race_progress.h"
 #include "exe.h"
 #include "game/car.h"
@@ -38,7 +39,7 @@ void Sim_Step(void)
     if (!(g_sim_tick & 1)) {
         PENDING_NOTE(0x416160, "Sim_ResetCollisionSlots (the collision events)");
         Sim_ClearContacts();                  /* 0x498190 */
-        PENDING_NOTE(0x4067c0, "AI_TickAll");
+        AI_TickAll();                         /* 0x4067c0 */
         TaskList_Run(&g_tasks_even);
         Race_TickEven();                      /* 0x417820 */
     }

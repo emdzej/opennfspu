@@ -1,6 +1,7 @@
 /* The drive mode (see drive_selftest.h). */
 #include "render/drive_selftest.h"
 #include "eagl/eagl.h"
+#include "game/ai.h"
 #include "game/car.h"
 #include "game/car_drive.h"
 #include "game/car_physics.h"
@@ -115,11 +116,15 @@ static bool load(const char *track, const char *carname)
     Sky_LoadFsh(g_track_name, false);
     RaceViews_ctor(&views);
     if (!RaceSetup_SingleCar(carname)) return false;
+    char v[8];
+    int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : 0;   /* --param opponents=<n> */
+    if (0 < opponents) RaceSetup_Opponents(opponents);
     Car_Construct();
     if (g_ncars < 1) return false;
-    Car *c = g_cars[0];
-    /* The race's set-up: the grid slot behind the start line, on the road (0x410790). */
-    Car_RaceInit(c, 0);
+    /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
+    for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
+    AI_Load();             /* the racing line (0x4031f0) */
+    AI_MakeControllers();  /* 0x406580 */
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
@@ -171,7 +176,24 @@ bool DRIVE_selftest(const char *track, const char *car)
         read_controls(c);
         Sim_Step();   /* 0x415010 */
     }
-    chase_camera(c);
+    static int follow = -1;   /* --param follow=<car>: the camera behind another car */
+    if (follow < 0) {
+        char v[8];
+        follow = plat_param("follow", v, sizeof v) ? atoi(v) : 0;
+        if (follow >= g_ncars) follow = 0;
+    }
+    chase_camera(g_cars[follow]);
+    char lv[4];
+    if (plat_param("ailog", lv, sizeof lv) && g_sim_tick % 128 < 2)
+        for (int i = 0; i < g_ncars; i++) {
+            Car *o = g_cars[i];
+            char b[160];
+            int16_t node;
+            memcpy(&node, o->b + 8, 2);
+            snprintf(b, sizeof b, "car %d node %d speed %.1f target %.1f gear %d thr %d brk %d steer %d", i, node, *CAR_F(o, 0x35c) * 3.6f,
+                     *CAR_F(o, 0xeb8) * 3.6f, (int8_t)o->b[0xd82], o->b[0xd7c], o->b[0xd7d], *CAR_I(o, 0xd90));
+            plat_log(b);
+        }
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     if (tm) TexManager_begin(tm);
     Render_Frame(&views);

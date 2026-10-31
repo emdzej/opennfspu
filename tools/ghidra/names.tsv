@@ -6,6 +6,7 @@
 004032f0	AIDataRecord_t_v1	ai	struct	Virtual slot 1 of AIDataRecord_t (vtable 0x5b2494)
 00403370	AIDataRecord_LineSpeed_t_v0	ai	struct	Virtual slot 0 of AIDataRecord_LineSpeed_t (vtable 0x5b24a0)
 004033d0	AIDataRecord_LineSpeed_t_v1	ai	struct	Virtual slot 1 of AIDataRecord_LineSpeed_t (vtable 0x5b24a0)
+00403450	AI_LinePoint	ai	med	Racing line point (x, z) at a road node (.lsp)
 004035e0	vector_destroy	stl	med	Frees a std::vector/string buffer through FastAlloc
 00403e20	AIState_NonActive_v1	ai	struct	Virtual slot 1 of AIState_NonActive (vtable 0x5b24f0)
 00403ed0	AIHigh_Cop_v0	ai	struct	Virtual slot 0 of AIHigh_Cop (vtable 0x5b2510)
@@ -13,6 +14,7 @@
 00405720	AIHigh_Human_v0	ai	struct	Virtual slot 0 of AIHigh_Human (vtable 0x5b2544)
 00405930	AIHigh_Opponent_v0	ai	struct	Virtual slot 0 of AIHigh_Opponent (vtable 0x5b2560)
 00406080	AIHigh_Traffic_v0	ai	struct	Virtual slot 0 of AIHigh_Traffic (vtable 0x5b2588)
+00406580	AI_MakeControllers	ai	med	A controller per race car by its flags
 004067c0	AI_TickAll	ai	high	Calls each car's AI controller (0x5e6774[i], virtual slot 0); a controller without state is first created by 0x414b30
 00406900	Race_InitTables	race	high	Lane table 0x5e7550 (0, 1/i), 0x40e6d0, AI_LoadLineSpeeds
 00406950	Traffic_LoadConfig	ai	med	Loads trafcfg.dat (traffic configuration)
@@ -22,8 +24,12 @@
 00408870	Car_Steady	race	high	On the ground and under control
 0040ad40	AI_LoadTuning	ai	med	Loads tuning.bin (AI tuning)
 0040b3f0	Race_Leaders	race	high	Leaders 0x5e6df0.. and rival chain
+0040b530	AIState_Tick	ai	med	Low-level driver then the state
 0040b600	AIState_Normal_v0	ai	struct	Virtual slot 0 of AIState_Normal (vtable 0x5b2668)
+0040b670	AI_Plan	ai	med	Target speed from the bends ahead, grip, damage and skill; junction choice
+0040c000	AI_Steer	ai	med	Pedals and steering at the racing line, passing the cars ahead
 0040ca40	AIState_Racing_v0	ai	struct	Virtual slot 0 of AIState_Racing (vtable 0x5b26b8)
+0040caa0	AIState_Racing_init	ai	med	Racing state: AI-driven, active
 0040cad0	AIState_Idle_v0	ai	struct	Virtual slot 0 of AIState_Idle (vtable 0x5b252c)
 0040cc30	AIState_Chase_v1	ai	struct	Virtual slot 1 of AIState_Chase (vtable 0x5b26c8)
 0040cf90	AIState_Chase_v0	ai	struct	Virtual slot 0 of AIState_Chase (vtable 0x5b26c8)
@@ -633,6 +639,7 @@
 004809e0	Road_BuildJunctions	world	high	Junctions of segment ends within 16 (max 8), centre, end weights int(1/n)
 00480f20	World_LoadJunctions	world	high	<track>.jnc: 0x24 per junction, end weights
 00481030	Road_JunctionNearest	world	high	Nearest node through a junction near-node list
+00481590	Road_JunctionAhead	road	med	The junction within n nodes along the segment
 00481670	Road_Step	world	high	The node n nodes on along the road (through a junction, else clamped to the segment)
 004817b0	Road_RaceLength	world	high	Road +4 race length (nnodes with one junction), junction +0x28 progress
 00481880	Road_Walk	world	high	Junction distances along the race (recursive), the longest
@@ -732,6 +739,7 @@
 00492b10	Net_WriteResultsHtml	net	med	Writes race results as HTML ("NfsNet")
 00493320	Net_VoiceInit	net	low	Voice recording buffer (VoiceRecBuff)
 00493810	CarSim_EngineWear	sim	high	The engine parts' mean wear (with the car's +0x4e8)
+004938d0	CarSim_DamageMean	sim	med	Mean of two damage zones
 004938f0	CarSim_TyreWear	sim	high	The tyre parts' wear (type 9)
 00493980	CarSim_BrakeWear	sim	high	The brake parts' wear (type 2)
 00493a10	CarSim_GearboxWear	sim	high	The gearbox parts' wear (type 3)
@@ -1174,6 +1182,7 @@
 004eaa30	FEVictory3DRoom_v0	frontend	struct	Virtual slot 0 of FEVictory3DRoom (vtable 0x5b73fc)
 004eaa80	FEVictory3DRoom_v1	frontend	struct	Virtual slot 1 of FEVictory3DRoom (vtable 0x5b73fc)
 004eadb0	FE_SetHudDials	hud	med	Ported in src/game/hud.c
+004eb430	FE_SetOpponents	fe	med	Opponents' drivers and skills from nfs5.per
 004f06f0	FECarSetup_Load	frontend	med	Car setup values (FDownForce, RDownForce, BrakeBias, ...)
 004f1070	FECarSetupCallbackList_v0	frontend	struct	Virtual slot 0 of FECarSetupCallbackList (vtable 0x5b7558)
 004f1130	FECarSetupCallbackList_v1	frontend	struct	Virtual slot 1 of FECarSetupCallbackList (vtable 0x5b7558)

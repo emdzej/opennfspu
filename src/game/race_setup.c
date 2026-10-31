@@ -90,3 +90,35 @@ bool RaceSetup_SingleCar(const char *name)
     g_ntrafficcars = 0;
     return true;
 }
+
+bool RaceSetup_Opponents(int n)
+{
+    size_t size = 0;
+    uint8_t *per = vfs_read_all("FEData\\Data\\nfs5.per", &size);
+    if (!per) return false;
+    int nper = (int)(size / 0x2c);
+    if (CAR_MAX <= n) n = CAR_MAX - 1;
+    if (nper < n) n = nper;
+    for (int i = 1; i <= n; i++) {
+        uint8_t *d = g_cardesc[i];
+        memcpy(d, g_cardesc[0], CARDESC_SIZE);
+        const uint8_t *r = per + 0x2c * (i - 1);
+        int16_t id;
+        memcpy(&id, r, 2);
+        float k = 1.0f;   /* the event's difficulty (its record's +0x3cc, the front end's) */
+        float sk[8];
+        memcpy(sk, r + 0xc, sizeof sk);
+        put_i(d, 0x8, 2);                                  /* CLASS: an opponent */
+        put_i(d, 0x14c, i);                                /* PERSONALITY */
+        put_i(d, 0x150, i);                                /* DRIVER */
+        float v[8] = {k * sk[0], k * sk[2], k * sk[4], k * sk[6], sk[1], sk[3], sk[5], sk[7]};
+        memcpy(d + 0x154, v, sizeof v);                    /* SKILLSLOW .. SKILLRANGEDEFAULT */
+        put_i(d, 0x174, n - i);                            /* STARTINGPOS */
+        put_str(d, 0x17c, "");                             /* DRIVERNAME (the record's string) */
+        (void)id;
+    }
+    put_i(g_cardesc[0], 0x174, n);
+    free(per);
+    g_nracecars = n + 1;
+    return true;
+}
