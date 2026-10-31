@@ -47,3 +47,5 @@ void Sky_DrawAfter(void);    /* 0x45d6b0: the pass after the world (0x45d060) */
 /* The view's clear colour from the light slot and the weather's blend at the eye (the mirror's while
    the first camera's 0x627f43 bit 4 is set, during the mirror's view). 0x459940 */
 uint32_t Sky_ClearColour(bool mirror);
+/* The sun's position in the world (0x460f50: the sun object's +0x11c); false without a configuration. */
+bool Sky_SunPosition(float out[4]);

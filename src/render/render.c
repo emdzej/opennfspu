@@ -206,6 +206,7 @@ uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it i
 uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
 static int card_type;               /* 0x6197b0: Render_DetectCard's card (pending: 0, never 0xe) */
 static int car_detail;              /* 0x6197c4 */
+uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb: the cars' dynamic lights and reflections */
 
 void Render_SetupQuality(void)
 {
@@ -229,6 +230,8 @@ void Render_SetupQuality(void)
     }
     if (g_renderopts.carchrome == 0) g_rmethod_key |= 1;
     else g_rmethod_key |= 3;
+    /* the chrome option: 0 none, 1 (0x6197c8/c9 only), 2 the dynamic lights and the reflections too */
+    g_render_carlights = g_render_carenv = g_renderopts.carchrome >= 2;
     car_detail = g_renderopts.cardetail == 0 ? 0 : g_renderopts.cardetail == 1 ? 1 : 2;
     if (RTex_flagsallowed && (g_rmethod_key & 2)) g_rmethod_key = (g_rmethod_key & ~3u) | 4;
     (void)specials_level;

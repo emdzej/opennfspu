@@ -179,6 +179,8 @@ const float *WSurface_Normal(WSurface *s);                         /* 0x474380 *
 const float *WSurface_Slope(WSurface *s);                          /* 0x474390 */
 /* The polygon's vertex i, the zero vector without one. 0x474550 */
 const float *WSurface_Vertex(const WSurface *s, int i);
+/* The light (1, r, g, b) at p from the vertex colours of the polygon under it. 0x474600 */
+void WSurface_Light(const WSurface *s, const float p[3], float out[4]);
 /* The ground height under p (a fresh tracker). 0x4744a0 */
 float WSurface_HeightAt(const float p[3]);
 

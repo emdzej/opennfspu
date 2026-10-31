@@ -67,6 +67,8 @@ static void draw_cars(RCamera *c)
         for (int k = 0; k < 9; k++) st->rot[k] = k < 6 ? -m[k] : m[k];
         float h = st->halfsize[1];
         for (int k = 0; k < 3; k++) st->pos[k] = p[k] - 2.0f * m[3 + k] * h;
+        CarLight_Update(&r->light, car);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
+        r->lit = true;
         R3DCar_Draw(r, &c->view->model);
     }
 }
@@ -78,6 +80,7 @@ static bool load(const char *track, const char *carname)
     if (!g_world || !g_world->root) return false;
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sky_LoadFsh(g_track_name, false);
+    CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
     RaceViews_ctor(&views);
     if (!RaceSetup_SingleCar(carname)) return false;
     char v[8];

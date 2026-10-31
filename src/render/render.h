@@ -163,6 +163,7 @@ typedef struct {
 
 extern RenderSystem *g_render;      /* 0x628130 */
 extern uint8_t g_render_skiplod0;   /* 0x6197e5: draw objects start at their second LOD */
+extern uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb (the chrome option 2) */
 extern uint8_t g_render_extras;     /* 0x6197e6: the extra 'pr' lists (0x40000) and the effects lists */
 extern RenderState *g_racerstate;   /* 0x62814c: the race's copy of the device's render states */
 

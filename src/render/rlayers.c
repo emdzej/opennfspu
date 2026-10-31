@@ -14,6 +14,7 @@ static void dep_assert(void) { REAL_abort(exe_str(0x5cded8), 0x8f, "%s", exe_str
 
 float g_rlayer_eye[3];
 float *g_rlayer_lights;
+struct Texture **g_rlayer_envtex;
 bool g_rlayer_fullambient_fill;
 
 static float exef(uint32_t va)

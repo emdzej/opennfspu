@@ -101,3 +101,27 @@ overlay view, the page flip. What the world, sky, particles and HUD draw is pend
   SkyMapSource_Noise, Scroller_*).
 - Render_DetectCard 0x44e760, the UV test 0x44e740, the font 0x5365e0, the 2D window 0x5341f0, the video
   mode change 0x467f70 / `Render_SetVideoMode` 0x467f00, `Render_RaceInit` 0x468ef0.
+
+## The cars' light
+
+Each car carries a light block, 0x194 bytes at R3DObject +0x2dc. The car's draw copies it and makes it
+the layers' light environment, 0x6115cc (0x4433c0). R3DCar_v15 (0x43a490) fills it from these sources:
+
+- **The track's environment map** (0x6115d8, R3DCar_LoadEnvMap 0x440900):
+  - `<track>.map`'s header colours: tint, ambient, interior, interior diffuse, light decal.
+  - Its road slices (`section%d`): a node range, three reflection textures open and three under a roof,
+    texture size and aspect.
+  - `<track>.env`, the slices' textures, in a texture bank of class 2.
+- **The light under the car** (0x474600 → 0x474660): the colours of the road polygon's vertices (5:5:5),
+  each channel interpolated as a plane at the car. Of a quad, the triangle holding the car. This is how
+  cars darken under trees and in tunnels.
+- **Ambients** 0 to 2, for the exterior, interior and light decals: that light times the map's ambient,
+  then times interior or light decal.
+- **Diffuses** 0 to 2: the light times the tint, the interior diffuse, or the light decal.
+- **The light direction**: away from the sun, whose position is 0x460f50 from the sky configuration
+  (+0x3c, +0x44, +0x48, +0xcdc, +0xce0, +0xce4). Under a roof (a surface above with flags 0xc000) it
+  points straight down.
+- **The slice's reflection textures** (by level, open or covered) when the chrome option is 2
+  (0x6197cb), the road's axes transposed for their projection, and the car's place across and along
+  the road at its node, in sixths.
+- **The nearest dynamic light** (0x456030), not ported.

@@ -1431,3 +1431,64 @@ WTreeElems *WTree_EdgesAlong(const float seg[6])   /* 0x473d60 */
 }
 
 double WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]) { return plane_height(n, v, p); }
+
+/* The light at p from the polygon under it (0x474600 -> 0x474660): the tracker moved to p first (a copy);
+   of a quad the triangle that holds p (by the signs of its edges' crossings, from the second corner),
+   then each channel of its vertices' 5:5:5 colours (bits 10-14, 5-9, 0-4, x 8 / 255) as the height of
+   their plane at p (0x474570, 0x489f90), at most 1. (1, 1, 1, 1) without a polygon. */
+
+void WSurface_Light(const WSurface *s, const float p[3], float out[4])
+{
+    WSurface t = *s;
+    WSurface_Update(&t, p, true);   /* 0x473fc0 */
+    out[0] = out[1] = out[2] = out[3] = 1.0f;
+    WTreeElem *e = t.elem;
+    if (!e) return;
+    int n = e->vt->nvertices(e);
+    const float *v[4];
+    uint16_t col[4];
+    for (int i = 0; i < n && i < 4; i++) {
+        v[i] = e->vt->vertex(e, i);
+        col[i] = e->vt->colour(e, i);
+    }
+    const float **pv = v;
+    uint16_t *pc = col;
+    if (n == 4) {
+        float s1 = (p[2] - v[1][2]) * (v[0][0] - v[1][0]) - (p[0] - v[1][0]) * (v[0][2] - v[1][2]);
+        if (!(0 < fbits(s1))) {   /* (the float's bits compared as an integer, as the original) */
+            float s2 = (p[2] - v[2][2]) * (v[1][0] - v[2][0]) - (p[0] - v[2][0]) * (v[1][2] - v[2][2]);
+            float s3 = (p[2] - v[0][2]) * (v[2][0] - v[0][0]) - (p[0] - v[0][0]) * (v[2][2] - v[0][2]);
+            if (!(0 < fbits(s2)) && !(0 < fbits(s3))) goto tri;
+        }
+        /* the other triangle: corners 0, 2, 3 (the first two slots shifted) */
+        v[1] = v[0];
+        col[1] = col[0];
+        pv = v + 1;
+        pc = col + 1;
+    }
+tri:;
+    const float k = 0.003921569f;   /* 0x5b3884 */
+    float ch[3][3];
+    for (int i = 0; i < 3; i++) {
+        uint16_t c = pc[i];
+        ch[0][i] = (float)(int16_t)((c >> 7) & 0xf8) * k;
+        ch[1][i] = (float)(int16_t)((c >> 2) & 0xf8) * k;
+        ch[2][i] = (float)((c & 0x1f) << 3) * k;
+    }
+    for (int c = 0; c < 3; c++) {
+        float tri3[9];
+        for (int i = 0; i < 3; i++) {
+            tri3[3 * i] = pv[i][0];
+            tri3[3 * i + 1] = ch[c][i];
+            tri3[3 * i + 2] = pv[i][2];
+        }
+        float a[3] = {tri3[3] - tri3[0], tri3[4] - tri3[1], tri3[5] - tri3[2]};
+        float b[3] = {tri3[0] - tri3[6], tri3[1] - tri3[7], tri3[2] - tri3[8]};
+        float nrm[3];
+        cross(a, b, nrm);
+        normalize(nrm, nrm);
+        if (0.9999f <= nrm[1]) nrm[1] = 0.99989998f;   /* 0x5b3e0c, 0x3f7ff972 */
+        double hgt = WTree_PlaneHeight(nrm, tri3, p);
+        out[1 + c] = 1.0 <= hgt ? 1.0f : (float)hgt;
+    }
+}

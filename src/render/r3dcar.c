@@ -815,7 +815,17 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
     EAGL_MatPostMul(EAGL_StackTopForWrite(model), &m);
     EAGL_MatTranslation(&m, st->pos[0] - c[0], st->pos[1] - c[1], st->pos[2] - c[2]);
     EAGL_MatPostMul(EAGL_StackTopForWrite(model), &m);
+    /* its light block as the layers' environment, a copy for the draw (0x4433c0: 0x65 words) */
+    float *saved = g_rlayer_lights;
+    static float env[CARLIGHT_SIZE / 4];
+    if (car->lit) {
+        memcpy(env, car->light.f, sizeof env);
+        g_rlayer_lights = env;
+        g_rlayer_envtex = car->light.tex;
+    }
     car_draw_lods(car, model);
+    g_rlayer_lights = saved;
+    g_rlayer_envtex = NULL;
     EAGL_StackPop(model);
     Render_SetCull(g_render);
 }

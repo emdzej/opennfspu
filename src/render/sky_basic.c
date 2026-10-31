@@ -931,3 +931,19 @@ SkyMulti *SkyMulti_ctor(SkyMulti *s, SkyRecord *rec, SkyTextures *tex, SkyConfig
         if (opaque_tex[i] && opaque_map[i] && s->blend[i]) s->blend[i]->v[1] = 0;
     return s;
 }
+
+/* The sun's position (0x460f50 from the sun's constructor 0x460640): the configuration's offsets
+   (+0xcdc, +0xce0) turned by its angle (+0x3c, turns), its height (+0x48) less the dome's curve (+0x44)
+   at that distance, scaled (+0xce4); w 1. */
+bool Sky_SunPosition(float out[4])
+{
+    const SkyConfig *c = Sky_Config();
+    if (!c || !c->data) return false;
+    float x = cfg_f(c, 0xcdc), y = cfg_f(c, 0xce0), a = cfg_f(c, 0x3c), h = cfg_f(c, 0x48), k = cfg_f(c, 0x44), sc = cfg_f(c, 0xce4);
+    double co = (float)cos_turns(a), si = sin_turns(a);
+    out[0] = (float)((si * y + co * x) * sc);
+    out[1] = (h - (y * y + x * x) * k) * sc;
+    out[2] = (float)((co * y - si * x) * sc);
+    out[3] = 1.0f;
+    return true;
+}

@@ -63,4 +63,5 @@ void RenderOptions_Load(void)
     free(text);
     char v[8];
     if (plat_param("sky_detail", v, sizeof v)) g_renderopts.skyrendering = atoi(v);
+    if (plat_param("carchrome", v, sizeof v)) g_renderopts.carchrome = atoi(v);   /* (a viewer aid: the reflections) */
 }

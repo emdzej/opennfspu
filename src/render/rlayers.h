@@ -24,6 +24,8 @@ EaglLayer *RLayers_Create(uint32_t type, uint32_t id);
      (a, r, g, b), diffuse at 0x58 + 16 i, the light direction at 0x48, diffuse multipliers at 0x90). */
 extern float g_rlayer_eye[3];
 extern float *g_rlayer_lights;      /* 0x6115cc */
+/* (port) the reflection textures of the environment by level (the original's +0xdc words). */
+extern struct Texture **g_rlayer_envtex;
 
 /* The vertex cache of TransformIndexCoords (0x613e10: 4 slots of a source, its count, 0x1000 bytes of
    transformed positions and 0x400 of clip codes, an age stamp and the context flags of the transform),

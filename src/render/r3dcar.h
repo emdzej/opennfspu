@@ -17,6 +17,7 @@
    the structs below hold the fields the ported code reads, each commented with its offset in the
    original, not the whole layout. */
 #pragma once
+#include "render/carlight.h"
 #include "eagl/eagl.h"
 #include "real/texture.h"
 #include "render/car_ini.h"
@@ -128,6 +129,9 @@ typedef struct R3DCar {
     /* port: the pages' texture states (the original's live on R3DObject_LoadHeader's stack, and the
        pages keep a pointer to them). */
     TextureStates pagestates;
+    /* port: the car's light block (the original's +0x2dc: render/carlight.h), and whether it was set */
+    CarLight light;
+    bool lit;
 } R3DCar;
 
 /* Game state the renderer reads (globals of the original). */
