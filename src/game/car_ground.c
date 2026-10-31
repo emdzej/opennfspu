@@ -640,17 +640,16 @@ static void player_distance(Car *c)
     *CAR_F(c, 0x78) = best;
 }
 
-/* The road node nearest the car (the body tracker's, +0x8): from the last one (the junction's other
-   segment, the tracker's +0x4, isn't ported with the junctions). 0x4743a0 */
-static void track_node(Car *c)
+void WSurface_TrackNode(WSurface *s, const float p[3])
 {
-    WSurface *s = &c->body;
     int16_t old = s->node;
     if (s->f4 >= 0) PENDING_NOTE(0x481560, "the road node by the junction's two segments");
-    if (g_road && g_road->nnodes) s->node = (int16_t)Road_NearestNode(g_road, CAR_F(c, 0x330), s->node);
+    if (g_road && g_road->nnodes) s->node = (int16_t)Road_NearestNode(g_road, p, s->node);
     s->changed = s->node != old;
     s->node_changed = s->node != old;
 }
+
+static void track_node(Car *c) { WSurface_TrackNode(&c->body, CAR_F(c, 0x330)); }
 
 static const float *node_vec(int node, int off) { return (const float *)(const void *)(g_road->nodes + node * ROAD_NODE_SIZE + off); }
 

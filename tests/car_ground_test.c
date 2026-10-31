@@ -5,6 +5,7 @@
 #include "exe.h"
 #include "game/car.h"
 #include "game/car_physics.h"
+#include "game/race_car.h"
 #include "game/race_setup.h"
 #include "game/road.h"
 #include "game/track.h"
@@ -18,13 +19,13 @@
 static int fails, checks;
 #define CHECK(x) do { checks++; if (!(x)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); } } while (0)
 
-/* The car set up for the race (0x49b480 with the specs' mass) and put on the road at a node facing +z
-(the grid placement isn't ported: CarSim_PlaceOnGround stands in), then lifted by `lift`. */
-static void place(Car *c, const float at[3], float lift)
+/* The car set up for the race (0x49b480 with the specs' mass), put on the road's centre at node n along
+   it (0x49b000), then lifted by `lift`. */
+static void place(Car *c, int n, float lift)
 {
     CarSim_Init(c, 0, *SPEC_F(c, 0x40) * 0.0078125f, *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));
-    static const float fwd[3] = {0, 0, 1};
-    CarSim_PlaceOnGround(c, at, fwd);
+    static const float centre[3] = {0, 0, 0};
+    CarSim_Place(c, n, centre, 1);
     CAR_F(c, 0x330)[1] += lift;
     CarSim_BodyPoints(c);
 }
@@ -59,7 +60,7 @@ int main(void)
         g_sim_tick = 0;
         const float *node = Road_NodePos(g_road, 10);
         float ground = WSurface_HeightAt(node);
-        place(c, node, 0.6f);
+        place(c, 10, 0.6f);
         run(256);   /* four seconds */
         const float *pos = CAR_F(c, 0x330), *vel = CAR_F(c, 0x33c);
         float above = pos[1] - ground, speed = sqrtf(vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]);

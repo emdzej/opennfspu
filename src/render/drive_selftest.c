@@ -6,6 +6,7 @@
 #include "game/car_physics.h"
 #include "game/race_setup.h"
 #include "game/race.h"
+#include "game/race_car.h"
 #include "game/scene.h"
 #include "game/track.h"
 #include "game/wtree.h"
@@ -44,10 +45,10 @@ static void set_env(void)   /* the track viewer's light until the sky's is porte
 }
 
 /* The cars through their renderers, their states taken from the simulation. The port's R3DCar_Draw takes
-   its flips as the car viewer's y-down camera needs them, while the simulation's world is y-up: the
-   car's up row goes to the renderer negated (and its centre, the up row times the half height, with
-   it), which draws the car upright with the winding the draw's cull flip expects. To fold into
-   R3DCar_Draw and the car viewer when the race's car draw (0x43f610) is ported. */
+   its flips as the car viewer's y-down camera needs them: the car's right and up rows go to the renderer
+   negated (a half turn about its forward axis), and its centre down by the up row times the full height,
+   which draws the car upright with the winding the draw's cull flip expects. To fold into R3DCar_Draw
+   and the car viewer when the race's car draw (0x43f610) is ported. */
 static void draw_cars(RCamera *c)
 {
     for (int i = 0; i < g_ncars; i++) {
@@ -56,7 +57,7 @@ static void draw_cars(RCamera *c)
         if (!r || !r->state) continue;
         const float *m = CAR_F(car, 0x364), *p = CAR_F(car, 0x330);
         R3DCarState *st = r->state;
-        for (int k = 0; k < 9; k++) st->rot[k] = k >= 3 && k < 6 ? -m[k] : m[k];
+        for (int k = 0; k < 9; k++) st->rot[k] = k < 6 ? -m[k] : m[k];
         float h = st->halfsize[1];
         for (int k = 0; k < 3; k++) st->pos[k] = p[k] - 2.0f * m[3 + k] * h;
         R3DCar_Draw(r, &c->view->model);
@@ -116,29 +117,8 @@ static bool load(const char *track, const char *carname)
     Car_Construct();
     if (g_ncars < 1) return false;
     Car *c = g_cars[0];
-    /* On the start line, along the road (as the track viewer finds its heading). */
-    float pos[3] = {0, 0, 0}, m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-    if (!Scene_StartLine(pos, m)) {
-        SceneElem *e = Scene_Camera(Scene_FirstCamera(false));
-        if (e) {
-            scene_pos(e, pos);
-            scene_mat(e, m);
-        }
-    }
-    SceneElem *t = Scene_FindTriggerByType(2);
-    if (t && scene_i32(t, 0xe8)) {
-        m[0] = scene_f32(t, 0xc8);
-        m[1] = scene_f32(t, 0xcc);
-        m[2] = scene_f32(t, 0xd0);
-    }
-    /* The race's car set-up (0x49b480 with the specs' mass, as 0x410790 calls it) and a place on the road
-       just past the start line (the grid placement isn't ported). */
-    CarSim_Init(c, 0, *SPEC_F(c, 0x40) * 0.0078125f, *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));
-    float fx = m[0], fz = m[2], n = sqrtf(fx * fx + fz * fz);
-    if (n < 1e-6f) { fx = 0; fz = 1; n = 1; }
-    float at[3] = {pos[0] + fx / n * 4.0f, pos[1], pos[2] + fz / n * 4.0f}, fwd[3] = {fx, 0, fz};
-    CarSim_PlaceOnGround(c, at, fwd);
-    CarSim_ResetDrive(c);
+    /* The race's set-up: the grid slot behind the start line, on the road (0x410790). */
+    Car_RaceInit(c, 0);
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     g_render_cars = draw_cars;
     set_env();

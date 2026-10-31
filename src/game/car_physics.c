@@ -192,35 +192,3 @@ void CarSim_Init(Car *c, int32_t id, float mass, float hx, float hy, float hz)
     CarSim_LoadBodyPoints(c);             /* 0x49ab30 */
     CarSim_BodyPoints(c);                 /* 0x49ada0 */
 }
-
-void CarSim_PlaceOnGround(Car *c, const float at[3], const float fwd[3])
-{
-    float fx = fwd[0], fz = fwd[2], n = sqrtf(fx * fx + fz * fz);
-    if (n < 1e-6f) {
-        fx = 0;
-        fz = 1;
-        n = 1;
-    }
-    fx /= n;
-    fz /= n;
-    /* Rows right, up, forward; right = (-fz, 0, fx): the left-handed frame of the original's world, in
-       which positive steering turns towards the first row. */
-    float rot[9] = {-fz, 0, fx, 0, 1, 0, fx, 0, fz};
-    memcpy(CAR_F(c, 0x364), rot, sizeof rot);
-    float ground = WSurface_HeightAt(at);
-    /* The lowest body point on the ground. */
-    float low = 0.0f;
-    for (int i = 0; i < *CAR_I(c, 0x32c); i++)
-        if (CAR_F(c, 0x8c + 12 * i)[1] < low) low = CAR_F(c, 0x8c + 12 * i)[1];
-    float *p = CAR_F(c, 0x330);
-    p[0] = at[0];
-    p[1] = ground - low;
-    p[2] = at[2];
-    *CAR_F(c, 0x41c) = ground;   /* the last ground height, as the grid's placement leaves it */
-    /* The ground frame (+0x490 side, +0x49c normal, +0x4a8 forward) as the force task makes it on level
-       ground, for the drive task that runs before it in a tick. */
-    memcpy(CAR_F(c, 0x490), rot, 12);
-    memcpy(CAR_F(c, 0x49c), rot + 3, 12);
-    memcpy(CAR_F(c, 0x4a8), rot + 6, 12);
-    CarSim_BodyPoints(c);
-}

@@ -909,6 +909,19 @@ void WSurface_Init(WSurface *s)
     s->slope[2] = 1.0f;
 }
 
+void WSurface_Reset(WSurface *s, int16_t node)
+{
+    s->f4 = -1;
+    s->node = node;
+    s->surface = 0;
+    s->normal_ok = 0;
+    s->node_changed = 0;
+    s->changed = 0;
+    s->none = 0;
+    s->cell = NULL;
+    s->elem = NULL;
+}
+
 float WSurface_HeightAt(const float p[3])
 {
     load_consts();

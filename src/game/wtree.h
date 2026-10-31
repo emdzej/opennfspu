@@ -124,6 +124,8 @@ typedef struct {
 
 /* A tracker with no polygon: normal up, slope forward (as 0x4744a0 makes one). */
 void WSurface_Init(WSurface *s);
+/* Back to no polygon at road node `node` (the normal and slope stay). 0x473170 */
+void WSurface_Reset(WSurface *s, int16_t node);
 /* The polygon under p (in x, z) whose centre is nearest p in height, among those with surface bits
    (& 0xf); NULL if none. 0x4731a0 */
 WTreeElem *WSurface_FindBelow(WSurface *s, const float p[3]);

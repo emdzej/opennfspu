@@ -15,6 +15,7 @@
 00406080	AIHigh_Traffic_v0	ai	struct	Virtual slot 0 of AIHigh_Traffic (vtable 0x5b2588)
 004067c0	AI_TickAll	ai	high	Calls each car's AI controller (0x5e6774[i], virtual slot 0); a controller without state is first created by 0x414b30
 00406950	Traffic_LoadConfig	ai	med	Loads trafcfg.dat (traffic configuration)
+00406db0	AI_Reset	ai	high	The car's AI state for the race (direction 0xeb0/0xeac, rates, targets)
 00407f50	AI_LoadPersonalities	ai	med	Loads prsonal.bin, scripts.bin, hhglue.bin (AI driver personalities and scripts)
 0040ad40	AI_LoadTuning	ai	med	Loads tuning.bin (AI tuning)
 0040b600	AIState_Normal_v0	ai	struct	Virtual slot 0 of AIState_Normal (vtable 0x5b2668)
@@ -28,7 +29,11 @@
 0040e080	AIState_Purgatory_v2	ai	struct	Virtual slot 2 of AIState_Purgatory (vtable 0x5b2710)
 0040e160	AIState_Purgatory_v0	ai	struct	Virtual slot 0 of AIState_Purgatory (vtable 0x5b2710)
 0040e230	AIState_GotoSlice_v0	ai	struct	Virtual slot 0 of AIState_GotoSlice (vtable 0x5b2720)
-00410790	Car_RaceInit	race	med	The race's per-car set-up (calls 0x49b480, 0x49e010, 0x49aee0, 0x49b000)
+0040e6b0	Road_NoLanes	world	high	Node 1's +0x38 lane count is zero
+0040e6d0	Race_SetSide	race	med	0x5e753c = 1, 0x5e7544 = Road_NoLanes, 0x5e7540 = 0xbe
+0040f110	Car_ClearRace	race	high	The car's race counters cleared (+0xb24 = 0x1c0)
+004105e0	Race_GridSlot	race	high	Grid slot: node ahead of the start by the description's +0x174 position, offset across the road by its parity
+00410790	Car_RaceInit	race	high	The race's per-car set-up: 0x49b480, the carried damage, the grid slot from the start trigger, the placement, the progress, the controls and race fields (port: src/game/race_car.c)
 00410dc0	CarSpecs_Load	sim	low	Car and AI specs records ("carSpecs", "AISpecs")
 00411190	Car_Construct	sim	low	Car object with its parts ("Car_tObj", "Parts_tCarParts")
 00412e90	Input_Sample	input	high	Reads keyboard/joystick into the per-player control state (32 Hz, from the timer or the loop)
@@ -48,9 +53,12 @@
 00415f10	Sim_HalfStep	game	med	Called on even sim ticks (32 Hz): input/replay record step
 00415fe0	Race_UpdatePositions	game	med	Ranks the cars for the race positions
 00416160	Sim_ResetCollisionSlots	sim	low	Resets 8 collision-event slots (16 bytes: -1, -100.0f, 0, 0) at 0x608b38
+004162b0	Race_Progress	race	high	Race progress 0..1 at a road node (reversed on reverse tracks)
 00416ae0	Race_End	game	med	Race finished/aborted: results, state change
 00417030	Race_TickOdd	game	low	Odd-tick race logic
 004171b0	CarSim_PlayerDistance	sim	high	Distance to the nearest human player's car (+0x78)
+00417280	Car_SetFrame	race	high	Car orientation +0x364 from the road axes +0x3b8 (right and forward negated against the road)
+00417330	Car_SetGroundFrame	race	high	Ground frame +0x490 from the road axes +0x3b8 (as 0x417280)
 00417820	Race_TickEven	game	low	Even-tick race logic
 00417a80	HUD_Countdown	hud	med	3-2-1-Go and circle art (321go, circlefull)
 00418450	H321Go_v0	hud	struct	Virtual slot 0 of H321Go (vtable 0x5b27ec)
@@ -484,6 +492,8 @@
 00471ad0	Track_Load	world	high	Loads the track (crp + scn + support files); "ERROR - Couldn't load track"
 00471ba0	BWorld_DeInit	world	high	Frees the track world
 00471bf0	Track_FindCrp	world	high	Lists *.crp in a folder ("No *.crp files in %s")
+004730f0	WSurface_Copy	world	high	Tracker assignment
+00473170	WSurface_Reset	world	high	Tracker back to no polygon at a road node
 004731a0	WSurface_FindBelow	world	high	The polygon under a point nearest in height among those with surface bits
 00473290	WSurface_FindAbove	world	high	The polygon above a point by more than 3.5, its flags
 00473fc0	WSurface_Update	world	high	A surface tracker's polygon for a point (kept while still on it)
@@ -535,6 +545,8 @@
 0047e680	WMidGround_ParsePiece	world	med	section:piece
 0047ea60	WMidGround_ParseObjectDefs	world	med	objectDefs (animdefs.txt)
 0047ec50	WObjectDefs_find	world	med	animdefs.txt definition of a Base type (default: the first)
+00481670	Road_Step	world	high	The node n nodes on along the road (through a junction, else clamped to the segment)
+00481a10	Road_SegmentRange	world	high	A node's segment: progress at its ends (junction +0x28), length, first node
 00482550	WSceneBundle_ctor	world	high	WSceneBundle (0x4c), vtable 0x5b47e0
 00482580	WSceneBundle_v0	world	struct	Virtual slot 0 of WSceneBundle (vtable 0x5b47e0)
 004825b0	WSceneBundle_v5	world	struct	Virtual slot 5 of WSceneBundle (vtable 0x5b47e0)
@@ -624,6 +636,7 @@
 00493a10	CarSim_GearboxWear	sim	high	The gearbox parts' wear (type 3)
 00493aa0	CarSim_AeroWear	sim	high	The aero parts' wear (type 6)
 00493b30	CarSim_TyreBump	sim	high	The tyres' bump amplitude from their parts and damage zones
+00493c60	Parts_Wear	sim	high	Parts' wear (+0x164) moved by their zones' damage (+0x4e4)
 00493db0	CarSim_AfterHit	sim	high	Velocity damped and local speeds after a hit
 00493e80	CarSim_TurnAlong	sim	high	Slow glancing hits turn the car along the wall
 00493f70	CarSim_HitWall	sim	high	The car pushed out of a wall, bounced off its normal; the impact
@@ -638,7 +651,7 @@
 0049ab30	CarSim_LoadBodyPoints	sim	high	The body points from the model's PdnB points, corners first
 0049ae30	CarSim_ShiftCompression	sim	high	The wheels' compressions moved with the body
 0049aee0	CarSim_Track	sim	high	The road tracking task: node, body surface, plane, heading
-0049b000	CarSim_PlaceOnRoad	sim	med	The car put on the road (position, its plane); not ported yet
+0049b000	CarSim_Place	sim	high	The car on the road at a node with an offset in the road's axes: frame from the polygon, trackers, wheels on the ground (port: race_car.c)
 0049b480	CarSim_Init	sim	high	The car's simulation state for the race: id, box, mass, inertia, still, upright
 0049b9a0	CarSim_GroundFrame	sim	high	The car's frame on the ground (+0x490..+0x4b0)
 0049bb10	CarSim_ClampTurn	sim	high	Angular velocity limits after a hard landing
@@ -1530,6 +1543,7 @@
 00532430	Mat3_AxisRotation	math	high	3x3 rotation by a fraction of a turn about an axis; the identity at 0
 00532550	Math_SinTurns	math	high	sin(x * 0x5bb2c0)
 00532560	Math_CosTurns	math	high	cos(x * 0x5bb2c0)
+005325f0	Vec3_Cross	math	high	a x b (0x56e6a5)
 00532640	Vec3_Normalize	math	high	v * (1 / length)
 00532680	Vec3_Dot	math	high	3-component dot product (thunk to 0x56e681)
 005328f0	INPUT_init	input	high	DirectInput device setup

@@ -132,3 +132,40 @@ int Road_SegmentOf(const Road *r, int n)
         if (r->seg[i].first <= n && n <= r->seg[i].last) return i;
     return -1;
 }
+
+int Road_Step(const Road *r, int n, int by, int branch)
+{
+    int s = Road_SegmentOf(r, n);
+    if (s < 0) return n;   /* (the original reads past its segments) */
+    int to = by + n;
+    const RoadSegment *g = &r->seg[s];
+    if (g->first <= to && to <= g->last) {
+        if (to >= r->nnodes) to = r->nnodes - 1;
+        if (to < 0) to = 0;
+        return to;
+    }
+    /* Off the segment's end: on through the junction there, else stopped at the end. */
+    int end = g->last < to ? g->last : g->first;
+    if (r->node_junction[end] >= 0)
+        PENDING_NOTE(0x481670, "the road's step through a junction (the junctions aren't built)");
+    (void)branch;
+    return end;
+}
+
+void Road_SegmentRange(const Road *r, int n, float *start, float *end, int *count, int *first)
+{
+    int s = Road_SegmentOf(r, n);
+    if (s < 0) {
+        *end = 0.0f;
+        *start = 0.0f;
+        *count = 1;
+        return;
+    }
+    /* Each end's junction carries the race's progress there (+0x28). */
+    PENDING_NOTE(0x481a10, "the progress at the segment's junctions (taken as 0 and 1)");
+    *start = 0.0f;
+    *end = 0.0f;
+    if (*end <= exe_f32(0x5b27a8)) *end = 1.0f;
+    *count = r->seg[s].last - r->seg[s].first + 1;
+    *first = r->seg[s].first;
+}

@@ -6,6 +6,7 @@
 #include "game/car.h"
 #include "game/car_drive.h"
 #include "game/car_physics.h"
+#include "game/race_car.h"
 #include "game/race_setup.h"
 #include "game/road.h"
 #include "game/track.h"
@@ -41,13 +42,9 @@ int main(void)
     CHECK(g_ncars == 1 && g_road && g_road->nnodes > 20);
     if (g_ncars != 1 || !g_road) return 1;
     Car *c = g_cars[0];
-    /* Placed at a node facing the next one (CarSim_PlaceOnGround stands in for the grid placement). */
-    const float *a = Road_NodePos(g_road, 20), *n = Road_NodePos(g_road, 21);
-    float f[3] = {n[0] - a[0], 0, n[2] - a[2]};
-    CarSim_Init(c, 0, *SPEC_F(c, 0x40) * 0.0078125f, *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));
-    CarSim_PlaceOnGround(c, a, f);
+    /* On its grid slot behind the start line (the race's set-up 0x410790). */
+    Car_RaceInit(c, 0);
     float *pos = CAR_F(c, 0x330);
-    CarSim_ResetDrive(c);
     g_sim_tick = 0;
     run(0x1c8);                         /* the countdown */
     float speed0 = *CAR_F(c, 0xd60);
@@ -58,6 +55,17 @@ int main(void)
                (int8_t)c->b[0xd82] - 1, *CAR_F(c, 0xdb4), *CAR_F(c, 0x374), pos[1] - WSurface_HeightAt(pos));
     }
     float v = *CAR_F(c, 0xd60);
+    /* Steering: positive turns towards the car's first row (right = up x forward), as the AI's steering
+       (0x4067c0: the target's direction dotted with that row, times 256) takes it. */
+    float right[3], from[3];
+    memcpy(right, CAR_F(c, 0x364), sizeof right);
+    memcpy(from, pos, sizeof from);
+    *CAR_I(c, 0xd90) = 0x7f;
+    run(64);
+    float side = (pos[0] - from[0]) * right[0] + (pos[2] - from[2]) * right[2];
+    printf("  steering 0x7f for 1 s: %.2f m towards the first row\n", side);
+    CHECK(side > 1.0f);
+    *CAR_I(c, 0xd90) = 0;
     CHECK(fabsf(speed0) < 0.5f);
     CHECK(v > 10.0f && v < 80.0f);
     CHECK((int8_t)c->b[0xd82] >= 2);

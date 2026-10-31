@@ -49,4 +49,11 @@ bool World_LoadSim(UData *root);
 int Road_NearestNode(const Road *r, const float p[3], int near);
 /* The segment holding node n, -1 if none. 0x481b20 */
 int Road_SegmentOf(const Road *r, int n);
+/* The node `by` nodes on from n (back if negative) in n's segment, clamped to the road; past the
+   segment's end on through the junction there (branch: its road, -1 the one going the same way), else
+   the segment's end. 0x481670 */
+int Road_Step(const Road *r, int n, int by, int branch);
+/* Node n's segment as the race's progress runs along it: the progress at its first and last nodes (the
+   last's 1 when it is 0), its length and first node; 0, 0, 1 for a node in no segment. 0x481a10 */
+void Road_SegmentRange(const Road *r, int n, float *start, float *end, int *count, int *first);
 static inline const float *Road_NodePos(const Road *r, int n) { return (const float *)(const void *)(r->nodes + n * ROAD_NODE_SIZE + 4); }

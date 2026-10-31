@@ -3,6 +3,8 @@
    render/camera_math.h. */
 #pragma once
 
+void Vec3_Cross(const float a[3], const float b[3], float out[3]);                   /* 0x5325f0 (0x56e6a5) */
+void Vec3_Unit(const float v[3], float out[3]);                                     /* 0x532640 (the length 0x532890) */
 void Vec3_AddArray(int n, const float *src, const float add[3], float *dst);   /* 0x532070 (0x56e410 each) */
 void Mat3_RotX(float m[9], float turns);                                        /* 0x532310 */
 void Mat3_RotY(float m[9], float turns);                                        /* 0x532370 */
