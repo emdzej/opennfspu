@@ -403,3 +403,28 @@ bool RTexBank_loadfile(RTexBank *b, const char *fsh, uint32_t flags)
     UDataFile_dtor(&f);
     return true;
 }
+
+/* ---- the render module's own art (Render_LoadCommonFsh 0x448a40 and its end 0x448af0) ---- */
+
+RTexBank *g_rtex_common[2];   /* 0x613e04: common.fsh, particle.fsh (class 4) */
+
+void Render_LoadCommonFsh(TexManager *m)
+{
+    for (int i = 0; i < 2; i++) {
+        g_rtex_common[i] = RTexBank_ctor(calloc(1, sizeof *g_rtex_common[i]), m, 4);
+        char path[256];
+        snprintf(path, sizeof path, "%s%s", "GameData\\Render\\", exe_str(exe_u32(0x5cdeac + 4 * (uint32_t)i)));   /* 0x65b30c */
+        if (g_rtex_common[i]) RTexBank_loadfile(g_rtex_common[i], path, 0);
+    }
+}
+
+void Render_FreeCommonFsh(void)
+{
+    for (int i = 0; i < 2; i++) {
+        if (g_rtex_common[i]) {
+            RTexBank_dtor(g_rtex_common[i]);
+            free(g_rtex_common[i]);
+        }
+        g_rtex_common[i] = NULL;
+    }
+}

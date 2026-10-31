@@ -51,6 +51,7 @@ bool app_init(void)
 
 bool app_frame(void)
 {
+    g_app_frames++;
     if (plat_frame_shown()) {
         if (drive_name[0]) DRIVE_selftest(drive_name, car_name);
         else if (track_name[0]) TRACK_selftest(track_name);

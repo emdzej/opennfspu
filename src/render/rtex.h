@@ -97,3 +97,10 @@ void RTexBank_insert(RTexBank *b, Texture *t, uint32_t id, uint32_t name, const 
                      int unused, bool nocommit);
 /* Every image of an FSH file into the bank (id 0, name = the entry's code). False if it can't be read. 0x44d140 */
 bool RTexBank_loadfile(RTexBank *b, const char *fsh, uint32_t flags);
+
+/* The render module's art: GameData\Render\common.fsh (the sun, the flares, the glows, the headlights'
+   'HEAD', ...) and particle.fsh, a class 4 bank each (0x613e04, 0x613e08; Render_LoadCommonFsh 0x448a40,
+   their end 0x448af0). */
+extern RTexBank *g_rtex_common[2];
+void Render_LoadCommonFsh(TexManager *m);
+void Render_FreeCommonFsh(void);

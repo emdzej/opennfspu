@@ -181,6 +181,9 @@ bool GLIDE_env(bool windowed, const char *driver, int display, int mode)
 
 /* ---- display mode and quality ---- */
 
+static int card_type;               /* 0x6197b0: Render_DetectCard's card (pending: 0, never 0xe) */
+uint8_t g_render_modalpha;          /* 0x6197aa */
+
 void Render_DisplayInit(void)
 {
     int w = 640, h = 480, bpp = 16;
@@ -195,6 +198,10 @@ void Render_DisplayInit(void)
     g_display.width = w;
     g_display.height = h;
     PENDING_NOTE(0x44e760, "Render_DetectCard");
+    /* (of it: whether the driver modulates alpha, setstate 0x1c3, except on the card types 2, 3 and 0xe;
+       the port's card is type 0) */
+    g_render_modalpha = THRASH.fn.setstate(THRASH_STATE_MODULATEALPHA, 0) != 0 && card_type != 2 && card_type != 3 &&
+                        card_type != 0xe;
     Render_SetupQuality();
     EAGL_SetDisplaySize((float)w, (float)h);             /* 0x537370: the 2D window's size */
 }
@@ -204,7 +211,6 @@ void Render_DisplayInit(void)
 static int specials_level;          /* 0x6197f4 */
 uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it in this build */
 uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
-static int card_type;               /* 0x6197b0: Render_DetectCard's card (pending: 0, never 0xe) */
 static int car_detail;              /* 0x6197c4 */
 uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb: the cars' dynamic lights and reflections */
 
@@ -428,6 +434,18 @@ void RCamera_Setup(RCamera *c)
     /* Aspect from the viewport's share of a 640x480 screen (0x5b2a8c, 0x5b2a88). */
     EAGL_ViewSetPerspective(v, c->halffov + c->halffov,
                             ((c->x1 - c->x0) * 640.0f) / ((c->y1 - c->y0) * 480.0f), c->znear, c->zfar);
+    if (c->active) EAGL_ContextViewport(g_eagl);
+}
+
+void RCamera_Setup2D(RCamera *c)
+{
+    EaglView *v = c->view;
+    float w = (float)g_display.width, h = (float)g_display.height;
+    EAGL_ViewSetOrtho(v, 1.0f, 0, 10.0f);
+    EAGL_MatTranslation(EAGL_StackTopForWrite(&v->view), -1.0f, 1.0f, -0.1f);
+    EaglMatrix sc;
+    EAGL_MatScale(&sc, 2.0f / w, -2.0f / h, -1.0f, 1.0f);   /* 0x5b2580, 0x5b2628 */
+    EAGL_MatPreMul(EAGL_StackTopForWrite(&v->view), &sc);
     if (c->active) EAGL_ContextViewport(g_eagl);
 }
 

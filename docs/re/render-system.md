@@ -161,3 +161,39 @@ Not ported yet:
 - the cars' light switches (R3DObject +0x2d4), taken as on;
 - the cop cars' red and blue light (0x452920);
 - the UV and ambient variants (0x453b70, 0x453490), which no track uses at the default options.
+
+## Sprites, the sun and the lens flare
+
+The render module's art comes from two class 4 texture banks: `GameData\Render\common.fsh` and
+`particle.fsh` (0x613e04, `Render_LoadCommonFsh` 0x448a40). Its screen sprites are the effects of
+`GameData\Render\flare.dat` (0x452180, the bank 0x61bcc0):
+- 0x8c-byte records sorted by name, looked up by binary search (0x452130). Each has two layers: a texture
+  name (`null` for none), a colour and a size. It also has flags (4 turns the sprite with its screen
+  position) and a blink: phase, on, off, in race ticks.
+- A layer's texture (0x451ff0) is one of the sky's shapes, by the name's bytes the other way round, else
+  common.fsh's: `SUNA`, `FLR0`, `BLUR`, `GLAR`. `lens` is in neither file, so the flare elements that ask
+  for it draw nothing.
+- One quad mesh draws them all (0x451360). The draw (0x4515e0) places each layer as a quad of
+  size × 0.1 / 640 of the screen's width and / 480 of its height, turned by (x + y) / 1440 turns. Below
+  alpha 1 the colours' alpha is scaled; below 0.05 the layer is skipped.
+
+The sun (0x460640, 0x1a0 bytes at 0x627e5c):
+- Its place is `Sky_SunPosition` (0x460f50). It only exists when the configuration's offsets (+0xcdc,
+  +0xce0) put it off the zenith by more than 0.02. Autobahn, canyon, forest, foothills and Monaco 1 have
+  it at the zenith: no sun sprite, no flare.
+- Among the sky's levels, after those flagged 0x400 (0x460150), the "anus" sprite is drawn at its
+  projected place in a pixel view (0x466f70: orthographic, x right, y down). This only happens when the
+  sun is on the screen and in front.
+- The first time, the 4 × 4 pixels round it are read back (`THRASH_readrect`) as the reference. This
+  needs the driver to modulate alpha (0x6197aa, Render_DetectCard's setstate 0x1c3 = the caps word 0x13).
+  The reference also tells 16-bit from 32-bit pixels: the last word stays 0 in 16-bit modes.
+- After the world (0x45d060 → 0x460320), with the LENSFLARE option (0x657d7c) and the configuration's
+  +0xdd8, the pixels are read again every 200 ms (GetTickCount). The count of unchanged ones / 16 is
+  the flare's alpha.
+- The flare is thirteen sprites, "bnus" to "nnus", on the line from the sun through the screen's centre,
+  at `flarepos.dat`'s distances (defaults 1, 0.75, -0.75, 0.5, ...).
+- If reading back takes over 5 ms on average after 10 reads, the flare stops for good.
+
+In the port, GetTickCount is the frames stepped at 60 Hz (`app_ticks_ms`), so runs repeat. gasm-run 0.16
+returns pixels from `read_pixels` only when it runs with `--screenshot`. Without it, the reads are zeros:
+the reference and every read match, and the flare shows at full strength even behind the world.

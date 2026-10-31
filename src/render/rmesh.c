@@ -75,20 +75,23 @@ void RMesh_dtor(RMesh *m)
 /* 0x468380: the layers of a stage. The texture's states for it: clamped unless noclamp (0x5377e0 with
    noclamp == 0), state 1 on (0x5377b0), state 0 when the quality row of class 1 starts with 0x10
    (0x5377a0 with RTex_Quality 0x44deb0), set on the texture (0x5361e0). */
+static void tex_states(Texture *tex, int noclamp)
+{
+    TextureStates st = tex->states;
+    TextureStates_settile(&st, noclamp == 0);
+    TextureStates_set(&st, 1, 1);
+    const uint8_t *q = RTex_quality(1);
+    TextureStates_set(&st, 0, q && *q == 0x10);
+    Texture_setstates(tex, &st);
+}
+
 static void stage_layers(RMesh *m, int s, Texture *tex, void *blend, void *uvs, void *colours, int noclamp)
 {
     EAGL_MaterialAddLayer(m->mat, EAGL_CreateLayer(3, 0, 0x20));
     *slot(m, s, m->slot_uv) = (EaglStream){(uint32_t)m->nverts << 3, uvs};
     EAGL_MaterialAddLayer(m->mat, EAGL_CreateLayer(4, 0, 0x20));
     *slot(m, s, m->slot_tex) = (EaglStream){0x54, tex};
-    if (tex) {
-        TextureStates st = tex->states;
-        TextureStates_settile(&st, noclamp == 0);
-        TextureStates_set(&st, 1, 1);
-        const uint8_t *q = RTex_quality(1);
-        TextureStates_set(&st, 0, q && *q == 0x10);
-        Texture_setstates(tex, &st);
-    }
+    if (tex) tex_states(tex, noclamp);
     EAGL_MaterialAddLayer(m->mat, EAGL_CreateLayer(8, 0, 0x20));
     *slot(m, s, m->slot_blend) = (EaglStream){0x18, blend};
     EAGL_MaterialAddLayer(m->mat, EAGL_CreateLayer(6, 0, 0x20));
@@ -125,6 +128,14 @@ void RMesh_setUVs(RMesh *m, int stage, void *uvs) { *slot(m, stage, m->slot_uv) 
 void RMesh_setColours(RMesh *m, int stage, void *colours)
 {
     *slot(m, stage, m->slot_colour) = (EaglStream){(uint32_t)m->nverts << 2, colours};
+}
+
+void RMesh_setBlend(RMesh *m, int stage, void *blend) { *slot(m, stage, m->slot_blend) = (EaglStream){0x18, blend}; }
+
+void RMesh_setTexture(RMesh *m, int stage, Texture *tex, int noclamp)
+{
+    *slot(m, stage, m->slot_tex) = (EaglStream){0x54, tex};
+    if (tex) tex_states(tex, noclamp);
 }
 
 void RMesh_setIndexPositions(RMesh *m, void *idx, uint32_t info) { m->streams[m->slot_pos2] = (EaglStream){info, idx}; }

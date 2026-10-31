@@ -21,6 +21,8 @@
 #include "real/texture.h"
 #include "render/r3dcar.h"
 #include "render/render.h"
+#include "render/rtex.h"
+#include "render/sprite.h"
 #include "render/render_pending.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
@@ -80,8 +82,11 @@ static bool load(const char *track, const char *carname)
     snprintf(g_track_name, sizeof g_track_name, "%s", track);
     Track_Load();
     if (!g_world || !g_world->root) return false;
+    Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
+    Sprites_Init();                     /* 0x451360 */
     Sky_LoadFsh(g_track_name, false);
+    SpriteBank_Load();                  /* 0x452090 */
     CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
     Headlights_Load();                  /* 0x452460 */
     RaceViews_ctor(&views);

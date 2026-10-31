@@ -35,6 +35,7 @@ typedef struct {
     int specialfx;              /* 0x657d6c */
     int adjustableviewdistance; /* 0x657d70 */
     int headlights;             /* 0x657d78 */
+    int lensflare;              /* 0x657d7c */
     int gammacorrection;        /* 0x657d80 */
     int skyrendering;           /* 0x657d9c SKYRENDERING: the sky's level (0 low .. 3 amazing: which blocks of
                                    Sky\<name>.txt count, and the light slot); a front-end option, so not in
@@ -164,6 +165,7 @@ typedef struct {
 extern RenderSystem *g_render;      /* 0x628130 */
 extern uint8_t g_render_skiplod0;   /* 0x6197e5: draw objects start at their second LOD */
 extern uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb (the chrome option 2) */
+extern uint8_t g_render_modalpha;   /* 0x6197aa: the driver modulates alpha (Render_DetectCard) */
 extern uint8_t g_render_extras;     /* 0x6197e6: the extra 'pr' lists (0x40000) and the effects lists */
 extern RenderState *g_racerstate;   /* 0x62814c: the race's copy of the device's render states */
 
@@ -185,6 +187,8 @@ void RFrame_Init(RFrame *f);                             /* 0x4660a0 */
 void RFrame_ToView(RFrame *f);                           /* 0x4661a0 */
 /* The camera's viewport (when the display mode changed), view matrix and projection. 0x466e70 */
 void RCamera_Setup(RCamera *c);
+/* The camera's view as the screen in pixels (x right, y down; z 0..10 orthographic). 0x466f70 */
+void RCamera_Setup2D(RCamera *c);
 void View_Begin(RenderSystem *r, RCamera *c);            /* 0x467170 */
 void View_End(RenderSystem *r);                          /* 0x4671e0 */
 

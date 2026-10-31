@@ -19,6 +19,7 @@ static struct { const char *name; int *v; } ints[] = {
     {"widescreen", &g_renderopts.widescreen}, {"carchrome", &g_renderopts.carchrome},
     {"cardetail", &g_renderopts.cardetail}, {"specialfx", &g_renderopts.specialfx},
     {"adjustableviewdistance", &g_renderopts.adjustableviewdistance}, {"headlights", &g_renderopts.headlights},
+    {"lensflare", &g_renderopts.lensflare},
     {"gammacorrection", &g_renderopts.gammacorrection}, {"drawsync", &g_renderopts.drawsync},
     {"viewdistance", &g_renderopts.viewdistance}, {"skyrendering", &g_renderopts.skyrendering},
 };
@@ -64,4 +65,5 @@ void RenderOptions_Load(void)
     char v[8];
     if (plat_param("sky_detail", v, sizeof v)) g_renderopts.skyrendering = atoi(v);
     if (plat_param("carchrome", v, sizeof v)) g_renderopts.carchrome = atoi(v);   /* (a viewer aid: the reflections) */
+    if (plat_param("lensflare", v, sizeof v)) g_renderopts.lensflare = atoi(v);   /* (and the sun's flare) */
 }

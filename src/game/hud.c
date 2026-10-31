@@ -188,7 +188,7 @@ static HudVisual *countdown_new(void)
     static const uint32_t csize[3] = {0x5cc860, 0x5cc858, 0x5cc850};
     for (int i = 0; i < 3; i++)
         g->centre[i] = HudArt_load(cfiles[i], cindex[i], g->cx, g->cy, exe_i32(csize[i]), exe_i32(csize[i] + 4), false, true, false);
-    g->plain = 1;   /* (0x6197aa, a display capability the port's options don't set: != 1) */
+    g->plain = g_render_modalpha != 1;   /* 0x6197aa */
     return &g->base;
 }
 

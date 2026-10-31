@@ -2,6 +2,7 @@
    (0x45cef0) and the draw (0x45d3b0) of the world draw's first sky call (0x45d690), the after-the-world pass
    (0x45d060 via 0x45d6b0). See sky.h. */
 #include "render/sky.h"
+#include "render/sky_sun.h"
 #include "eagl/eagl.h"
 #include "exe.h"
 #include "game/track.h"
@@ -381,7 +382,7 @@ static Sky *Sky_ctor(Sky *s, const char *name)
     s->config = Sky_Config();
     PENDING_NOTE(0x45ca40, "the sky's colour grid (0x627e3c)");
     lightning_create(s->config);                             /* 0x45cb00 */
-    PENDING_NOTE(0x4600b0, "the sun and its lens flare (0x627e5c)");
+    Sun_Create(s->config);                                   /* 0x4600b0 */
     Sky_CreateLight(g_renderopts.skyrendering);             /* 0x459820 */
     if (s->config && s->config->data) {
         s->blend = malloc(sizeof *s->blend);
@@ -561,7 +562,7 @@ static void sky_draw(Sky *s)
     sky_fog(s, false);   /* 0x45d1a0 */
     for (int i = 0; i < s->nlayers; i++)
         if (s->layer[i] && (s->layer[i]->flags & 0x400)) draw_layer(s, c, i, heading, fwd[1]);
-    PENDING_NOTE(0x460150, "the sun and the lens flare");
+    if (g_sun) Sun_Draw(g_sun);                              /* 0x460150 */
     for (int i = 0; i < s->nlayers; i++)
         if (s->layer[i] && !(s->layer[i]->flags & 0x400)) draw_layer(s, c, i, heading, fwd[1]);
     PENDING_NOTE(0x516210, "0x516210 (twice) after the sky");
@@ -582,7 +583,33 @@ void Sky_DrawBefore(void)   /* 0x45d690 */
     sky_draw(g_sky);
 }
 
+/* 0x45d060: the lens flare around the eye, as the sky was drawn (the render states of sky_draw). */
+static void sky_after(Sky *s)
+{
+    if (!g_sun || !g_sun->enabled) return;
+    RCamera *c = g_render->camera;
+    RenderState *rs = g_render->device->rs;
+    int s39 = rs->state39, s28 = rs->state28;
+    rs->state39 = 0;
+    EAGL_RSSet(0x39, 0);
+    rs->state28 = 7;
+    EAGL_RSSet(0x28, 7);
+    RFrame f = c->frame;
+    memcpy(s->eye, c->frame.eye, sizeof s->eye);
+    memset(c->frame.eye, 0, sizeof c->frame.eye);    /* 0x4660e0 */
+    memset(c->frame.trans, 0, sizeof c->frame.trans);
+    THRASH.fn.setstate(0x24, 10);
+    RCamera_Setup(c);
+    Sun_DrawFlare(g_sun);                             /* 0x460320 */
+    rs->state39 = s39;
+    EAGL_RSSet(0x39, (uint32_t)s39);
+    rs->state28 = s28;
+    EAGL_RSSet(0x28, (uint32_t)s28);
+    c->frame = f;
+    RCamera_Setup(c);
+}
+
 void Sky_DrawAfter(void)    /* 0x45d6b0 -> 0x45d060 */
 {
-    if (g_sky) PENDING_NOTE(0x45d060, "the sky's after-the-world pass (0x460320)");
+    if (g_sky) sky_after(g_sky);
 }

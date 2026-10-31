@@ -7,6 +7,8 @@
 #include "real/texture.h"
 #include "render/rdraw.h"
 #include "render/render.h"
+#include "render/rtex.h"
+#include "render/sprite.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
 #include "render/noise.h"
@@ -78,8 +80,11 @@ static bool load(const char *name)
     snprintf(g_track_name, sizeof g_track_name, "%s", name);
     Track_Load();
     if (!g_world || !g_world->root) return false;
+    Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
+    Sprites_Init();                     /* 0x451360 */
     Sky_LoadFsh(g_track_name, false);   /* as Render_RaceInit (0x468ef0) does */
+    SpriteBank_Load();                  /* 0x452090 */
     RaceViews_ctor(&views);
     camera = views.main;
     float pos[3] = {0, 0, 0}, m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
