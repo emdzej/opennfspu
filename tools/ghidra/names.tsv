@@ -1646,6 +1646,7 @@
 00536310	Texture_rename	real	high	Name (19 chars)
 00536350	SYNCTASK_add	real	high	Named after its own error message (\real\cmn\systask.c)
 00536450	SYNCTASK_run	real	high	\real\cmn\systask.c: runs due periodic tasks when the timer ticked (port: src/real/systask.c)
+005365e0	FONT_initdtex	real	med	Installs the DTEX font driver (0x5dfb60) and the default font
 00536a80	FEAliasedPositionableAccessor_v29	frontend	struct	Virtual slot 29 of FEAliasedPositionableAccessor (vtable 0x5b4be4)
 00536bc0	MOUSE_init	input	high	\real\patch3\pc\mouse.c: DirectInput mouse
 00536e30	MOUSE_setstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
@@ -1722,13 +1723,24 @@
 0053b870	STARTUP_createwindow	sys	high	CreateWindowExA, sized with AdjustWindowRectEx
 0053bdd0	wininittimer	real	high	Named after its own error message (\real\pc\lowtimer.c)
 0053c050	TIMER_ticks	timer	high	Current timer tick count
+0053c430	FONT_open	real	high	Font object (0xec) over an FNTF file in memory (port: src/real/font.c)
+0053c640	FONT_setdriver	real	high	The font driver table (0x5dec18 software, 0x5dfb60 DTEX)
 0053cc40	FONT_drawtext	real	high	Named after its own error message (\real\pc\fontpc.c)
+0053d510	FONT_setclip	real	high	Clip rectangle (clip on)
+0053d690	FONT_glyph	real	high	Glyph of a character (11-byte records, direct then halving search 0x53d6e0)
+0053d730	FONT_print	real	high	Draw text now
+0053d7b0	FONT_drawquads	real	high	Texture (re)made, set, quads drawn through the driver
+0053d820	FONT_build	real	high	Text to quads (pen, newline, tabs, kerning, other case)
+0053da90	FONT_quad	real	high	A glyph quad (slant, offsets, corner colours, clip)
+0053dd00	FONT_clipquad	real	high	Quad clipped to the font clip rectangle with uv
+0053e0d0	FONT_makemesh	real	high	Text mesh (0x20)
 0053e230	FONT_drawmesh	real	high	Named after its own error message (\real\patch3\cmn\fontdraw.c)
 0053e2b0	FONT_freemesh	real	high	Named after its own error message (\real\patch3\cmn\fontdraw.c)
 0053e330	FONT_setstate	real	high	Named after its own error message (\real\cmn\fontattr.c)
 0053e600	FONT_setstatef	real	high	Named after its own error message (\real\cmn\fontattr.c)
 0053e730	FONT_getstate	real	high	Named after its own error message (\real\cmn\fontattr.c)
 0053e940	FONT_getstatef	real	high	Named after its own error message (\real\cmn\fontattr.c)
+0053ea50	FONT_extent	real	high	Text bounds
 0053eda0	REAL_assert	real	high	REAL library assertion ("Assertion Failed")
 0053ee20	EAGL_RegisterLayerFactory	eagl	high	Adds a factory in front of the chain
 0053eed0	EAGL_MaterialAddLayer	eagl	high	Appends a layer to a material
@@ -1946,6 +1958,9 @@
 00571150	UNPACK_dispatch	file	high	Codec dispatch: 0x10 RefPack, 0x18, 0x30/32/34, 0x46 (port: src/real/pack.c)
 00571240	UNPACK_size	file	high	Unpacked size of a packed block, 0 if not packed
 005713e0	movdfl	real	high	Named after its own error message (\real\pc\movdfl.c)
+00571940	FONTDTEX_create	real	high	Square DTEX pages of the glyph image
+00571ac0	FONTDTEX_update	real	high	Image rows into the pages (4-bit nibbles swapped), palette
+00572040	FONTDTEX_settexture	real	high	Current font texture
 00572070	FONT_dtexdrawquadmesh	real	high	Named after its own error message (\real\cmn\fontdtex.c)
 00572ce0	DEPTH_to565	real	high	8888 -> 565
 00572d0b	DEPTH_to1555	real	high	8888 -> 1555 (0 stays 0)
@@ -1975,6 +1990,7 @@
 005941b0	UNPACK_type18	file	med	Codec of type 0x18 (unused by the data)
 00594510	REFPACK_decode	file	high	RefPack (0x10FB) decoder
 005946a0	REFPACK_copy	file	high	RefPack back-reference byte copy
+00594730	FONT_palette	real	high	Palette from the colour states (0x594790 ramp, 0x594900 outline, 0x5949e0 shadow; mix 0x5947e0)
 00594f50	CONNpackettimeout	real	high	Named after its own error message (\real\cmn\llpacket.c)
 0059d400	Sys_InitPaths	main	med	Game directory from GetModuleFileName (data root for every relative path)
 0059d690	UTIL_loadfileabort	util	high	FILE_loadabort under the search path (NULL if no directory has it)
