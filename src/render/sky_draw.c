@@ -11,6 +11,7 @@
 #include "render/sky_tex.h"
 #include "render/sky_text.h"
 #include "game/car.h"
+#include "game/audio.h"
 #include "game/road.h"
 #include "real/random.h"
 #include <math.h>
@@ -343,10 +344,8 @@ static void lightning_strike(SkyLightning *l)
     float ang = REAL_randf();
     double c = cos_turns(ang), sn = sin_turns(ang);
     float vol = ang * 65535.0f;   /* 0x5b3ed0 */
-    if (REAL_randf() < 0.1f) {    /* 0x5b2604 */
-        (void)vol;
-        PENDING_NOTE(0x4a8110, "the lightning's thunder");
-    }
+    if (REAL_randf() < 0.1f)      /* 0x5b2604 */
+        Audio_Thunder((int32_t)exe_u32(0x5cf104 + 4 * (uint32_t)l->level), (int)lrintf(vol));
     float x = ((half - (float)(sn * dist)) / size) * 15.0f;   /* 0x5b243c */
     float y = (((float)c * dist + half) / size) * 15.0f;
     l->x = x >= 15.0f ? 15.0f : x;

@@ -37,6 +37,7 @@ static int fixdiv(int a, int b) { return (int)((((int64_t)(a % b)) << 16) / b) +
 static void engines_free(void);
 static void stream_close(void);
 static int stream_bank(int type, int idx, bool look);
+static int32_t s_thunder_wait, s_thunder = -1, s_thunder_angle;   /* 0x656494, 0x656834, 0x656498 */
 static int32_t s_nearvol = 0x80;   /* 0x655f34: 0x80 less the cars close to the listener */
 typedef struct {
     int32_t slot;      /* 0x6564a0: the SND bank */
@@ -1388,7 +1389,9 @@ static void track_banks_load(void)
 
 void Audio_StartRace(void)
 {
-    /* 0x4a8430 -> 0x4ae850: the elements' voices */
+    /* 0x4a8430: no thunder waiting; 0x4ae850: the elements' voices */
+    s_thunder = -1;
+    s_thunder_angle = s_thunder_wait = 0;
     for (int v = 0; v < 16; v++) s_ev[v] = (ElemVoice){NULL, -1, -1, 0};
     s_ev_on = true;
     elems_reset();
@@ -1667,6 +1670,28 @@ static void near_tick(int vp, int i)
     if ((*CAR_I(c, CAR_FLAGS) & 0x20) && (*CAR_I(c, 0xecc) & 2)) PENDING_NOTE(0x4aac60, "the cop cars' sirens (0x4aac60, 0x4aad80)");
 }
 
+void Audio_Thunder(int delay, int angle)
+{
+    uint32_t r = REAL_rand();
+    s_thunder_wait = 0x87 - delay;
+    s_thunder = (int32_t)(r % 9) + 0x3df;
+    s_thunder_angle = angle;
+}
+
+/* The thunder's sound asked for while it waits, then played once (0x4a8150). */
+static void thunder_tick(void)
+{
+    if (0 < s_thunder_wait) {
+        s_thunder_wait--;
+        stream_bank(0, s_thunder, false);
+        return;
+    }
+    if (-1 < s_thunder) {
+        play_once(s_banks[5].slot, s_thunder, s_thunder_angle, 0x7f, 0x40, 0x10000, 0x7f);
+        s_thunder = -1;
+    }
+}
+
 void Audio_Tick(void)
 {
     if (!s_on) return;
@@ -1678,7 +1703,7 @@ void Audio_Tick(void)
     memcpy(s_lfwd, cam->orient + 6, sizeof s_lfwd);
     s_lvel = cam->mode != 0xb && (cam->mode == 0xc || cam->mode == 0xe) ? NULL : cam->car ? CAR_F(cam->car, 0x33c) : NULL;
     stream_tick();   /* 0x4b07f0 */
-    PENDING_NOTE(0x4a8150, "the thunder (0x4a8150)");
+    thunder_tick();   /* 0x4a8150 */
     int n = g_sound_quality == 0 ? 4 : g_sound_quality == 1 ? 2 : 1;
     near_update(n);
     if (g_race_players == 1) s_nearvol = 0x80;

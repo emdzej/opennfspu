@@ -24,5 +24,8 @@ void Audio_LoadTrackSounds(void);
 void Audio_StartRace(void);
 /* The start's countdown, step 0 .. 3 ("3", "2", "1", "Go"). 0x4a6010 */
 void Audio_Countdown(int step);
+/* A lightning strike's thunder (0x4a8110): one of track.viv's 991 .. 999 after 0x87 - delay odd ticks,
+   from the angle. */
+void Audio_Thunder(int delay, int angle);
 /* The odd ticks' audio (0x4a7ef0), the listener at the race camera. */
 void Audio_Tick(void);
