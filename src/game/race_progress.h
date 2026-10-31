@@ -32,3 +32,6 @@ void Race_CarProgress(Car *c);
 void Race_CountLap(Car *c);
 void Race_TickEven(void);   /* 0x417820 */
 void Race_TickOdd(void);    /* 0x417030 */
+/* The human players' wrong-way count (+0xd30, ticks going against the race; 0 when right, finished, AI
+   driven, respawning, or in the pursuit), the audio's player tick's part (0x4a7430). */
+void Race_WrongWay(void);

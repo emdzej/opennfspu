@@ -153,7 +153,17 @@ void Hud2D_Flush(void)
         if (v) HudFont_print(t->font, v, t->x, t->y, -1.0f, t->s);   /* 0x536770 */
     }
     ntexts = 0;
-    if (nlines) PENDING_NOTE(0x465f10, "the HUD's lines (0x465f10)");
+    /* The lines, one draw each with the line object (0x62810c, the 0x59ee20 material): two points, their
+       colours, no texture coordinates (0x465f10). */
+    static const float nouv[4];
+    for (int i = 0; i < nlines; i++) {
+        streams[0] = (EaglStream){2 * 16, lines[i].p};
+        streams[1] = (EaglStream){2 * 4, lines[i].c};
+        streams[2] = (EaglStream){2 * 8, (void *)nouv};
+        streams[3] = (EaglStream){0x54, NULL};
+        streams[4] = (EaglStream){0x18, rs};
+        EAGL_MaterialDraw(&mat, streams, 2, 2);
+    }
     nlines = 0;
 }
 

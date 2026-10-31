@@ -260,8 +260,10 @@
 004366a0	HVisual_v0	hud	struct	Virtual slot 0 of HVisual (vtable 0x5b34bc)
 00436880	HWinnings_v0	hud	struct	Virtual slot 0 of HWinnings (vtable 0x5b34d8)
 004368c0	HWinnings_v1	hud	struct	Virtual slot 1 of HWinnings (vtable 0x5b34d8)
+00436dd0	HWrongWay_init	hud	med	Wrong-way warning
 00436e50	HWrongWay_v0	hud	struct	Virtual slot 0 of HWrongWay (vtable 0x5b350c)
 00436ea0	HWrongWay_v1	hud	struct	Virtual slot 1 of HWrongWay (vtable 0x5b350c)
+00437290	HWrongWay_layout	hud	med	Centre text and bracket corners
 00437570	HYesNoOverlay_v0	hud	struct	Virtual slot 0 of HYesNoOverlay (vtable 0x5b3554)
 00437600	HYesNoOverlay_v1	hud	struct	Virtual slot 1 of HYesNoOverlay (vtable 0x5b3554)
 004376a0	HYesNoOverlay_v9	hud	struct	Virtual slot 9 of HYesNoOverlay (vtable 0x5b3554)
@@ -463,6 +465,7 @@
 0045f650	Scroller_FreeClouds_v0	render	struct	Virtual slot 0 of Scroller_FreeClouds (vtable 0x5b3f44)
 0045fa40	Sky_LoadText	render	high	Loads Sky\<name>.txt (sky layers)
 00463af0	Camera_Update	camera	low	Per-frame camera/view update (called each tick when paused or replaying)
+00465f10	HUD_DrawLine	hud	med	A line through the line object 0x62810c
 004660a0	RFrame_Init	render	high	Camera frame: orientation and rotation identity, eye and translation zero
 004661a0	RFrame_ToView	render	high	Frame to world-to-camera rotation (transposed, forward negated) and translation
 00466df0	RCamera_Letterbox	render	med	Widescreen: the main camera's y range (0.15 .. 0.85)
@@ -818,6 +821,7 @@
 004a6730	Audio_Shutdown	audio	med	"audio heap used %d bytes"
 004a6990	AudioCmn_AddBank	game	high	Named after its own error message
 004a6a60	AudioCmn_LoadBank	game	high	Named after its own error message
+004a7430	Audio_PlayerTick	audio	med	Per-player audio; counts wrong-way ticks (+0xd30)
 004a7ef0	Audio_Tick	audio	med	Per-tick audio update (engines, positional sounds)
 004a8260	Audio_LoadSpeech	audio	med	SFXBANK / speech banks
 004a8aa0	Audio_LoadCollisionSounds	audio	med	Collision sound bank (SND_coll)

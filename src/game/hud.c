@@ -945,6 +945,94 @@ static HudVisual *tach_new(void)
     return &d->tray.base;
 }
 
+/* ---- the wrong way (HWrongWay, 0x48 bytes, vtable 0x5b350c; 0x436dd0) ---- */
+
+/* "wrong way" (hud.loc 0x46ef) at the screen's centre in brackets of lines five pixels long, blinking
+   (shown 64 ticks, hidden 32). */
+typedef struct {
+    HudVisual base;
+    HText *text;          /* +0x10 */
+    int32_t acc, last;    /* +0x14, +0x18: the ticks counted, the last tick */
+    int32_t x, y;         /* +0x1c, +0x20: the text's place */
+    uint8_t shown;        /* +0x24 */
+    int32_t box[8];       /* +0x28: the brackets' corners (left top, left bottom, right top, right bottom) */
+} HWrongWay;
+
+/* Its place: centred on the screen, the brackets five pixels past the text's width and the alphabet's
+   height. 0x437290 */
+static void wrongway_layout(HWrongWay *w)
+{
+    w->x = g_display.width / 2;
+    w->y = g_display.height / 2;
+    if (!w->text || !w->text->font || !w->text->font->font) return;
+    const char *s = LOC_string(HudConfig_loc(), 0x46ef);
+    float ex, ey, ew, eh;
+    text_extent(w->text, s ? s : "", &ex, &ey, &ew, &eh);
+    float cx = (float)w->x, hw = ew * exe_f32(0x5b23f0), t = cx - hw;
+    w->box[0] = w->box[2] = (int)(t - exe_f32(0x5b2400));
+    w->box[4] = w->box[6] = (int)(hw + cx + exe_f32(0x5b2400));
+    int top = w->y - 5, bottom = (int)((float)w->y + eh + exe_f32(0x5b2400));
+    w->box[1] = w->box[5] = top;
+    w->box[3] = w->box[7] = bottom;
+    w->x = (int)t;
+    w->text->x = w->x, w->text->y = w->y;
+}
+
+static void wrongway_line(int x0, int y0, int x1, int y1)
+{
+    float p[8] = {(float)x0, (float)y0, 0, 1, (float)x1, (float)y1, 0, 1};
+    uint32_t c[2] = {0xfffab400u, 0xfffab400u};
+    Hud2D_Line(p, c);
+}
+
+/* 0x436ea0 */
+static void wrongway_draw(HudVisual *v)
+{
+    HWrongWay *w = (HWrongWay *)v;
+    int now = g_sim_tick;
+    if (g_race_knockout) return;
+    w->acc += now - w->last;
+    if (w->shown ? 0x41 <= w->acc : 0x21 <= w->acc) {
+        w->acc = 0;
+        w->shown = !w->shown;
+    }
+    if (w->shown) {
+        const char *s = LOC_string(HudConfig_loc(), 0x46ef);
+        text_print(w->text, s ? s : "", 1.0f, 1.0f);
+        int *b = w->box;
+        wrongway_line(b[0], b[1], b[0] + 5, b[1]);
+        wrongway_line(b[0], b[1], b[0], b[1] + 5);
+        wrongway_line(b[2], b[3], b[2] + 5, b[3]);
+        wrongway_line(b[2], b[3], b[2], b[3] - 5);
+        wrongway_line(b[4], b[5], b[4] - 5, b[5]);
+        wrongway_line(b[4], b[5], b[4], b[5] + 5);
+        wrongway_line(b[6], b[7], b[6] - 5, b[7]);
+        wrongway_line(b[6], b[7], b[6], b[7] - 5);
+    }
+    w->last = now;
+}
+
+static void wrongway_destroy(HudVisual *v)   /* 0x436e50 */
+{
+    text_free(((HWrongWay *)v)->text);
+    free(v);
+}
+
+static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL};
+
+static HudVisual *wrongway;   /* 0x60ca0c */
+
+static HudVisual *wrongway_new(void)
+{
+    HWrongWay *w = calloc(1, sizeof *w);
+    if (!w) return NULL;
+    w->base.vt = &wrongway_vt;
+    w->shown = 1;
+    w->text = text_new(HudConfig_font(0x4c), 0xfffab400u, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    wrongway_layout(w);
+    return &w->base;
+}
+
 /* ---- the HUD ---- */
 
 void HUD_Init(void)
@@ -964,12 +1052,15 @@ void HUD_Init(void)
     add(tachdigital_new(), true, false);
     PENDING_NOTE(0x424420, "HUD_Init's other visuals (gauges, lap, position, time, map, messages)");
     add(countdown_new(), false, false);
+    wrongway = wrongway_new();   /* 0x436dd0 (drawn on its own) */
     Hud2D_Init();   /* 0x419d70 */
     HudConfig_trays(true);   /* (0x657de4, the trays option: on) */
 }
 
 void HUD_Free(void)
 {
+    if (wrongway) wrongway->vt->destroy(wrongway);
+    wrongway = NULL;
     for (int i = 0; i < nlist; i++)
         if (list[i].v) list[i].v->vt->destroy(list[i].v);
     free(list);
@@ -1004,6 +1095,9 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         if (!e->last && e->front && 0x1c0 < g_sim_tick && (always || e->v->state == 2) && (g_race_view == 0 || g_race_view == 1))
             e->v->vt->draw(e->v);
     }
+    PENDING_NOTE(0x425910, "the pursuit's time trays (game type 9: 0x60ca1c, 0x60ca40)");
+    Car *me = local_car();
+    if (wrongway && me && *CAR_I(me, 0xd30) != 0 && g_race_mode != 9 && g_race_view != 2 && 0x1c0 < g_sim_tick) wrongway->vt->draw(wrongway);
     end_pass(r);
     /* The others. */
     pass(r, c);

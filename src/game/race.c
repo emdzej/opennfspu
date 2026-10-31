@@ -46,6 +46,7 @@ void Sim_Step(void)
     TaskList_Run(&g_tasks_tick);
     if (g_sim_tick & 1) {
         Race_TickOdd();                       /* 0x417030 */
+        Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
         PENDING_NOTE(0x417030, "the odd tick's Race_UpdatePositions, Audio_Tick, World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");

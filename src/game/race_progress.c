@@ -331,3 +331,27 @@ void Race_TickOdd(void)
         PENDING_NOTE(0x4170f0, "Race_End(2): the results");
     }
 }
+
+void Race_WrongWay(void)
+{
+    for (int i = 0; i < g_humans.n; i++) {
+        Car *c = g_humans.c[i];
+        if (!c) continue;
+        float d = K(0x5b23f8);
+        if (!(*CAR_I(c, CAR_FLAGS) & 0x200)) {
+            int16_t node;
+            memcpy(&node, c->b + 8, 2);
+            d = dot3(CAR_F(c, 0x37c), node_vec(node, 0x1c));
+            if (g_race_reverse) d = -d;
+        } else if (*CAR_I(c, 0xeac) != *CAR_I(c, 0xeb0)) {
+            d = K(0x5b2624);
+        }
+        int32_t *n = CAR_I(c, 0xd30);
+        if (*CAR_I(c, 0xb50) == 2 || *CAR_I(c, 0xda8) || *CAR_I(c, 0x544) || g_race_mode == 9 || K(0x5b23f8) <= d) {
+            *n = 0;
+        } else if (*(int16_t *)(void *)(c->b + 0x418) == 0 && *CAR_I(c, 0x1104) == 0) {
+            (*n)++;
+            if (0x3f < *n && (*n & 0x1f) == 0 && *n < 0x94) PENDING_NOTE(0x4aac40, "the wrong way's speech");
+        }
+    }
+}
