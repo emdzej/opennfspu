@@ -2,6 +2,7 @@
 #include "game/audio.h"
 #include "exe.h"
 #include "game/camera.h"
+#include "game/input.h"
 #include "pending.h"
 #include "render/r3dcar.h"
 #include "real/locatbig.h"
@@ -676,8 +677,33 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
 {
     (void)heading;
     if (0 < s_level) s_level--;
+    if (g_racecam[0].mode == 0xc && 1 < g_replay_mode) PENDING_NOTE(0x4a9e20, "the TV camera's distances for the car's sounds");
     int att = fixdiv(0x8000000, dist + 0x20000);
     int a = (att + ((att >> 31) & 0xffff)) >> 0x10;
+    /* The speed's term: |speed|, three times it for the others than the type 1 (+0x464). */
+    float sp = *CAR_F(c, 0xd60);
+    int type = *CAR_I(c, 0x464);
+    int speed = (int)(type == 1 ? fabsf(sp) : fabsf(sp * 3.0f));   /* 0x5b2600; _ftol */
+    int half = speed >> 1;
+    int windvel = half + 0x40 < 0x7f ? half + 0x40 : 0x7f;
+    int lift = rpmvol < 0x97 ? (rpmvol < 0 ? 0 : rpmvol) : 0x96;
+    PENDING_NOTE(0x565150, "the reverb's sends under roofs (the car's 0x473290 test)");
+    if (*CAR_I(c, 0x540) != 0) type = 4;
+    int view, wind = half;
+    switch (g_racecam[0].mode) {
+    case 0:
+    case 0xf: view = 1; wind = speed; break;
+    case 2:
+    case 3:
+    case 4: view = 2; break;
+    default:
+        if (!(g_racecam[0].flags2 & 8)) view = 3;
+        else {
+            view = 0;   /* (0x443e10, the car's interior, taken as no) */
+            wind = speed;
+        }
+        break;
+    }
     int idx = *CAR_I(c, 0x520);
     if (idx < 0 || CAR_MAX <= idx) idx = 0;
     int thr = *CAR_I(c, 0xd98) == 0 ? c->b[0xd7f] : c->b[0xd80];
@@ -690,11 +716,20 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
         s_throttle[idx] = (uint8_t)(e + (-2 < d ? -1 : d));
     }
     int eased = s_throttle[idx] < 0xff ? s_throttle[idx] : 0xff;
-    int lift = rpmvol < 0x97 ? (rpmvol < 0 ? 0 : rpmvol) : 0x96;
     int up = ((lift + 0x28) * a + (((lift + 0x28) * a >> 31) & 0x7f)) >> 7;
     int v = up <= a ? a : up;
     int vol = (v * 0x7f) >> 7;
-    if (speedv != 0 || g_racecam[0].mode == 0xb) vol = (vol << 0x10) / pitch;
+    int vol0 = vol;
+    wind = wind - 0xf < 1 ? 0 : wind - 0xf;
+    int windvol = (v * wind) >> 7;
+    if (0x7a < windvol) windvol = 0x7a;
+    if (speedv != 0 || g_racecam[0].mode == 0xb) vol = (vol0 << 0x10) / pitch;
+    /* The wind by the car's type (patch 0x11 on), at the speed's velocity. */
+    if (windvol == 0) stop_slot(0x18);
+    else play_slot(0x18, type + 0x11, windvel, pitch, windvol, pan, 0x7f);
+    stop_slot(0x1c);
+    PENDING_NOTE(0x443e10, "the road's noise inside the car (slot 0x1a, the car's interior)");
+    stop_slot(0x1a);
     int8_t shift = (int8_t)c->b[0xd84];
     if (shift && (int8_t)c->b[0xd81] < (int8_t)c->b[0xd82] && (int8_t)c->b[0xd81] != 1 && eased) {
         vol = ((shift * vol) / *SPEC_I(c, 0x54) + vol) >> 1;
@@ -705,21 +740,37 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
         else if (shift < 3) eased = 0;
         s_throttle[idx] = (uint8_t)eased;
     }
-    int view;
-    switch (g_racecam[0].mode) {
-    case 0:
-    case 0xf: view = 1; break;
-    case 2:
-    case 3:
-    case 4: view = 2; break;
-    default:
-        view = (g_racecam[0].flags2 & 8) ? 0 : 3;   /* (0x443e10 for the car's interior is pending) */
-        break;
+    /* The gear change's clunk in the views inside (the engine bank's patch 2). */
+    if ((g_racecam[0].flags2 & 8) && g_racecam[0].mode != 0 && g_racecam[0].mode != 0xf && shift == 1)
+        play_once(s_banks[0].slot, 2, 0, 0x7f, 0x40, 0x10000, 0x7f);
+    /* The gearbox's whine (slot 0, patch 0xf): by the view's volume, the rpm against half the redline,
+       the throttle and the car's whine (+0x54c); pitched by the rpm. */
+    Engine *en = s_engine[0];
+    int vv = en ? (((view == 0 ? en->k[11] << 4 : view == 1 ? en->k[10] : en->k[12]) * vol) >> 7) : 0;   /* 0x4ad410 */
+    if (0x7e < vv) vv = 0x7f;
+    float whine = *CAR_F(c, 0x54c);
+    if (whine <= 0.1f) {   /* 0x5b2604 */
+        stop_slot(0);
+    } else {
+        float rpm = *CAR_F(c, 0xdb4), red = *SPEC_F(c, 0x94), f2, f3;
+        if (rpm <= red * 0.5f) {
+            f2 = red * 0.25f;
+            f3 = rpm * 0.5f - f2;
+        } else {
+            f2 = red * 0.9f;   /* 0x5b25e8 */
+            f3 = f2 - rpm;
+        }
+        if (f3 < 0) f3 = 0;
+        float pf = ((rpm * 2.5f) / red + 0.5f) * (float)pitch;   /* 0x5b2464 */
+        int wv = (int)lrintf((float)vv * (f3 / f2) * (float)c->b[0xd7f] * whine * 0.007843138f);   /* 0x5b4b50 */
+        if (0x7e < wv) wv = 0x7f;
+        if (wv < 1) wv = 0;
+        play_slot(0, 0xf, 0x40, (int)lrintf(pf), wv, pan, 0x7f);
     }
     int rpm16 = (int)(*CAR_F(c, 0xdb4) / *SPEC_F(c, 0x94) * 65536.0f);   /* 0x5b3e68 */
     int throttle = *CAR_I(c, 0xdb0) == 0 ? -1 : *CAR_I(c, 0x548) == 0 ? eased >> 1 : 0x7f;
     int engvol = ((opt(0x5d1748) * opt(0x5d14c8) * 0x55 >> 7) * vol) >> 0xe;
-    PENDING_NOTE(0x4a99e0, "the car's wind, rain, gearbox whine, tyres and gear sounds");
+    PENDING_NOTE(0x4aed00, "the tyres' sounds (0x4aed00)");
     engine_snap(0, engvol, rpm16, throttle, view, DESC_I(c, 0x518) ? pitch * 2 : pitch, pan, facing);
 }
 
