@@ -432,6 +432,26 @@ int SND_SetPan(int handle, int pan, int spread)
     return v;
 }
 
+/* The time left to play, in hundredths of a second at its pitch: the longest of its voices' (a voice
+   under pitch 0x11 counts for ever); -7 for none, -8 for no such play. 0x5658b0 */
+int SND_TimeLeft(int handle)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return -8;
+    int best = -7, at = -1;
+    while (next_of_group(v, &at)) {
+        SndVoice *x = &s_voice[at];
+        int pos = SndMix_Position(s_dev[at].src[0]);   /* 0x590b00: the device side's position */
+        if (pos < 0) continue;
+        int t = x->pitchout < 0x11 ? 0x7fffffff
+                                   : ((((x->nsamples - pos) * 100) / (int)x->rate << 0xc) / (int)x->pitchout << 0xc) /
+                                         (int)(uint16_t)x->f4c;
+        if (best < t) best = t;
+    }
+    return best;
+}
+
 /* The play's pitch, 4.12 (0x565400; it stops at the first voice already at it). */
 int SND_SetPitch(int handle, int pitch)
 {
@@ -626,9 +646,28 @@ void SND_BankRemove(int slot)
 
 /* 100 times a second (0x5892d0): each playing voice's LFOs, its volume ramp (ending the voice below 0),
    its envelope (ending it after the last segment); then its volume and pitch to the sources. */
+static void (*s_tickfn[8])(void);   /* 0x6b48f0 */
+static int s_ntickfn;               /* 0x6b48e0 */
+
+void SND_AddTick(void (*fn)(void))   /* 0x560e90 */
+{
+    if (s_on && s_ntickfn < 8) s_tickfn[s_ntickfn++] = fn;
+}
+
+void SND_RemoveTick(void (*fn)(void))   /* 0x560ec0 */
+{
+    for (int i = 0; i < s_ntickfn; i++)
+        if (s_tickfn[i] == fn) {
+            memmove(s_tickfn + i, s_tickfn + i + 1, (size_t)(s_ntickfn - i - 1) * sizeof *s_tickfn);
+            s_ntickfn--;
+            return;
+        }
+}
+
 static void tick(void)
 {
     s_ticks++;
+    for (int i = 0; i < s_ntickfn; i++) s_tickfn[i]();
     for (int i = 0; i < s_nvoices; i++) {
         SndVoice *v = &s_voice[i];
         if (v->state != 1 || v->handle < 0) continue;
@@ -731,6 +770,7 @@ bool SND_Init(int rate, int channels, int voices, int quality)
 void SND_Shutdown(void)
 {
     s_on = false;
+    s_ntickfn = 0;
     SndMix_Free();
     free(s_voice);
     free(s_dev);

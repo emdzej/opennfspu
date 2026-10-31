@@ -114,6 +114,10 @@ bool SND_Playing(int handle);                               /* 0x565800 (the ori
 int SND_SetVolume(int handle, int vol);                     /* 0x5657c0 */
 int SND_SetPan(int handle, int pan, int spread);            /* 0x565670 */
 int SND_SetPitch(int handle, int pitch);                    /* 0x565400 */
+int SND_TimeLeft(int handle);                               /* 0x5658b0: hundredths of a second */
+/* A function the library's 100 Hz tick calls (0x560e90; at most eight), and its removal (0x560ec0). */
+void SND_AddTick(void (*fn)(void));
+void SND_RemoveTick(void (*fn)(void));
 /* Fills n frames of interleaved 16-bit samples, the library's ticks at 100 Hz among them (0x58f970). */
 void SND_Fill(int16_t *out, int n);
 int SND_Rate(void);

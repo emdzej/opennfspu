@@ -1,5 +1,6 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "game/audio.h"
 #include "game/sim_rand.h"
 #include "game/race_car.h"
 #include "game/ai.h"
@@ -49,9 +50,10 @@ void Sim_Step(void)
     TaskList_Run(&g_tasks_tick);
     if (g_sim_tick & 1) {
         Race_TickOdd();                       /* 0x417030 */
+        Audio_Tick();                         /* 0x4a7ef0 (Race_TickOdd's) */
         Race_UpdatePositions();               /* 0x415fe0 */
         Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
-        PENDING_NOTE(0x417030, "the odd tick's Audio_Tick, World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
+        PENDING_NOTE(0x417030, "the odd tick's World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");
     g_sim_tick++;

@@ -23,6 +23,7 @@
 #include "render/render_pending.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
+#include "game/audio.h"
 #include "game/camera.h"
 #include "render/noise.h"
 #include "render/sky.h"
@@ -103,6 +104,9 @@ static bool load(const char *track, const char *carname)
         int mode = plat_param("cam", v, sizeof v) ? atoi(v) : DESC_I(g_cars[follow], 0x208);
         Camera_Init(0, g_cars[follow], mode);
     }
+    /* The race's sounds (GameStartup 0x4b65a0: Audio_Init 0x4a6610, the player's engine 0x4a8aa0 ->
+       0x4ac9e0 from its description's SOUNDNAME). */
+    if (Audio_Init()) Audio_LoadEngine(0, (const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
     set_env();
