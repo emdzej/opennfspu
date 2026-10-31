@@ -88,6 +88,7 @@ int main(void)
     snprintf(g_track_name, sizeof g_track_name, "autobahn");
     Track_Load();
     CHECK(RaceSetup_SingleCar("964"));
+    if (getenv("AUDIO_OPP")) CHECK(RaceSetup_Opponents(1));
     Car_Construct();
     if (g_ncars < 1) return 1;
     g_sim_tick = 0x1c0 - 0x40;

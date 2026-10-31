@@ -2,6 +2,7 @@
 #include "game/audio.h"
 #include "exe.h"
 #include "game/camera.h"
+#include "game/car_drive.h"
 #include "game/input.h"
 #include "pending.h"
 #include "render/r3dcar.h"
@@ -31,6 +32,8 @@ static bool s_on;   /* 0x5d1734 */
 static int fixdiv(int a, int b) { return (int)((((int64_t)(a % b)) << 16) / b) + (a / b) * 0x10000; }
 static void engines_free(void);
 static void stream_close(void);
+static int stream_bank(int type, int idx, bool look);
+static int32_t s_nearvol = 0x80;   /* 0x655f34: 0x80 less the cars close to the listener */
 typedef struct {
     int32_t slot;      /* 0x6564a0: the SND bank */
     uint8_t *data;     /* 0x6564a8 */
@@ -146,10 +149,11 @@ static int play_once(int bank, int patch, int angle, int vol, int bend, int pitc
         p.f12 = 3000;   /* (0x443e10, the car's interior, taken as no) */
     p.pan = opt(0x5d1760) ? (int8_t)pan_byte(angle) : 0x40;
     p.velocity = (int8_t)vel;
-    if (bank < -1) {
-        PENDING_NOTE(0x4a8340, "the streamed one-shots (speech, the track's)");
-        return -1;
+    if (bank < -1) {   /* the streamed ones: the cached bank's patch 0, else asked for (and silent now) */
+        bank = stream_bank(bank == -4 ? 2 : bank == -3 ? 1 : 0, patch, false);
+        patch = 0;
     }
+    if (bank < 0) return -1;
     return SND_Play(bank, patch, &p);
 }
 
@@ -467,8 +471,34 @@ void Audio_LoadTrackSounds(void)
     free(viv);
 }
 
-/* The cached bank of (type, idx): its library slot, -1 when it isn't there; asked for (and not just
-   looked at), a missing one is queued to be loaded (0x4a8340). */
+static void stream_request(int type, int idx, bool loadonly);
+
+/* The cache's entry to take for a bank of the type: a free one, else the least recently used past 16
+   ticks, else the last of a lower type (0x4a81b0); its bank given up. */
+static int stream_evict(int type)
+{
+    for (int i = 0; i < 0x20; i++)
+        if (s_cache[i].idx == -1) return i;
+    int e = -1;
+    int32_t oldest = g_sim_tick - 0x10;
+    for (int i = 0; i < 0x20; i++)
+        if (s_cache[i].idx != -1 && s_cache[i].used < oldest) {
+            oldest = s_cache[i].used;
+            e = i;
+        }
+    if (e < 0)
+        for (int i = 0; i < 0x20; i++)
+            if (s_cache[i].idx != -1 && s_cache[i].type < type) e = i;
+    if (e < 0) return -1;
+    if (s_cache[e].slot != -1) SND_BankRemove(s_cache[e].slot);
+    free(s_cache[e].data);
+    s_cache[e] = (StreamBank){-1, -1, -1, 0, NULL};
+    return e;
+}
+
+/* The cached bank of (type, idx): its library slot, -1 when it isn't there (or not read yet); asked
+   for (and not just looked at), a missing one gets an entry and a load-only request, unless more than
+   five are waiting (0x4a8340, 0x4b0ac0). */
 static int stream_bank(int type, int idx, bool look)
 {
     for (int i = 0; i < 0x20; i++)
@@ -477,35 +507,38 @@ static int stream_bank(int type, int idx, bool look)
             return s_cache[i].slot;
         }
     if (look) return -1;
-    PENDING_NOTE(0x4a8340, "the streamed banks' load-only requests (the port loads them when played)");
+    int waiting = 0;
+    for (int r = s_req_rd; r != s_req_wr; r = (r + 1) & 0x3f)
+        if (0 <= s_req[r].type && s_req[r].loadonly) waiting++;
+    if (5 < waiting) return -1;
+    int e = stream_evict(type);
+    if (e < 0) return -1;
+    int wr = s_req_wr;
+    stream_request(type, idx, true);
+    if (wr == s_req_wr) return -1;
+    s_cache[e] = (StreamBank){type, idx, -1, g_sim_tick, NULL};
     return -1;
 }
 
-/* Reads (type, idx) into the cache, giving up the least recently used past 16 ticks (0x4a81b0). */
+/* Reads (type, idx) into its cache entry (the one asked for, else a new one) (the file thread's). */
 static int stream_load(int type, int idx)
 {
-    int s = stream_bank(type, idx, true);
-    if (s >= 0) return s;
-    StreamSource *src = type >= 0 && type < 3 ? &s_stream[type] : NULL;
-    if (!src || !src->f || idx < 0 || src->count <= idx || src->index[idx][1] == 0) return -1;
     int e = -1;
     for (int i = 0; i < 0x20 && e < 0; i++)
-        if (s_cache[i].idx == -1) e = i;
-    if (e < 0) {
-        int32_t oldest = g_sim_tick - 0x10;
-        for (int i = 0; i < 0x20; i++)
-            if (s_cache[i].slot != -1 && s_cache[i].used < oldest) {
-                oldest = s_cache[i].used;
-                e = i;
-            }
-        if (e < 0) return -1;
-        SND_BankRemove(s_cache[e].slot);
-        free(s_cache[e].data);
+        if (s_cache[i].idx == idx && s_cache[i].type == type) e = i;
+    if (0 <= e && s_cache[e].slot != -1) {
+        s_cache[e].used = g_sim_tick;
+        return s_cache[e].slot;
     }
+    StreamSource *src = type >= 0 && type < 3 ? &s_stream[type] : NULL;
+    if (!src || !src->f || idx < 0 || src->count <= idx || src->index[idx][1] == 0) return -1;
+    if (e < 0) e = stream_evict(type);
+    if (e < 0) return -1;
     uint32_t len = src->index[idx][1];
     uint8_t *d = malloc(len);
     if (!d || vfs_read_at(src->f, src->index[idx][0], d, len) != (int64_t)len) {
         free(d);
+        s_cache[e] = (StreamBank){-1, -1, -1, 0, NULL};
         return -1;
     }
     s_cache[e] = (StreamBank){type, idx, SND_BankAdd(d), g_sim_tick, d};
@@ -865,8 +898,7 @@ static void engine_snap(int slot, int vol, int rpm16, int throttle, int view, in
     if (view < 2) {
         s->xfade = (uint16_t)(view == 0 ? e->k[3] : e->k[1]);
         s->pan = 0;
-        s->spread = 0;
-        PENDING_NOTE(0x655f34, "the engine's spread by the cars near the listener");
+        s->spread = g_race_players == 1 || 1 < g_sound_quality ? 0 : (uint16_t)(s_nearvol * 0x3fff >> 7);
         m = view == 0 ? e->k[2] : e->k[0];
     } else {
         int base = e->k[4];
@@ -1165,6 +1197,189 @@ static void player_tick(Car *c)
     }
 }
 
+/* The cars near the listener (0x655d60: 4 x 0x38 bytes) whose sounds play in their slots: the engine's
+   road noise i + 6, its lden and ldex banks i + 10 and i + 14, its events i + 0x22, the horn i + 0x27. */
+typedef struct {
+    Car *car;                 /* +0x00 (NEAR_GONE: no longer near) */
+    int32_t speed;            /* +0x0c: its speed (16.16) */
+    int32_t dist2;            /* +0x14: its distance squared, at most 0x1324 */
+    int32_t horn, horn_on, horn_off, horn_n;   /* +0x20 .. +0x2c: the horn's countdowns */
+} NearCar;
+static NearCar s_near[4];
+#define NEAR_GONE ((Car *)(intptr_t)-1)
+
+static void near_reset(NearCar *n, Car *c) { *n = (NearCar){.car = c, .dist2 = 0x1324}; }
+
+/* The race cars nearest the listener, up to n of them within 300 (50 for flag 0x10), the viewport's
+   own car left out (split screen: the humans'); those within 400 have their lden bank asked for. The
+   records of cars no longer near are let go (their sounds stopped), new cars take free ones (0x4a7b90). */
+static void near_update(int n)
+{
+    Car *list[4] = {0};
+    int ld[4];
+    for (int k = 0; k < n; k++) ld[k] = 0x12c0000;
+    for (int i = 0; i < g_ncars; i++) {
+        Car *c = g_cars[i];
+        if (g_race_players == 1 ? (*CAR_I(c, CAR_FLAGS) & 4) != 0 : (g_humans.n > 0 && c == g_humans.c[0])) continue;
+        if (!c->b[0x7f]) continue;
+        uint32_t flags = (uint32_t)*CAR_I(c, CAR_FLAGS);
+        const float *p = CAR_F(c, 0x330);
+        float d[3] = {p[0] - s_listener[0], p[1] - s_listener[1], p[2] - s_listener[2]};
+        int dist = (int)(sqrtf(dot3(d, d)) * 65536.0f);   /* 0x532110 */
+        if (dist < 0x1900000) stream_bank(1, *CAR_I(c, 0x520) * 2 + 1, false);   /* 0x4b02a0 */
+        if (((flags & 0x10) ? 50 : 300) * 0x10000 <= dist) continue;
+        for (int k = 0; k < n; k++) {
+            if (ld[k] <= dist) continue;
+            for (int j = n - 1; k < j; j--) {
+                list[j] = list[j - 1];
+                ld[j] = ld[j - 1];
+            }
+            list[k] = c;
+            ld[k] = dist;
+            break;
+        }
+    }
+    for (int r = 0; r < n; r++) {
+        if (!s_near[r].car) continue;
+        int k = 0;
+        for (; k < n; k++)
+            if (list[k] == s_near[r].car) {
+                list[k] = NULL;
+                break;
+            }
+        if (k == n) s_near[r].car = NEAR_GONE;
+    }
+    for (int k = 0; k < n; k++) {
+        if (!list[k]) continue;
+        for (int r = 0; r < n; r++) {
+            if (s_near[r].car && s_near[r].car != NEAR_GONE) continue;
+            if (s_near[r].car) {
+                /* (the engine's slots are stopped only for a car of none: never) */
+                PENDING_NOTE(0x4aad20, "the sirens' state (0x65686c)");
+                stop_slot(r + 0x22);
+                stop_slot(r + 0x27);
+            }
+            near_reset(&s_near[r], list[k]);
+            break;
+        }
+    }
+    for (int r = 0; r < n; r++) {
+        if (s_near[r].car != NEAR_GONE) continue;
+        stop_slot(r + 6);
+        stop_slot(r + 10);
+        stop_slot(r + 14);
+        stop_slot(r + 0x22);
+        stop_slot(r + 0x27);
+        near_reset(&s_near[r], NULL);
+    }
+}
+
+/* A near car's engine (0x4aa740): its lden and ldex banks mixed by how it faces the listener (the
+   fade tables 0x5d17a4 .. at the low qualities only lden's), the pitch by the rpm and the Doppler; the
+   road's noise (patch 0x10) by its speed up to 40, lowered by the cars close by; all by the distance
+   (128 over 2 + the distance; the camera 0xb's 256 over 1 + it). */
+static void near_engine(int slot, int idx, int rpm16, int pitch, int dist, int pan, int speed, int facing)
+{
+    int att = g_racecam[0].mode == 0xb ? fixdiv(0x10000000, dist + 0x10000) : fixdiv(0x8000000, dist + 0x20000);
+    att = (att + ((att >> 31) & 0xffff)) >> 0x10;
+    if (att == 0) {
+        stop_slot(slot);
+        stop_slot(slot + 4);
+        stop_slot(slot + 8);
+        return;
+    }
+    int64_t pp = (int64_t)(rpm16 + 0x3333) * pitch;
+    uint32_t lo = (uint32_t)pp;
+    int mix = 0x3f;
+    if (g_sound_quality < 2) {
+        mix = ((facing >> 1) + facing) >> 10;
+        mix = mix < 0x40 ? (mix < -0x3f ? -0x40 : mix) : 0x40;
+    }
+    int p = ((int)(((lo >> 0x10) + (int32_t)(pp >> 32) * 0x10000 + ((lo >> 0xf & 1) != 0)) * 0x50) >> 10) << 4;
+    play_slot(slot + 4, idx * 2 + 1, 0x40, p, (int8_t)exe_data((uint32_t)(0x5d17a4 - mix), 1)[0] * att >> 7, pan, 0x7f);
+    play_slot(slot + 8, idx * 2 + 2, 0x40, p, (int8_t)exe_data((uint32_t)(0x5d17a4 + mix), 1)[0] * att >> 7, pan, 0x7f);
+    int sp = 0x280000 < speed ? 0x280000 : speed;
+    /* (the rpm as the road noise's velocity, as the original passes it) */
+    play_slot(slot, 0x10, rpm16, pitch, ((att * sp) / 0x280000) * s_nearvol >> 7, pan, 0x7f);
+}
+
+/* A near car's sounds (0x4a6e50): the Doppler, distance, facing and pan as the player's, its engine,
+   its events (those of a slot in the record's i + 0x22), a human's horn. */
+static void near_tick(int vp, int i)
+{
+    NearCar *n = &s_near[i];
+    Car *c = n->car;
+    if (!c || c == NEAR_GONE) return;
+    const float *p = CAR_F(c, 0x330);
+    float d[3] = {p[0] - s_listener[0], p[1] - s_listener[1], p[2] - s_listener[2]};
+    float closing = 0;
+    if (d[0] != 0 || d[1] != 0 || d[2] != 0) {
+        float l = sqrtf(dot3(d, d)), u[3] = {d[0] / l, d[1] / l, d[2] / l};
+        closing = dot3(u, CAR_F(c, 0x33c));
+    }
+    int pitch = (int)(340.0 / ((double)closing + 340.0) * 65536.0);   /* 0x5b4b40, 0x5b4b38 */
+    if (pitch < 0) return;
+    int dist = (int)(sqrtf(dot3(d, d)) * 65536.0f);
+    int facing = 0;
+    if (dist != 0) {
+        int f = fixdiv((int)(dot3(d, CAR_F(c, 0x37c)) * 65536.0f), dist);
+        facing = f < 0x10000 ? (f <= -0x10000 ? -0x10000 : f) : 0x10000;
+    }
+    int pan = 0;
+    if (opt(0x5d1760)) {
+        if (g_race_players == 1) pan = vp ? 0x4000 : 0xc000;
+        else {
+            int x = (int)(dot3(d, s_lright) * 65536.0f), y = (int)(dot3(d, s_lfwd) * 65536.0f);
+            if (g_r3d_mirror) x = -x;
+            pan = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
+        }
+    }
+    int du = (dist + ((dist >> 31) & 0xffff)) >> 0x10;
+    n->dist2 = du * du < 0x1324 ? du * du : 0x1324;
+    n->speed = abs((int)(*CAR_F(c, 0xec0) * 65536.0f));   /* (less the viewport car's with a listener speed) */
+    int rpm16 = (int)(*CAR_F(c, 0xdb4) / *SPEC_F(c, 0x94) * 65536.0f);
+    rpm16 = rpm16 < 0 ? 0 : 0x20000 < rpm16 ? 0x20000 : rpm16;
+    int speed = (int)(*CAR_F(c, 0xd60) * 65536.0f);
+    if (speed < 1) speed = (int)(*CAR_F(c, 0xd60) * -65536.0f);   /* 0x5b4b48 */
+    near_engine(i + 6, *CAR_I(c, 0x520), rpm16, pitch, dist, pan, speed, facing);
+    for (int k = *CAR_I(c, 0x110c) - 1; 0 <= k; k--) {
+        const uint8_t *r = c->b + 0x1110 + k * 0x18;
+        int32_t id, kind, surf;
+        float strength;
+        memcpy(&id, r + 4, 4);
+        memcpy(&kind, r + 8, 4);
+        memcpy(&surf, r + 0xc, 4);
+        memcpy(&strength, r + 0x10, 4);
+        if (s_on) event_sound(id < 0 ? -1 : i + 0x22, kind, surf, (int)(strength * 65536.0f), dist, pan);   /* 0x4aa9a0 */
+    }
+    int hvol = ((0x1324 - n->dist2) * 0x7f) / 0x1324;
+    int type = DESC_I(c, 0);
+    int hpatch = (type == 0x30) + 10, hvel = (int8_t)exe_data(0x5d1478 + (uint32_t)type, 1)[0];
+    if (!(*CAR_I(c, CAR_FLAGS) & 4)) {
+        /* The others' horn by its countdowns (nothing in the exe sets them). */
+        if (0 < n->horn) {
+            if (0 < n->horn_on) n->horn--;
+            if (n->horn == 0) {
+                c->b[0xd86] = 0;
+                stop_slot(i + 0x27);
+                if (--n->horn_n != 0) n->horn = n->horn_off;
+            } else {
+                c->b[0xd86] = 1;
+                play_slot(i + 0x27, hpatch, hvel, pitch, hvol, pan, 0x7f);
+            }
+        } else if (n->horn < 0 && ++n->horn == 0) {
+            n->horn = n->horn_on;
+        }
+    } else if (c->b[0xd86]) {
+        play_slot(i + 0x27, hpatch, hvel, pitch, hvol, pan, 0x7f);
+        n->horn = 1;
+    } else if (n->horn != 0) {
+        stop_slot(i + 0x27);
+        n->horn = 0;
+    }
+    if ((*CAR_I(c, CAR_FLAGS) & 0x20) && (*CAR_I(c, 0xecc) & 2)) PENDING_NOTE(0x4aac60, "the cop cars' sirens (0x4aac60, 0x4aad80)");
+}
+
 void Audio_Tick(void)
 {
     if (!s_on) return;
@@ -1175,8 +1390,33 @@ void Audio_Tick(void)
     memcpy(s_lright, cam->orient, sizeof s_lright);
     memcpy(s_lfwd, cam->orient + 6, sizeof s_lfwd);
     stream_tick();   /* 0x4b07f0 */
-    PENDING_NOTE(0x4a8150, "the thunder (0x4a8150) and 0x4a7b90");
+    PENDING_NOTE(0x4a8150, "the thunder (0x4a8150)");
+    int n = g_sound_quality == 0 ? 4 : g_sound_quality == 1 ? 2 : 1;
+    near_update(n);
+    if (g_race_players == 1) s_nearvol = 0x80;
+    else {
+        /* 0xc0 less, for each car within 128, its distance short of 128 */
+        int v = 0xc00000;
+        for (int r = 0; r < 4; r++) {
+            if (!s_near[r].car) continue;
+            const float *p = CAR_F(s_near[r].car, 0x330);
+            float d[3] = {p[0] - s_listener[0], p[1] - s_listener[1], p[2] - s_listener[2]};
+            int dist = (int)(sqrtf(dot3(d, d)) * 65536.0f);
+            if (dist < 0x800000) v += dist - 0x800000;
+        }
+        v = (v + ((v >> 31) & 0xffff)) >> 0x10;
+        s_nearvol = 0x7f < v ? 0x80 : v < 1 ? 0 : v;
+    }
     if (g_humans.n > 0) player_tick(g_humans.c[0]);
-    PENDING_NOTE(0x4a6e50, "the opponents' sounds (0x4a6e50)");
+    if (0 < opt(0x5d1750)) {
+        near_tick(0, 0);
+        if (g_sound_quality < 2) {
+            near_tick(0, 1);
+            if (g_sound_quality < 1) {
+                near_tick(0, 2);
+                near_tick(0, 3);
+            }
+        }
+    }
     memcpy(s_lastlistener, s_listener, sizeof s_lastlistener);
 }

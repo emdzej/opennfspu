@@ -68,3 +68,28 @@ shift (the table 0x59b680 builds) plus the two samples before weighted by the co
 
 The device's fill (0x58f970) alternates the library's 100 Hz tick (0x5892d0: envelopes, volume ramps,
 pitch slides, modulators) with mixing runs (0x5986f0) of up to 256 samples.
+
+## The cars near the listener
+
+Each odd tick 0x4a7b90 keeps a list of the race cars nearest the listener (four records of 0x38 bytes at
+0x655d60; 4, 2 or 1 of them at sound quality 0, 1, 2), within 300 units (50 with car flag 0x10), leaving
+out the viewport's own car (in split screen the humans). Cars within 400 have their `lden` bank (stream
+type 1, index `car*2+1`, 0x4b02a0) asked for in advance. A record whose car is no longer near is let go
+and its slots stopped; a new car takes a free record. (When a record changes cars, the check that would
+stop its engine slots tests the new car against null, so it never does.)
+
+0x4a6e50 plays record i's car like the player's: Doppler `340 / (340 + closing speed)`, the distance,
+pan and facing. 0x4aa740 plays the engine as two streamed banks in slots i+10 (`lden`) and i+14
+(`ldex`), crossfaded by the facing through the fade bytes around 0x5d17a4 (only `lden` at the low
+qualities), pitched by rpm and Doppler, attenuated by `128 / (2 + distance)` (camera 0xb: `256 / (1 +
+distance)`); the road noise (patch 0x10, slot i+6) by the forward speed up to 40, scaled by 0x655f34.
+That value is 0x80, less each near car's shortfall from 128 units (0xc0 base, clamped to 0..0x80); the
+player's engine snapshot uses it as its spread. The car's events go through the impact player with the
+record's slot i+0x22 for slotted ones (stop events included, unlike the player's). A human car's horn
+(car+0xd86) plays patch 10 (11 for type 0x30) in slot i+0x27; the others' horn countdowns are never set
+by the exe. Sirens (0x4aac60, 0x4aad80) are pending.
+
+A patch played from a streamed bank (-2 track, -3 cars, -4 speech) resolves through the cache
+(0x4a8340): if the bank isn't cached yet, it reserves an entry and queues a load-only request (at most
+six waiting) and stays silent until a later tick finds it. Eviction takes a free entry, else the least
+recently used one older than 16 ticks, else the last one of a lower type (0x4a81b0).
