@@ -184,6 +184,8 @@ bool GLIDE_env(bool windowed, const char *driver, int display, int mode)
 static int card_type;               /* 0x6197b0: Render_DetectCard's card (pending: 0, never 0xe) */
 uint8_t g_render_modalpha;          /* 0x6197aa */
 
+int Render_CardType(void) { return card_type; }
+
 void Render_DisplayInit(void)
 {
     int w = 640, h = 480, bpp = 16;
