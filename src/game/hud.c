@@ -756,6 +756,222 @@ static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
     return &t->combo.tray.base;
 }
 
+/* ---- the standings (HPosition, 600 bytes, vtable 0x5b2dbc; 0x42a6f0) ---- */
+
+int32_t g_hud_opponentlist = 1;   /* 0x657dd4: OPPONENTLIST (1 the gap in nodes, 2 in time) */
+
+enum { POS_MAX = CAR_MAX };
+
+/* A row a racer by place: the car's colour, the driver's name, the gap to the player; below them
+   "position" and the player's place of all. */
+typedef struct {
+    HTray tray;
+    float swatch[16];             /* +0xc4: the colour square's corners, the first row's */
+    HText *name[POS_MAX];         /* +0x104: by row */
+    HText *gap[POS_MAX];          /* +0x108 */
+    HText *label, *place, *of, *extra;   /* +0x10c, +0x110, +0x114, +0x118 */
+    char placebuf[8], ofbuf[8];   /* +0x11c, +0x120 */
+    char gapbuf[POS_MAX][12];     /* +0x123: by car */
+    char namebuf[POS_MAX][25];    /* +0x183: by car */
+    int32_t count;                /* +0x254 */
+} HPosition;
+
+/* The rows, the label and the place's texts, the colour square, at (x, y) through the places (4).
+   0x42b5b0 */
+static void position_setpos(HudVisual *v, int x, int y)
+{
+    HPosition *p = (HPosition *)v;
+    int32_t px, py;
+    HudConfig_setpos(HUDPOS_POSITION, x, y);
+    HudConfig_pos(HUDPOS_POSITION, &px, &py);
+    tray_place(&p->tray, px, py);
+    int rw = HudConfig_i32(0xb4), rh = HudConfig_i32(0xb8), sw = HudConfig_i32(0x114), sh = HudConfig_i32(0x118);
+    int in = HudConfig_i32(0x34), top = HudConfig_i32(0x38);
+    for (int i = 0; i < p->count; i++) {
+        if (p->name[i]) p->name[i]->x = in + px + in + sw, p->name[i]->y = top + rh * i + py;
+        if (p->gap[i]) p->gap[i]->x = px + rw - in - 8, p->gap[i]->y = top + rh * i + py;
+    }
+    int w = p->tray.w, h = p->tray.h;
+    float a, b, c, ah;
+    if (!p->label || !p->place || !p->of || !p->label->font || !p->place->font || !p->of->font) return;
+    /* "position" at the bottom left (measured on the label's font for the alphabet's height). */
+    text_extent(p->label, exe_str(0x5ccdd0), &a, &b, &c, &ah);
+    p->label->x = px + in;
+    p->label->y = py + (h - (int)((float)top + ah));
+    /* The place ("4/") and of all ("4") as wide as samples, ending at the right inset. */
+    float slash_w, slash_h, four_w, four_h;
+    text_extent(p->place, exe_str(0x5ccddc), &a, &b, &slash_w, &slash_h);
+    int right = (int)((float)(w - in) - slash_w + (float)px);
+    text_extent(p->of, exe_str(0x5ccc38), &a, &b, &four_w, &four_h);
+    int at = (int)((float)right - four_w) - 3;
+    p->place->x = at;
+    p->place->y = py + (h - (int)((float)top + slash_h));
+    p->of->x = (int)((float)at + slash_w);
+    p->of->y = py + (h - (int)((float)top + four_h));
+    /* The colour square: centred on the first row. */
+    float zh;
+    text_extent(p->label, exe_str(0x5ccad0), &a, &b, &c, &zh);
+    int x0 = in + px, y0 = (int)(zh * 0.5f - (float)(sh / 2) + (float)(py + top));
+    float q[16] = {(float)x0, (float)y0, 0, 1, (float)(x0 + sw), (float)y0, 0, 1,
+                   (float)(x0 + sw), (float)(y0 + sh), 0, 1, (float)x0, (float)(y0 + sh), 0, 1};
+    memcpy(p->swatch, q, sizeof q);
+}
+
+/* Its size for the count, place and colours again. 0x42bac0 */
+static void position_reset(HudVisual *v)
+{
+    HPosition *p = (HPosition *)v;
+    int rw = HudConfig_i32(0xb4), rh = HudConfig_i32(0xb8), top = HudConfig_i32(0x38);
+    tray_setsize(&p->tray, rw, (p->count + 1) * rh + top * 2, top + rh * p->count);
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_POSITION, &x, &y);
+    v->vt->setpos(v, x, y);
+    tray_colours(&p->tray);
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    for (int i = 0; i < p->count; i++) {
+        if (p->name[i]) p->name[i]->colour = (uint32_t)HudConfig_i32(0x1c), p->name[i]->colour2 = c14;
+        if (p->gap[i]) p->gap[i]->colour = HudConfig_scheme(), p->gap[i]->colour2 = c14;
+    }
+    if (p->label) p->label->colour = (uint32_t)HudConfig_i32(0x18), p->label->colour2 = c14;
+    if (p->extra) p->extra->colour = HudConfig_scheme(), p->extra->colour2 = c14;
+    if (p->place) p->place->colour = HudConfig_scheme(), p->place->colour2 = c14;
+    if (p->of) p->of->colour = (uint32_t)HudConfig_i32(0x18), p->of->colour2 = c14;
+}
+
+static bool out_of_race(Car *c) { return (*CAR_I(c, 0xb50) == 3 || *CAR_I(c, 0xb50) == 1) && g_race_mode == 1; }
+
+/* 0x42af60 */
+static void position_draw(HudVisual *v)
+{
+    HPosition *p = (HPosition *)v;
+    if (g_race_view == 2 || g_race_view == 3 || p->count < 2) return;
+    int was = p->count;
+    p->count = g_racers.n;
+    for (int i = 0; i < g_racers.n; i++)
+        if (out_of_race(g_racers.c[i])) p->count--;
+    if (was != p->count) v->vt->reset(v);
+    for (int i = 0; i < p->count; i++) {
+        Car *c = g_racers.c[i];
+        if (!out_of_race(c) && g_race_mode == 1 && p->count < *CAR_I(c, 0xb48) - 1) return;
+    }
+    if (HudConfig_choicei32(0x48) == 0 || !always || v->state == 0 || p->count < 1) return;   /* 0x41e8a0 */
+    tray_draw(&p->tray);
+    int rh = HudConfig_i32(0xb8);
+    Car *me = local_car();
+    int mine = me ? *CAR_I(me, 0xb54) : 0;
+    for (int i = 0; i < g_racers.n && i < POS_MAX; i++) {
+        Car *c = g_racers.c[i];
+        if (out_of_race(c)) continue;
+        int row = *CAR_I(c, 0xb48) - 1;
+        if (row < 1) row = 0;
+        if (POS_MAX <= row) continue;
+        float q[16];
+        memcpy(q, p->swatch, sizeof q);
+        for (int k = 0; k < 4; k++) q[4 * k + 1] += (float)(rh * row);
+        uint32_t col;
+        memcpy(&col, CAR_DESCB(c) + 0x218, 4);
+        if (g_hud_opaque) col |= 0xff000000u;   /* 0x419f70 */
+        uint32_t cs[4] = {col, col, col, col};
+        Hud2D_Quad(q, cs);
+        text_print(p->name[row], p->namebuf[i], 1.0f, 1.0f);
+        char *g = p->gapbuf[i];
+        const char *s = g;
+        if (g_race_knockout == 1) {
+            PENDING_NOTE(0x42af60, "the knockout's standings (its distances)");
+            s = exe_str(0x5ccde4);
+        } else if (g_race_mode == 3) {
+            PENDING_NOTE(0x48d720, "the network race's standings");
+            s = exe_str(0x5ccde4);
+        } else if (*CAR_I(c, 0xb50) == 2) {
+            HTime_Format(*CAR_I(c, 0xb24), g, false);
+        } else {
+            int d = *CAR_I(c, 0xb54) - mine;
+            if (g_hud_opponentlist == 1) {
+                if (d == 0) s = exe_str(0x5ccde4);   /* "-----" */
+                else snprintf(g, 12, "%d", d);
+            } else if (g_hud_opponentlist == 2) {
+                float a = me ? *CAR_F(me, 0x35c) : 0, b = *CAR_F(c, 0x35c), f;
+                if (d < 1) {
+                    f = a * exe_f32(0x5b23f0);
+                    if (f < b) f = b;
+                } else {
+                    f = b * exe_f32(0x5b23f0);
+                    if (b * exe_f32(0x5b23f0) < a) f = a;
+                }
+                if (exe_f32(0x5b2df8) < a && d != 0) HTime_Format((int)lrintf((float)(d * 0x40) / f), g, true);
+                else s = exe_str(0x5ccde4);
+            } else {
+                g[0] = 0;
+            }
+        }
+        text_print(p->gap[row], s, 1.0f, 1.0f);
+    }
+    const char *label = LOC_string(HudConfig_loc(), 0x11);
+    text_print(p->label, label ? label : "", 1.0f, 1.0f);
+    if (!g_race_knockout && me) {
+        snprintf(p->placebuf, sizeof p->placebuf, "%d%s", *CAR_I(me, 0xb48), exe_str(0x5ccde0));
+        text_print(p->place, p->placebuf, 1.0f, 1.0f);
+        snprintf(p->ofbuf, sizeof p->ofbuf, "%d", p->count);
+        text_print(p->of, p->ofbuf, 1.0f, 1.0f);
+    }
+}
+
+static void position_destroy(HudVisual *v)   /* 0x42ad40 */
+{
+    HPosition *p = (HPosition *)v;
+    for (int i = 0; i < POS_MAX; i++) text_free(p->name[i]), text_free(p->gap[i]);
+    text_free(p->label);
+    text_free(p->place);
+    text_free(p->of);
+    text_free(p->extra);
+    free(p);
+}
+
+static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress};
+
+static HudVisual *position_new(void)
+{
+    HPosition *p = calloc(1, sizeof *p);
+    if (!p) return NULL;
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_POSITION, &x, &y);
+    tray_init(&p->tray, &position_vt, x, y, 0, 0, 0, false, 0, false, false);
+    p->count = g_racers.n < POS_MAX ? g_racers.n : POS_MAX;
+    int rw = HudConfig_i32(0xb4), rh = HudConfig_i32(0xb8), top = HudConfig_i32(0x38);
+    tray_setsize(&p->tray, rw, (p->count + 1) * rh + top * 2, top + rh * p->count);
+    int nw = (int)((double)rw * exe_f64(0x5b2db0)), gw = (int)((double)rw * exe_f64(0x5b2da8));
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    for (int i = 0; i < p->count; i++) {
+        p->name[i] = text_new(HudConfig_font(0x64), (uint32_t)HudConfig_i32(0x1c), c14, 0, 0, nw, rh, 0, false);
+        p->gap[i] = text_new(HudConfig_font(0x7c), HudConfig_scheme(), c14, 0, 0, gw, rh, 1, false);
+    }
+    p->label = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, rw, rh, 0, false);
+    p->extra = text_new(HudConfig_font(0x64), HudConfig_scheme(), c14, 0, 0, rw, rh, 1, false);
+    p->place = text_new(HudConfig_font(0x4c), HudConfig_scheme(), c14, 0, 0, rw, rh, 0, false);
+    p->of = text_new(HudConfig_font(0x64), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, rw, rh, 0, false);
+    PENDING_NOTE(0x42a6f0, "the standings' ping meter (network)");
+    HudConfig_pos(HUDPOS_POSITION, &x, &y);
+    position_setpos(&p->tray.base, x, y);
+    /* The drivers' names, cut to fit 55 pixels (" " when none). */
+    for (int i = 0; i < g_racers.n && i < POS_MAX; i++) {
+        const char *src = (const char *)CAR_DESCB(g_racers.c[i]) + 0x17c;
+        int n = (int)strlen(src);
+        if (24 < n) n = 24;
+        bool fits = false;
+        while (0 < n && !fits) {
+            memcpy(p->namebuf[i], src, (size_t)n);
+            p->namebuf[i][n] = 0;
+            float a, b, w, h;
+            if (p->name[0] && p->name[0]->font && p->name[0]->font->font) text_extent(p->name[0], p->namebuf[i], &a, &b, &w, &h);
+            else w = 0;
+            if (exe_f32(0x5b2da4) < w) n--;
+            else fits = true;
+        }
+        if (n == 0) snprintf(p->namebuf[i], sizeof p->namebuf[i], "%s", exe_str(0x5ccdc0));
+    }
+    return &p->tray.base;
+}
+
 /* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
    the value from tables made once, a cap over its pivot ---- */
 
@@ -1046,7 +1262,8 @@ void HUD_Init(void)
     add(speed_new(), true, false);
     add(time_new(&time_vt, HUDPOS_TIME, HudConfig_i32(0xa4), HudConfig_i32(0xa8)), true, false);           /* 0x4315d0 */
     add(time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4)), true, false);   /* 0x42a0f0 */
-    PENDING_NOTE(0x42a6f0, "HUD_Init's damage, position and lap visuals (0x42f880, 0x42a6f0, 0x421e20)");
+    PENDING_NOTE(0x42f880, "HUD_Init's damage visuals (0x42f880, 0x421e20)");
+    add(position_new(), true, false);
     add(speedometer_new(), true, false);
     add(tach_new(), true, false);
     add(tachdigital_new(), true, false);

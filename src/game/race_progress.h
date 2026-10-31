@@ -35,3 +35,10 @@ void Race_TickOdd(void);    /* 0x417030 */
 /* The human players' wrong-way count (+0xd30, ticks going against the race; 0 when right, finished, AI
    driven, respawning, or in the pursuit), the audio's player tick's part (0x4a7430). */
 void Race_WrongWay(void);
+/* The racers' places (+0xb48, from the ranking: 1 the first, 0 when not ranked); the first human's row.
+   In the two-player split race (0x657420, one human) the catch-up factors +0x53c by the gap to it.
+   0x415fe0 */
+void Race_UpdatePositions(void);
+/* The ranking emptied (its first eight rows: car -1, distance -100), before the cars' tasks rank them
+   again (0x416160, named Sim_ResetCollisionSlots in the Ghidra project). */
+void Race_ResetRanking(void);

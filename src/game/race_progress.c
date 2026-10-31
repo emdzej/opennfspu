@@ -355,3 +355,25 @@ void Race_WrongWay(void)
         }
     }
 }
+
+void Race_UpdatePositions(void)
+{
+    int first = 99;
+    for (int i = 0; i < g_racers.n; i++) {
+        Car *c = g_racers.c[i];
+        int place = 0;
+        for (int k = 0; k < g_racers.n; k++)
+            if (g_race_rank[k].car == *CAR_I(c, CAR_INDEX)) {
+                place = k + 1;
+                break;
+            }
+        *CAR_I(c, 0xb48) = place;
+        if (g_race_rank[i].human != 0 && first == 99) first = i;
+    }
+    (void)first;   /* (the split race's catch-up by it: 0x657420, +0x53c, not ported) */
+}
+
+void Race_ResetRanking(void)
+{
+    for (int i = 0; i < 8 && i < CAR_MAX; i++) g_race_rank[i] = (RaceRank){-1, -100.0f, 0, 0};
+}

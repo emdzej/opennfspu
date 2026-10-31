@@ -37,7 +37,7 @@ void Sim_Step(void)
         PENDING_NOTE(0x5d1744, "the start's volume ramp (0x5d1744, 0x657ca4)");
     }
     if (!(g_sim_tick & 1)) {
-        PENDING_NOTE(0x416160, "Sim_ResetCollisionSlots (the collision events)");
+        Race_ResetRanking();                  /* 0x416160 */
         Sim_ClearContacts();                  /* 0x498190 */
         AI_TickAll();                         /* 0x4067c0 */
         TaskList_Run(&g_tasks_even);
@@ -46,8 +46,9 @@ void Sim_Step(void)
     TaskList_Run(&g_tasks_tick);
     if (g_sim_tick & 1) {
         Race_TickOdd();                       /* 0x417030 */
+        Race_UpdatePositions();               /* 0x415fe0 */
         Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
-        PENDING_NOTE(0x417030, "the odd tick's Race_UpdatePositions, Audio_Tick, World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
+        PENDING_NOTE(0x417030, "the odd tick's Audio_Tick, World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");
     g_sim_tick++;

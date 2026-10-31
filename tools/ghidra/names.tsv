@@ -64,7 +64,7 @@
 00415ea0	Input_Enqueue	input	high	Puts one 4-byte control packet into player n's 128-entry ring
 00415f10	Sim_HalfStep	game	med	Called on even sim ticks (32 Hz): input/replay record step
 00415fe0	Race_UpdatePositions	game	med	Ranks the cars for the race positions
-00416160	Sim_ResetCollisionSlots	sim	low	Resets 8 collision-event slots (16 bytes: -1, -100.0f, 0, 0) at 0x608b38
+00416160	Race_ResetRanking	game	med	Empties the distance ranking 0x608b38 (8 rows: -1, -100.0f, 0, 0)
 004162b0	Race_Progress	race	high	Race progress 0..1 at a road node (reversed on reverse tracks)
 00416330	Race_CarProgress	race	high	Racer distance +0xaf8, laps, lap times, finish +0xb50, ranking table 0x608b38
 004169d0	CarSim_RaceTask	race	high	Every-tick car task (even ticks): odometer +0xd00, racer progress 0x416330, else road progress (port: race_progress.c)
@@ -117,6 +117,7 @@
 0041e5b0	HUD_TraysOff	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e5e0	HUD_NoTrays	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e870	HUD_MultiTimeShown	hud	med	Ported in src/game/hud.c
+0041e8a0	HUD_StandingsShown	hud	med	Second layout +0x48 and the HUD shown
 0041e920	HUD_GearShown	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e940	HUD_SpeedFigures	hud	med	Ported in src/game/hud.c
 0041e960	HUD_SpeedDial	hud	med	Ported in src/game/hud.c
@@ -178,6 +179,7 @@
 0042a550	HPause_v0	hud	struct	Virtual slot 0 of HPause (vtable 0x5b2d54)
 0042a5b0	HPause_v1	hud	struct	Virtual slot 1 of HPause (vtable 0x5b2d54)
 0042a600	HPause_v9	hud	struct	Virtual slot 9 of HPause (vtable 0x5b2d54)
+0042a6f0	HPosition_init	hud	med	Standings tray
 0042ad40	HPosition_v0	hud	struct	Virtual slot 0 of HPosition (vtable 0x5b2dbc)
 0042af60	HPosition_v1	hud	struct	Virtual slot 1 of HPosition (vtable 0x5b2dbc)
 0042b5b0	HPosition_v12	hud	struct	Virtual slot 12 of HPosition (vtable 0x5b2dbc)
