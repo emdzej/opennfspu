@@ -23,7 +23,16 @@
 #include "real/set3d.h"
 #include <string.h>
 
-#define VSTRIDE 8   /* floats per work vertex (32 bytes, one texture coordinate set) */
+/* Floats per work vertex: 8 (32 bytes, one texture coordinate set), 10 (40 bytes) in the two-stage
+   draws, whose kernels (0x542090, 0x544780, 0x546bb0) are the one-stage ones with the second set and
+   the stride (their clippers 0x54..2 the same with 40-byte vertices). */
+static int vstride = 8;
+#define VSTRIDE vstride
+/* The two-stage draw's second coordinate set, its blend modes and textures (EAGL_DrawTwoStage). */
+static const float *two_uv2;
+static bool two_on;
+static int two_m0, two_m1;
+static void *two_t0, *two_t1;
 
 static uint32_t ubits(float f) { union { float f; uint32_t u; } c = {f}; return c.u; }
 static float ufloat(uint32_t u) { union { uint32_t u; float f; } c = {u}; return c.f; }
@@ -65,10 +74,27 @@ static void submit(EaglContext *c, uint32_t unindexed_prim, bool sort)
 {
     if (!c->out_nindices) return;
     /* The manager of the graphics object ((*0x69ed0c)[1]): the draw's texture on stage 0, none on 1. */
-    if (g_texgraphics && g_texgraphics->textures) TEXTURE_select(g_texgraphics->textures, c->texture, NULL);
-    reset_format(c);
+    if (two_on) {
+        /* both textures (0x535fb0), the two-set format (0x2a 1), each stage's blend (0x29, 0x10029) */
+        if (g_texgraphics && g_texgraphics->textures) TEXTURE_select(g_texgraphics->textures, two_t0, two_t1);
+        if (c->twouv != 1) {
+            THRASH.fn.setstate(0x2a, 1);
+            c->twouv = 1;
+        }
+        if (two_m0 != c->blend0) {
+            THRASH.fn.setstate(0x29, (uintptr_t)two_m0);
+            c->blend0 = two_m0;
+        }
+        if (two_m1 != c->blend1) {
+            THRASH.fn.setstate(0x10029, (uintptr_t)two_m1);
+            c->blend1 = two_m1;
+        }
+    } else {
+        if (g_texgraphics && g_texgraphics->textures) TEXTURE_select(g_texgraphics->textures, c->texture, NULL);
+        reset_format(c);
+    }
     c->draw.prim = 4;
-    c->draw.fvf = 0x1c4;
+    c->draw.fvf = two_on ? 0x2c4 : 0x1c4;
     c->draw.verts = c->verts;
     if (sort && c->sort) EAGL_SortTriangles(c);
     if (!(c->flags & EAGL_CF_INSIDE) || !unindexed_prim) {
@@ -171,6 +197,15 @@ void EAGL_DrawList(EaglContext *c, const uint32_t *diffuse, const uint32_t *spec
             }
         }
         has_uv = true;
+    }
+    if (two_uv2 && !uv2) {
+        for (int t = 0; t < ntri3; t++)
+            if ((f & EAGL_CF_INSIDE) || c->primcodes[t][0] == 0)
+                for (int k = 0; k < 3; k++) {
+                    v[(3 * t + k) * VSTRIDE + 8] = two_uv2[2 * (3 * t + k)];
+                    v[(3 * t + k) * VSTRIDE + 9] = two_uv2[2 * (3 * t + k) + 1];
+                }
+        uv2 = true;
     }
     uint16_t *idx = c->indices;
     int nout = 0;
@@ -281,6 +316,15 @@ void EAGL_DrawQuads(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
             }
         }
         has_uv = true;
+    }
+    if (two_uv2 && !uv2) {
+        for (int q = 0; q < nquads; q++)
+            if (inside || c->primcodes[q][0] == 0)
+                for (int k = 0; k < 4; k++) {
+                    v[(4 * q + k) * VSTRIDE + 8] = two_uv2[2 * (4 * q + k)];
+                    v[(4 * q + k) * VSTRIDE + 9] = two_uv2[2 * (4 * q + k) + 1];
+                }
+        uv2 = true;
     }
     if (uv2 || has_uv || has_s || has_d || moved) {
         uint16_t *idx = c->indices;
@@ -445,6 +489,19 @@ void EAGL_DrawStrip(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
                 }
         has_uv = true;
     }
+    if (two_uv2 && !uv2) {
+        for (int i = 0; i < n; i++) {
+            v[i * VSTRIDE + 8] = two_uv2[2 * i];
+            v[i * VSTRIDE + 9] = two_uv2[2 * i + 1];
+        }
+        if (spread)
+            for (int i = n - 1; i >= 0; i--)
+                if (remap[i] != i) {
+                    v[remap[i] * VSTRIDE + 8] = v[i * VSTRIDE + 8];
+                    v[remap[i] * VSTRIDE + 9] = v[i * VSTRIDE + 9];
+                }
+        uv2 = true;
+    }
     uint16_t *idx = c->indices;
     /* Vertex n is scratch: it keeps where the copies end and the next index between the kernel runs of a
        multi-pass material (the original stores the pointer itself; the port an index). */
@@ -553,7 +610,7 @@ void EAGL_DrawStrip(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
 
 /* Two polygon buffers of 10 vertices, adjacent as in the original (0x6bc340, 0x6bc480: a second
    texture coordinate set written past a vertex lands in the next one). */
-static float clipbuf[2 * 10 * VSTRIDE + 2];
+static float clipbuf[2 * 10 * 10 + 2];
 #define BUF_A (clipbuf)
 #define BUF_B (clipbuf + 10 * VSTRIDE)
 
@@ -874,4 +931,31 @@ void EAGL_SortTriangles(EaglContext *c)
     for (int t = 0; t < ntri; t++)
         for (int j = 0; j < 3; j++) c->indices[3 * t + j] = sortbuf[t].i[j];
     c->sort = 0;
+}
+
+/* The two-stage draw layer's kernels (0x542090 strip, 0x544780 list, 0x546bb0 quads): the one-stage ones
+   with 40-byte vertices, the second coordinate set (its layer's data, else the vertices' own with
+   EAGL_CF_UV2) and the two textures and blend modes. The stamps: diffuse, specular, the two uv sets. */
+void EAGL_DrawTwoStage(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, int mode0, int mode1,
+                       const int16_t *stamps)
+{
+    const float *uv0 = c->stage_tex[0], *uv1 = c->stage_tex[1];
+    if (c->pad014 < stamps[3]) c->pad014 = stamps[3];   /* +0x14: the second set's stamp */
+    else uv1 = NULL;
+    vstride = 10;
+    two_on = true;
+    two_uv2 = uv1;
+    two_m0 = mode0;
+    two_m1 = mode1;
+    two_t0 = c->stage_tex[2];
+    two_t1 = c->stage_tex[3];
+    switch (c->prim) {
+    case 1: EAGL_DrawStrip(c, diffuse, specular, uv0, stamps[0], stamps[1], stamps[2]); break;
+    case 3: EAGL_DrawList(c, diffuse, specular, uv0, stamps[0], stamps[1], stamps[2]); break;
+    case 4: EAGL_DrawQuads(c, diffuse, specular, uv0, stamps[0], stamps[1], stamps[2]); break;
+    default: c->flags &= 0xffffff07u; break;
+    }
+    vstride = 8;
+    two_on = false;
+    two_uv2 = NULL;
 }

@@ -43,7 +43,8 @@ void CarEnv_Free(void);
 enum { CARLIGHT_SIZE = 0x194 };
 typedef struct {
     float f[CARLIGHT_SIZE / 4];
-    struct Texture *tex[3];   /* (the original's +0xdc: the reflection textures by level) */
+    struct Texture *tex[3];   /* (the original's +0xd0: the slice's reflection textures by level; +0xdc,
+                                 the car's sphere maps, are R3DCar's globaltex) */
 } CarLight;
 
 /* The car's light now (R3DCar_v15 0x43a490): the light under it on the road (the polygon's colours), the

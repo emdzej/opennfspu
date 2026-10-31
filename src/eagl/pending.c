@@ -29,9 +29,3 @@ void EAGL_ClipOrtho(int i0, int i1, int i2, uint32_t codes, float guardband, con
 }
 
 
-void EAGL_DrawTwoStage(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, int mode0, int mode1,
-                       const int16_t *stamps)
-{
-    PENDING_NOTE(0x542090, "EAGL_DrawTwoStage (0x542090 / 0x544780 / 0x546bb0)");
-    c->flags &= 0xffffff07u;
-}

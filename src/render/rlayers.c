@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 /* The source file and messages of the asserts and aborts (exe strings). */
 #define RCUSTOMLAYERS exe_str(0x5cdf04)
@@ -15,6 +16,8 @@ static void dep_assert(void) { REAL_abort(exe_str(0x5cded8), 0x8f, "%s", exe_str
 float g_rlayer_eye[3];
 float *g_rlayer_lights;
 struct Texture **g_rlayer_envtex;
+struct Texture **g_rlayer_spectex;
+struct Texture **g_rlayer_lighttex;
 bool g_rlayer_fullambient_fill;
 
 static float exef(uint32_t va)
@@ -50,6 +53,9 @@ static EaglLayer *exec_indexedcolour(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_ambient(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_fullambient(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_light(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_spectex(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_shadowmap(EaglLayer *, EaglStream *, EaglStream *);
 
 static const RLayerClass classes[] = {
     {0x8001, -1, 0x5b3c18, 1, true, false, 0, 0, 0x20, NULL, 0x448bf0, "RCustomLayers::LayerUVAnimate"},
@@ -67,9 +73,9 @@ static const RLayerClass classes[] = {
     {0x800f, 0x8000, 0, 0, false, false, 0, 0, 0x20, NULL, 0x4499c0, "RCustomLayers::LayerFalseSort1"},
     {0x8010, 0x8000, 0, 0, false, false, 0, 0, 0x20, NULL, 0x449a10, "RCustomLayers::LayerFalseSort2"},
     {0x8011, -1, 0, 0, true, false, 4, 0, 0, NULL, 0x453490, "Headlights::LayerVertexLight_Ambient"},
-    {0x8100, 3, 0x5b38c0, 3, true, true, 0, 0, 0, NULL, 0x445450, "R3DSpecularTextureLayer"},
-    {0x8101, 3, 0x5b38c0, 3, true, true, 0, 0, 0, NULL, 0x445a40, "R3DSkyMapTextureLayer"},
-    {0x8102, 3, 0x5b38c0, 3, false, true, 0, 0, 0, NULL, 0x446060, "R3DShadowMapTextureLayer"},
+    {0x8100, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_spectex, 0x445450, "R3DSpecularTextureLayer"},
+    {0x8101, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_skymap, 0x445a40, "R3DSkyMapTextureLayer"},
+    {0x8102, 3, 0x5b38c0, 3, false, true, 0, 0, 0, exec_shadowmap, 0x446060, "R3DShadowMapTextureLayer"},
     {0x8104, -1, 0x5b38c0, 3, true, false, 0, 0xb8, 0, exec_light, 0x446460, "R3DLightLayer"},
     {0x8105, -1, 0x5b38c0, 3, true, false, 0, 4, 0, NULL, 0x446db0, "R3DSpecularLayer"},
 };
@@ -463,5 +469,285 @@ static EaglLayer *exec_light(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     }
 #undef LIT
     c->flags |= EAGL_CF_DIFFUSE;
+    return l->next;
+}
+
+/* The sphere map's coordinates of a normal (0x445450's loop): the normal through the model and view
+   rotations, then n.xy * 0.5 / sqrt(|n.z| + 1) + 0.5, the root as the original takes it (0x5f400000 less
+   half the bits, one step with 1.47 and 0.47). */
+static void sphere_uv(const float *m, const float *n, float out[2])
+{
+    float x = n[0] * m[0] + n[1] * m[4] + n[2] * m[8] + n[3] * m[12];   /* 0x53a0a0 */
+    float y = n[0] * m[1] + n[1] * m[5] + n[2] * m[9] + n[3] * m[13];
+    float z = n[0] * m[2] + n[1] * m[6] + n[2] * m[10] + n[3] * m[14];
+    float a = fabsf(z) + 1.0f;   /* 0x5b2750 */
+    int32_t ai;
+    memcpy(&ai, &a, 4);
+    int32_t ri = 0x5f400000 - (ai >> 1);
+    float r;
+    memcpy(&r, &ri, 4);
+    float f = r * (1.47f - a * r * r * 0.47f) * 0.5f;   /* 0x5b38d8, 0x5b38e0, 0x5b23f0 */
+    out[0] = x * f + 0.5f;
+    out[1] = y * f + 0.5f;
+}
+
+/* 0x445450 (R3DSpecularTextureLayer): the reflection. Its level by the shininess (stream 0's first float:
+   below 0.05, below 0.95, above) picks the environment's texture (none with its +0x190 set) into stream
+   1; without one the pass is skipped (to the next draw layer's next, unless the stride is 0x20 and the id
+   0xe). The normals (dependency 0) give the sphere map's coordinates (set 2 for id 0xf, else set 1) of
+   the vertices of drawn primitives, through the index list (dependency 2) once per source vertex. */
+static EaglLayer *exec_spectex(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    EaglContext *c = g_eagl;
+    int stride = (int)l->param;
+    float shine;
+    memcpy(&shine, s0->data, 4);
+    int level = shine < 0.05f ? 0 : shine < 0.95f ? 1 : 2;   /* 0x5b38b0, 0x5b38b4 */
+    const uint8_t *env = (const uint8_t *)g_rlayer_lights;
+    void *tex = env && !env[0x190] && g_rlayer_spectex ? (void *)g_rlayer_spectex[level] : NULL;   /* +0xdc */
+    s1->data = tex;
+    if (!tex) {
+        if (stride != 0x20 && l->id != 0xe) return l->next;
+        EaglLayer *d = EAGL_LayerFindNext(l, 0, 0);
+        return d ? d->next : NULL;
+    }
+    if (!dep_present(l, 1) && (!l->dep || l->ndeps < 2)) dep_assert();
+    const float *normals = dep_data(l, 0);
+    uint32_t nbytes = dep_info(l, 0) & 0xfffffff0u;
+    const uint8_t *idx = dep_present(l, 2) ? EAGL_LayerData(l->dep[2]) : NULL;
+    if (!normals) return l->next;
+    float *dst;
+    if (l->id == 0xf) {
+        dst = (float *)(c->verts + 0x20);
+        c->flags |= EAGL_CF_UV2;
+    } else {
+        dst = (float *)(c->verts + 0x18);
+        c->flags |= EAGL_CF_UV;
+    }
+    /* the rotations of the model and the view (translations dropped), model x view */
+    EaglMatrix mm = *EAGL_StackTop(&c->view->model), vm = *EAGL_StackTop(&c->view->view);
+    mm.m[12] = mm.m[13] = mm.m[14] = 0;
+    vm.m[12] = vm.m[13] = vm.m[14] = 0;
+    EAGL_MatPreMul(&vm, &mm);
+    const float *m = vm.m;
+    int per = c->prim;
+    static float cache[256][2];
+    static int32_t stamp[256], now;   /* 0x612de0 (stamp, uv) records, 0x613de8 */
+    uint8_t *o = (uint8_t *)dst;
+    if (!(c->flags & EAGL_CF_INSIDE) && per != 1) {
+        uint32_t (*pc)[2] = c->primcodes;
+        if (!idx) {
+            const float *n = normals;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, n += 4, o += stride) sphere_uv(m, n, (float *)o);
+                else {
+                    k += per;
+                    n += 4 * per;
+                    o += stride * per;
+                }
+            }
+        } else {
+            now++;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, o += stride) {
+                        uint8_t i = idx[k];
+                        if (stamp[i] != now) {
+                            sphere_uv(m, normals + 4 * i, cache[i]);
+                            stamp[i] = now;
+                        }
+                        memcpy(o, cache[i], 8);
+                    }
+                else {
+                    k += per;
+                    o += stride * per;
+                }
+            }
+        }
+    } else if (!idx) {
+        const float *n = normals;
+        for (int k = 0; k < c->nverts; k++, n += 4, o += stride) sphere_uv(m, n, (float *)o);
+    } else {
+        uint32_t nsrc = nbytes / 16;
+        for (uint32_t i = 0; i < nsrc && i < 256; i++) sphere_uv(m, normals + 4 * i, cache[i]);
+        for (int k = 0; k < c->nverts; k++, o += stride) memcpy(o, cache[idx[k]], 8);
+    }
+    return l->next;
+}
+
+/* 0x445a40 (R3DSkyMapTextureLayer): the road's reflection. As the specular texture's, its level picks
+   the environment's slice texture (+0xd0) into stream 1, or skips the pass. Each vertex's position
+   (dependency 1) pushed along its normal (dependency 0) by the environment's +0 goes through the model
+   matrix, less the car's position (+0xe8), into the road's axes (+0x104); its across and up coordinates
+   scaled by 1 / the texture size (+4) and that times the aspect (+8), offset by the car's place along the
+   road (+0x144 x 0.1, +0x148) and a half. */
+static EaglLayer *exec_skymap(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    EaglContext *c = g_eagl;
+    int stride = (int)l->param;
+    float shine;
+    memcpy(&shine, s0->data, 4);
+    int level = shine < 0.05f ? 0 : shine < 0.95f ? 1 : 2;
+    const float *env = g_rlayer_lights;
+    void *tex = env && !((const uint8_t *)env)[0x190] && g_rlayer_envtex ? (void *)g_rlayer_envtex[level] : NULL;
+    s1->data = tex;
+    if (!tex) {
+        if (stride != 0x20 && l->id != 0xe) return l->next;
+        EaglLayer *d = EAGL_LayerFindNext(l, 0, 0);
+        return d ? d->next : NULL;
+    }
+    if (!l->dep || l->ndeps < 3) dep_assert();
+    const float *normals = dep_data(l, 0), *pos = dep_data(l, 1);
+    uint32_t nbytes = dep_info(l, 0) & 0xfffffff0u;
+    const uint8_t *idx = dep_present(l, 2) ? EAGL_LayerData(l->dep[2]) : NULL;
+    if (!normals || !pos) return l->next;
+    float push = env[0], su = env[1], sv = env[2] * env[1];
+    static const float id9[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    float back[3] = {-env[0x3a], -env[0x3b], -env[0x3c]};
+    EaglMatrix t, m = *EAGL_StackTop(&c->view->model), road;
+    EAGL_MatFromRotTrans(&t, id9, back);   /* 0x5bb2d0 */
+    EAGL_MatPostMul(&m, &t);
+    memcpy(road.m, env + 0x41, sizeof road.m);
+    EAGL_MatPostMul(&m, &road);
+    float *dst;
+    if (l->id == 0xf) {
+        dst = (float *)(c->verts + 0x20);
+        c->flags |= EAGL_CF_UV2;
+    } else {
+        dst = (float *)(c->verts + 0x18);
+        c->flags |= EAGL_CF_UV;
+    }
+    float ou = env[0x51] * 0.1f + 0.5f, ov = env[0x52] + 0.5f;   /* 0x5b2604, 0x5b23f0 */
+    const float *M = m.m;
+#define SKYUV(n, p, out) do { \
+        float x_ = push * (n)[0] + (p)[0], y_ = push * (n)[1] + (p)[1], z_ = push * (n)[2] + (p)[2]; \
+        (out)[0] = (x_ * M[0] + y_ * M[4] + z_ * M[8] + M[12]) * su + ou; \
+        (out)[1] = (M[2] * x_ + M[6] * y_ + M[10] * z_ + M[14]) * sv + ov; } while (0)
+    int per = c->prim;
+    static float cache[256][2];
+    static int32_t stamp[256], now;
+    uint8_t *o = (uint8_t *)dst;
+    if (!(c->flags & EAGL_CF_INSIDE) && per != 1) {
+        uint32_t (*pc)[2] = c->primcodes;
+        if (!idx) {
+            const float *n = normals, *p = pos;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, n += 4, p += 4, o += stride) SKYUV(n, p, (float *)o);
+                else {
+                    k += per;
+                    n += 4 * per;
+                    p += 4 * per;
+                    o += stride * per;
+                }
+            }
+        } else {
+            now++;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, o += stride) {
+                        uint8_t i = idx[k];
+                        if (stamp[i] != now) {
+                            stamp[i] = now;
+                            SKYUV(normals + 4 * i, pos + 4 * i, cache[i]);
+                        }
+                        memcpy(o, cache[i], 8);
+                    }
+                else {
+                    k += per;
+                    o += stride * per;
+                }
+            }
+        }
+    } else if (!idx) {
+        const float *n = normals, *p = pos;
+        for (int k = 0; k < c->nverts; k++, n += 4, p += 4, o += stride) SKYUV(n, p, (float *)o);
+    } else {
+        uint32_t nsrc = nbytes / 16;
+        for (uint32_t i = 0; i < nsrc && i < 256; i++) SKYUV(normals + 4 * i, pos + 4 * i, cache[i]);
+        for (int k = 0; k < c->nverts; k++, o += stride) memcpy(o, cache[idx[k]], 8);
+    }
+#undef SKYUV
+    return l->next;
+}
+
+/* 0x446060 (R3DShadowMapTextureLayer): the nearest dynamic light's map. Its texture (the environment's
+   +0x18c) into stream 1, or the pass skipped without one. The positions (dependency 1) through the model
+   matrix (0x611e18), then the light's two rows (+0x164 .. +0x174, +0x178 .. +0x188) give the coordinates,
+   through the index list once per source vertex. */
+static EaglLayer *exec_shadowmap(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0;
+    EaglContext *c = g_eagl;
+    int stride = (int)l->param;
+    const float *env = g_rlayer_lights;
+    void *tex = env && g_rlayer_lighttex ? *g_rlayer_lighttex : NULL;   /* +0x18c */
+    s1->data = tex;
+    if (!tex) {
+        if (stride != 0x20 && l->id != 0xe) return l->next;
+        EaglLayer *d = EAGL_LayerFindNext(l, 0, 0);
+        return d ? d->next : NULL;
+    }
+    if (!l->dep || l->ndeps < 3) dep_assert();
+    const float *pos = dep_data(l, 1);
+    uint32_t nsrc = dep_info(l, 1) >> 4;
+    const uint8_t *idx = dep_present(l, 2) ? EAGL_LayerData(l->dep[2]) : NULL;
+    float *dst;
+    if (l->id == 0xf) {
+        dst = (float *)(c->verts + 0x20);
+        c->flags |= EAGL_CF_UV2;
+    } else {
+        dst = (float *)(c->verts + 0x18);
+        c->flags |= EAGL_CF_UV;
+    }
+    static float world[256][4];
+    if (nsrc > 256) nsrc = 256;
+    EAGL_MatTransform4(EAGL_StackTop(&c->view->model), (int)nsrc, pos, 0x10, world[0], 0x10);   /* EAGL_MatTransform4b */
+    const float *L = env + 0x164 / 4;
+#define SHUV(w, out) do { (out)[0] = L[0] * (w)[0] + (w)[2] * L[2] + L[1] * (w)[1] + L[4]; \
+        (out)[1] = L[7] * (w)[2] + L[6] * (w)[1] + L[5] * (w)[0] + L[9]; } while (0)
+    int per = c->prim;
+    static float cache[256][2];
+    static int32_t stamp[256], now;
+    uint8_t *o = (uint8_t *)dst;
+    if (!(c->flags & EAGL_CF_INSIDE) && per != 1) {
+        uint32_t (*pc)[2] = c->primcodes;
+        if (!idx) {
+            int k = 0;
+            for (const float *w = world[0]; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, w += 4, o += stride) SHUV(w, (float *)o);
+                else {
+                    k += per;
+                    w += 4 * per;
+                    o += stride * per;
+                }
+            }
+        } else {
+            now++;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, o += stride) {
+                        uint8_t i = idx[k];
+                        if (stamp[i] != now) {
+                            stamp[i] = now;
+                            SHUV(world[i], cache[i]);
+                        }
+                        memcpy(o, cache[i], 8);
+                    }
+                else {
+                    k += per;
+                    o += stride * per;
+                }
+            }
+        }
+    } else if (!idx) {
+        for (int k = 0; k < c->nverts && k < 256; k++, o += stride) SHUV(world[k], (float *)o);
+    } else {
+        for (uint32_t i = 0; i < nsrc; i++) SHUV(world[i], cache[i]);
+        for (int k = 0; k < c->nverts; k++, o += stride) memcpy(o, cache[idx[k]], 8);
+    }
+#undef SHUV
     return l->next;
 }

@@ -125,3 +125,20 @@ the layers' light environment, 0x6115cc (0x4433c0). R3DCar_v15 (0x43a490) fills 
   (0x6197cb), the road's axes transposed for their projection, and the car's place across and along
   the road at its node, in sixths.
 - **The nearest dynamic light** (0x456030), not ported.
+
+## Reflections
+
+With the chrome option at 2, car materials draw extra passes after the base. Each pass is a texture layer
+that writes its own texture coordinates into the work vertices (set 1, or set 2 for id 0xf, flagging
+EAGL_CF_UV / UV2), then a render state and a draw. A layer without a texture skips its pass: it returns
+the layer after the next draw layer, unless the stride is 0x20 and the id 0xe.
+
+| Layer | Texture | Coordinates |
+|---|---|---|
+| R3DSpecularTextureLayer (0x445450) | the car's sphere maps SPC1..3 (light block +0xdc, 0x440870), by shininess (stream 0: below 0.05, 0.95, above), none with +0x190 | the normals through the model and view rotations: n.xy · 0.5 / √(\|n.z\| + 1) + 0.5, with the original's coarse root (0x5f400000, one step with 1.47 / 0.47) |
+| R3DSkyMapTextureLayer (0x445a40) | the road slice's (+0xd0), by the same levels | the position, pushed along the normal by +0, through the model matrix less the car's position into the road's axes (+0x104): across × 1/size + along × 0.1 + 0.5, up × aspect/size + 0.5 |
+| R3DShadowMapTextureLayer (0x446060) | the nearest dynamic light's (+0x18c; none while the lights aren't ported, so the pass is skipped) | the world positions through the light's two rows (+0x164, +0x178) |
+
+The two-stage draw layer's kernels (0x542090, 0x544780, 0x546bb0) are the one-stage ones run with
+40-byte vertices: the second coordinate set, both textures (0x535fb0), the two-set format (setstate 0x2a
+1) and each stage's blend (0x29, 0x10029).

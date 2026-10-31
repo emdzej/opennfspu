@@ -6,6 +6,7 @@
 #include "real/set3d.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 EaglContext *g_eagl;
 
