@@ -131,6 +131,7 @@ export default defineConfig({
             { text: "Sound", link: "/re/sound" },
             { text: "Textures and rendering", link: "/re/render" },
             { text: "Render system", link: "/re/render-system" },
+            { text: "Front end", link: "/re/frontend" },
             { text: "File formats", link: "/formats" },
           ],
         },
