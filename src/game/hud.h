@@ -31,6 +31,8 @@ void HUD_Init(void);
 void HUD_Free(void);
 /* The race over: the results and the other race-over screens in turn (0x426a40 with 1). */
 void HUD_RaceOver(void);
+/* Every visual hidden, the modal list emptied (the replay's start). 0x425740 */
+void HUD_HideAll(void);
 /* A time of ticks as mm:ss.hh, signed if asked. 0x435640 */
 void HTime_Format(int t, char *out, bool sign);
 /* The HUD over camera c (the overlay view). 0x425910 */

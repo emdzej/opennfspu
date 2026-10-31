@@ -1,5 +1,7 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "game/sim_rand.h"
+#include "game/race_car.h"
 #include "game/ai.h"
 #include "game/race_progress.h"
 #include "exe.h"
@@ -11,6 +13,7 @@
 int32_t g_race_started;
 int32_t g_race_countdown;
 int32_t g_race_view;   /* 0x657424: 0 racing, 2 the replay */
+int32_t g_race_seed;
 
 /* The cars' per-tick contacts (+0x110c) cleared, the list of the cars checked against each other
    emptied. 0x498190 */
@@ -52,4 +55,22 @@ void Sim_Step(void)
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");
     g_sim_tick++;
+}
+
+void Race_Restart(int32_t start)
+{
+    g_race_countdown = 0;
+    g_race_over = 0;
+    g_race_started = 0;
+    g_sim_tick = start;
+    SimRand_Seed((uint32_t)g_race_seed);   /* 0x4a4560 */
+    PENDING_NOTE(0x414ed0, "the race restart's other parts (0x44fbd0, the cops' script, the cameras 0x468fe0, 0x412170)");
+    for (int i = 0; i < g_ncars; i++) {
+        g_ranked.c[i] = g_cars[i];   /* 0x411100 */
+        g_ordered.c[i] = g_cars[i];
+    }
+    for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], (uint32_t)i);   /* 0x410790 */
+    for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
+    AI_MakeControllers();                  /* 0x406780, 0x406580 */
+    Race_ResetRanking();
 }

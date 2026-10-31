@@ -52,6 +52,7 @@
 004105e0	Race_GridSlot	race	high	Grid slot: node ahead of the start by the description's +0x174 position, offset across the road by its parity
 00410790	Car_RaceInit	race	high	The race's per-car set-up: 0x49b480, the carried damage, the grid slot from the start trigger, the placement, the progress, the controls and race fields (port: src/game/race_car.c)
 00410dc0	CarSpecs_Load	sim	low	Car and AI specs records ("carSpecs", "AISpecs")
+00411100	Car_RaceInitAll	game	med	Lists and every car set up
 00411190	Car_Construct	sim	low	Car object with its parts ("Car_tObj", "Parts_tCarParts")
 00412e90	Input_Sample	input	high	Reads keyboard/joystick into the per-player control state (32 Hz, from the timer or the loop)
 00413820	Input_QueuePacket	input	high	Queues the sampled controls as an input packet per player (lockstep queue), counts packets
@@ -59,6 +60,7 @@
 004138f0	Input_Action	input	high	Action word ring (32 frames at 0x5e954c): is action n held, or pressed this frame (edge)
 00413960	Race_QuitRequested	game	high	Action bit 0 (quit) of the current frame's action word
 00413c70	Replay_Pack	input	med	Run-length pack 8 bytes
+00413ec0	Replay_Rewind	input	med	Replay pointers for the run
 00413ff0	Replay_Save	game	med	Writes replay.rpl ("FINAL GAMETICK=%d")
 00414080	Replay_Store	input	med	A block into the replay buffer
 004141c0	Replay_Load	input	med	A block from the replay buffer
@@ -71,6 +73,7 @@
 00414b30	Sim_TaskRate	sim	high	A car task's rate by distance (updates/s, ticks, dt) and whether it runs this tick
 00414d50	TaskList_Run	game	high	Runs a list of (function, argument) callbacks; the race keeps two (0x606acc every tick, 0x606ad0 even ticks)
 00414dd0	Race_SelectTrackDefaults	game	low	Track defaults (autobahn special case)
+00414ed0	Race_Restart	game	med	Race counters, seed, AI, cars again
 00415010	Sim_Step	game	high	One 64 Hz simulation tick: AI, cars, physics, world, audio, network, replay
 00415300	RaceLoop	game	high	The race: per iteration sample input, run sim ticks up to the 64 Hz target (Sim_Step 0x415010), handle pause menu / in-race options (FE_Run "options"), screenshots (Unleashed%02d.tga), render a frame (Render_Frame 0x468900), until the race ends
 00415ea0	Input_Enqueue	input	high	Puts one 4-byte control packet into player n's 128-entry ring
@@ -173,6 +176,7 @@
 00423d90	HGraphicVisual_SetColours	hud	high	Four corner colours
 00423e70	HGraphicVisual_v5	hud	struct	Virtual slot 5 of HGraphicVisual (vtable 0x5b2bcc)
 00424420	HUD_Init	hud	med	Builds the race HUD (H* visuals) for the race type
+00425740	HUD_HideAll	hud	med	All visuals hidden, modal list empty
 004257d0	HUD_DrawOverlay	hud	low	Draws the HUD overlays (pause, messages)
 00425910	HUD_Draw	hud	low	Draws the HUD visuals for a view
 00425de0	HUD_ShowFront	hud	med	Ported in src/game/hud.c / hud_config.c

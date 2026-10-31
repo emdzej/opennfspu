@@ -2363,6 +2363,13 @@ static void race_screens(void)
     }
 }
 
+void HUD_HideAll(void)
+{
+    for (int i = 0; i < nlist; i++)
+        if (list[i].v->state != 0 && list[i].v->vt->setstate) list[i].v->vt->setstate(list[i].v, 0);
+    nmodal = 0;
+}
+
 void HUD_RaceOver(void)
 {
     PENDING_NOTE(0x426a40, "the race-over HUD's other parts (place swaps, the replay's HUD)");

@@ -9,6 +9,7 @@
 #include "game/race.h"
 #include "game/hud.h"
 #include "game/input.h"
+#include "game/sim_rand.h"
 #include "game/race_progress.h"
 #include "pending.h"
 #include "game/race_car.h"
@@ -127,12 +128,13 @@ static bool load(const char *track, const char *carname)
     Car_Construct();
     if (g_ncars < 1) return false;
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
+    g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
+    SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
     AI_Load();             /* the racing line (0x4031f0) */
     Input_Reset(false);
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
     AI_MakeControllers();  /* 0x406580 */
-    g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
     set_env();
@@ -186,7 +188,7 @@ bool DRIVE_selftest(const char *track, const char *car)
     for (int i = 0; i < n && i < 4; i++) {
         if (!(g_sim_tick & 1)) {
             read_controls();
-            Input_QueuePacket();         /* 0x413820 */
+            if (g_replay_mode < 2) Input_QueuePacket();   /* 0x413820 */
             Sim_HalfStep(g_sim_tick >> 1);   /* 0x415f10 */
         }
         Sim_Step();   /* 0x415010 */
@@ -206,9 +208,16 @@ bool DRIVE_selftest(const char *track, const char *car)
     /* The race over (all the humans finished): the race-over screens (the original's second race loop,
        race view 2, replays the race behind them: the replay isn't ported, the race goes on). */
     if (g_race_over && g_race_view < 2) {
+        /* GameMain's second race loop: the race again from its start, replaying the packets
+           (0x414ed0, 0x413ec0), the HUD's visuals hidden (0x425740), then the race-over screens. */
         g_race_view = 2;
-        PENDING_NOTE(0x4b6840, "the race's replay after it (GameMain's second race loop)");
-        HUD_RaceOver();   /* 0x426a40 */
+        g_replay_mode = 2;
+        Race_Restart(0x1c0 - 0x40);
+        Input_Reset(true);
+        if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;
+        HUD_HideAll();      /* 0x425740 */
+        HUD_RaceOver();     /* 0x426a40 */
+        PENDING_NOTE(0x415300, "the replay's speeds and cameras");
     }
     static int follow = -1;   /* --param follow=<car>: the camera behind another car */
     if (follow < 0) {
@@ -224,7 +233,7 @@ bool DRIVE_selftest(const char *track, const char *car)
             char b[160];
             int16_t node;
             memcpy(&node, o->b + 8, 2);
-            snprintf(b, sizeof b, "car %d node %d speed %.1f target %.1f gear %d thr %d brk %d steer %d", i, node, *CAR_F(o, 0x35c) * 3.6f,
+            snprintf(b, sizeof b, "view %d tick %d car %d node %d speed %.1f target %.1f gear %d thr %d brk %d steer %d", g_race_view, g_sim_tick, i, node, *CAR_F(o, 0x35c) * 3.6f,
                      *CAR_F(o, 0xeb8) * 3.6f, (int8_t)o->b[0xd82], o->b[0xd7c], o->b[0xd7d], *CAR_I(o, 0xd90));
             plat_log(b);
         }
