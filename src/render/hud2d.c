@@ -131,6 +131,40 @@ static void draw_quads(int q, int n, Texture *t)
     EAGL_MaterialDraw(&mat, streams, 4, n * 4);
 }
 
+/* At once, with the line object's material (0x62810c, 0x59ee20; the queues' here): prim 2 lines, 4 quads. */
+static void draw_now(int prim, int n, const float *p, const uint32_t *c, const float *uv, Texture *t)
+{
+    static float nouv[2 * 0x200];
+    if (n <= 0 || 0x200 < n) return;
+    streams[0] = (EaglStream){(uint32_t)n * 16, (void *)p};
+    streams[1] = (EaglStream){(uint32_t)n * 4, (void *)c};
+    streams[2] = (EaglStream){(uint32_t)n * 8, uv ? (void *)uv : nouv};
+    streams[3] = (EaglStream){0x54, t};
+    streams[4] = (EaglStream){0x18, rs};
+    EAGL_MaterialDraw(&mat, streams, prim, n);
+}
+
+void Hud2D_LineNow(const float points[8], const uint32_t colours[2]) { draw_now(2, 2, points, colours, NULL, NULL); }
+
+void Hud2D_LinesNow(int n, const float *points, uint32_t colour)
+{
+    static uint32_t c[0x200];
+    if (n <= 0 || 0x200 < n) return;
+    for (int i = 0; i < n; i++) c[i] = colour;
+    draw_now(2, n, points, c, NULL, NULL);
+}
+
+void Hud2D_QuadNow(const float corners[16], uint32_t colour)
+{
+    uint32_t c[4] = {colour, colour, colour, colour};
+    draw_now(4, 4, corners, c, NULL, NULL);
+}
+
+void Hud2D_TexQuadNow(Texture *t, const uint32_t colours[4], const float corners[16], const float uv[8])
+{
+    draw_now(4, 4, corners, colours, uv, t);
+}
+
 void Hud2D_Flush(void)
 {
     if (nplain) draw_quads(0, nplain, NULL);

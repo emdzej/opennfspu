@@ -5,6 +5,7 @@
 #include "game/car_drive.h"
 #include "game/hud_config.h"
 #include "game/race_car.h"
+#include "game/road.h"
 #include "game/race_progress.h"
 #include "eagl/eagl.h"
 #include "pending.h"
@@ -1174,6 +1175,423 @@ static HudVisual *gdamage_new(void)
     return &g->tray.base;
 }
 
+/* ---- the track map (HTrackMap, 0x150 bytes, vtable 0x5b3248; 0x431e50) ---- */
+
+/* Text drawn at once in the current view (0x431230 with its second argument: 0x536a30, 0x536710). */
+static void text_print_now(HText *t, const char *s)
+{
+    if (!t || !t->font || !t->font->drawer || !g_render || !g_render->camera) return;
+    int x = t->x;
+    if (t->align == 1) {
+        if (t->width == 0.0f || !t->keep) {
+            float a, b, h;
+            FONT_extent(t->font->font, s, &a, &b, &t->width, &h);
+        }
+        x = (int)((float)x - t->width);
+    }
+    FONT_setstate(t->font->font, 0xc, g_hud_opaque ? t->colour | 0xff000000u : t->colour);
+    HudFont_print(t->font->drawer, g_render->camera->view, (float)x, (float)t->y, -1.0f, s);
+}
+
+enum { MAP_POINTS = 400, MAP_JUNCTIONS = 0xc8 };
+
+static float node_f(int n, int off)
+{
+    float v;
+    memcpy(&v, g_road->nodes + (size_t)n * ROAD_NODE_SIZE + off, 4);
+    return v;
+}
+static float node_x(int n) { return node_f(n, 4); }
+static float node_z(int n) { return node_f(n, 0xc); }
+
+/* The road as points along it (0x60e4a0: x, 1, z, its segment), a point each time the road has turned
+   by a share of all its turning; the junctions' ends as lines to their centres (0x60cb70). */
+typedef struct {
+    HTray tray;
+    int32_t rx, ry, rw, rh;        /* +0xc4: the view's rectangle (HRenderVisual 0x42c7c0) */
+    RCamera *camera;               /* +0xc8: the view */
+    uint32_t grid[2];              /* +0xcc: the grid lines' colours (the layout's +0x30) */
+    HText *label, *lap, *laps;     /* +0xd4 "lap", +0xd8 "N/", +0xdc "M" */
+    HudArt *dot, *blip;            /* +0xe0, +0xe4 */
+    int32_t cx, cz, w, d;          /* +0xe8 .. +0xf4: the road's middle and size */
+    char lapbuf[4], lapsbuf[4];    /* +0xf8, +0xfc */
+    int32_t njunctions, npoints;   /* +0x100, +0x104 */
+    uint8_t whole;                 /* +0x14a: zoomed out to the whole track */
+    float extent;                  /* +0x14c */
+    float point[MAP_POINTS][4];
+    float junction[MAP_JUNCTIONS][6];
+} HTrackMap;
+
+static int32_t lastpos[2] = {-1, -1};   /* 0x60fda0: the map's place last frame */
+
+static float heading(float dz, float dx) { return (float)(atan2((double)dz, (double)dx) * exe_f64(0x5bb2c8)); }   /* 0x5325d0 */
+
+static int seg_of(int n)   /* 0x481b20 */
+{
+    for (int s = 0; s < g_road->nseg; s++)
+        if (g_road->seg[s].first <= n && n <= g_road->seg[s].last) return s;
+    return -1;
+}
+
+static const RoadJunction *end_junction(int n)   /* 0x481640 */
+{
+    int j = g_road->node_end[n];
+    return 0 <= j ? &g_road->junctions[j] : NULL;
+}
+
+static float turn(float a, float b)
+{
+    float d = fabsf(a - b);
+    if (exe_f32(0x5b23f0) < d) d = exe_f32(0x5b24a8) - d;
+    return fabsf(d);
+}
+
+static void map_point(HTrackMap *m, float x, float z, int seg)
+{
+    float *p = m->point[m->npoints++];
+    p[0] = x, p[1] = 1.0f, p[2] = z;
+    memcpy(&p[3], &seg, 4);
+}
+
+static void map_junction(HTrackMap *m, float x, float z, const RoadJunction *j)
+{
+    if (MAP_JUNCTIONS <= m->njunctions) return;   /* (port: the original has no bound) */
+    float *p = m->junction[m->njunctions++];
+    p[0] = x, p[1] = 1.0f, p[2] = z, p[3] = j->centre[0], p[4] = 1.0f, p[5] = j->centre[2];
+}
+
+/* 0x432190 */
+static void map_build(HTrackMap *m)
+{
+    const Road *r = g_road;
+    int n = r ? r->nnodes : 0;
+    float total = 0;
+    for (int i = 0; i < n;) {
+        float px = node_x(i), pz = node_z(i);
+        float h = heading(node_z(i + 1 < n ? i + 1 : i) - pz, node_x(i + 1 < n ? i + 1 : i) - px);
+        int s = seg_of(i);
+        i++;
+        if (s != seg_of(i)) continue;
+        do {
+            float prev = h;
+            if (n <= i) goto measured;
+            float qx = node_x(i), qz = node_z(i);
+            h = heading(qz - pz, qx - px);
+            total += turn(h, prev);
+            i++;
+            px = qx, pz = qz;
+        } while (s == seg_of(i));
+    }
+measured:;
+    float step = total * exe_f32(0x5b3284);
+    m->npoints = m->njunctions = 0;
+    for (int i = 0; i < n && m->npoints < MAP_POINTS;) {
+        float px = node_x(i), pz = node_z(i);
+        int s = seg_of(i);
+        float h = heading(node_f(i, 0x5c) - pz, node_f(i, 0x54) - px);
+        map_point(m, px, pz, s);
+        const RoadJunction *j = end_junction(i);
+        if (j) map_junction(m, px, pz, j);
+        i++;
+        float acc = 0;
+        if (s == seg_of(i)) {
+            do {
+                float prev = h;
+                if (n <= i) goto built;
+                if (399 < m->npoints) break;
+                float qx = node_x(i), qz = node_z(i);
+                h = heading(qz - pz, qx - px);
+                acc += turn(h, prev);
+                if (step <= acc) {
+                    map_point(m, px, pz, s);
+                    acc -= step;
+                }
+                s = seg_of(i);
+                j = end_junction(i);
+                if (j) map_junction(m, qx, qz, j);
+                i++;
+                px = qx, pz = qz;
+            } while (s == seg_of(i));
+        }
+        if (n <= i) break;
+        if (m->npoints < MAP_POINTS) map_point(m, px, pz, s);
+    }
+built:;
+    float maxx = 0, maxz = 0, minx = 0, minz = 0;   /* (from 0, as the original) */
+    for (int i = 0; i < m->npoints; i++) {
+        if (maxx < m->point[i][0]) maxx = m->point[i][0];
+        if (maxz < m->point[i][2]) maxz = m->point[i][2];
+        if (m->point[i][0] < minx) minx = m->point[i][0];
+        if (m->point[i][2] < minz) minz = m->point[i][2];
+    }
+    float w = maxx - minx, d = maxz - minz;
+    m->w = (int)w;
+    m->d = (int)d;
+    m->extent = (float)(m->w < m->d ? m->d : m->w);
+    m->cx = (int)(w * 0.5f + minx);
+    m->cz = (int)(d * 0.5f + minz);
+}
+
+static float map_zoom(void)   /* 0x41e9e0 */
+{
+    float z = 0;
+    switch (HudConfig_choicei32(0x44)) {
+    case 2: z = exe_f32(0x5b2a84); break;
+    case 3: z = exe_f32(0x5b2a80); break;
+    case 4: z = exe_f32(0x5b242c); break;
+    default: break;
+    }
+    if (HudConfig_choicei32(0x40) != 3) return z * exe_f32(0x5b2a78) + exe_f32(0x5b2a74);
+    return z * exe_f32(0x5b2a7c) + exe_f32(0x5b2400);
+}
+
+/* The view from above: flat, at the track's middle (zoomed out to it) or the player's car, turned with
+   the car (mode 1) or the road (mode 3), scaled by the zoom. 0x4333a0 */
+static void map_view(HTrackMap *m, EaglView *v, bool turned, bool road)
+{
+    Car *me = local_car();
+    EaglMatrix *top = EAGL_StackTopForWrite(&v->view), t;
+    EAGL_MatScale(top, 1.0f, 0, 1.0f, 1.0f);
+    float z = map_zoom();
+    if (exe_f32(0x5b2454) == z) {
+        m->whole = 1;
+        EAGL_MatTranslation(&t, -(float)m->cx, 100.0f, -(float)m->cz);
+    } else {
+        m->whole = 0;
+        EAGL_MatTranslation(&t, me ? -CAR_F(me, 0x330)[0] : 0, 100.0f, me ? -CAR_F(me, 0x330)[2] : 0);
+    }
+    EAGL_MatPostMul(top, &t);
+    EAGL_MatAxisAngle(&t, -90.0f, 1.0f, 0, 0);
+    EAGL_MatPostMul(top, &t);
+    if (road || turned) {
+        float a = 0;
+        if (road && me) {
+            int16_t node;
+            memcpy(&node, me->b + 8, 2);
+            a = heading(node_f(node, 0x1c), node_f(node, 0x24)) * exe_f32(0x5b25cc);
+        } else if (me) {
+            a = heading(CAR_F(me, 0x364)[0], CAR_F(me, 0x364)[2]) * exe_f32(0x5b25cc) - exe_f32(0x5b3288);
+        }
+        EAGL_MatAxisAngle(&t, a, 0, 0, 1.0f);
+        EAGL_MatPostMul(top, &t);
+    }
+    if (m->whole && HudConfig_choicei32(0x40) != 3) z = m->extent * exe_f32(0x5b23f0) + exe_f32(0x5b2484);
+    float mx = g_r3d_mirror ? exe_f32(0x5b2624) : exe_f32(0x5b24a8);
+    EAGL_MatScale(&t, mx * (exe_f32(0x5b24a8) / z), exe_f32(0x5b24a8) / z, 1.0f, 1.0f);
+    EAGL_MatPostMul(top, &t);
+    EAGL_ViewSetOrtho(v, 1.0f, 1.0f, 800.0f);
+}
+
+/* The cars: the racers placed (and the cops), a blip the size of their footprint times s. 0x433070 */
+static void map_blips(HudArt *art, int s)
+{
+    if (!art) return;
+    for (int i = g_ncars - 1; 0 <= i; i--) {
+        Car *c = g_cars[i];
+        uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
+        if (!((f & 1) || (f & 0x20)) || !c->b[0x7f]) continue;
+        if ((f & 1) && g_race_mode != 9 && !(0 < *CAR_I(g_racers.c[i < g_racers.n ? i : 0], 0xb48))) continue;
+        float r[3], fw[3], p[3];
+        float hl = (float)s * *CAR_F(c, 0x3b0), hw = (float)s * *CAR_F(c, 0x3a8);
+        for (int k = 0; k < 3; k++) r[k] = CAR_F(c, 0x364)[k] * hw, fw[k] = CAR_F(c, 0x37c)[k] * hl, p[k] = CAR_F(c, 0x330)[k];
+        float q[12];
+        for (int k = 0; k < 3; k++) {
+            q[k] = p[k] + fw[k] + r[k];        /* front right */
+            q[3 + k] = p[k] + fw[k] - r[k];    /* front left */
+            q[6 + k] = p[k] - fw[k] - r[k];
+            q[9 + k] = p[k] - fw[k] + r[k];
+        }
+        HudArt_setcorners(art, q);
+        uint32_t a, b;
+        if (!(f & 0x20)) {
+            uint32_t col;
+            memcpy(&col, CAR_DESCB(c) + 0x218, 4);
+            if ((col & 0xff0000) < 0x14 && (col & 0xff00) < 0x14 && (col & 0xff) < 0x14) col = 0xff202020u;
+            a = b = col;
+        } else {
+            PENDING_NOTE(0x433070, "the cops' flashing blips");
+            a = b = 0xc0ff0000u;
+        }
+        HudArt_setcolours(art, b, a, a, b);
+        HudArt_draw(art);
+    }
+}
+
+/* The road's lines and the cars. 0x4335f0 */
+static void map_world(HTrackMap *m)
+{
+    View_Begin(g_render, m->camera);
+    EAGL_RSSet(0x28, 7);
+    bool road = HudConfig_choicei32(0x40) == 3;
+    map_view(m, m->camera->view, HudConfig_choicei32(0x40) == 1 || road, road);
+    static float v[0xfc][4];
+    if (!road) {
+        int k = 0;
+        for (int i = 0; i < m->npoints - 1; i++) {
+            if (memcmp(&m->point[i][3], &m->point[i + 1][3], 4) != 0) continue;
+            float a[4] = {m->point[i][0], 0, m->point[i][2], 1}, b[4] = {m->point[i + 1][0], 0, m->point[i + 1][2], 1};
+            memcpy(v[2 * k], a, 16);
+            memcpy(v[2 * k + 1], b, 16);
+            if (++k == 0x7e) {
+                Hud2D_LinesNow(0xfc, &v[0][0], 0xffffffffu);
+                k = 0;
+            }
+        }
+        if (k) Hud2D_LinesNow(2 * k, &v[0][0], 0xffffffffu);
+        k = 0;
+        for (int i = 0; i < m->njunctions; i++) {
+            float a[4] = {m->junction[i][0], 0, m->junction[i][2], 1}, b[4] = {m->junction[i][3], 0, m->junction[i][5], 1};
+            memcpy(v[2 * k], a, 16);
+            memcpy(v[2 * k + 1], b, 16);
+            if (++k == 0x7e) {
+                Hud2D_LinesNow(0xfc, &v[0][0], 0xffffffffu);
+                k = 0;
+            }
+        }
+        if (k) Hud2D_LinesNow(2 * k, &v[0][0], 0xffffffffu);
+    }
+    map_blips(m->blip, road ? 1 : (m->whole ? 0x3c : 0x14));
+    EAGL_RSSet(0x28, 3);
+    View_End(g_render);
+}
+
+/* The grid over the map, its shade, the laps. 0x432ac0 */
+static void map_grid(HTrackMap *m)
+{
+    int mw = HudConfig_i32(0xe4), mh = HudConfig_i32(0xe8), W = g_display.width, H = g_display.height;
+    View_Begin(g_render, m->camera);
+    EAGL_RSSet(0x28, 3);
+    Hud2D_View(g_render);
+    if (!HudConfig_notrays()) {
+        float q[16] = {0, 0, 2.0f, 1, (float)W, 0, 2.0f, 1, (float)W, (float)H, 2.0f, 1, 0, (float)H, 2.0f, 1};
+        Hud2D_QuadNow(q, 0x3f000000u);   /* 0x465f60 */
+    }
+    int sp = HudConfig_i32(0x10c);
+    if (0 < sp) {
+        int n = mw / sp, step = sp * W / (mw ? mw : 1);
+        for (int k = 1, x = step; k < n; k++, x += step) {
+            float l[8] = {(float)x, 0, 0, 1, (float)x, (float)H, 0, 1};
+            Hud2D_LineNow(l, m->grid);
+        }
+        n = mh / sp, step = sp * H / (mh ? mh : 1);
+        for (int k = 1, y = step; k < n; k++, y += step) {
+            float l[8] = {0, (float)y, 0, 1, (float)W, (float)y, 0, 1};
+            Hud2D_LineNow(l, m->grid);
+        }
+    }
+    int32_t px, py;
+    HudConfig_pos(HUDPOS_MAP, &px, &py);
+    if (px == lastpos[0] && py == lastpos[1] && !g_race_linear && m->label && m->lap && m->laps) {
+        const char *s = LOC_string(HudConfig_loc(), 0x13);
+        text_print_now(m->label, s ? s : "");
+        float sx = (float)mw / (float)W, a, b, w, h;
+        snprintf(m->lapsbuf, sizeof m->lapsbuf, "%d", g_race_laps);
+        int ax = m->laps->x, ay = m->laps->y;
+        text_extent(m->laps, m->lapsbuf, &a, &b, &w, &h);
+        m->laps->x = (int)((float)ax - w / sx);
+        text_print_now(m->laps, m->lapsbuf);
+        m->laps->x = ax, m->laps->y = ay;
+        Car *me = local_car();
+        int now = me ? *CAR_I(me, 0xb20) + 1 : 1;
+        if (g_race_laps <= now) now = g_race_laps;
+        snprintf(m->lapbuf, sizeof m->lapbuf, "%d%s", now, exe_str(0x5ccde0));
+        text_extent(m->lap, m->lapbuf, &a, &b, &w, &h);
+        m->lap->x = (int)((float)(int)((float)ax - w / sx) - w / sx);
+        m->lap->y = ay;
+        text_print_now(m->lap, m->lapbuf);
+    }
+    lastpos[0] = px, lastpos[1] = py;
+    View_End(g_render);
+}
+
+/* Shown by the second layout's +0x40 (1 turned with the car, 2 north up, 3 the road ahead). 0x4329c0 */
+static void map_draw(HudVisual *v)
+{
+    HTrackMap *m = (HTrackMap *)v;
+    if (g_race_view == 2 || g_race_view == 3) return;
+    if ((HudConfig_choicei32(0x40) == 0 && !(v->state == 1 || v->state == 2)) || v->state == 0) return;   /* 0x41e7d0 */
+    if (!m->camera || !g_render) return;
+    PENDING_NOTE(0x4329c0, "the map's guard band off (EAGL context +0x117e4)");
+    tray_draw(&m->tray);
+    if (v->state == 3) {
+        map_grid(m);
+        map_world(m);
+    }
+}
+
+/* Its place, its view (a camera over its rectangle), the laps' texts. 0x4327e0 */
+static void map_setpos(HudVisual *v, int x, int y)
+{
+    HTrackMap *m = (HTrackMap *)v;
+    int32_t px, py;
+    HudConfig_setpos(HUDPOS_MAP, x, y);
+    HudConfig_pos(HUDPOS_MAP, &px, &py);
+    tray_place(&m->tray, px, py);
+    m->rx = px, m->ry = py;
+    if (m->camera) RCamera_Free(m->camera);
+    m->camera = NULL;
+    float W = (float)g_display.width, H = (float)g_display.height;
+    float nx = (float)px / W, ny = (float)py / H, sw = (float)HudConfig_i32(0xe4) / W, sh = (float)HudConfig_i32(0xe8) / H;   /* 0x420c00, 0x420970 */
+    if (g_render) m->camera = Render_CreateCamera(g_render, 4, nx, ny, nx + sw, ny + sh, 0, g_render->znear, g_render->zfar);
+    if (!m->label || !m->label->font || !m->label->font->font) return;
+    const char *s = LOC_string(HudConfig_loc(), 0x13);
+    float a, b, c, h;
+    text_extent(m->label, s ? s : "", &a, &b, &c, &h);
+    int ty = (int)((H - (float)HudConfig_i32(0x38) / sh) - h / sh);
+    m->label->x = HudConfig_i32(0x34), m->label->y = ty;
+    if (m->laps) m->laps->x = (int)(W - (float)HudConfig_i32(0x34) / sw), m->laps->y = ty;
+}
+
+static void map_reset(HudVisual *v)   /* 0x432fe0 */
+{
+    HTrackMap *m = (HTrackMap *)v;
+    tray_setsize(&m->tray, HudConfig_i32(0xe4), HudConfig_i32(0xe8), 0);
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_MAP, &x, &y);
+    v->vt->setpos(v, x, y);
+    tray_colours(&m->tray);
+    map_build(m);
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    if (m->label) m->label->colour = (uint32_t)HudConfig_i32(0x18), m->label->colour2 = c14;
+    if (m->lap) m->lap->colour = HudConfig_scheme(), m->lap->colour2 = c14;
+    if (m->laps) m->laps->colour = (uint32_t)HudConfig_i32(0x18), m->laps->colour2 = c14;
+}
+
+static void map_destroy(HudVisual *v)   /* 0x4320f0 */
+{
+    HTrackMap *m = (HTrackMap *)v;
+    if (m->camera) RCamera_Free(m->camera);
+    text_free(m->label);
+    text_free(m->lap);
+    text_free(m->laps);
+    HudArt_free(m->dot);
+    HudArt_free(m->blip);
+    free(m);
+}
+
+static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress};
+
+static HudVisual *map_new(void)
+{
+    HTrackMap *m = calloc(1, sizeof *m);
+    if (!m) return NULL;
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_MAP, &x, &y);
+    int w = HudConfig_i32(0xe4), h = HudConfig_i32(0xe8);
+    tray_init(&m->tray, &map_vt, x, y, w, h, 0, true, 0, true, false);
+    map_build(m);
+    m->grid[0] = m->grid[1] = (uint32_t)HudConfig_i32(0x30);   /* 0x420470 */
+    PENDING_NOTE(0x431e50, "the map's debug texts (0x60d4d4)");
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    m->label = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, w, 0, 0, false);
+    m->lap = text_new(HudConfig_font(0x4c), HudConfig_scheme(), c14, 0, 0, w, 0, 0, false);
+    m->laps = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, w, 0, 0, false);
+    m->dot = HudArt_load(exe_str(0x5cd198), 0, 0, 0, 9, 9, true, false, false);      /* "radar" */
+    m->blip = HudArt_load(exe_str(0x5cd198), 0, 0, 0, 0x1c, 0x3f, true, false, false);
+    map_setpos(&m->tray.base, x, y);
+    return &m->tray.base;
+}
+
 /* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
    the value from tables made once, a cap over its pivot ---- */
 
@@ -1470,6 +1888,7 @@ void HUD_Init(void)
     add(speedometer_new(), true, false);
     add(tach_new(), true, false);
     add(tachdigital_new(), true, false);
+    add(map_new(), true, true);   /* 0x431e50 (drawn last) */
     PENDING_NOTE(0x424420, "HUD_Init's other visuals (gauges, lap, position, time, map, messages)");
     add(countdown_new(), false, false);
     wrongway = wrongway_new();   /* 0x436dd0 (drawn on its own) */

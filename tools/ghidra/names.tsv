@@ -125,6 +125,7 @@
 0041e960	HUD_SpeedDial	hud	med	Ported in src/game/hud.c
 0041e980	HUD_TachDial	hud	med	Ported in src/game/hud.c
 0041e9a0	HUD_TachFigures	hud	med	Ported in src/game/hud.c
+0041e9e0	HUD_MapZoom	hud	med	Map zoom by layout
 0041ea70	HUD_LoadLayout	hud	med	Loads a .hud layout (1.hud, nfs5-1.hud)
 0041f7c0	HUD_LoadLayouts	hud	med	Ported in src/game/hud.c / hud_config.c
 0041fb60	HUD_LayoutPixels	hud	med	Ported in src/game/hud.c / hud_config.c
@@ -243,10 +244,15 @@
 00431b90	HTournamentStandings_v5	hud	struct	Virtual slot 5 of HTournamentStandings (vtable 0x5b3210)
 00431e50	HTrackMap_LoadRadar	hud	med	Track map radar art
 004320d0	HTrackMap_v0	hud	struct	Virtual slot 0 of HTrackMap (vtable 0x5b3248)
+00432190	HTrackMap_build	hud	med	Road points and junction lines for the map
 004327e0	HTrackMap_v12	hud	struct	Virtual slot 12 of HTrackMap (vtable 0x5b3248)
 004329c0	HTrackMap_v1	hud	struct	Virtual slot 1 of HTrackMap (vtable 0x5b3248)
+00432ac0	HTrackMap_grid	hud	med	Map shade, grid, lap texts
 00432fe0	HTrackMap_v2	hud	struct	Virtual slot 2 of HTrackMap (vtable 0x5b3248)
+00433070	HTrackMap_blips	hud	med	Car blips
 00433360	HTrackMap_v10	hud	struct	Virtual slot 10 of HTrackMap (vtable 0x5b3248)
+004333a0	HTrackMap_view	hud	med	Top-down view matrix
+004335f0	HTrackMap_world	hud	med	Map road lines and blips
 004338e0	HTrackRecords_v0	hud	struct	Virtual slot 0 of HTrackRecords (vtable 0x5b32b0)
 00433920	HTrackRecords_v1	hud	struct	Virtual slot 1 of HTrackRecords (vtable 0x5b32b0)
 00433980	HTrackRecords_v2	hud	struct	Virtual slot 2 of HTrackRecords (vtable 0x5b32b0)
@@ -471,7 +477,9 @@
 0045f650	Scroller_FreeClouds_v0	render	struct	Virtual slot 0 of Scroller_FreeClouds (vtable 0x5b3f44)
 0045fa40	Sky_LoadText	render	high	Loads Sky\<name>.txt (sky layers)
 00463af0	Camera_Update	camera	low	Per-frame camera/view update (called each tick when paused or replaying)
+00465ea0	HUD_DrawLines	hud	med	n line vertices, one colour
 00465f10	HUD_DrawLine	hud	med	A line through the line object 0x62810c
+00465f60	HUD_DrawQuad	hud	med	Flat quad at once
 004660a0	RFrame_Init	render	high	Camera frame: orientation and rotation identity, eye and translation zero
 004661a0	RFrame_ToView	render	high	Frame to world-to-camera rotation (transposed, forward negated) and translation
 00466df0	RCamera_Letterbox	render	med	Widescreen: the main camera's y range (0.15 .. 0.85)
@@ -649,10 +657,12 @@
 00480f20	World_LoadJunctions	world	high	<track>.jnc: 0x24 per junction, end weights
 00481030	Road_JunctionNearest	world	high	Nearest node through a junction near-node list
 00481590	Road_JunctionAhead	road	med	The junction within n nodes along the segment
+00481640	Road_EndJunction	road	med	Junction a node is an end of
 00481670	Road_Step	world	high	The node n nodes on along the road (through a junction, else clamped to the segment)
 004817b0	Road_RaceLength	world	high	Road +4 race length (nnodes with one junction), junction +0x28 progress
 00481880	Road_Walk	world	high	Junction distances along the race (recursive), the longest
 00481a10	Road_SegmentRange	world	high	A node segment: progress at its junctions, length, first node
+00481b20	Road_SegmentIndex	road	med	Segment containing a node
 00482550	WSceneBundle_ctor	world	high	WSceneBundle (0x4c), vtable 0x5b47e0
 00482580	WSceneBundle_v0	world	struct	Virtual slot 0 of WSceneBundle (vtable 0x5b47e0)
 004825b0	WSceneBundle_v5	world	struct	Virtual slot 5 of WSceneBundle (vtable 0x5b47e0)
@@ -1682,6 +1692,7 @@
 00532430	Mat3_AxisRotation	math	high	3x3 rotation by a fraction of a turn about an axis; the identity at 0
 00532550	Math_SinTurns	math	high	sin(x * 0x5bb2c0)
 00532560	Math_CosTurns	math	high	cos(x * 0x5bb2c0)
+005325d0	Turns_Atan2	math	med	atan2 in turns
 005325f0	Vec3_Cross	math	high	a x b (0x56e6a5)
 00532640	Vec3_Normalize	math	high	v * (1 / length)
 00532680	Vec3_Dot	math	high	3-component dot product (thunk to 0x56e681)

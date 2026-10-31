@@ -124,7 +124,6 @@ HudArt *HudArt_load(const char *name, int index, int x, int y, int w, int h, boo
     while (p && strcmp(p->name, name)) p = p->next;
     if (!p) p = make_page(name, path, index, single);
     if (!p) return a;
-    if (a->now) PENDING_NOTE(0x59ee20, "the art's own material (drawn at once)");
     a->file = p->file;
     a->texture = p->texture;
     a->bucket = p->bucket;
@@ -191,5 +190,6 @@ void HudArt_draw(HudArt *a)
 {
     if (!a || !a->texture) return;
     const float *uv = a->uv[(a->flipx != 0) + ((a->flipy != 0) ? 2 : 0)];
-    Hud2D_TexQuad(a->bucket, a->texture, a->colour, a->corner, uv);
+    if (a->now) Hud2D_TexQuadNow(a->texture, a->colour, a->corner, uv);   /* its own material (0x59ee20) */
+    else Hud2D_TexQuad(a->bucket, a->texture, a->colour, a->corner, uv);
 }
