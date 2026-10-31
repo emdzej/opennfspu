@@ -1,6 +1,7 @@
 /* The render system (render.h): Render_Init and the render system object, the graphics device, the
    render-state object, display mode and quality, cameras and views, the race frame. */
 #include "render/render.h"
+#include "game/hud.h"
 #include "exe.h"
 #include "platform.h"
 #include "pending.h"
@@ -467,7 +468,8 @@ void Render_Frame(RaceViews *rv)
     Render_MainViews(rv);
     View_Begin(g_render, rv->overlay);
     View_End(g_render);
-    Render_PendingHud(rv->overlay);                      /* HUD_Draw, 0x468be0, HUD_DrawOverlay */
+    HUD_Draw(g_render, rv->overlay);                     /* 0x425910 */
+    Render_PendingHud(rv->overlay);                      /* 0x468be0, HUD_DrawOverlay */
     View_Begin(g_render, rv->overlay);
     View_End(g_render);
     Render_EndFrame(g_render);

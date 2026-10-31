@@ -9,7 +9,7 @@
 
 int32_t g_race_started;
 int32_t g_race_countdown;
-int32_t g_race_laps_done;   /* 0x657424 */
+int32_t g_race_view;   /* 0x657424: 0 racing, 2 the replay */
 
 /* The cars' per-tick contacts (+0x110c) cleared, the list of the cars checked against each other
    emptied. 0x498190 */
@@ -28,7 +28,7 @@ void Sim_Step(void)
     if (!g_race_started) {
         /* The countdown's steps at the ticks of 0x5cc7c4 (not in the free modes 6, 7, 8). */
         int32_t at = (int32_t)exe_u32(0x5cc7c4 + 4u * (uint32_t)(uint8_t)g_race_countdown);
-        if (at <= g_sim_tick && g_race_laps_done < 2 && g_race_mode != 6 && g_race_mode != 7 && g_race_mode != 8) {
+        if (at <= g_sim_tick && g_race_view < 2 && g_race_mode != 6 && g_race_mode != 7 && g_race_mode != 8) {
             PENDING_NOTE(0x4a6010, "Audio_Countdown");
             g_race_countdown = (uint8_t)(g_race_countdown + 1);
         }

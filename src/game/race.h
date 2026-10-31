@@ -7,5 +7,6 @@
 
 extern int32_t g_race_started;    /* 0x606ac0: set past tick 0x1bf (the countdown's end) */
 extern int32_t g_race_countdown;  /* 0x656858: the countdown's step (its ticks from 0x5cc7c4) */
+extern int32_t g_race_view;       /* 0x657424: 0 racing, 1 .., 2 the replay */
 
 void Sim_Step(void);

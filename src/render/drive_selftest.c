@@ -6,6 +6,7 @@
 #include "game/car_physics.h"
 #include "game/race_setup.h"
 #include "game/race.h"
+#include "game/hud.h"
 #include "game/race_car.h"
 #include "game/scene.h"
 #include "game/track.h"
@@ -121,6 +122,7 @@ static bool load(const char *track, const char *carname)
     Car_RaceInit(c, 0);
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     g_render_cars = draw_cars;
+    HUD_Init();   /* 0x424420 */
     set_env();
     RLists_Init();
     plat_set_frame_rate(60.0);

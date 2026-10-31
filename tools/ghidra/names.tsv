@@ -72,6 +72,16 @@
 00417820	Race_TickEven	game	low	Even-tick race logic
 00417a80	HUD_Countdown	hud	med	3-2-1-Go and circle art (321go, circlefull)
 00418450	H321Go_v0	hud	struct	Virtual slot 0 of H321Go (vtable 0x5b27ec)
+00418510	H321Go_Draw	hud	high	Countdown 256..448: rings, cross, digit of the step, keyframed (port: src/game/hud.c)
+00418690	H321Go_Digits	hud	high	Countdown digit keyframes, fading previous digit, centre digit
+00418930	H321Go_Ring	hud	med	Countdown ring of segments (geometry)
+00419c70	H321Go_Cross	hud	high	Two lines through the screen centre
+00419d70	Hud2D_Init	hud	high	HUD 2D queues and their material (port: src/render/hud2d.c)
+00419e30	Hud2D_Text	hud	high	Queued text
+00419eb0	Hud2D_Line	hud	high	Queued line
+00419fb0	Hud2D_Quad	hud	high	Untextured quad
+0041a1a0	Hud2D_TexQuad	hud	high	Textured quad in a bucket
+0041a350	Hud2D_Flush	hud	high	Draws the queues
 0041a6f0	HBillBoard_v0	hud	struct	Virtual slot 0 of HBillBoard (vtable 0x5b28bc)
 0041a7c0	HBillBoard_v1	hud	struct	Virtual slot 1 of HBillBoard (vtable 0x5b28bc)
 0041b220	HButtonVisual_v0	hud	struct	Virtual slot 0 of HButtonVisual (vtable 0x5b2904)
@@ -104,7 +114,11 @@
 00422e10	HGraphicVisual_LoadArt	hud	med	HUD art from an FSH ("HUD:%s")
 00423690	HGraphicVisual_v0	hud	struct	Virtual slot 0 of HGraphicVisual (vtable 0x5b2bcc)
 004237f0	FastAlloc_free	mem	high	STL deallocate counterpart
+00423910	HGraphicVisual_SetUV	hud	high	Four uv sets
 00423a30	HGraphicVisual_v1	hud	struct	Virtual slot 1 of HGraphicVisual (vtable 0x5b2bcc)
+00423b10	HGraphicVisual_Place	hud	high	Corners from a position
+00423c20	HGraphicVisual_SetCorners	hud	high	Four corners
+00423d90	HGraphicVisual_SetColours	hud	high	Four corner colours
 00423e70	HGraphicVisual_v5	hud	struct	Virtual slot 5 of HGraphicVisual (vtable 0x5b2bcc)
 00424420	HUD_Init	hud	med	Builds the race HUD (H* visuals) for the race type
 004257d0	HUD_DrawOverlay	hud	low	Draws the HUD overlays (pause, messages)
@@ -400,6 +414,7 @@
 004661a0	RFrame_ToView	render	high	Frame to world-to-camera rotation (transposed, forward negated) and translation
 00466df0	RCamera_Letterbox	render	med	Widescreen: the main camera's y range (0.15 .. 0.85)
 00466e70	RCamera_Setup	render	high	Viewport on mode change, view matrix from the frame, perspective
+004670c0	Hud2D_View	hud	high	Orthographic pixel view on the current camera
 00467170	View_Begin	render	high	Vertex cache reset, current view (0x628130+0x10), depth factor, EAGL_ViewBegin, clear, context viewport
 004671e0	View_End	render	high	EAGL_EndScene, view inactive
 00467230	Render_CreateCamera	render	high	Camera (0x138): EAGL view, viewport fractions, near, far, clear, half fov 45 (port: render.c)
@@ -1647,6 +1662,7 @@
 00536350	SYNCTASK_add	real	high	Named after its own error message (\real\cmn\systask.c)
 00536450	SYNCTASK_run	real	high	\real\cmn\systask.c: runs due periodic tasks when the timer ticked (port: src/real/systask.c)
 005365e0	FONT_initdtex	real	med	Installs the DTEX font driver (0x5dfb60) and the default font
+005367d0	HudFont_Print	real	high	Text projected through the view, clipped to its viewport
 00536a80	FEAliasedPositionableAccessor_v29	frontend	struct	Virtual slot 29 of FEAliasedPositionableAccessor (vtable 0x5b4be4)
 00536bc0	MOUSE_init	input	high	\real\patch3\pc\mouse.c: DirectInput mouse
 00536e30	MOUSE_setstate	real	high	Named after its own error message (\real\patch3\pc\mouse.c)
