@@ -28,5 +28,6 @@ FertControl *FEApp_Top(void);
 typedef enum { FE_RUNNING, FE_PLAY, FE_QUIT } FEResult;
 FEResult FEApp_Result(void);
 const char *FEApp_Track(void);
+const char *FEApp_Car(void);
 int FEApp_Laps(void);
 int FEApp_Opponents(void);

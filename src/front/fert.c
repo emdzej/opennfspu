@@ -670,7 +670,8 @@ bool FertWindow_LoadLayout(FertControl *w, const char *path)
         FertControl *c = Fert_MakeControl(cid);
         if (!c) continue;
         add_child(w, c);
-        IniData_LoadSection(ini, i);   /* (the template's parse used its own file) */
+        /* (the section as loaded above: the template's parse had its own file, and a second load would
+           split the section's lines again, empty values then taking the next line, 0x5236d0) */
         FertControl_parseLayout(c, ini);
     }
     IniFile_Free(&f);

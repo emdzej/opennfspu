@@ -1,0 +1,31 @@
+/* The front end's data accessors (FEAccessor, vtable 0x5b4bbc, and its list kind FEPositionableAccessor):
+   named objects in one map (0x65b3a8; the constructor 0x4b7920 registers, a taken name getting a number,
+   the destructor 0x4b7c40 lets go; FUN_004b78a0 finds one by name). The controls name them with a field
+   and an argument, "Track1.Track(SHORT)": the map holds the name before the argument.
+
+   The port has, so far, the Quick Race screen's lists, made as the data areas make theirs:
+   - Game.NumOpponents, an int accessor 0..7 (FEdaGameOptions_v0 0x4e4bc0 -> 0x4b9ef0);
+   - Track1.Track, the tracks of nfs5.trk with a model (FE_LoadTrackList 0x4facd0), named by their
+     strings;
+   - zMergedList.Car and OpponentCar.Car, the racing cars of nfs5.car with a model (FE_LoadCarList
+     0x4f30c0, the list 0x6919f0), named by their short names. (The original's lists also follow the
+     era and the owned cars, and sort them, 0x4f34c0 / 0x4f05c0: pending.)
+   Positions start from fe.txt's race description, what the original's options hold. */
+#pragma once
+#include <stdbool.h>
+
+typedef struct FEAccessor FEAccessor;
+
+void FEData_Init(void);
+/* The accessor of a control's path ("Name.Field(ARG)"), NULL if there's none. */
+FEAccessor *FEAccess_Find(const char *path);
+int FEAccess_Count(const FEAccessor *a);
+int FEAccess_Pos(const FEAccessor *a);
+void FEAccess_SetPos(FEAccessor *a, int pos);
+/* The text of the current item. */
+const char *FEAccess_Text(const FEAccessor *a);
+
+/* The race the choices describe: the track's name (its .crp), the car's file, the opponents. */
+const char *FEData_Track(void);
+const char *FEData_Car(void);
+int FEData_Opponents(void);

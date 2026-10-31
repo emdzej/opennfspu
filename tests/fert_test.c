@@ -90,6 +90,24 @@ int main(void)
     }
     FertControl_free(w);
 
+    {   /* QuickRace.lay: the combo boxes take their accessors from the layout */
+        FertControl *q = FertControl_new(true);
+        CHECK(FertWindow_LoadLayout(q, "FEData\\Layouts\\QuickRace.lay"));
+        int found = 0;
+        for (int i = 0; i < q->nchildren; i++) {
+            FertControl *c = q->children[i];
+            for (int k = 0; k < c->nparts; k++) {
+                FertAttr *a = FertAttrList_find(&c->parts[k]->attrs, "accessor");
+                if (a && strcmp(c->id, "NFS5.ComboBoxSlider") == 0) {
+                    printf("  combo %d accessor '%s' exposed %d\n", i, a->value, a->exposed);
+                    if (strcmp(a->value, "Put_Accessor_Value_Here")) found++;
+                }
+            }
+        }
+        CHECK(found == 4);   /* (empty values once took the next line: a section loaded twice) */
+        FertControl_free(q);
+    }
+
     /* Every layout. */
     vfs_list("FEData\\Layouts", on_layout, NULL);
     int sections = 0, made = 0, unknown = 0;

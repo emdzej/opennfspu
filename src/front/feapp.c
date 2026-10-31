@@ -2,6 +2,7 @@
 #include "front/feapp.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
+#include "front/feaccess.h"
 #include "pending.h"
 #include "platform.h"
 #include "render/render.h"
@@ -17,6 +18,7 @@ static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu,
 static FEResult s_result;
 static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents;
+static char s_car[64] = "964";
 static int s_depth;
 static RCamera *s_camera;
 static int32_t s_mouse[2] = {-1, -1}; /* the pump's last poll (+0x14 ..) */
@@ -90,6 +92,7 @@ bool FEApp_Init(const char *start)
         Fert_ListControls(FE_DIR_CONTROLS);          /* 0x529eb0 */
         FEStrings_Load(language());                  /* 0x4e0090 */
         FEParts_Init();
+        FEData_Init();                               /* (the data areas' accessors, 0x4e4bc0 ..) */
         FE2D_Init();                                 /* 0x4d88c0 */
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
         PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, 3D rooms, music, movies");
@@ -171,6 +174,7 @@ static void on_leave(FertControl *c)   /* 0x4c7820 */
 
 FEResult FEApp_Result(void) { return s_result; }
 const char *FEApp_Track(void) { return s_track; }
+const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 int FEApp_Opponents(void) { return s_opponents; }
 
@@ -200,9 +204,11 @@ static void callback(const char *cb)
         /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
            accessors pending: fe.txt's as the original's defaults). */
         char v[64];
-        if (fe_key("track_name", v, sizeof v)) snprintf(s_track, sizeof s_track, "%s", v);
+        (void)v;
+        snprintf(s_track, sizeof s_track, "%s", FEData_Track());
+        snprintf(s_car, sizeof s_car, "%s", FEData_Car());
         s_laps = fe_int("num_laps", 1);
-        s_opponents = fe_int("numopponentracecars", 0);
+        s_opponents = FEData_Opponents();
         s_result = FE_PLAY;
     } else {
         char m[160];
@@ -211,9 +217,18 @@ static void callback(const char *cb)
     }
 }
 
+static bool is_combo(const FertControl *c) { return !strcmp(c->id, "NFS5.ComboBoxSlider"); }
+
 static void on_up(FertControl *c)
 {
     if (c->feflags & 0x10) return;   /* 0x4c7a10: disabled */
+    if (is_combo(c)) {
+        /* (FEComboBox opens its selection box, the list to pick from; the port steps to the next item
+           for now) */
+        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + 1);
+        return;
+    }
     if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.BOTTOMBARBUTTON")) {   /* 0x4c8f50 */
         PENDING_NOTE(0x4aab80, "the front end's click sound (5)");
         const char *cb = data_str(c, "callback");
@@ -305,6 +320,31 @@ void FEApp_Frame(void)
     if (w) {
         for (int i = 0; i < w->nchildren; i++) FertControl_Update(w->children[i]);   /* (the controls' ticks) */
         FEWindow_Draw(w);
+        /* the combo boxes' values (FEComboBox's own draw 0x4c53e0, its styling pending): right-aligned
+           in the value part's place */
+        for (int i = 0; i < w->nchildren; i++) {
+            FertControl *c = w->children[i];
+            if (!is_combo(c) || c->state == FertControl_findState(c, "hidden")) continue;
+            FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+            int k = FertControl_findPart(c, "label");
+            if (!a || k < 0) continue;
+            FertAttr *f = FertAttrList_find(&c->parts[k]->attrs, "fontPathName");
+            char path[300];
+            FE_ResolvePath(f ? FertAttr_str(f) : "", path, sizeof path);
+            HudFont *font = FEFont_Get(path);
+            const char *t = FEAccess_Text(a);
+            int n = (int)strlen(t) + 1;
+            char *copy = FE2D_Alloc(n);
+            if (!font || !copy) continue;
+            memcpy(copy, t, (size_t)n);
+            int32_t pos[2] = {0, 0}, width = 0;
+            FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+            if (pa) FertAttr_point(pa, pos);
+            const char *ws = data_str(c, "width");
+            if (ws) width = atoi(ws);
+            FE2D_DepthStep();
+            FE2D_Text(font, (float)(pos[0] + width - 13), (float)(pos[1] + 2), 2, 0xffffffffu, copy, 1.0f, 1.0f);
+        }
     }
     if (s_bar) {
         for (int i = 0; i < s_bar->nchildren; i++) FertControl_Update(s_bar->children[i]);
