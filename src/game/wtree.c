@@ -815,11 +815,36 @@ static int cyl_collide(const WTreeObject *o, const float seg[6], float n[3], flo
     return 0;
 }
 
+/* The segment against the box's four sides in the ground plane: the number crossed; the first crossed
+   side's normal, or with a second the corner between them (at) and the normal across the segment.
+   0x486d40 */
 static int box_collide(const WTreeObject *o, const float seg[6], float n[3], float at[3])
 {
-    (void)o, (void)seg, (void)n, (void)at;
-    PENDING_NOTE(0x486d40, "the box against a segment (0x486d40)");
-    return 0;
+    int crossed = 0;
+    float first[6] = {0};
+    n[0] = n[1] = n[2] = 0;
+    for (int i = 0; i < 4; i++) {
+        const float *a = o->corner[i], *b = o->corner[(i + 1) & 3];
+        float side[6] = {a[0], a[1], a[2], b[0], b[1], b[2]};
+        if (!World_SegmentsCross(side, seg, at)) continue;   /* 0x489bf0 */
+        crossed++;
+        float d[3] = {b[0] - a[0], 0, b[2] - a[2]};
+        normalize(d, d);
+        if (n[0] == k_zero && n[1] == k_zero && n[2] == k_zero) {
+            memcpy(first, side, sizeof first);
+            n[0] = -d[2];
+            n[1] = 0;
+            n[2] = d[0];
+        } else {
+            World_SegmentsCross(side, first, at);
+            float v[3] = {seg[3] - seg[0], seg[4] - seg[1], seg[5] - seg[2]};
+            normalize(v, v);
+            n[2] = -v[0];
+            n[0] = v[2];
+            n[1] = 0;
+        }
+    }
+    return crossed;
 }
 
 static const WTreeObjectVtbl cyl_ovt = {cyl_radius, cyl_collide, obj_hitkind};

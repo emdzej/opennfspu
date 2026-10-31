@@ -1,6 +1,7 @@
 /* The cars' collisions (see car_collide.h). */
 #include "game/car_collide.h"
 #include "exe.h"
+#include "game/car_impulse.h"
 #include "game/wtree.h"
 #include "pending.h"
 #include <math.h>
@@ -279,6 +280,57 @@ static void hit_cylinder(Car *c, WTreeObject *o)
     memcpy(CAR_F(c, 0x440), on, 12);
 }
 
+
+/* The car against a box: the four sides of the car's box (corners at its centre plus or minus half its
+   length and width, and up or down by half its height, paired by 0x5d0b6c) tested against the box's
+   sides; a car side across two box sides (a corner in the car) is pushed at once, else the side whose
+   deepest body point is shallowest, under an eighth of the car's speed (at least 0.1). 0x498600 */
+static void hit_box(Car *c, WTreeObject *o)
+{
+    const float *pos = CAR_F(c, 0x330), *rt = CAR_F(c, 0x364), *up = CAR_F(c, 0x370), *fw = CAR_F(c, 0x37c);
+    float hx = *CAR_F(c, 0x3a8), hy = *CAR_F(c, 0x3ac), hz = *CAR_F(c, 0x3b0);
+    float corner[4][3];
+    for (int k = 0; k < 3; k++) {
+        float f = fw[k] * hz, r = rt[k] * hx, d = up[k] * -hy;
+        corner[0][k] = pos[k] + d + f - r;
+        corner[1][k] = pos[k] - d + f + r;
+        corner[2][k] = pos[k] - d - f - r;
+        corner[3][k] = pos[k] + d - f + r;
+    }
+    bool found = false;
+    float best = 999.0f, bn[3] = {0, 0, 0}, bat[3] = {0, 0, 0};
+    for (int s = 0; s < 4; s++) {
+        int a = (int)exe_u32(0x5d0b6c + 8u * (unsigned)s), b = (int)exe_u32(0x5d0b70 + 8u * (unsigned)s);
+        float seg[6] = {corner[a][0], 0, corner[a][2], corner[b][0], 0, corner[b][2]}, n[3], at[3];
+        int hit = o->ovt->collide(o, seg, n, at);
+        if (hit > 1) {
+            memcpy(bn, n, 12);
+            memcpy(bat, at, 12);
+            found = true;
+            break;
+        }
+        if (hit == 1) {
+            float lim = *CAR_F(c, 0x35c) * K(0x5b272c), deep = -99.0f;
+            if (lim < K(0x5b2604)) lim = 0.1f;
+            for (int i = 0; i < *CAR_I(c, 0x32c); i++) {
+                const float *p = CAR_F(c, 0x1dc + 12 * i);
+                float d[3] = {p[0] - at[0], p[1] - at[1], p[2] - at[2]}, v = -dot3(d, n);
+                if (K(0x5b49c4) < v && deep < v) deep = v;
+            }
+            if (deep < best && K(0x5b49c4) < deep && deep < lim) {
+                memcpy(bn, n, 12);
+                memcpy(bat, at, 12);
+                best = deep;
+                found = true;
+            }
+        }
+    }
+    if (!found) return;
+    CarSim_BodyImpulse(c, bn, bat, bits(0x3dcccccd));   /* 0x496580 */
+    *CAR_I(c, 0x438) = o->f20 | 0x50000;
+    memcpy(CAR_F(c, 0x440), pos, 12);
+}
+
 void CarSim_Objects(Car *c)
 {
     if (*CAR_I(c, 0x43c) != 0) return;
@@ -295,7 +347,7 @@ void CarSim_Objects(Car *c)
             if (o->shape == WOBJ_CYLINDER)
                 hit_cylinder(c, o);
             else if (o->shape == WOBJ_BOX)
-                PENDING_NOTE(0x498600, "the car against a box (0x498600: the box's sides, 0x486d40, 0x496580)");
+                hit_box(c, o);
         } else if (kind == 3) {
             if (K(0x5b2580) < *CAR_F(c, 0x35c)) {
                 *CAR_F(c, 0x430) = 15.0f;

@@ -1,5 +1,6 @@
 /* The cars' contact with the ground (see car_ground.h). */
 #include "game/car_ground.h"
+#include "game/car_impulse.h"
 #include "exe.h"
 #include "game/car_physics.h"
 #include "game/road.h"
@@ -15,15 +16,6 @@ int32_t g_race_network;
 int32_t g_race_rollover_events;
 int32_t g_race_heavy;
 
-/* The body's points against the ground (impulses through 0x495ea0, 0x496440, 0x494d60): pending. */
-static void CarSim_BodyOnGround(Car *c, const float n[3], const float at[3], float friction)
-{
-    (void)c;
-    (void)n;
-    (void)at;
-    (void)friction;
-    PENDING_NOTE(0x496580, "the body's collision with the ground (0x496580, 0x495ea0)");
-}
 
 static float exe_f32(uint32_t va)
 {
@@ -592,7 +584,7 @@ void CarSim_Forces(void *car)
         /* Tilted over (or traffic): the body's points against the ground. */
         float fr = surface_friction(kind);
         if (K(0x5b2698) < *CAR_F(c, 0x3a0) && !(flags & 0x80)) fr = 0.1f;
-        CarSim_BodyOnGround(c, WSurface_Normal(&c->body), CAR_F(c, 0x400), fr);   /* 0x496580 */
+        CarSim_BodyImpulse(c, WSurface_Normal(&c->body), CAR_F(c, 0x400), fr);   /* 0x496580 */
         if (*CAR_F(c, 0x3a0) < K(0x5b23f8)) *CAR_I(c, 0xdb0) = 0;
         if (*CAR_F(c, 0x3a0) < K(0x5b2698) && vy < K(0x5b2628)) {
             vel[1] = vel[1] - surface_bounce(kind) * vy;

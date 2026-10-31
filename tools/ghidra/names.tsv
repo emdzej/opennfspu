@@ -618,7 +618,7 @@
 00486bf0	WTreeElem_BoxObject_ctor	world	high	Box: 4 ground-plane corners +0x34, +0x64 = half bbox diagonal * 1.05
 00486ce0	WTreeElem_BoxObject_v5	world	struct	Virtual slot 5 of WTreeElem_BoxObject (vtable 0x5b4938)
 00486cf0	WTreeElem_BoxObject_v0	world	struct	Virtual slot 0 of WTreeElem_BoxObject (vtable 0x5b4938)
-00486d40	WTreeElem_BoxObject_v6	world	struct	Virtual slot 6 of WTreeElem_BoxObject (vtable 0x5b4938)
+00486d40	WTreeElem_BoxObject_Collide	world	high	Slot 6: segment vs the box sides: count, side normal or corner + segment normal
 00486f80	WTreeElem_BoxObject_v7	world	struct	Virtual slot 7 of WTreeElem_BoxObject (vtable 0x5b4938)
 004872a0	WVisWall_set	world	high	Visibility wall from two points (ground-plane segment, length^2 and its inverse)
 00487410	BWorld_ctor	world	high	The track world (0x3c)
@@ -665,10 +665,13 @@
 00493f70	CarSim_HitWall	sim	high	The car pushed out of a wall, bounced off its normal; the impact
 004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
 00494f90	CarSim_Edges	sim	high	The car's eight box probes against the road edges
+00495ea0	CarSim_ContactImpulse	sim	high	Normal (0.3; traffic 0.4 or 0.6/size) and friction impulse at a point
+00496440	CarSim_ClampSpin	sim	high	Angular velocity held to 0.75 (tiny 2.25, light traffic 6.75)
+00496580	CarSim_BodyImpulse	sim	high	Body points behind a plane: impulse at their mean, push out by the deepest, spin clamp, impact (port: src/game/car_impulse.c)
 00498190	Sim_ClearContacts	sim	high	Clears the cars' per-tick contacts (+0x110c) and the car-car list count (0x628f5c)
 004981f0	CarSim_NearBox	sim	high	Point within r of the car box (right, forward)
 004982f0	CarSim_ObjectContact	sim	high	Push out along n, impact 3x closing speed, velocity +32 push, zone damage over 10
-00498600	CarSim_HitBox	sim	med	Car vs box object (box slot 6 on the car box sides, 0x496580)
+00498600	CarSim_HitBox	sim	high	Car box sides (pairs 0x5d0b6c) vs box object; corner hit at once, else shallowest under speed/8
 00498a10	CarSim_HitCylinder	sim	high	Car vs cylinder object
 00498d50	CarSim_Objects	sim	high	Car vs world objects near it (port: car_collide.c)
 00498f60	CarSim_Collide	sim	high	The collision task: edges, objects, the other cars

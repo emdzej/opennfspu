@@ -53,8 +53,8 @@ typedef struct WTreeObject WTreeObject;
 enum { WOBJ_CYLINDER = 1, WOBJ_BOX = 2 };
 typedef struct {
     float (*radius)(const WTreeObject *o);                                  /* 5 */
-    /* 6: against a segment (seg[0..2] from, [3..5] to, in the ground plane): 0 clear, 1 the segment is
-       inside, 2 it crosses an edge (normal and point out). */
+    /* 6: against a segment (seg[0..2] from, [3..5] to, in the ground plane): the sides it crosses (the
+       box), a normal and a point out (the original's first argument, the car's position, is unused). */
     int (*collide)(const WTreeObject *o, const float seg[6], float normal[3], float at[3]);
     int (*hitkind)(const WTreeObject *o, const float vel[3]);               /* 8: 1 animated, 2 solid, 3 drive-through */
 } WTreeObjectVtbl;
