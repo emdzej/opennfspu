@@ -27,8 +27,8 @@ static float exe_f32(uint32_t va)
     return f;
 }
 
-int32_t g_ai_level = 1;
-int32_t g_ai_drive;   /* (the front end's difficulty option; its middle) */
+int32_t g_ai_level = 1;   /* (the front end's difficulty option; its middle) */
+int32_t g_ai_drive;
 
 /* The task rates the controllers last asked for (0x5e6650, 0x5e6654, 0x5e66a0). */
 static int ai_rate, ai_ticks;
@@ -528,15 +528,5 @@ void AI_TickAll(void)
         if (!h->always && !Sim_TaskRate(1, 0, *CAR_F(c, 0x78), *CAR_I(c, 0), &ai_rate, &ai_ticks, &ai_dt, *CAR_I(c, 0x10b8) != 0))
             continue;
         if (h->kind == 2) opponent_tick(h);
-        else if (h->kind == 1 && g_ai_drive) {
-            /* The AI drive key (C1_COMMAND2_AIDRIVE). Port: the human's car keeps its own tasks (its
-               place on the road and its drive); the AI gives it pedals and steering. */
-            PENDING_NOTE(0x405720, "the human's AI drive as the original runs it");
-            AI_Plan(c);
-            AI_Steer(c);
-            c->b[0xd7d] = c->b[0xd9d];
-            c->b[0xd7c] = c->b[0xd9c];
-            *CAR_I(c, 0xd90) = *CAR_I(c, 0xda0);
-        }
     }
 }

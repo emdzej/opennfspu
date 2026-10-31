@@ -8,6 +8,7 @@
 #include "game/race_setup.h"
 #include "game/race.h"
 #include "game/hud.h"
+#include "game/input.h"
 #include "game/race_progress.h"
 #include "pending.h"
 #include "game/race_car.h"
@@ -128,6 +129,8 @@ static bool load(const char *track, const char *carname)
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
     AI_Load();             /* the racing line (0x4031f0) */
+    Input_Reset(false);
+    if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
     AI_MakeControllers();  /* 0x406580 */
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     g_render_cars = draw_cars;
@@ -139,7 +142,9 @@ static bool load(const char *track, const char *carname)
 }
 
 /* The driver: the keyboard (DirectInput codes) or the pad into the car's controls. */
-static void read_controls(Car *c)
+/* The driver: the keyboard (DirectInput codes) or the pad into the local player's packet (port: the
+   original samples its configured controls, Input_Sample 0x412e90; the keyboard's steering eases in). */
+static void read_controls(void)
 {
     uint8_t keys[KEY_COUNT] = {0};
     bool kb = plat_keys(keys);
@@ -154,15 +159,16 @@ static void read_controls(Car *c)
     bool left = autodrive == 3 || (kb && (keys[0xcb] || keys[0x1e])) || (pad & PAD_LEFT);
     bool right = autodrive == 2 || (kb && (keys[0xcd] || keys[0x20])) || (pad & PAD_RIGHT);
     bool hand = (kb && keys[0x39]) || (pad & PAD_X);
-    c->b[0xd7c] = up ? 0xff : 0;
-    c->b[0xd7d] = down ? 0xff : 0;
-    c->b[0xd85] = hand ? 1 : 0;
-    if ((kb && keys[0x13]) || (pad & PAD_Y)) c->b[0xd89] = 1;   /* the reset key (R; the race's C1_COMMAND2_RESET) */
-    int target = left == right ? 0 : left ? -0x7f : 0x7f;
-    int32_t *s = CAR_I(c, 0xd90);
-    int step = 0x10;   /* the keyboard's steering eases over about an eighth of a second */
-    if (*s < target) *s = *s + step < target ? *s + step : target;
-    else if (*s > target) *s = *s - step > target ? *s - step : target;
+    bool reset = (kb && keys[0x13]) || (pad & PAD_Y);   /* R: C1_COMMAND2_RESET */
+    static int steer;
+    int target = left == right ? 0 : left ? -0x3f : 0x3f;
+    int step = 8;   /* the keyboard's steering eases over about an eighth of a second */
+    if (steer < target) steer = steer + step < target ? steer + step : target;
+    else if (steer > target) steer = steer - step > target ? steer - step : target;
+    g_input_packet[0] = (uint8_t)((hand ? 1 : 0) | (reset ? 5 << 3 : 0));
+    g_input_packet[1] = (uint8_t)(int8_t)steer;
+    g_input_packet[2] = up ? 0x7f : 0;
+    g_input_packet[3] = down ? 0x7f : 0;
 }
 
 bool DRIVE_selftest(const char *track, const char *car)
@@ -178,7 +184,11 @@ bool DRIVE_selftest(const char *track, const char *car)
     int n = (int)ticks_due;
     ticks_due -= n;
     for (int i = 0; i < n && i < 4; i++) {
-        if (!g_ai_drive) read_controls(c);
+        if (!(g_sim_tick & 1)) {
+            read_controls();
+            Input_QueuePacket();         /* 0x413820 */
+            Sim_HalfStep(g_sim_tick >> 1);   /* 0x415f10 */
+        }
         Sim_Step();   /* 0x415010 */
     }
     {

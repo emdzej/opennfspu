@@ -8,6 +8,7 @@
 #include "game/car_ground.h"
 #include "game/car_physics.h"
 #include "game/car_respawn.h"
+#include "game/input.h"
 #include "pending.h"
 
 #define TASK(addr, what)                                       \
@@ -17,7 +18,6 @@
         PENDING_NOTE(0x##addr, what);                          \
     }
 TASK(414830, "car task: 0x414830 (unregistered)")
-TASK(499150, "car task: 0x499150 (even, 0x15)")
 TASK(4a0e10, "car task: 0x4a0e10 (traffic, +0xe1c)")
 TASK(4083c0, "car task: 0x4083c0 (replay)")
 TASK(49b6b0, "car task: 0x49b6b0 (+0xe24 variant)")
@@ -31,7 +31,7 @@ void Car_SetTasks(Car *c)
     uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
     *slot(c, T_E0C) = CarSim_Track;    /* 0x49aee0 */
     *slot(c, T_E10) = task_414830;
-    *slot(c, T_E14) = task_499150;
+    *slot(c, T_E14) = CarSim_PacketTask;   /* 0x499150 */
     *slot(c, T_E1C) = CarSim_Drive;    /* 0x49fb20 */
     *slot(c, T_E20) = CarSim_Forces;   /* 0x49bcb0 */
     *slot(c, T_E24) = CarSim_Move;   /* 0x49b710 */

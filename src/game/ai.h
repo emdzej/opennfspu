@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 extern int32_t g_ai_level;     /* 0x6573f4: the opponents' level (0 .. 2) */
-extern int32_t g_ai_drive;     /* the human's car AI-driven (the AIDRIVE key; port: the AI's pedals and steering only) */
+extern int32_t g_ai_drive;     /* the drive view's aidrive=1: the human's car AI-driven (+0xda8, as the AIDRIVE key) */
 
 /* The race's AI data: the racing line (AI_LoadLineSpeeds 0x4031f0: <track><reversed>.lsp of
    GameData\Track\racer\work\, two floats a node from +4). */

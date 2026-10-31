@@ -55,11 +55,18 @@
 00411190	Car_Construct	sim	low	Car object with its parts ("Car_tObj", "Parts_tCarParts")
 00412e90	Input_Sample	input	high	Reads keyboard/joystick into the per-player control state (32 Hz, from the timer or the loop)
 00413820	Input_QueuePacket	input	high	Queues the sampled controls as an input packet per player (lockstep queue), counts packets
+004138b0	Input_ManualShift	input	med	Shift commands
 004138f0	Input_Action	input	high	Action word ring (32 frames at 0x5e954c): is action n held, or pressed this frame (edge)
 00413960	Race_QuitRequested	game	high	Action bit 0 (quit) of the current frame's action word
+00413c70	Replay_Pack	input	med	Run-length pack 8 bytes
 00413ff0	Replay_Save	game	med	Writes replay.rpl ("FINAL GAMETICK=%d")
+00414080	Replay_Store	input	med	A block into the replay buffer
+004141c0	Replay_Load	input	med	A block from the replay buffer
+00414410	Replay_Record	input	med	Packet into the replay block
+004144d0	Replay_Play	input	med	Packet from the replay
 00414680	Replay_WriteFinalTick	game	med	"FINAL GAMETICK=%d" into replay.rpl
 00414710	Replay_Load	game	med	Loads replay.rpl (or the default replay)
+00414830	Input_CarPacket	input	med	Record or play the packet
 00414870	Race_SetupSkidpad	game	low	Skidpad (test drive) race setup
 00414b30	Sim_TaskRate	sim	high	A car task's rate by distance (updates/s, ticks, dt) and whether it runs this tick
 00414d50	TaskList_Run	game	high	Runs a list of (function, argument) callbacks; the race keeps two (0x606acc every tick, 0x606ad0 even ticks)
@@ -807,6 +814,7 @@
 00498a10	CarSim_HitCylinder	sim	high	Car vs cylinder object
 00498d50	CarSim_Objects	sim	high	Car vs world objects near it (port: car_collide.c)
 00498f60	CarSim_Collide	sim	high	The collision task: edges, objects, the other cars
+00499150	CarSim_PacketTask	sim	med	Human car controls from the packet
 00499490	CarSim_BodyPlane	sim	high	The car's own ground plane from the body polygon and the road axes
 004996a0	CarSim_SurfaceNoise	sim	high	The surface roughness under a wheel (random bumps by surface kind)
 004999e0	CarSim_Ground	sim	high	The wheels on the ground: contacts, suspension, pitch and roll; mean height
