@@ -120,6 +120,8 @@ static int16_t rd16(const uint8_t *p) { int16_t v; memcpy(&v, p, 2); return v; }
 static int shape_x(const uint8_t *sh) { return (int32_t)((uint32_t)rd32(sh + 0xc) << 20) >> 20; }
 static int shape_y(const uint8_t *sh) { return (int32_t)((uint32_t)rd32(sh + 0xc) << 4) >> 20; }
 
+void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy);
+
 static void lower(char *dst, size_t cap, const char *src)
 {
     snprintf(dst, cap, "%s", src ? src : "");
@@ -404,5 +406,135 @@ void FEWindow_Draw(FertControl *w)
 {
     /* (the screen object, the layout's first section, holds the screen's settings: room, callback list,
        music; the window's draw doesn't draw it) */
-    for (int i = w->nchildren - 1; 0 <= i; i--) FEControl_Draw(w->children[i], 0, 0);   /* 0x528390: last first */
+    for (int i = w->nchildren - 1; 0 <= i; i--) {   /* 0x528390: last first */
+        FertControl *c = w->children[i];
+        if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, 0, 0);
+        else FEControl_Draw(c, 0, 0);
+    }
+}
+
+/* ---------------------------------------------------------------- the front end's styles (0x520780 ..) */
+
+/* A colour's alpha scaled by a (0x4d82a0; 0xff keeps it). */
+static uint32_t fade(uint32_t c, int a) { return a == 0xff ? c : (uint32_t)(((c >> 24) * (uint32_t)a) / 0xff) << 24 | (c & 0xffffffu); }
+
+/* Whether the plain look is drawn (0x4e2dc0: the display can't modulate alpha, 0x6197aa). */
+static bool plain(void) { return g_render_modalpha == 0; }
+
+static void quad4(float x0, float y0, uint32_t c0, float x1, float y1, uint32_t c1, float x2, float y2, uint32_t c2,
+                  float x3, float y3, uint32_t c3)   /* 0x4d9380's order: two along the top, two along the bottom */
+{
+    const float p[8] = {x0, y0, x1, y1, x2, y2, x3, y3};
+    const uint32_t c[4] = {c0, c1, c2, c3};
+    FE2D_Quad(p, c);
+}
+
+/* The red gradient behind a bar (0x521180). */
+void FEStyle_Shadow(float x, float y, float w, float h, int a)
+{
+    uint32_t l = fade(0xffe00c0cu, a), r = fade(0xff820000u, a);
+    FE2D_Gouraud(x + 1.0f, y + 1.0f, w - 2.0f, h - 2.0f, l, r, l, r);
+}
+
+/* A shine over a bar (0x521090): light fading down over its top half, dark over the bottom one. */
+void FEStyle_Shine(float x, float y, float w, float h, int a)
+{
+    if (plain()) {
+        FE2D_Frame(x, y, w, h, (uint32_t)a << 24);
+        return;
+    }
+    uint32_t c0 = fade(0xffffffu, a), c1 = fade(0x80ffffffu, a), c2 = fade(0x91000000u, a), c3 = fade(0, a);
+    float hh = (h - 2.0f) * 0.5f;
+    w -= 2.0f;
+    x += 1.0f;
+    FE2D_Gouraud(x, y + 1.0f, w, hh, c1, c1, c0, c0);
+    FE2D_Gouraud(x, hh + y + 1.0f, w, hh, c3, c3, c2, c2);
+}
+
+/* A bevel of b pixels inside a bar (0x5211f0): light top and left, dark right and bottom. */
+void FEStyle_Bevel(float x, float y, float w, float h, int a, int b)
+{
+    if (plain()) return;
+    uint32_t hi = fade(0xccffffffu, a), hi2 = fade(0x33ffffffu, a), lo2 = fade(0x33000000u, a), lo = fade(0xcc000000u, a);
+    float yb = y + h, fb = (float)b;
+    float y1 = (yb + 1.0f) - 2.0f, xi = fb + x + 1.0f, x0 = x + 1.0f, yi = fb + y + 1.0f, y0 = y + 1.0f;
+    quad4(x0, y0, hi, xi, yi, hi2, x0, y1, hi, xi, y1 - fb, hi2);   /* left */
+    float xr = (x + w + 1.0f) - 1.0f;
+    quad4(x0, y0, hi, xr, y0, hi2, xi, yi, hi, xr - fb, yi, hi2);   /* top */
+    float xr2 = (x + w) - 1.0f;
+    quad4(xr2 - fb, yi, lo2, xr2, y0, lo, xr2 - fb, y1 - fb, lo2, xr2, y1, lo);   /* right */
+    float yb2 = (yb - fb) - 1.0f;
+    quad4(xi, yb2, lo2, xr - fb, yb2, lo2, x0, yb - 1.0f, lo, xr, yb - 1.0f, lo);   /* bottom */
+}
+
+/* A drop shadow (dx, dy) out from a bar's right and bottom (0x520780). */
+void FEStyle_DropShadow(float x, float y, float w, float h, int a, int dx, int dy)
+{
+    if (plain()) return;
+    uint32_t c8 = fade(0x19000000u, a), c9 = fade(0xcc000000u, a), c10 = fade(0x0c000000u, a);
+    float fy = (float)dy, y2 = fy + y, y3 = y2 + h, fx = (float)dx, x5 = fx + x, x6 = x5 + w;
+    float yb = y + h, xr = x + w;
+    quad4(xr, y2, c9, x6, y2, c8, xr, yb, c9, x6, y3, c8);
+    float x1 = fx + fx + x;
+    quad4(x1, yb, c9, xr, yb, c9, x5, y3, c8, x6, y3, c8);
+    quad4(x5, yb, c10, x1, yb, c9, x5, y3, c10, x5, y3, c10);
+    float y4 = fy + fy + y;
+    quad4(xr, y2, c10, x6, y2, c10, xr, y4, c9, xr, y4, c9);
+}
+
+/* A hovered bar's inset (0x5208d0): dark top and left, light right and bottom. */
+void FEStyle_Inset(float x, float y, float w, float h, int a, int b)
+{
+    if (plain()) return;
+    uint32_t c11 = fade(0xcc000000u, a), c12 = fade(0x19000000u, a), c13 = fade(0x33ffffffu, a), c14 = fade(0xccffffffu, a);
+    float fb = (float)b, y2 = fb + y + 1.0f, xr = x + w, x3 = (xr - fb) - 1.0f, x4 = fb + x, x5 = x4 + 1.0f;
+    float y6 = y + 1.0f, x7 = xr - 1.0f, x8 = x + 1.0f, y9 = (y + h) - 1.0f;
+    quad4(x8, y6, c11, x7, y6, c11, x5, y2, c12, x3, y2, c12);
+    quad4(x8, y6, c11, x4, y2, c12, x8, y9, c11, x4, y9 - fb, c12);
+    float y4 = ((y + h) - fb) - 1.0f;
+    quad4(x3, y2, c13, x7, y6, c14, x3, y4, c13, x7, y9, c14);
+    quad4(x5, y4, c13, (xr - fb) + 1.0f, y4, c13, x - 2.0f, y9, c14, xr - 2.0f, y9, c14);
+}
+
+static int data_int(const FertControl *c, const char *name, int def)
+{
+    for (int k = 0; k < c->nparts; k++) {
+        FertAttr *a = FertAttrList_find(&c->parts[k]->attrs, name);
+        if (a) return a->type == FATTR_INT ? FertAttr_int(a) : atoi(FertAttr_str(a));
+    }
+    return def;
+}
+
+/* A GoTo button (FEGoToButton_v15 0x4c8ba0): the gradient, its parts, the drop shadow or the hovered
+   inset, the shine or the bevel, the focus frame; its stems down to the oval. */
+void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return;   /* 0x4c7aa0: hidden */
+    int32_t r[4];
+    FertControl_rect(c, r);
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
+    int a = 0xff;   /* (0x4c8410: the control's fade) */
+    int ds = data_int(c, "dropshadow", 0);
+    bool shadow = ds == 1, gradient = ds == 2;   /* +0x14c, +0x14d (0x4c89e0) */
+    bool hover = (c->feflags & 4) != 0, disabled = (c->feflags & 0x10) != 0, focused = (c->feflags & 0x40) != 0;
+    if (gradient) FEStyle_Shadow(x, y, w, h, a);
+    FEControl_Draw(c, ox, oy);   /* 0x4c7e30 */
+    if (!hover || disabled) {
+        if (shadow) FEStyle_DropShadow(x, y, w, h, a, 4, 4);
+    } else {
+        FEStyle_Inset(x, y, w, h, a, 3);
+    }
+    if (!hover) {
+        if (!gradient) FEStyle_Shine(x, y, w, h, a);
+        else FEStyle_Bevel(x, y, w, h, a, 3);
+    }
+    if (focused && gradient) {
+        FE2D_Frame(x, y, w, h, (uint32_t)a << 24 | 0xffffffu);
+        return;
+    }
+    if (data_int(c, "glintybox", -1) == -1) return;   /* (+0x150: the glint, with its stems) */
+    uint32_t k = (uint32_t)a << 24;
+    FE2D_Rect(x, y, 1.0f, (float)(data_int(c, "stemleftheight", 0) + (r[3] - r[1])), k);
+    FE2D_Rect(x + w, y, 1.0f, (float)(data_int(c, "stemrightheight", 0) + (r[3] - r[1])), k);
+    /* (the glint sweeping along the bar, 0x51f660: pending) */
 }
