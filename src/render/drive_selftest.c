@@ -8,6 +8,8 @@
 #include "game/race_setup.h"
 #include "game/race.h"
 #include "game/hud.h"
+#include "game/race_progress.h"
+#include "pending.h"
 #include "game/race_car.h"
 #include "game/scene.h"
 #include "game/track.h"
@@ -118,7 +120,9 @@ static bool load(const char *track, const char *carname)
     if (!RaceSetup_SingleCar(carname)) return false;
     char v[8];
     int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : 0;   /* --param opponents=<n> */
+    g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
     if (0 < opponents) RaceSetup_Opponents(opponents);
+    if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
     Car_Construct();
     if (g_ncars < 1) return false;
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
@@ -174,8 +178,27 @@ bool DRIVE_selftest(const char *track, const char *car)
     int n = (int)ticks_due;
     ticks_due -= n;
     for (int i = 0; i < n && i < 4; i++) {
-        read_controls(c);
+        if (!g_ai_drive) read_controls(c);
         Sim_Step();   /* 0x415010 */
+    }
+    {
+        /* --param finish=<tick>: the player finished there (a test aid; the race's own finish is the
+           lap count's, 0x417460). */
+        static int finish = -2;
+        char fv[12];
+        if (finish == -2) finish = plat_param("finish", fv, sizeof fv) ? atoi(fv) : -1;
+        if (0 < finish && finish <= g_sim_tick && *CAR_I(c, 0xb50) == 0) {
+            *CAR_I(c, 0xb50) = 2;
+            *CAR_I(c, 0xb14) = g_sim_tick;
+            *CAR_I(c, 0xb24) = g_sim_tick - 0x1c0;
+        }
+    }
+    /* The race over (all the humans finished): the race-over screens (the original's second race loop,
+       race view 2, replays the race behind them: the replay isn't ported, the race goes on). */
+    if (g_race_over && g_race_view < 2) {
+        g_race_view = 2;
+        PENDING_NOTE(0x4b6840, "the race's replay after it (GameMain's second race loop)");
+        HUD_RaceOver();   /* 0x426a40 */
     }
     static int follow = -1;   /* --param follow=<car>: the camera behind another car */
     if (follow < 0) {

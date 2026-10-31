@@ -26,6 +26,10 @@ typedef struct { HudVisual *v; uint8_t front, last; } HudEntry;
 static HudEntry *list;
 static int nlist;
 static bool hidden;          /* 0x60ca00 */
+/* The modal visuals in turn (0x60c9c4): the first shown, the next when it is done. */
+static HudVisual *modal[8];
+static int nmodal;
+static HudVisual *summary;   /* 0x60ca4c */
 static bool always;          /* 0x60c970: draw the front visuals whatever their state */
 
 static void add(HudVisual *v, bool front, bool last)
@@ -147,7 +151,7 @@ static void go_draw(HudVisual *v)
     if (v->state != 0) v->state = 0;
 }
 
-static const HudVisualVtbl go_vt = {go_destroy, go_draw, NULL, NULL, NULL, NULL};   /* 0x5b27ec */
+static const HudVisualVtbl go_vt = {go_destroy, go_draw, NULL, NULL, NULL, NULL, NULL};   /* 0x5b27ec */
 
 static HudVisual *countdown_new(void)
 {
@@ -185,6 +189,20 @@ static HudVisual *countdown_new(void)
         g->centre[i] = HudArt_load(cfiles[i], cindex[i], g->cx, g->cy, exe_i32(csize[i]), exe_i32(csize[i] + 4), false, true, false);
     g->plain = 1;   /* (0x6197aa, a display capability the port's options don't set: != 1) */
     return &g->base;
+}
+
+/* A shade over (x, y, w, h): white fading down to the middle, black up from it, alpha percent of 0x7f.
+   0x435d00 */
+static void tray_shade(int x, int y, int w, int h, int alpha)
+{
+    if (g_hud_opaque) return;
+    uint32_t a = (uint32_t)(alpha * 0x7f / 100) << 24;
+    float fx = (float)x, fy = (float)y, x1 = (float)(x + w), ym = (float)(h / 2 + y), y1 = (float)(y + h);
+    float q0[16] = {fx, fy, 0, 1, x1, fy, 0, 1, x1, ym, 0, 1, fx, ym, 0, 1};
+    float q1[16] = {fx, ym, 0, 1, x1, ym, 0, 1, x1, y1, 0, 1, fx, y1, 0, 1};
+    uint32_t c0[4] = {a | 0xffffff, a | 0xffffff, 0xffffff, 0xffffff}, c1[4] = {0, 0, a, a};
+    Hud2D_Quad(q0, c0);
+    Hud2D_Quad(q1, c1);
 }
 
 /* ---- the trays (HTray, vtable 0x5b3318; 0x433ef0): a visual's dark panel, sliding in from the nearest
@@ -359,7 +377,7 @@ static void tray_draw(HTray *t)
                             : ((uint32_t)exe_u32(0x5b3304 + 4u * (unsigned)k) * (uint32_t)a / 100u) << 24 | exe_u32(0x5b32e4 + 4u * (unsigned)k);
     Hud2D_Quad(t->corner, c);
     if (0 < t->lineoff && v->state == 3) Hud2D_Line(t->line, t->linec);
-    if (t->shade) PENDING_NOTE(0x435d00, "the trays' shade (0x435d00)");
+    if (t->shade) tray_shade(t->x, t->y, t->w, t->h, a);
 }
 
 /* ---- the texts (HTextVisual, 0x34 bytes, vtable 0x5b3184; 0x430e50) ---- */
@@ -547,7 +565,7 @@ static void gear_reset(HudVisual *v)
     combo_reset(c);
 }
 
-static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress};
+static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL};
 
 static HudVisual *gear_new(void)
 {
@@ -630,8 +648,8 @@ static void figures_reset(HudVisual *v, int size_off, bool choice)
 static void speed_reset(HudVisual *v) { figures_reset(v, 0x9c, false); }
 static void tachdigital_reset(HudVisual *v) { figures_reset(v, 0x14, true); }
 
-static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress};
-static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress};
+static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL};
+static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL};
 
 static HudVisual *figures_new(const HudVisualVtbl *vt, int place, int w, int h, bool keep)
 {
@@ -744,8 +762,8 @@ static void multitime_draw(HudVisual *v)
 static void time_reset(HudVisual *v) { figures_reset(v, 0xa4, false); }        /* 0x431760 */
 static void multitime_reset(HudVisual *v) { figures_reset(v, 0x0, true); }     /* 0x42a290 */
 
-static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress};
-static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress};
+static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL};
+static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL};
 
 static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
 {
@@ -928,7 +946,7 @@ static void position_destroy(HudVisual *v)   /* 0x42ad40 */
     free(p);
 }
 
-static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress};
+static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL};
 
 static HudVisual *position_new(void)
 {
@@ -1123,7 +1141,7 @@ static void gdamage_reset(HudVisual *v)
     tray_colours(&g->tray);
 }
 
-static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress};
+static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL};
 
 static HudVisual *gdamage_new(void)
 {
@@ -1569,7 +1587,7 @@ static void map_destroy(HudVisual *v)   /* 0x4320f0 */
     free(m);
 }
 
-static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress};
+static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL};
 
 static HudVisual *map_new(void)
 {
@@ -1590,6 +1608,428 @@ static HudVisual *map_new(void)
     m->blip = HudArt_load(exe_str(0x5cd198), 0, 0, 0, 0x1c, 0x3f, true, false, false);
     map_setpos(&m->tray.base, x, y);
     return &m->tray.base;
+}
+
+/* ---- the billboards (HBillBoard, vtable 0x5b28bc; 0x41a530): a panel opening downwards from its title bar
+   to its full height, a title bar and a key bar with a dark band sweeping along them, a frame and the
+   bars' shades ---- */
+
+/* A rectangle's four corners (x y z w). 0x435880 */
+static void box(int x, int y, int w, int h, float out[16])
+{
+    float q[16] = {(float)x, (float)y, 0, 1, (float)(x + w), (float)y, 0, 1, (float)(x + w), (float)(y + h), 0, 1, (float)x, (float)(y + h), 0, 1};
+    memcpy(out, q, sizeof q);
+}
+
+static void quad_table(const float q[16], uint32_t table)
+{
+    uint32_t c[4];
+    for (int k = 0; k < 4; k++) c[k] = exe_u32(table + 4u * (unsigned)k);
+    Hud2D_Quad(q, c);
+}
+
+/* A frame of pad pixels round (x, y, w, h) in style s (0x5b3358 + 0x40 s). 0x435980 */
+static void frame(int x, int y, int w, int h, int s, int p)
+{
+    if (g_hud_opaque || s < 0 || 2 < s) return;
+    float fx = (float)x, fy = (float)y, x1 = (float)(x + w), y1 = (float)(y + h);
+    float top[16] = {fx - p, fy - p, 0, 1, x1 + p, fy - p, 0, 1, x1, fy, 0, 1, fx, fy, 0, 1};
+    float right[16] = {x1 + p, fy - p, 0, 1, x1 + p, y1 + p, 0, 1, x1, y1, 0, 1, x1, fy, 0, 1};
+    float bottom[16] = {x1 + p, y1 + p, 0, 1, fx - p, y1 + p, 0, 1, fx, y1, 0, 1, x1, y1, 0, 1};
+    float left[16] = {fx - p, y1 + p, 0, 1, fx - p, fy - p, 0, 1, fx, fy, 0, 1, fx, y1, 0, 1};
+    uint32_t t = 0x5b3358u + 0x40u * (unsigned)s;
+    quad_table(top, t);
+    quad_table(right, t + 0x10);
+    quad_table(bottom, t + 0x20);
+    quad_table(left, t + 0x30);
+}
+
+/* A bevel of b pixels inside (x, y, w, h). 0x436380 */
+static void bevel(int x, int y, int w, int h, int b)
+{
+    if (g_hud_opaque) return;
+    float fx = (float)x, fy = (float)y, x1 = (float)(x + w), y1 = (float)(y + h);
+    float top[16] = {fx, fy, 0, 1, x1, fy, 0, 1, x1, fy + b, 0, 1, fx, fy + b, 0, 1};
+    float right[16] = {x1 - b, fy, 0, 1, x1, fy, 0, 1, x1, y1, 0, 1, x1 - b, y1, 0, 1};
+    float bottom[16] = {fx, y1 - b, 0, 1, x1, y1 - b, 0, 1, x1, y1, 0, 1, fx, y1, 0, 1};
+    float left[16] = {fx, fy, 0, 1, fx + b, fy, 0, 1, fx + b, y1, 0, 1, fx, y1, 0, 1};
+    quad_table(top, 0x5b3478);
+    quad_table(right, 0x5b3488);
+    quad_table(bottom, 0x5b3498);
+    quad_table(left, 0x5b34a8);
+}
+
+static void flat(const float q[16], uint32_t col)   /* 0x419f70 */
+{
+    if (g_hud_opaque) col |= 0xff000000u;
+    uint32_t c[4] = {col, col, col, col};
+    Hud2D_Quad(q, c);
+}
+
+static void line2(const float *a, const float *b, uint32_t table)   /* 0x435900 + 0x419eb0 */
+{
+    float p[8] = {a[0], a[1], 0, 1, b[0], b[1], 0, 1};
+    uint32_t c[2] = {exe_u32(table), exe_u32(table + 4)};
+    Hud2D_Line(p, c);
+}
+
+typedef struct {
+    HudVisual base;
+    int32_t w, h;                 /* +0x10, +0x14 */
+    float bar[16], keys[16], body[16];   /* +0x1c, +0x5c, +0x9c */
+    int32_t frames;               /* +0xdc */
+    int32_t cw, ch, step;         /* +0xe4, +0xe8, +0xec: the size now, its step */
+    const char *title, *sub;      /* +0xf0, +0xf4 */
+    HText *ttitle, *tsub, *tkey, *tkey2;   /* +0xf8 .. +0x104 */
+    uint8_t keyhints;             /* +0x108 */
+    int32_t dir, last;            /* +0x110, +0x114: the band's direction, its last place */
+    uint8_t autoclose;            /* +0x118 */
+    int32_t opened;               /* +0x11c */
+} HBillBoard;
+
+/* The bars and body for size (w, h) centred on the screen, the texts in the bars. 0x41ae40 */
+static void bb_layout(HBillBoard *b, int w, int h, int pad)
+{
+    int x = (g_display.width - w) / 2, y = (g_display.height - h) / 2;
+    box(x, y, w, pad, b->bar);
+    box(x, h + pad * -2 + y, w, pad, b->keys);
+    memcpy(b->body, b->bar + 12, 16);
+    memcpy(b->body + 4, b->bar + 8, 16);
+    if (b->keys[5] <= b->bar[13]) {
+        memcpy(b->body + 8, b->bar + 8, 16);
+        memcpy(b->body + 12, b->bar + 12, 16);
+    } else {
+        memcpy(b->body + 8, b->keys + 4, 16);
+        memcpy(b->body + 12, b->keys, 16);
+    }
+    float a, c, d, th;
+    float bh = exe_f32(0x5b265c), in = exe_f32(0x5b241c), half = exe_f32(0x5b23f0);
+    if (b->ttitle && b->ttitle->font && b->ttitle->font->font) {
+        text_extent(b->ttitle, b->title ? b->title : "", &a, &c, &d, &th);
+        b->ttitle->x = (int)(b->bar[0] + in), b->ttitle->y = (int)((bh - th) * half + b->bar[1]);
+    }
+    if (b->tsub && b->tsub->font && b->tsub->font->font) {
+        text_extent(b->tsub, b->sub ? b->sub : "", &a, &c, &d, &th);
+        b->tsub->x = (int)(b->bar[4] - in), b->tsub->y = (int)((bh - th) * half + b->bar[1]);
+    }
+    const char *k1 = LOC_string(HudConfig_loc(), 0x46b4), *k2 = LOC_string(HudConfig_loc(), 0x46b5);
+    if (b->tkey && b->tkey->font && b->tkey->font->font) {
+        text_extent(b->tkey, k1 ? k1 : "", &a, &c, &d, &th);
+        b->tkey->x = (int)(b->keys[0] + in), b->tkey->y = (int)((bh - th) * half + b->keys[1]);
+    }
+    if (b->tkey2 && b->tkey2->font && b->tkey2->font->font) {
+        text_extent(b->tkey2, k2 ? k2 : "", &a, &c, &d, &th);
+        b->tkey2->x = (int)(b->keys[4] - in), b->tkey2->y = (int)((bh - th) * half + b->keys[1]);
+    }
+}
+
+static void bb_setpos(HudVisual *v, int x, int y) { bb_layout((HBillBoard *)v, x, y, 0x16); }   /* 0x41add0 */
+
+static void bb_setstate(HudVisual *v, int32_t s)   /* 0x41adf0 */
+{
+    HBillBoard *b = (HBillBoard *)v;
+    b->frames = 0;
+    v->state = s;
+    if (s == 1) b->opened = g_sim_tick;
+    if (s == 1 || s == 2) PENDING_NOTE(0x4aab80, "the billboards' sound (4)");
+}
+
+/* The dark band along a bar at x: two quads to its sides. */
+static void band(const float *r, float x)
+{
+    float l[16] = {r[0], r[1], r[2], r[3], x, r[5], 0, 1, x, r[9], 0, 1, r[12], r[13], r[14], r[15]};
+    float rt[16] = {x, r[5], 0, 1, r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], x, r[9], 0, 1};
+    quad_table(l, 0x5b2898);
+    quad_table(rt, 0x5b28a8);
+}
+
+/* 0x41a7c0 */
+static void bb_draw(HBillBoard *b)
+{
+    HudVisual *v = &b->base;
+    if (v->state == 0) return;
+    if (b->autoclose && b->opened && 0x280 < g_sim_tick - b->opened) {
+        v->vt->setstate(v, 2);
+        b->opened = 0;
+    }
+    if (v->state == 1) {
+        b->ch += b->step;
+        if (b->h <= b->ch) {
+            b->cw = b->w, b->ch = b->h;
+            v->state = 3;
+        }
+        b->frames++;
+    } else if (v->state == 2) {
+        b->ch -= b->step;
+        if (b->ch < 0x29) {
+            b->ch = 0x28;
+            v->state = 0;
+        }
+        b->frames++;
+    } else if (v->state == 3) {
+        b->cw = b->w, b->ch = b->h;
+    }
+    v->vt->setpos(v, b->cw, b->ch);
+    quad_table(b->body, 0x5b2858);
+    int t = (int)fmod((double)g_sim_tick, (double)exe_f64(0x5b28f0));   /* (the race loop's tick 0x606ac8) */
+    int s = (int)((unsigned)(t * (int)(b->bar[4] - b->bar[0])) >> 5);
+    if (b->dir == 0 && s < b->last) b->dir = 1;
+    else if (b->dir == 1 && s < b->last) b->dir = 0;
+    b->last = s;
+    band(b->bar, (float)(int)(b->dir ? b->bar[4] - (float)s : (float)s + b->bar[0]));
+    band(b->keys, (float)(int)(b->dir ? b->keys[4] - (float)s : (float)s + b->keys[0]));
+    if (v->state == 3) {
+        text_print(b->ttitle, b->title ? b->title : "", 1.0f, 1.0f);
+        text_print(b->tsub, b->sub ? b->sub : "", 1.0f, 1.0f);
+        if (b->keyhints) {
+            const char *k = LOC_string(HudConfig_loc(), 0x46b4);
+            text_print(b->tkey, k ? k : "", 1.0f, 1.0f);
+            if (v->flag) {
+                k = LOC_string(HudConfig_loc(), 0x46b5);
+                text_print(b->tkey2, k ? k : "", 1.0f, 1.0f);
+            }
+        }
+    }
+    int x = (int)b->bar[0], y = (int)b->bar[1];
+    frame(x, y, (int)(b->keys[8] - b->bar[0]), (int)(b->keys[9] - b->bar[1]), exe_i32(0x5cc8e4), exe_i32(0x5cc8e8));
+    tray_shade(x, y, (int)(b->bar[4] - b->bar[0]), (int)(b->bar[9] - b->bar[5]), 100);
+    tray_shade((int)b->keys[0], (int)b->keys[1], (int)(b->keys[4] - b->keys[0]), (int)(b->keys[9] - b->keys[5]), 100);
+}
+
+static void bb_init(HBillBoard *b, const HudVisualVtbl *vt, int w, int h, const char *title, const char *sub, bool keyhints, bool flag,
+                    bool autoclose)
+{
+    b->base.vt = vt;
+    b->base.flag = flag;
+    b->w = w, b->h = h;
+    b->step = h / 5;
+    b->title = title, b->sub = sub;
+    b->keyhints = keyhints;
+    b->autoclose = autoclose;
+    const char *f = HudConfig_font(0x4c);
+    b->ttitle = text_new(f, 0xffffffffu, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    b->tsub = text_new(f, 0xffffffffu, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 1, false);
+    b->tkey = text_new(f, 0xffffffffu, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    b->tkey2 = text_new(f, 0xffffffffu, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 1, false);
+    b->cw = w, b->ch = 0x28;
+    bb_layout(b, w, b->ch, 0x16);
+}
+
+static void bb_free(HBillBoard *b)   /* 0x41a760 */
+{
+    text_free(b->ttitle);
+    text_free(b->tsub);
+    text_free(b->tkey);
+    text_free(b->tkey2);
+}
+
+/* ---- the tables (HTable, 0x7b0 bytes, vtable 0x5b3078; 0x42e810): a header of column names, rows of
+   eight cells of text, a cell's colour square, a row marked ---- */
+
+enum { TBL_ROWS = 8, TBL_COLS = 6 };
+
+typedef struct {
+    char cell[TBL_ROWS][TBL_COLS][0x20];   /* +0x004 */
+    struct { uint8_t on; uint32_t colour; } swatch[TBL_ROWS][TBL_COLS];   /* +0x604 */
+    HText *text;                           /* +0x784 */
+    int32_t x, y, w;                       /* +0x788 .. +0x790 */
+    float xh, xw;                          /* +0x794, +0x798: "x"'s extent */
+    int32_t cols, rows;                    /* +0x79c, +0x7a0 */
+    const int32_t *colw;                   /* +0x7a4 (exe data) */
+    const char *head[TBL_COLS];            /* +0x7a8 */
+    int32_t mark;                          /* +0x7ac: the row marked (-1 none) */
+} HTable;
+
+static HTable *table_new(int x0, int y0, int x1, int y1, int cols, int rows, uint32_t colw, const char *const *head)
+{
+    HTable *t = calloc(1, sizeof *t);
+    if (!t) return NULL;
+    t->cols = cols, t->rows = rows;
+    t->colw = (const int32_t *)(const void *)exe_data(colw, 4u * (unsigned)cols);
+    for (int c = 0; c < cols && c < TBL_COLS; c++) t->head[c] = head[c];
+    t->mark = -1;
+    t->text = text_new(HudConfig_font(0x64), 0xff000000u, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    if (t->text && t->text->font && t->text->font->font) {
+        float a, b;
+        text_extent(t->text, exe_str(0x5ccfc0), &a, &b, &t->xw, &t->xh);
+    }
+    int sum = 0;
+    for (int c = 0; c < cols; c++) sum += t->colw[c];
+    t->w = sum;
+    t->x = ((x1 - x0) - sum) / 2 + x0;
+    t->y = (int)((unsigned)((y1 + (rows + 1) * -0x14) - y0) >> 1) + y0;
+    for (int r = 0; r < TBL_ROWS; r++)
+        for (int c = 0; c < TBL_COLS; c++) snprintf(t->cell[r][c], 0x20, "%s", exe_str(0x5ccdc0));
+    return t;
+}
+
+static void table_free(HTable *t)
+{
+    if (!t) return;
+    text_free(t->text);
+    free(t);
+}
+
+static void table_swatch(int x, int y, uint32_t col)   /* 0x42f030 */
+{
+    float q[16];
+    box(x, y, 0x12, 6, q);
+    flat(q, (col & 0xff000000u) ? col : 0xff000000u);
+    for (int k = 0; k < 4; k++) line2(q + 4 * k, q + 4 * ((k + 1) & 3), 0x5b306c);
+}
+
+/* 0x42e9b0 */
+static void table_draw(HTable *t)
+{
+    float head[16], body[16], mark[16];
+    box(t->x, t->y, t->w, 0x14, head);
+    flat(head, 0xfffab400u);
+    bevel(t->x, t->y, t->w, 0x14, 4);
+    box(t->x, t->y + 0x14, t->w, t->rows * 0x14, body);
+    flat(body, 0x40ffffffu);
+    if (t->mark != -1) {
+        box(t->x, t->y + t->mark * 0x14, t->w, 0x14, mark);
+        flat(mark, 0x80fab400u);
+    }
+    line2(head, body + 12, 0x5b3064);
+    line2(head + 4, body + 8, 0x5b3064);
+    int acc = 0;
+    for (int c = 0; c < t->cols - 1; c++) {
+        acc += t->colw[c];
+        float a[2] = {(float)acc + head[0], 20.0f + head[1]}, b[2] = {(float)acc + body[12], body[13]};
+        line2(a, b, 0x5b3064);
+    }
+    line2(head, head + 4, 0x5b3064);
+    line2(head + 12, head + 8, 0x5b3064);
+    line2(body + 12, body + 8, 0x5b3064);
+    if (!t->text || !t->text->font || !t->text->font->font) return;
+    int x = (int)(head[0] + exe_f32(0x5b2404));
+    float a, b, w, h;
+    for (int c = 0; c < t->cols; c++) {
+        const char *s = t->head[c] ? t->head[c] : "";
+        text_extent(t->text, s, &a, &b, &w, &h);
+        t->text->x = x, t->text->y = (int)(((head[13] - head[1]) - h) * exe_f32(0x5b23f0) + head[1]);
+        text_print(t->text, s, 1.0f, 1.0f);
+        x += t->colw[c];
+    }
+    for (int r = 0; r < t->rows; r++) {
+        x = (int)(head[0] + exe_f32(0x5b2404));
+        for (int c = 0; c < t->cols; c++) {
+            const char *s = t->cell[r][c];
+            text_extent(t->text, s, &a, &b, &w, &h);
+            int ty = (int)(((head[13] - head[1]) - h) * exe_f32(0x5b23f0) + (float)(r * 0x14) + head[13]);
+            int tx = x;
+            if (t->swatch[r][c].on) {
+                table_swatch(x, (int)((float)(r * 0x14) + head[13] + exe_f32(0x5b3090)), t->swatch[r][c].colour);
+                tx = x + 0x16;
+            }
+            t->text->x = tx, t->text->y = ty;
+            text_print(t->text, s, 1.0f, 1.0f);
+            x += t->colw[c];
+        }
+    }
+}
+
+/* ---- the race's results (HRaceSummary, 0x1bc bytes, vtable 0x5b2e60; 0x42bc30) ---- */
+
+typedef struct {
+    HBillBoard bb;
+    HTable *table;        /* +0x120 */
+    uint8_t linear, trial, extra;   /* +0x124, +0x125, +0x148 */
+    int32_t done[8];      /* +0x128 */
+    const char *head[TBL_COLS];
+} HRaceSummary;
+
+/* Racer i's row at its place: the place's name ("1st" .. hud.loc 0x46c4..), the driver, the car with its
+   colour, the best lap, the race's time ("-------" when none; a point-to-point race only the time).
+   0x42c170 */
+static void summary_row(HRaceSummary *s, int i, int time, int best, int row)
+{
+    HTable *t = s->table;
+    if (!t || row < 0 || TBL_ROWS <= row || g_racers.n <= i) return;
+    Car *c = g_racers.c[i];
+    s->done[i] = 1;
+    const char *place = LOC_string(HudConfig_loc(), 0x46c4 + row);
+    snprintf(t->cell[row][0], 0x20, "%s", place ? place : "");
+    snprintf(t->cell[row][1], 0x20, "%.31s", (const char *)CAR_DESCB(c) + 0x17c);
+    snprintf(t->cell[row][2], 0x20, "%.15s", (const char *)CAR_DESCB(c) + 0x534);
+    t->swatch[row][2].on = 1;
+    memcpy(&t->swatch[row][2].colour, CAR_DESCB(c) + 0x218, 4);
+    int col = 3;
+    if (!s->linear && g_race_mode != 3) {
+        HTime_Format(best, t->cell[row][3], false);
+        col = 4;
+    }
+    if (time == 0) snprintf(t->cell[row][col], 0x20, "%s", exe_str(0x5cce0c));
+    else HTime_Format(time, t->cell[row][col], false);
+    if (s->trial && !s->extra) PENDING_NOTE(0x42c170, "the skill test's scores (0x6576d8)");
+}
+
+/* Opening: the rows from the results, the player's marked. 0x42c070 */
+static void summary_setstate(HudVisual *v, int32_t st)
+{
+    HRaceSummary *s = (HRaceSummary *)v;
+    memset(s->done, 0, sizeof s->done);
+    if (v->state == 0) {
+        for (int i = 0; i < g_racers.n; i++) {
+            Car *c = g_racers.c[i];
+            int row = *CAR_I(c, 0xcd4) - 1;
+            if (0 <= row && row < g_racers.n) summary_row(s, i, *CAR_I(c, 0xcd8), *CAR_I(c, 0xcfc), row);
+        }
+        Car *me = local_car();
+        if (s->table && me) s->table->mark = *CAR_I(me, 0xcd4);
+    }
+    bb_setstate(v, st);
+}
+
+static void summary_draw(HudVisual *v)   /* 0x42bfe0 */
+{
+    HRaceSummary *s = (HRaceSummary *)v;
+    bb_draw(&s->bb);
+    if (v->state != 0 && !(v->state == 1 || v->state == 2) && s->table) table_draw(s->table);
+}
+
+static bool bb_done(HudVisual *v) { return v->state == 0; }   /* 0x41b110 */
+
+static void summary_destroy(HudVisual *v)   /* 0x42bfa0 */
+{
+    HRaceSummary *s = (HRaceSummary *)v;
+    table_free(s->table);
+    bb_free(&s->bb);
+    free(s);
+}
+
+static const HudVisualVtbl summary_vt = {summary_destroy, summary_draw, NULL, summary_setstate, bb_setpos, NULL, bb_done};
+
+static HudVisual *summary_new(const char *title)
+{
+    HRaceSummary *s = calloc(1, sizeof *s);
+    if (!s) return NULL;
+    const char *sub = LOC_string(HudConfig_loc(), 0x46d2);
+    bb_init(&s->bb, &summary_vt, exe_i32(0x5b2e00), exe_i32(0x5b2e04), title, sub, true, true, true);
+    s->linear = g_race_linear != 0;
+    s->trial = g_race_mode == 4;
+    s->extra = 0;   /* (0x6577e4) */
+    const uint8_t *loc = HudConfig_loc();
+    /* The columns: 4 for a point-to-point or network race (0x5b2e0c), 5 with the best lap (0x5b2e1c); the
+       skill test's 5 and 6 (0x5b2e30, 0x5b2e44) with its score. */
+    static const int ids4[4] = {0, 0x46bf, 0x46c0, 0x46c2}, ids5[5] = {0, 0x46bf, 0x46c0, 0x46c1, 0x46c2};
+    static const int ids5t[5] = {0, 0x46bf, 0x46c0, 0x46c2, 0x46c3}, ids6[6] = {0, 0x46bf, 0x46c0, 0x46c1, 0x46c2, 0x46c3};
+    const int *ids;
+    int n;
+    uint32_t widths;
+    if (!s->trial || s->extra) {
+        if (!s->linear && g_race_mode != 3) ids = ids5, n = 5, widths = 0x5b2e1c;
+        else ids = ids4, n = 4, widths = 0x5b2e0c;
+    } else if (!s->linear) {
+        ids = ids6, n = 6, widths = 0x5b2e44;
+    } else {
+        ids = ids5t, n = 5, widths = 0x5b2e30;
+    }
+    for (int c = 0; c < n; c++) s->head[c] = ids[c] ? LOC_string(loc, ids[c]) : exe_str(0x5b2e08);
+    int x = (g_display.width - s->bb.w) / 2, y = (g_display.height - s->bb.h) / 2;   /* 0x41b120 */
+    s->table = table_new(x, y, exe_i32(0x5b2e00) + x, exe_i32(0x5b2e04) + y, n, 8, widths, s->head);
+    return &s->bb.base;
 }
 
 /* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
@@ -1743,8 +2183,8 @@ static void tach_setpos(HudVisual *v, int x, int y)
     PENDING_NOTE(0x42f4f0, "the tachometer's two texts (+0xa9c4, +0xa9c8; placed, never drawn)");
 }
 
-static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress};
-static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress};
+static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL};
+static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL};
 
 static HudVisual *speedometer_new(void)
 {
@@ -1854,7 +2294,7 @@ static void wrongway_destroy(HudVisual *v)   /* 0x436e50 */
     free(v);
 }
 
-static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL};
+static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL, NULL};
 
 static HudVisual *wrongway;   /* 0x60ca0c */
 
@@ -1891,13 +2331,50 @@ void HUD_Init(void)
     add(map_new(), true, true);   /* 0x431e50 (drawn last) */
     PENDING_NOTE(0x424420, "HUD_Init's other visuals (gauges, lap, position, time, map, messages)");
     add(countdown_new(), false, false);
+    {
+        int id = g_race_mode == 1 ? 0x46ff : g_race_mode == 2 ? 0x46f9 : 0x46d1;
+        const char *title = LOC_string(HudConfig_loc(), id);
+        summary = summary_new(title ? title : "");   /* 0x42bc30 */
+        add(summary, false, false);
+    }
+    nmodal = 0;
     wrongway = wrongway_new();   /* 0x436dd0 (drawn on its own) */
     Hud2D_Init();   /* 0x419d70 */
     HudConfig_trays(true);   /* (0x657de4, the trays option: on) */
 }
 
+static void push_modal(HudVisual *v)
+{
+    if (v && nmodal < 8) modal[nmodal++] = v;
+}
+
+/* The race over: the player's place congratulated, the results, the track's records. 0x426c50 */
+static void race_screens(void)
+{
+    if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8) return;
+    if (g_race_mode <= 5) PENDING_NOTE(0x41cb10, "the place's congratulations (HCongrats)");
+    if (g_race_knockout) return;
+    if (g_race_mode == 0 || g_race_mode == 3 || g_race_mode == 1 || g_race_mode == 2 || g_race_mode == 5) {
+        push_modal(summary);
+        if (summary) summary->flag = 1;   /* (slot 11: the second key's hint) */
+        if (g_race_mode != 3) PENDING_NOTE(0x433790, "the track's records (HTrackRecords)");
+    } else {
+        PENDING_NOTE(0x426c50, "the race-over screens of the other game types");
+    }
+}
+
+void HUD_RaceOver(void)
+{
+    PENDING_NOTE(0x426a40, "the race-over HUD's other parts (place swaps, the replay's HUD)");
+    race_screens();   /* 0x426c50 */
+    /* (port: the list's first is shown at once; the original's starts hidden and is passed) */
+    if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
+}
+
 void HUD_Free(void)
 {
+    nmodal = 0;
+    summary = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);
     wrongway = NULL;
     for (int i = 0; i < nlist; i++)
@@ -1947,12 +2424,26 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         HudEntry *e = &list[i];
         if (e->last && 0x1c0 < g_sim_tick && (always || e->v->state == 2)) e->v->vt->draw(e->v);
     }
-    /* No modal visual (0x60c9c4, not ported): once the race has started the hidden front visuals show,
-       sliding in. 0x425de0 */
-    if (0x1c0 < g_sim_tick && (g_race_view == 0 || g_race_view == 1))
+    if (nmodal == 0) {
+        /* No modal visual: once the race has started the hidden front visuals show, sliding in. 0x425de0 */
+        if (0x1c0 < g_sim_tick && (g_race_view == 0 || g_race_view == 1))
+            for (int i = 0; i < nlist; i++) {
+                HudEntry *e = &list[i];
+                if (e->front && (always || e->v->state == 2) && e->v->state == 0 && e->v->vt->setstate) e->v->vt->setstate(e->v, 1);
+            }
+    } else {
+        /* The first modal visual finished (hidden, or done): the next shows. The front visuals settled
+           slide away meanwhile. */
+        HudVisual *m = modal[0];
+        if (m->state == 0 || (m->vt->done && m->vt->done(m))) {
+            memmove(modal, modal + 1, sizeof modal[0] * (size_t)(nmodal - 1));
+            nmodal--;
+            if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
+        }
         for (int i = 0; i < nlist; i++) {
             HudEntry *e = &list[i];
-            if (e->front && (always || e->v->state == 2) && e->v->state == 0 && e->v->vt->setstate) e->v->vt->setstate(e->v, 1);
+            if (e->front && e->v->state == 3 && !(g_race_view == 2 && g_race_mode == 9) && e->v->vt->setstate) e->v->vt->setstate(e->v, 2);
         }
+    }
     PENDING_NOTE(0x425910, "HUD_Draw's modal visuals, replay and network parts");
 }

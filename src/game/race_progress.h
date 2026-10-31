@@ -42,3 +42,6 @@ void Race_UpdatePositions(void);
 /* The ranking emptied (its first eight rows: car -1, distance -100), before the cars' tasks rank them
    again (0x416160, named Sim_ResetCollisionSlots in the Ghidra project). */
 void Race_ResetRanking(void);
+/* The race's results into the cars (+0xcc4 .. +0xd00, what the front end reads back): the humans' (kind
+   1, quit: not finished) and the opponents' still racing given a time from their progress. 0x416ae0 */
+void Race_End(int kind);

@@ -13,7 +13,7 @@
 | Tracks: loading, scenes and start grids, the world draw, the sky's horizon | in progress (all objects tested instead of the visibility grid; no clouds yet) |
 | Track road and collision: road nodes, the collision tree of polygons, road edges and roadside objects (cylinders, boxes), the ground under a point | in progress (no animated objects yet) |
 | Cameras | in progress (fixed viewer cameras; the race cameras aren't ported) |
-| Race HUD: fonts, the HUD's 2D layer and art, its layouts (`SaveData\XXhud1XX.hud`, `XXhud2XX.hud`), localised strings | in progress (the start countdown, the gear, the speedometer and tachometer dials and their digital forms, the race time and lap times, the wrong-way warning, the standings and the place, the damage drawing, the track map with the laps; no text damage yet, no track records, no drivers' names) |
+| Race HUD: fonts, the HUD's 2D layer and art, its layouts (`SaveData\XXhud1XX.hud`, `XXhud2XX.hud`), localised strings | in progress (the start countdown, the gear, the speedometer and tachometer dials and their digital forms, the race time and lap times, the wrong-way warning, the standings and the place, the damage drawing, the track map with the laps, the race's results when it ends; no text damage, congratulations or replay yet, no track records, no drivers' names) |
 | Frontend (menus, showroom, Evolution, Factory Driver) | not started |
 | Simulation (handling, damage, AI, police) | in progress (one car drives from its grid slot behind the start line: ground contact, suspension, engine, gearbox, tyres, the road's walls, roadside posts, trees and boxes, the body against the ground when the car is over; body damage in nine zones from hard hits; opponents race the racing line (`opponents=<n>`), the cars collide with each other; no visible dents, police or traffic yet) |
 | Sound, music, speech | not started |
@@ -25,7 +25,7 @@ The viewers, with `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--ass
 - `--param track=<name>` shows a track from its start line (`alps`, `autobahn`, `canyon`, `monaco1`, ...),
   `yaw=<degrees>` turns the camera;
 - `--param drive=<track>` drives a car from the race's grid there (`car=<name>`, default `964`): arrow keys or WASD, space the
-  handbrake, R puts the car back on the road; on a pad left/right, A throttle, B brake, X handbrake, Y back on the road. `camdist=<metres>` moves the chase camera, `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n.
+  handbrake, R puts the car back on the road; on a pad left/right, A throttle, B brake, X handbrake, Y back on the road. `camdist=<metres>` moves the chase camera, `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid).
 
 Nothing on this page is a promise of dates. Progress is tracked in the
 [repository](https://github.com/emdzej/opennfspu).

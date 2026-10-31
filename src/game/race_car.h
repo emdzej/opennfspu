@@ -16,6 +16,9 @@ void AI_Setup(Car *c);
 /* The AI's state for the race. 0x406db0 */
 void AI_Reset(Car *c);
 
+/* The parts' wear from the damage; applied (to their condition) or only measured. 0x493c60 */
+void CarSim_PartsWear(Car *c, bool apply);
+
 /* The race's progress at road node n, 0..1 along the race (from its segment's ends; backwards on a
    reversed track, where a circuit's 1 is 0). 0x4162b0 */
 float Race_Progress(int n);

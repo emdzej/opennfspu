@@ -17,6 +17,7 @@ typedef struct {
     void (*setstate)(HudVisual *v, int32_t s);    /* slot 5: 0x537790, the trays' 0x4343f0 */
     void (*setpos)(HudVisual *v, int x, int y);   /* slot 12 */
     int (*progress)(HudVisual *v);                /* slot 14: of the fade, 0..100 (0x434950) */
+    bool (*done)(HudVisual *v);                   /* slot 3: a modal visual finished (it leaves the modal list) */
 } HudVisualVtbl;
 
 struct HudVisual {
@@ -28,6 +29,8 @@ struct HudVisual {
 /* The HUD for the race (the visuals ported so far). 0x424420 */
 void HUD_Init(void);
 void HUD_Free(void);
+/* The race over: the results and the other race-over screens in turn (0x426a40 with 1). */
+void HUD_RaceOver(void);
 /* A time of ticks as mm:ss.hh, signed if asked. 0x435640 */
 void HTime_Format(int t, char *out, bool sign);
 /* The HUD over camera c (the overlay view). 0x425910 */

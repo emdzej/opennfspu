@@ -328,7 +328,7 @@ void Race_TickOdd(void)
     }
     if (g_race_mode != 3 && done == g_humans.n) {
         g_race_over = 1;
-        PENDING_NOTE(0x4170f0, "Race_End(2): the results");
+        Race_End(2);   /* 0x416ae0 */
     }
 }
 
@@ -376,4 +376,101 @@ void Race_UpdatePositions(void)
 void Race_ResetRanking(void)
 {
     for (int i = 0; i < 8 && i < CAR_MAX; i++) g_race_rank[i] = (RaceRank){-1, -100.0f, 0, 0};
+}
+
+static int rank_of(Car *c)
+{
+    for (int k = 0; k < g_racers.n; k++)
+        if (g_race_rank[k].car == *CAR_I(c, CAR_INDEX)) return k + 1;
+    return 0;
+}
+
+static void keep_zones(Car *c) { memcpy(CAR_I(c, 0xc98), CAR_I(c, 0x4e4), 10 * 4); }
+
+void Race_End(int kind)
+{
+    Car *h0 = g_humans.n ? g_humans.c[0] : NULL;
+    if (!h0) return;
+    *CAR_I(h0, 0xb60) = 0;
+    for (int i = 0; i < g_ntraffic; i++)
+        if (g_traffic[i] && *CAR_I(g_traffic[i], 0x42c) != 0) (*CAR_I(h0, 0xb60))++;
+    if (g_race_type == 4) {
+        *CAR_I(h0, 0xcd8) = *CAR_I(h0, 0xb24);
+        *CAR_I(h0, 0xcd0) = *CAR_I(h0, 0xb50);
+        *CAR_I(h0, 0xcc4) = *CAR_I(h0, 0xb60);
+        keep_zones(h0);
+        return;
+    }
+    for (int i = 0; i < g_humans.n; i++) {
+        Car *c = g_humans.c[i];
+        if (*CAR_I(c, 0xb50) == 1) {
+            float f = *CAR_F(c, 0xaf8) - *CAR_F(c, 0xb00);
+            if (f <= K(0x5b27b4)) f = K(0x5b27b4);
+            f = f / (*CAR_F(c, 0xb04) - *CAR_F(c, 0xb00));
+            float t = (float)(*CAR_I(c, 0xb14) - 0x1c0);
+            if (f < K(0x5b2738)) t = f * K(0x5b27b0);
+            *CAR_I(c, 0xb24) = (int32_t)lrintf(((float)g_race_laps * t) / f);
+            if (g_race_type != 2 || g_race_local == i) *CAR_I(c, 0xb50) = 1;
+        }
+        if (kind == 1) {
+            if (g_race_type == 2) {
+                if (*CAR_I(c, 0xb50) != 2 && g_race_local == i) *CAR_I(c, 0xb50) = 1;
+            } else {
+                *CAR_I(c, 0xb50) = 1;
+            }
+            for (int j = 0; j < g_race_laps; j++) *CAR_I(c, 0xcdc + 4 * j) = *CAR_I(c, 0xb28 + 4 * j);
+        }
+        *CAR_I(c, 0xcd4) = rank_of(c);
+        *CAR_I(c, 0xcd8) = *CAR_I(c, 0xb24);
+        *CAR_I(c, 0xcd0) = *CAR_I(c, 0xb50);
+        *CAR_I(c, 0xcfc) = *CAR_I(c, 0xb28);
+        *CAR_I(c, 0xcc4) = *CAR_I(c, 0xb60);
+        *CAR_I(c, 0xcc8) = *CAR_I(c, 0xb64);
+        *CAR_I(c, 0xccc) = *CAR_I(c, 0xb68);
+        CarSim_PartsWear(c, false);   /* 0x493c60 */
+        keep_zones(c);
+        for (int j = 0; j < g_race_laps; j++) {
+            int32_t *lap = CAR_I(c, 0xcdc + 4 * j);
+            *lap = *CAR_I(c, 0xb28 + 4 * j);
+            if (*lap < *CAR_I(c, 0xcfc) && *lap != 0) *CAR_I(c, 0xcfc) = *lap;
+        }
+    }
+    for (int i = 0; i < g_rivals.n; i++) {
+        Car *c = g_rivals.c[i];
+        if (*CAR_I(c, 0xb50) == 0) {
+            if (g_race_type == 3 && *CAR_I(c, 0xb48) != 1) {
+                *CAR_I(c, 0xb14) = g_sim_tick;
+                *CAR_I(c, 0xb24) = 0;
+                *CAR_I(c, 0xb50) = 3;
+            } else {
+                float f;
+                if (!g_race_linear) {
+                    f = (float)(*CAR_I(c, 0xb14) - 0x1c0) / (*CAR_F(c, 0xaf8) / (float)g_race_laps);
+                } else {
+                    f = *CAR_F(c, 0xaf8) - *CAR_F(h0, 0xb00);
+                    if (f <= K(0x5b27b4)) f = K(0x5b27b4);
+                    f = f / (*CAR_F(c, 0xb04) - *CAR_F(h0, 0xb00));
+                    float t = (float)(*CAR_I(c, 0xb14) - 0x1c0);
+                    if (f < K(0x5b2738)) t = f * K(0x5b27b0);
+                    f = ((float)g_race_laps * t) / f;
+                }
+                *CAR_I(c, 0xb24) = (int32_t)lrintf(f);
+                *CAR_I(c, 0xb50) = 2;
+                if (*CAR_I(c, 0xb28) == 0) *CAR_I(c, 0xb28) = (int32_t)lrintf(f);
+            }
+        }
+        *CAR_I(c, 0xcd4) = rank_of(c);
+        *CAR_I(c, 0xcd8) = *CAR_I(c, 0xb24);
+        *CAR_I(c, 0xcd0) = *CAR_I(c, 0xb50);
+        *CAR_I(c, 0xccc) = *CAR_I(c, 0xb68);
+        keep_zones(c);
+        *CAR_I(c, 0xcfc) = 99999;
+        for (int j = 0; j < g_race_laps; j++)
+            if (*CAR_I(c, 0xb28 + 4 * j) < *CAR_I(c, 0xcfc) && 0 < *CAR_I(c, 0xb28 + 4 * j)) *CAR_I(c, 0xcfc) = *CAR_I(c, 0xb28 + 4 * j);
+        for (int j = 0; j < g_race_laps; j++) {
+            int32_t *lap = CAR_I(c, 0xcdc + 4 * j);
+            *lap = *CAR_I(c, 0xb28 + 4 * j);
+            if (*lap < *CAR_I(c, 0xcfc) && *lap != 0) *CAR_I(c, 0xcfc) = *lap;
+        }
+    }
 }

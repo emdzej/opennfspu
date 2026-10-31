@@ -94,8 +94,10 @@
 00419fb0	Hud2D_Quad	hud	high	Untextured quad
 0041a1a0	Hud2D_TexQuad	hud	high	Textured quad in a bucket
 0041a350	Hud2D_Flush	hud	high	Draws the queues
+0041a530	HBillBoard_init	hud	med	Panel base
 0041a6f0	HBillBoard_v0	hud	struct	Virtual slot 0 of HBillBoard (vtable 0x5b28bc)
 0041a7c0	HBillBoard_v1	hud	struct	Virtual slot 1 of HBillBoard (vtable 0x5b28bc)
+0041ae40	HBillBoard_layout	hud	med	Bars and texts for a size
 0041b220	HButtonVisual_v0	hud	struct	Virtual slot 0 of HButtonVisual (vtable 0x5b2904)
 0041b360	HButtonVisual_v6	hud	struct	Virtual slot 6 of HButtonVisual (vtable 0x5b2904)
 0041b760	HButtonVisual_v7	hud	struct	Virtual slot 7 of HButtonVisual (vtable 0x5b2904)
@@ -169,6 +171,8 @@
 00425de0	HUD_ShowFront	hud	med	Ported in src/game/hud.c / hud_config.c
 00425eb0	HUD_HandleInput	hud	med	Mouse/keys to the HUD's visual list (pause menu etc.); returns the chosen action
 00426760	HUD_ApplyLayout	hud	med	Ported in src/game/hud.c / hud_config.c
+00426a40	HUD_RaceOver	hud	med	Race over HUD
+00426c50	HUD_RaceScreens	hud	med	Race-over modal sequence
 00427a20	HUD_LoadArt	hud	med	Loads the HUD art (pic16.fsh)
 00428350	HInfo_v0	hud	struct	Virtual slot 0 of HInfo (vtable 0x5b2bfc)
 00428390	HInfo_v1	hud	struct	Virtual slot 1 of HInfo (vtable 0x5b2bfc)
@@ -194,9 +198,11 @@
 0042af60	HPosition_v1	hud	struct	Virtual slot 1 of HPosition (vtable 0x5b2dbc)
 0042b5b0	HPosition_v12	hud	struct	Virtual slot 12 of HPosition (vtable 0x5b2dbc)
 0042bac0	HPosition_v2	hud	struct	Virtual slot 2 of HPosition (vtable 0x5b2dbc)
+0042bc30	HRaceSummary_init	hud	med	Results
 0042bfa0	HRaceSummary_v0	hud	struct	Virtual slot 0 of HRaceSummary (vtable 0x5b2e60)
 0042bfe0	HRaceSummary_v1	hud	struct	Virtual slot 1 of HRaceSummary (vtable 0x5b2e60)
 0042c070	HRaceSummary_v5	hud	struct	Virtual slot 5 of HRaceSummary (vtable 0x5b2e60)
+0042c170	HRaceSummary_row	hud	med	A racer row
 0042c5a0	HRearview_v0	hud	struct	Virtual slot 0 of HRearview (vtable 0x5b2e98)
 0042c5e0	HRearview_v12	hud	struct	Virtual slot 12 of HRearview (vtable 0x5b2e98)
 0042c6a0	HRearview_v1	hud	struct	Virtual slot 1 of HRearview (vtable 0x5b2e98)
@@ -216,9 +222,11 @@
 0042e670	HSpeedometer_init	hud	med	Ported in src/game/hud.c
 0042e770	HSpeedometer_v0	hud	struct	Virtual slot 0 of HSpeedometer (vtable 0x5b3020)
 0042e7a0	HSpeedometer_v1	hud	struct	Virtual slot 1 of HSpeedometer (vtable 0x5b3020)
+0042e810	HTable_init	hud	med	Table of cells
 0042e980	HTable_v0	hud	struct	Virtual slot 0 of HTable (vtable 0x5b3078)
 0042e9b0	HTable_v1	hud	struct	Virtual slot 1 of HTable (vtable 0x5b3078)
 0042f000	HTable_v5	hud	struct	Virtual slot 5 of HTable (vtable 0x5b3078)
+0042f030	HTable_swatch	hud	med	Colour square
 0042f1f0	HTable_v2	hud	struct	Virtual slot 2 of HTable (vtable 0x5b3078)
 0042f300	HTach_init	hud	med	Ported in src/game/hud.c
 0042f4a0	HTach_v0	hud	struct	Virtual slot 0 of HTach (vtable 0x5b3098)
@@ -274,6 +282,10 @@
 00434600	HTray_slide	hud	med	Ported in src/game/hud.c / hud_config.c
 00434950	HTray_progress	hud	med	Ported in src/game/hud.c / hud_config.c
 00435640	HTime_Format	hud	med	Race time text (9:59.99 cap)
+00435880	HUD_Box	hud	med	Rect corners
+00435980	HUD_Frame	hud	med	Frame quads
+00435d00	HUD_Shade	hud	med	Shade quads
+00436380	HUD_Bevel	hud	med	Bevel quads
 004366a0	HVisual_v0	hud	struct	Virtual slot 0 of HVisual (vtable 0x5b34bc)
 00436880	HWinnings_v0	hud	struct	Virtual slot 0 of HWinnings (vtable 0x5b34d8)
 004368c0	HWinnings_v1	hud	struct	Virtual slot 1 of HWinnings (vtable 0x5b34d8)

@@ -54,6 +54,11 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x0, 0xb);                                   /* TYPE */
     put_i(d, 0x8, 1);                                     /* CLASS: the human player */
     put_i(d, 0x200, 0xe);                                 /* SPEECHCOLOUR */
+    {
+        /* SKILLSLOW .. SKILLDEFAULT 1, their ranges 0 (the player's, as the front end writes them). */
+        float sk[8] = {1, 1, 1, 1, 0, 0, 0, 0};
+        memcpy(d + 0x154, sk, sizeof sk);
+    }
     for (int k = 0; k < 20; k++) put_i(d, 0x28 + 4 * k, 0);   /* PARTINDEX: the front end's owned-car parts */
     /* The setup screen's sliders (FECarSetup 0x4f06f0) at their middle, as 1/65536ths (the brake bias
        times 100); the gear and final ratio offsets and the toe at none. A stand-in until the front end's

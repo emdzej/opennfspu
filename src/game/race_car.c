@@ -203,7 +203,7 @@ static void clear_race(Car *c)
 /* The parts' wear (+0x164) moved by the damage of the zones each part sits in (+0x48: ten flags, the
    zones at the car's +0x4e4), scaled by 1.5 - the part's +0x60 / 200; negated when applying. Without
    apply the wear stops at 100 and is kept at the car's +0xc48. 0x493c60 */
-static void parts_wear(Car *c, bool apply)
+void CarSim_PartsWear(Car *c, bool apply)
 {
     for (int i = 0; i < CAR_NPARTS; i++) {
         uint8_t *p = c->p[CARP_PARTS + i];
@@ -331,7 +331,7 @@ void Car_RaceInit(Car *c, uint32_t id)
         /* The damage carried into the race: the zones and the parts' wear. */
         memcpy(c->b + 0x4e4, CAR_DESCB(c) + 0xc8, 0x28);
         for (int i = 0; i < CAR_NPARTS; i++) memcpy((uint8_t *)c->p[CARP_PARTS + i] + 0x164, CAR_DESCB(c) + 0x78 + 4 * i, 4);
-        parts_wear(c, true);
+        CarSim_PartsWear(c, true);
         CarSim_ResetDrive(c);   /* 0x49e010 */
         SceneElem *start = Scene_FindTriggerByType(2);   /* the start line */
         if (!start || g_race_type != 4) {
