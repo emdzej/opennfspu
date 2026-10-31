@@ -397,6 +397,56 @@ int SND_Stop(int handle)
 
 bool SND_Playing(int handle) { return s_on && voice_of(handle) >= 0; }
 
+/* The play's volume, 0 .. 127, at once (0x5657c0 -> 0x565730; nothing when it is already so). */
+int SND_SetVolume(int handle, int vol)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    int at = -1;
+    while (next_of_group(v, &at)) {
+        SndVoice *x = &s_voice[at];
+        if (x->vcur == vol << 0x10) return 0;
+        x->vcur = vol << 0x10;
+        x->vstep = 0;
+        voice_volume(x);
+        voice_apply_volume(at);
+    }
+    return v;
+}
+
+/* The pan angle and its spread (clamped to +-0x4000). 0x565670 */
+int SND_SetPan(int handle, int pan, int spread)
+{
+    if (!s_on) return -10;
+    if (0x3fff < spread) spread = 0x3fff;
+    else if (spread < -0x4000) spread = -0x4000;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    int at = -1;
+    while (next_of_group(v, &at)) {
+        s_voice[at].pan = (uint16_t)pan;
+        s_voice[at].pan2 = (int16_t)spread;
+        dev_pan(&s_dev[at], s_voice[at].pan, s_voice[at].out);   /* 0x590a70 */
+    }
+    return v;
+}
+
+/* The play's pitch, 4.12 (0x565400; it stops at the first voice already at it). */
+int SND_SetPitch(int handle, int pitch)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    int at = -1;
+    while (next_of_group(v, &at) && s_voice[at].pitch != (uint16_t)pitch) {
+        s_voice[at].pitch = (uint16_t)pitch;
+        voice_pitch(&s_voice[at]);
+        voice_apply_pitch(at);
+    }
+    return v;
+}
+
 /* ---- playing ---- */
 
 /* The software voice's sources (0x589d90 with 0x596910 and 0x598280): one per channel, then its pitch,
@@ -667,7 +717,7 @@ bool SND_Init(int rate, int channels, int voices, int quality)
     if (!s_voice || !s_dev || !s_bank) return false;
     for (int i = 0; i < s_nvoices; i++) s_voice[i].handle = -1;
     for (int g = 0; g < 32; g++) s_groupvol[g][0] = s_groupvol[g][1] = 0x7f;
-    PENDING_NOTE(0x565150, "the SND groups' volumes from the game (the port starts them at 127)");
+    /* (the groups' volumes are the reverb's sends, 0x565150 -> 0x590050, 0x598c60; the reverb isn't ported) */
     s_master = 0x7f;
     s_ticks = 0;
     pan_table();
