@@ -31,12 +31,25 @@ typedef struct {
 
 static float depth_of(const Item *i) { return i->kind == 0 ? i->u.q.pos[0][2] : i->u.t.z; }
 
+/* The texture's place in the sort: the original compares the pointers, an order its heap gives; the
+   port numbers the textures as it first queues them, so that runs repeat whatever the allocator does. */
+static const void *s_seen[512];
+static int s_nseen;
+static uint32_t tex_key(const void *t)
+{
+    if (!t) return 0;
+    for (int i = 0; i < s_nseen; i++)
+        if (s_seen[i] == t) return (uint32_t)i + 1;
+    if (s_nseen < 512) s_seen[s_nseen++] = t;
+    return (uint32_t)s_nseen;
+}
+
 /* 0x4d8f00: farther first; then the order; then the texture. */
 static bool before(const Item *a, const Item *b)
 {
     float za = depth_of(a), zb = depth_of(b);
     if (za == zb) {
-        if ((uint32_t)a->order == (uint32_t)b->order) return (uintptr_t)a->tex < (uintptr_t)b->tex;
+        if ((uint32_t)a->order == (uint32_t)b->order) return tex_key(a->tex) < tex_key(b->tex);
         return (uint32_t)a->order < (uint32_t)b->order;
     }
     return zb < za;
