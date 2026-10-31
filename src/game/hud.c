@@ -972,6 +972,208 @@ static HudVisual *position_new(void)
     return &p->tray.base;
 }
 
+/* ---- the damage, drawn (HGraphicDamage, 0x1d0 bytes, vtable 0x5b2b84; 0x421e20) ---- */
+
+/* A getter returning a pair as instructions (mov eax, imm; mov edx, imm or mov edx, eax): its values read
+   from the code. */
+static void code_pair(uint32_t fn, int32_t *x, int32_t *y)
+{
+    *x = exe_i32(fn + 1);
+    *y = exe_data(fn + 5, 1)[0] == 0xba ? exe_i32(fn + 6) : *x;
+}
+
+/* The car seen from above in six parts of car.fsh (colour by their zones' damage, five of them drawn
+   again mirrored below) inside its outline, a green-to-red scale between "0%" and "100%", "damage". */
+typedef struct {
+    HTray tray;
+    HText *right, *left, *title;  /* +0xc4 "100%", +0xc8 "0%", +0xcc */
+    HudArt *outline;              /* +0xd0 */
+    HudArt *part[6];              /* +0xd4 */
+    int32_t mirror[6];            /* +0xec: the mirrored copy's offset (0: below by its height) */
+    uint32_t colour[12][4];       /* +0x104: the scale's lines, then a row a damage level 1 .. 11 */
+    float th;                     /* +0x1cc: the alphabet's height in the title's font */
+} HGraphicDamage;
+
+/* The part getters (sizes 0x420a70.., places 0x420ad0..) and the outline's size (0x420920). */
+static const uint32_t part_size[6] = {0x420a70, 0x420a80, 0x420a90, 0x420aa0, 0x420ab0, 0x420ac0};
+static const uint32_t part_at[6] = {0x420ad0, 0x420ae0, 0x420af0, 0x420b00, 0x420b10, 0x420b20};
+static const int part_image[6] = {3, 0, 4, 5, 2, 1};
+
+/* 0x4229f0 */
+static void gdamage_setpos(HudVisual *v, int x, int y)
+{
+    HGraphicDamage *g = (HGraphicDamage *)v;
+    int32_t px, py, ax, ay, ow, oh;
+    HudConfig_setpos(HUDPOS_GDAMAGE, x, y);
+    HudConfig_pos(HUDPOS_GDAMAGE, &px, &py);
+    tray_place(&g->tray, px, py);
+    int w = HudConfig_i32(0xbc), in = HudConfig_i32(0x34), top = HudConfig_i32(0x38);
+    ax = HudConfig_i32(0x104), ay = HudConfig_i32(0x108);
+    code_pair(0x420920, &ow, &oh);
+    int y1 = py + top + oh * 2 + ay;
+    if (g->left) g->left->x = px + in, g->left->y = y1;
+    const char *t = LOC_string(HudConfig_loc(), 0xc);
+    float a, b, c, d;
+    if (g->left && g->left->font && g->left->font->font) text_extent(g->left, t ? t : "", &a, &b, &c, &g->th);
+    if (g->right) g->right->x = px + w - 6, g->right->y = y1;
+    if (g->title && g->title->font && g->title->font->font) {
+        text_extent(g->title, t ? t : "", &a, &b, &c, &d);
+        g->title->x = px + in;
+        g->title->y = (int)((float)(HudConfig_i32(0xc0) - top) - d + (float)py);
+    }
+    PENDING_NOTE(0x493c30, "the damage's percentage text (made, never drawn)");
+    int bx = px + ax, by = py + ay;
+    if (g->outline) HudArt_place(g->outline, bx, by);
+    for (int i = 0; i < 6; i++) {
+        int32_t ox, oy;
+        code_pair(part_at[i], &ox, &oy);
+        if (g->part[i]) HudArt_place(g->part[i], bx + ox, by + oy);
+    }
+}
+
+/* The art at its place, mirrored (in y, one pixel up) below by off or its height. 0x423c90 */
+static void art_mirror(HudArt *a, bool flip, int off)
+{
+    a->flipy = flip;
+    int x = a->x, y = a->y;
+    if (!a->centred && flip) y += off ? off : a->h;
+    if (flip) y -= exe_i32(0x5ccc98);
+    float c[12] = {(float)x, (float)y, 0, (float)(a->w + x), (float)y, 0, (float)(a->w + x), (float)(a->h + y), 0, (float)x, (float)(a->h + y), 0};
+    HudArt_setcorners(a, c);
+}
+
+static void level_colours(HGraphicDamage *g, HudArt *a, int level)
+{
+    if (level == 0) {
+        HudArt_setcolours(a, 0x55058228u, 0x55058228u, 0x55058228u, 0x55058228u);
+        return;
+    }
+    if (11 < level) level = 11;   /* (port: the original reads past its rows) */
+    const uint32_t *r = g->colour[level];
+    HudArt_setcolours(a, r[0], r[1], r[2], r[3]);
+}
+
+/* Shown by the second layout's +0x3c 1. 0x422490 */
+static void gdamage_draw(HudVisual *v)
+{
+    HGraphicDamage *g = (HGraphicDamage *)v;
+    Car *car = local_car();
+    if (HudConfig_choicei32(0x3c) != 1 || v->state == 0 || !car) return;   /* 0x41e8d0 */
+    tray_draw(&g->tray);
+    /* Each part's two zones' damage in levels (zone x 4 x 0.01). */
+    static const int zones[12] = {2, 0, 1, 1, 3, 7, 4, 6, 5, 5, 8, 8};
+    int lv[12];
+    for (int k = 0; k < 12; k++) lv[k] = (int)((double)(*CAR_F(car, 0x4e4 + 4 * zones[k]) * exe_f32(0x5b241c)) * exe_f64(0x5b2bc0));
+    for (int i = 0; i < 6; i++) {
+        HudArt *a = g->part[i];
+        if (!a) continue;
+        level_colours(g, a, lv[2 * i]);
+        art_mirror(a, false, 0);
+        HudArt_draw(a);
+        if (i != 1 && i != 4 && i != 5) {
+            level_colours(g, a, lv[2 * i + 1]);
+            art_mirror(a, true, g->mirror[i]);
+            HudArt_draw(a);
+        }
+    }
+    if (g->outline) {
+        art_mirror(g->outline, false, 0);
+        HudArt_draw(g->outline);
+        art_mirror(g->outline, true, 0);
+        HudArt_draw(g->outline);
+    }
+    /* The scale: two lines (green to yellow, yellow to red), as thick as the layout's +0x40. */
+    int32_t px, py, ow, oh;
+    HudConfig_pos(HUDPOS_GDAMAGE, &px, &py);
+    code_pair(0x420920, &ow, &oh);
+    int w = HudConfig_i32(0xbc), in = HudConfig_i32(0x34), top = HudConfig_i32(0x38);
+    float ly = (float)(top * 3) + (float)(py + oh * 2 + HudConfig_i32(0x108)) + g->th;
+    float x0 = (float)(in + px), x1 = (float)(in + w / 2 + px), x2 = (float)((w + px) - in);
+    for (int k = 0; k < HudConfig_i32(0x40); k++) {
+        float l0[8] = {x0, ly, 0, 1, x1, ly, 0, 1}, l1[8] = {x1, ly, 0, 1, x2, ly, 0, 1};
+        Hud2D_Line(l0, g->colour[0]);
+        Hud2D_Line(l1, g->colour[0] + 2);
+        ly += 1.0f;
+    }
+    text_print(g->left, exe_str(0x5ccc8c), 1.0f, 1.0f);
+    text_print(g->right, exe_str(0x5ccc84), 1.0f, 1.0f);
+    PENDING_NOTE(0x434f00, "the pursuit's red damage title (game type 9)");
+    if (g->title) g->title->colour = (uint32_t)HudConfig_i32(0x18);
+    const char *t = LOC_string(HudConfig_loc(), 0xc);
+    text_print(g->title, t ? t : "", 1.0f, 1.0f);
+}
+
+static void gdamage_destroy(HudVisual *v)   /* 0x4223b0 */
+{
+    HGraphicDamage *g = (HGraphicDamage *)v;
+    text_free(g->right);
+    text_free(g->left);
+    text_free(g->title);
+    HudArt_free(g->outline);
+    for (int i = 0; i < 6; i++) HudArt_free(g->part[i]);
+    free(g);
+}
+
+/* Its colours again (the texts'). 0x422cc0 */
+static void gdamage_reset(HudVisual *v)
+{
+    HGraphicDamage *g = (HGraphicDamage *)v;
+    PENDING_NOTE(0x422cc0, "HGraphicDamage's reset (the layout changed)");
+    tray_colours(&g->tray);
+}
+
+static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress};
+
+static HudVisual *gdamage_new(void)
+{
+    HGraphicDamage *g = calloc(1, sizeof *g);
+    if (!g) return NULL;
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_GDAMAGE, &x, &y);
+    int w = HudConfig_i32(0xbc), h = HudConfig_i32(0xc0);
+    tray_init(&g->tray, &gdamage_vt, x, y, w, h, 0, false, 0, false, false);
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    g->left = text_new(HudConfig_font(0x7c), HudConfig_scheme(), c14, 0, 0, 10, 0x14, 0, false);
+    g->right = text_new(HudConfig_font(0x7c), HudConfig_scheme(), c14, 0, 0, 10, 0x14, 1, false);
+    g->title = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, 10, 0x14, 0, false);
+    for (int i = 0; i < 6; i++) {
+        int32_t pw, ph;
+        code_pair(part_size[i], &pw, &ph);
+        g->part[i] = HudArt_load(exe_str(0x5ccc80), part_image[i], 0, 0, pw, ph, false, false, false);   /* "car" */
+    }
+    int32_t ow, oh;
+    code_pair(0x420920, &ow, &oh);
+    g->outline = HudArt_load(exe_str(0x5ccc80), 6, 0, 0, ow, oh, false, false, false);
+    if (g->outline) HudArt_setcolours(g->outline, 0xcc000000u, 0xcc000000u, 0xcc000000u, 0xcc000000u);
+    static const int mirrored[3] = {0, 2, 3};
+    for (int k = 0; k < 3; k++) {
+        int i = mirrored[k];
+        int32_t pw, ph, ox, oy;
+        code_pair(part_size[i], &pw, &ph);
+        code_pair(part_at[i], &ox, &oy);
+        g->mirror[i] = (oh - oy) * 2 - ph;
+    }
+    for (int i = 0; i < 6; i++)
+        if (g->part[i]) HudArt_setcolours(g->part[i], 0, 0, 0, 0);
+    /* The colours (immediates of the constructor's stores, 0x4221ac .. 0x4222b2). */
+    uint32_t c0 = exe_u32(0x4221b1 + 6), cy = exe_u32(0x4221ac + 1), c3 = exe_u32(0x4221cc + 6);
+    uint32_t row[4] = {c0, cy, cy, c3};
+    memcpy(g->colour[0], row, sizeof row);
+    static const uint32_t rows[10] = {0x4221c7, 0x4221dc, 0x4221e7, 0x422204, 0x422221, 0x42223e, 0x42225b, 0x422278, 0x422295, 0x4222b2};
+    for (int l = 1; l <= 11; l++) {
+        uint32_t c = exe_u32(rows[l <= 10 ? l - 1 : 9] + 1);
+        for (int k = 0; k < 4; k++) g->colour[l][k] = c;
+    }
+    gdamage_setpos(&g->tray.base, x, y);
+    /* The tray's divider above the title. */
+    const char *t = LOC_string(HudConfig_loc(), 0xc);
+    float a, b, c, d = 0;
+    if (g->title && g->title->font && g->title->font->font) text_extent(g->title, t ? t : "", &a, &b, &c, &d);
+    float lo = (float)(g->tray.h - HudConfig_i32(0x38)) - d;
+    tray_setsize(&g->tray, g->tray.w, g->tray.h, (int)(lo - (float)(HudConfig_i32(0x38) / 2)));
+    return &g->tray.base;
+}
+
 /* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
    the value from tables made once, a cap over its pivot ---- */
 
@@ -1262,8 +1464,9 @@ void HUD_Init(void)
     add(speed_new(), true, false);
     add(time_new(&time_vt, HUDPOS_TIME, HudConfig_i32(0xa4), HudConfig_i32(0xa8)), true, false);           /* 0x4315d0 */
     add(time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4)), true, false);   /* 0x42a0f0 */
-    PENDING_NOTE(0x42f880, "HUD_Init's damage visuals (0x42f880, 0x421e20)");
+    PENDING_NOTE(0x42f880, "HUD_Init's text damage (HTextDamage 0x42f880, the second layout's +0x3c 2 or 3)");
     add(position_new(), true, false);
+    add(gdamage_new(), true, false);   /* 0x421e20 */
     add(speedometer_new(), true, false);
     add(tach_new(), true, false);
     add(tachdigital_new(), true, false);

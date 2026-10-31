@@ -118,6 +118,8 @@
 0041e5e0	HUD_NoTrays	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e870	HUD_MultiTimeShown	hud	med	Ported in src/game/hud.c
 0041e8a0	HUD_StandingsShown	hud	med	Second layout +0x48 and the HUD shown
+0041e8d0	HUD_GraphicDamageShown	hud	med	Second layout +0x3c == 1
+0041e8f0	HUD_TextDamageShown	hud	med	Second layout +0x3c 2 or 3
 0041e920	HUD_GearShown	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e940	HUD_SpeedFigures	hud	med	Ported in src/game/hud.c
 0041e960	HUD_SpeedDial	hud	med	Ported in src/game/hud.c
@@ -140,6 +142,7 @@
 00421ca0	HGear_v0	hud	struct	Virtual slot 0 of HGear (vtable 0x5b2b44)
 00421cd0	HGear_v1	hud	struct	Virtual slot 1 of HGear (vtable 0x5b2b44)
 00421db0	HGear_v2	hud	struct	Virtual slot 2 of HGear (vtable 0x5b2b44)
+00421e20	HGraphicDamage_init	hud	med	Damage display: car parts by zone damage
 004223b0	HGraphicDamage_v0	hud	struct	Virtual slot 0 of HGraphicDamage (vtable 0x5b2b84)
 00422490	HGraphicDamage_v1	hud	struct	Virtual slot 1 of HGraphicDamage (vtable 0x5b2b84)
 004229f0	HGraphicDamage_v12	hud	struct	Virtual slot 12 of HGraphicDamage (vtable 0x5b2b84)
@@ -151,6 +154,7 @@
 00423a30	HGraphicVisual_v1	hud	struct	Virtual slot 1 of HGraphicVisual (vtable 0x5b2bcc)
 00423b10	HGraphicVisual_Place	hud	high	Corners from a position
 00423c20	HGraphicVisual_SetCorners	hud	high	Four corners
+00423c90	HGraphicVisual_mirror	hud	med	Corners at its place, mirrored below
 00423d90	HGraphicVisual_SetColours	hud	high	Four corner colours
 00423e70	HGraphicVisual_v5	hud	struct	Virtual slot 5 of HGraphicVisual (vtable 0x5b2bcc)
 00424420	HUD_Init	hud	med	Builds the race HUD (H* visuals) for the race type

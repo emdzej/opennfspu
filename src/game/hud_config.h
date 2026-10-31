@@ -18,6 +18,7 @@ enum {
     HUDPOS_SPEED = 1,    /* 0x420b40 */
     HUDPOS_TIME = 2,     /* 0x420b50 */
     HUDPOS_POSITION = 4, /* 0x420ba0 */
+    HUDPOS_GDAMAGE = 5,  /* 0x420b90 */
     HUDPOS_TACHDIAL = 6, /* 0x420bb0 */
     HUDPOS_SPEEDO = 7,   /* 0x420bc0 */
     HUDPOS_MULTITIME = 11, /* 0x420b60: the second record's +0x0c */
