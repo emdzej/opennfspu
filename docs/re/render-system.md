@@ -173,7 +173,11 @@ The render module's art comes from two class 4 texture banks: `GameData\Render\c
 - A layer's texture (0x451ff0) is one of the sky's shapes, by the name's bytes the other way round, else
   common.fsh's: `SUNA`, `FLR0`, `BLUR`, `GLAR`. `lens` is in neither file, so the flare elements that ask
   for it draw nothing.
-- One quad mesh draws them all (0x451360). The draw (0x4515e0) places each layer as a quad of
+- One quad mesh draws them all (0x451360), through a blend record (0x537760) whose transparency slot
+  is set to 1 (0x5377c0, which Ghidra names FERT_EventPump_v2 because the code is shared): source
+  alpha plus destination. The textures are black-backed (SUNA, GLAR, SPIK are opaque black-to-white
+  gradients), so black adds nothing. The sun's records are set the same way.
+- The screen draw (0x4515e0) places each layer as a quad of
   size × 0.1 / 640 of the screen's width and / 480 of its height, turned by (x + y) / 1440 turns. Below
   alpha 1 the colours' alpha is scaled; below 0.05 the layer is skipped.
 
@@ -193,6 +197,22 @@ The sun (0x460640, 0x1a0 bytes at 0x627e5c):
 - The flare is thirteen sprites, "bnus" to "nnus", on the line from the sun through the screen's centre,
   at `flarepos.dat`'s distances (defaults 1, 0.75, -0.75, 0.5, ...).
 - If reading back takes over 5 ms on average after 10 reads, the flare stops for good.
+
+The track's glows are the article effects of type 2 (`'ef'` +8: x, y, z, w, a normal, the sprite's
+name, a phase; 0x451810, from the effects list after the opaque one):
+- The sprite blinks as above. With its flag 0x10, the effect's phase is added; the remainder is unsigned.
+- A depth bias (record slot 4) of depthfactor × -250000 / distance² pulls it towards the eye.
+- Fog and z writes are off while it draws; the fog's density and colour are put back after.
+- Each layer is a billboard (RBillBoard_CreateQuads 0x44f5b0): corners along the current view's axes,
+  from its model-view inverted by cofactors (0x53a1c0), turned by an angle in degrees.
+- Its alpha and size depend on the flags (0x4514c0). 8 flickers: at most 190, plus up to 64 at random.
+  1 and 2 fade it by its facing; 0x20 and 0x40 scale its size the same ways. Under fog it fades over
+  300 units.
+- The facing is the dot product (0x556080) of the normal through the model matrix with the camera's
+  back row. The normal's w is 0 and the row's 1, and the function scales by their ratio, so the facing
+  is always 0. Glows with the flags 1, 2, 0x20 or 0x40 never draw, as in the original.
+- The angle (facing × 120 + distance × 3.6) only counts with the flag 4, or when fog was on at the
+  previous glow.
 
 In the port, GetTickCount is the frames stepped at 60 Hz (`app_ticks_ms`), so runs repeat. gasm-run 0.16
 returns pixels from `read_pixels` only when it runs with `--screenshot`. Without it, the reads are zeros:

@@ -57,3 +57,20 @@ bool Sprite_Empty(const Sprite *s);
    below 1), through the given blend: when its blink shows it, each layer a quad of its size (a share of
    the screen's width and height), turned by (x + y) / 1440 turns when the flag 4 is set. 0x4515e0 */
 void Sprite_Draw(const Sprite *s, const float *pos, float a, void *blend);
+
+/* A billboard (RBillBoard.cpp): its place (x, y, z, w), size, colour and turn (degrees about the view's
+   axis). */
+typedef struct {
+    float pos[4];
+    float size;
+    uint32_t colour;
+    float angle;
+} RBillBoard;
+
+/* n billboards as quads facing the current view (its model-view inverted: 0x53a1c0), the corners
+   up-left, up-right, down-right, down-left, and their colours. 0x44f5b0 */
+void RBillBoard_CreateQuads(int n, const RBillBoard *in, float (*pos)[4], uint32_t *colours);
+/* A track effect of type 2 ('ef' +8: x, y, z, w, the normal, the sprite's name, a phase): its sprite's
+   layers as billboards, blinking, flickering, fading under fog, with a depth bias towards the eye, fog
+   and z writes off while they draw. 0x451810 */
+void Sprite_DrawGlow(const float *g);

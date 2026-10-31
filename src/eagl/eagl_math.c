@@ -185,3 +185,49 @@ EaglMatrix *EAGL_StackTopForWrite(EaglMatStack *s)
     s->serial++;
     return s->top;
 }
+
+/* The determinant of the leading n x n of a matrix in rows of 4, by cofactors along the first row
+   (0x53a430; x87 sums, stored as floats each step). */
+static double det_n(const float *m, int n)
+{
+    if (n == 1) return m[0];
+    float sum = 0, sign = 1.0f;
+    for (int c = 0; c < n; c++) {
+        float minor[16];
+        int k = 0;
+        for (int r = 1; r < n; r++) {
+            int j = 0;
+            for (int cc = 0; cc < n; cc++)
+                if (cc != c) minor[k + j++] = m[cc + r * 4];
+            k += 4;
+        }
+        sum = (float)(det_n(minor, n - 1) * (double)m[c] * (double)sign + (double)sum);
+        sign = -sign;
+    }
+    return sum;
+}
+
+bool EAGL_MatInvert(const EaglMatrix *src, EaglMatrix *dst)
+{
+    double det = det_n(src->m, 4);
+    float d = (float)det;
+    if (!((double)1e-5f <= det || d <= -1e-5f)) return false;   /* 0x5bb89c, 0x5bb898: dst untouched */
+    float t[16];
+    for (int r = 0; r < 4; r++)   /* 0x53a3c0: transposed */
+        for (int c = 0; c < 4; c++) t[r * 4 + c] = src->m[c * 4 + r];
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) {
+            float minor[16];
+            int k = 0;
+            for (int rr = 0; rr < 4; rr++) {
+                if (rr == r) continue;
+                int j = 0;
+                for (int cc = 0; cc < 4; cc++)
+                    if (cc != c) minor[k + j++] = t[cc + rr * 4];
+                k += 4;
+            }
+            float sign = (r + c) & 1 ? -1.0f : 1.0f;
+            dst->m[c + r * 4] = (float)((det_n(minor, 3) * (double)sign) / (double)d);
+        }
+    return true;
+}

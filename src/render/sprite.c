@@ -4,6 +4,8 @@
 #include "exe.h"
 #include "vfs.h"
 #include "render/render.h"
+#include "render/r3dcar.h"
+#include "real/random.h"
 #include "render/thrash.h"
 #include "render/rmesh.h"
 #include "render/rtex.h"
@@ -21,7 +23,7 @@ static RMesh *s_mesh;                /* 0x61bcb0 */
 static SkyBlend *s_blend;            /* 0x61bcb4 */
 static float s_uv[8];                /* 0x61bc78: the quad's corners (0,0) (1,0) (1,1) (0,1) */
 static const int32_t *s_clock;       /* 0x61bcac: the race's tick counter */
-static Texture *s_blur;              /* 0x61bcb8 */
+static Texture *s_blur;              /* 0x61bcb8 (the glows of 0x451c30, to come) */
 
 enum { NAME_NULL = 0x6e756c6c };     /* 'null' */
 
@@ -47,6 +49,7 @@ void Sprites_Init(void)
     s_mesh = RMesh_ctor(malloc(sizeof *s_mesh), 0xe, 4, 1, NULL, 4);
     RMesh_stage(s_mesh, 0, NULL, NULL, NULL, NULL, 0);
     s_blend = SkyBlend_ctor(malloc(sizeof *s_blend));
+    if (s_blend) s_blend->v[2] = 1;   /* 0x5377c0 (Ghidra's FERT_EventPump_v2, the same code): additive */
     static const float uv[8] = {0, 0, 1, 0, 1, 1, 0, 1};
     memcpy(s_uv, uv, sizeof s_uv);
     s_clock = &g_sim_tick;
@@ -200,4 +203,165 @@ void Sprite_Draw(const Sprite *s, const float *pos, float a, void *blend)
         RMesh_setTexture(s_mesh, 0, tex, 0);
         RMesh_draw(s_mesh, -1);
     }
+}
+
+/* ---- billboards (RBillBoard.cpp, 0x44f5b0) ---- */
+
+void RBillBoard_CreateQuads(int n, const RBillBoard *in, float (*pos)[4], uint32_t *colours)
+{
+    EaglView *v = g_render->device->current;
+    EAGL_ViewUpdate(v);
+    EaglMatrix inv;
+    EAGL_MatInvert(&v->modelview, &inv);   /* (left as it was when singular) */
+    static const float ax[3][4] = {{1.0f, 0, 0, 0}, {0, 1.0f, 0, 0}, {0, 0, 1.0f, 0}};
+    float right[4], up[4], fwd[4];
+    EAGL_MatTransform4(&inv, 1, ax[0], 16, right, 16);
+    EAGL_MatTransform4(&inv, 1, ax[1], 16, up, 16);
+    EAGL_MatTransform4(&inv, 1, ax[2], 16, fwd, 16);
+    for (int i = 0; i < n; i++, in++, pos += 4, colours += 4) {
+        float r[4], u[4];
+        if (in->angle == 0) {
+            memcpy(r, right, sizeof r);
+            memcpy(u, up, sizeof u);
+        } else {
+            EaglMatrix m;
+            EAGL_MatAxisAngle(&m, in->angle, fwd[0], fwd[1], fwd[2]);
+            EAGL_MatTransform4(&m, 1, right, 16, r, 16);
+            EAGL_MatTransform4(&m, 1, up, 16, u, 16);
+        }
+        float h = in->size * 0.5f;   /* 0x5b23f0 */
+        const float *p = in->pos;
+        for (int k = 0; k < 3; k++) {
+            pos[0][k] = (u[k] - r[k]) * h + p[k];
+            pos[1][k] = (u[k] + r[k]) * h + p[k];
+            pos[2][k] = (r[k] * h - u[k] * h) + p[k];
+            pos[3][k] = (-(r[k] * h) - u[k] * h) + p[k];
+        }
+        for (int k = 0; k < 4; k++) {
+            pos[k][3] = p[3];
+            colours[k] = in->colour;
+        }
+    }
+}
+
+/* ---- the track's glows (0x451810) ---- */
+
+static uint8_t s_fog;          /* 0x61bca8: fog was on at the last glow */
+static float s_fogdensity;     /* 0x61bca0 */
+static uint32_t s_fogcolour;   /* 0x61bc9c */
+
+/* The glow's alpha a and size by its flags (0x4514c0): 8 flickers (at most 190, plus up to 64), 1 and 2
+   fade it by the facing f (1: f; 2: from 0.95 up, x 20), 0x20 and 0x40 scale the size the same ways;
+   under fog it fades over 300 units. False when it ends up too faint (0.1) or small (1). */
+static bool glow_fade(const Sprite *s, float f, float *size, float *a, float dist)
+{
+    uint32_t fl = s->rec->flags;
+    if (fl & 8) {
+        if (exe_f32(0x5b3d48) < *a) *a = 190.0f;
+        *a = (float)((double)REAL_randf() * (double)exe_f32(0x5b24e4) + (double)*a);
+    }
+    float lo = exe_f32(0x5b2604), k = exe_f32(0x5b2610), x = exe_f32(0x5b2470);   /* 0.1, 0.95, 20 */
+    if (fl & 1) {
+        if (f < lo) return false;
+        *a = f * *a;
+    }
+    if (fl & 2) {
+        if (f < lo) return false;
+        *a = (f - k) * *a * x;
+        if (*a < lo) return false;
+    }
+    if (s->rec->flags & 0x60) {
+        if (s->rec->flags & 0x20) *size = f * *size;
+        if (s->rec->flags & 0x40) *size = (f - k) * *size * x;
+        if (*size < 1.0f) return false;
+    }
+    if (s_fog) {
+        *a = (1.0f - dist * exe_f32(0x5b3d44)) * *a;   /* 1/300 */
+        if (*a < lo) return false;
+    }
+    return true;
+}
+
+/* The dot product of two points (0x556080): scaled by a's w over b's when they differ. */
+static float dot4(const float *a, const float *b)
+{
+    if (a[3] == b[3]) return (float)((double)a[2] * b[2] + (double)a[0] * b[0] + (double)a[1] * b[1]);
+    double r = (double)a[3] / (double)b[3];
+    return (float)((double)b[2] * r * a[2] + r * b[0] * a[0] + (double)b[1] * r * a[1]);
+}
+
+void Sprite_DrawGlow(const float *g)
+{
+    uint32_t name;
+    memcpy(&name, &g[7], 4);
+    Sprite *s = SpriteBank_Find(g_sprites, name);
+    if (!s || !s_mesh) return;
+    const SpriteRec *r = s->rec;
+    if (r->off != 0 || r->on != 0) {
+        float ph = (r->flags & 0x10) ? g[8] : 0;
+        uint32_t t = (uint32_t)(r->phase + (int32_t)ph + *s_clock);
+        if (r->on < (int32_t)(t % (uint32_t)(r->on + r->off))) return;
+    }
+    RenderState *rs = g_render->device->rs;
+    RCamera *c = g_render->camera;
+    const EaglMatrix *model = EAGL_StackTop(&g_render->device->current->model);
+    /* Its facing: the normal through the model matrix against the camera's back row. (The normal's w is
+       0 and the row's 1, so the product is scaled by 0: always 0.) */
+    float n[4] = {g[4], g[5], g[6], 0};
+    EAGL_MatTransform4(model, 1, n, 16, n, 16);
+    float back[4] = {c->frame.orient[6], c->frame.orient[7], c->frame.orient[8], 1.0f};
+    float f = -dot4(n, back);
+    float p[4] = {g[0], g[1], g[2], 1.0f};
+    EAGL_MatTransform4(model, 1, p, 16, p, 16);
+    const float *eye = c->frame.eye;
+    float d2 = (p[0] - eye[0]) * (p[0] - eye[0]) + (p[1] - eye[1]) * (p[1] - eye[1]) + (p[2] - eye[2]) * (p[2] - eye[2]);
+    /* Pulled towards the eye by a depth bias that grows as it nears. */
+    s_blend->v[4] = (int32_t)lrintf(g_render->depthfactor * exe_f32(0x5b3d68) / d2);   /* -250000 */
+    float angle = 0, dist = 0;
+    if ((r->flags & 4) || s_fog) {   /* (the fog flag of the last glow) */
+        uint32_t u;
+        memcpy(&u, &d2, 4);
+        u = (uint32_t)((int32_t)u >> 1) + 0x1fc00000u;   /* a quick square root */
+        memcpy(&dist, &u, 4);
+        angle = dist * exe_f32(0x5b3d64) + f * exe_f32(0x5b3d60);   /* 3.6, 120 (degrees) */
+    }
+    int z39 = rs->state39;
+    rs->state39 = 0;
+    EAGL_RSSet(0x39, 0);
+    if (rs->state15 == 0) {
+        s_fog = 0;
+    } else {
+        s_fog = 1;
+        memcpy(&s_fogdensity, &rs->state0e, 4);
+        s_fogcolour = (uint32_t)rs->state0f;
+        RenderState_SetFogMode(rs, 0);
+    }
+    for (int i = 0; i < 2; i++) {
+        Texture *tex = s->tex[i];
+        if (!tex) continue;
+        RBillBoard b = {{g[0], g[1], g[2], g[3]}, r->size[i] * exe_f32(0x5b2604), r->colour[i], 0};
+        if (s_fog || (r->flags & 0x6b)) {
+            float a = (float)(int32_t)(float)(b.colour >> 24);
+            if (!glow_fade(s, f, &b.size, &a, dist)) continue;
+            b.colour = (uint32_t)lrintf(a) << 24 | (b.colour & 0xffffffu);
+        }
+        b.angle = angle;
+        static float v[4][4];
+        static uint32_t col[4];
+        RBillBoard_CreateQuads(1, &b, v, col);
+        RMesh_setPositions(s_mesh, v, 4);
+        RMesh_setUVs(s_mesh, 0, s_uv);
+        RMesh_setColours(s_mesh, 0, col);
+        RMesh_setTexture(s_mesh, 0, tex, 0);
+        RMesh_setBlend(s_mesh, 0, s_blend);
+        RMesh_draw(s_mesh, -1);
+    }
+    if (s_fog) {
+        RenderState_SetFogMode(rs, 4);
+        RenderState_SetFogMode(rs, 1);
+        RenderState_SetFogDensity(rs, s_fogdensity);
+        RenderState_SetFogColour(rs, s_fogcolour);
+    }
+    rs->state39 = z39;
+    EAGL_RSSet(0x39, (uint32_t)z39);
 }

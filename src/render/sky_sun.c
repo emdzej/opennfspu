@@ -47,6 +47,7 @@ void Sun_Create(const SkyConfig *config)
     s->bpp = 2;
     for (int i = 0; i < SUN_SPRITES; i++) {
         s->blend[i] = SkyBlend_ctor(malloc(sizeof *s->blend[i]));
+        if (s->blend[i]) s->blend[i]->v[2] = 1;   /* 0x5377c0: additive (the textures are black-backed) */
         s->mesh[i] = RMesh_ctor(malloc(sizeof *s->mesh[i]), 0x16, 4, 1, s->pos, 4);
         if (s->mesh[i]) RMesh_stage(s->mesh[i], 0, NULL, s->blend[i], NULL, NULL, 0);
     }

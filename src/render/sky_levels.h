@@ -24,7 +24,10 @@ typedef struct SkyLevel {
     uint32_t flags;           /* +0x04: 0x80 drawn by the main view's flag +0x11c, 0x400 blocks the sun */
 } SkyLevel;
 
-/* The blend parameters an RMesh stage takes (0x18 bytes; ctor 0x537760: 1, 2, 0, 0, 0, -1). */
+/* The blend parameters an RMesh stage takes (0x18 bytes; ctor 0x537760: 1, 2, 0, 0, 0, -1): EAGL's six
+   render-state slots (0x5ded30: shade, blend on, transparency 0x38, cull, depth bias, none). Setters
+   0x5377a0 [0], 0x5377b0 [1], 0x5377c0 [2] (named FERT_EventPump_v2 in Ghidra: the same code), 0x5377d0
+   [4]. */
 typedef struct { int32_t v[6]; } SkyBlend;
 SkyBlend *SkyBlend_ctor(SkyBlend *b);   /* 0x537760 */
 

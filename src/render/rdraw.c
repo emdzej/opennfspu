@@ -1,5 +1,6 @@
 /* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
 #include "render/rdraw.h"
+#include "render/sprite.h"
 #include "exe.h"
 #include "game/track.h"
 #include "game/world.h"
@@ -196,7 +197,7 @@ static void article_special(RDrawObject *o, int index, const RListEntry *e)
 {
     const uint32_t *ef = UData_data((UData *)e->item);
     switch (ef ? ef[0] : 0) {
-    case 2: PENDING_NOTE(0x451810, "the effect type 2 draw"); break;
+    case 2: Sprite_DrawGlow((const float *)(ef + 2)); break;   /* 0x451810 */
     case 3: PENDING_NOTE(0x455020, "the effect particle emitter (RGenericParticleSystem)"); break;
     case 4: if (g_render_extras) PENDING_NOTE(0x455f60, "the effect light"); break;
     }

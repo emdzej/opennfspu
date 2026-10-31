@@ -31,7 +31,9 @@ void EAGL_MatTranslation(EaglMatrix *m, float x, float y, float z);             
 void EAGL_MatFromRotTrans(EaglMatrix *m, const float rot[9], const float t[3]); /* 0x539a40 */
 void EAGL_MatToRotTrans(const EaglMatrix *m, float rot[9], float t[3]);         /* 0x539ab0 */
 void EAGL_MatCopy(EaglMatrix *m, const EaglMatrix *src);                         /* 0x539b00 */
-void EAGL_MatInvertOrtho(EaglMatrix *m);                                          /* 0x539b20: transpose 3x3, inverse translation */
+void EAGL_MatInvertOrtho(EaglMatrix *m);
+/* The general inverse, by cofactors over the determinant; false (dst untouched) when |det| < 1e-5. 0x53a1c0 */
+bool EAGL_MatInvert(const EaglMatrix *src, EaglMatrix *dst);                                          /* 0x539b20: transpose 3x3, inverse translation */
 /* n 4-component points (strides in bytes, 0 = 16) through m; in place when src == dst. */
 void EAGL_MatTransform4(const EaglMatrix *m, int n, const float *src, int sstride, float *dst, int dstride); /* 0x539cc0 */
 
