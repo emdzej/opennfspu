@@ -3,6 +3,7 @@
 #include "exe.h"
 #include "pending.h"
 #include "real/mem.h"
+#include "render/carpages.h"
 #include "render/r3dcar.h"
 #include "support/ufile.h"
 #include "vfs.h"
@@ -420,11 +421,19 @@ static void Car_MakeRenderer(Car *c)
     CarRenderer *r = calloc(1, sizeof *r);
     if (!r) return;
     r->state.rot[0] = r->state.rot[4] = r->state.rot[8] = 1;
-    r->spec.racenumber = -1;
-    for (int k = 0; k < CAR_NOPTIONS; k++) r->spec.options[k] = -1;
+    /* The renderer's view of the description (the original's spec is the description itself). */
+    const uint8_t *d = CAR_DESCB(c);
+    memcpy(r->spec.licence, d + 0x1c0, sizeof r->spec.licence);
+    memcpy(r->spec.colours, d + 0x218, sizeof r->spec.colours);
+    memcpy(r->spec.options, d + 0x32c, sizeof r->spec.options);
+    r->spec.racenumber = DESC_I(c, 0x510);
+    r->spec.scheme = (uint32_t)DESC_I(c, 0x514);
+    r->spec.stretch = DESC_I(c, 0x518);
+    r->spec.customtpage = DESC_I(c, 0x51c);
     r->state.spec = &r->spec;
+    r->state.style = DESC_I(c, 0x328);   /* +0x568: BODYSTYLE */
     R3DCar_Init(&r->car, &r->state);
-    PENDING_NOTE(0x410fcf, "the car's colours and options from its description (R3DCar_SetColours)");
+    R3DCar_SetColours(&r->car, r->spec.scheme);   /* 0x443ce0 */
     char path[128];
     snprintf(path, sizeof path, "GameData\\CarModel\\%s", (const char *)CAR_DESCB(c) + 0x228);
     R3DCar_LoadCrp(&r->car, path);

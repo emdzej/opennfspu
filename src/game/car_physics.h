@@ -14,3 +14,10 @@ void CarSim_WheelSpin(Car *c);     /* 0x4a2570 */
 /* The body's points from the car model's 'PdnB' points (R3DCar +0xf8): the four lowest, one per corner,
    first. 0x49ab30 */
 void CarSim_LoadBodyPoints(Car *c);
+/* The car's simulation state for the race (0x49b480, from the race's car set-up 0x410790): its id, half box
+   (+0x3a8) and radius (+0x3b4), mass (+0x354, the specs' mass times 0x5b273c for the race cars) and
+   inertia, still, upright, its body points. */
+void CarSim_Init(Car *c, int32_t id, float mass, float hx, float hy, float hz);
+/* Port stand-in for the grid placement: at `at`, facing fwd in the ground plane, its lowest body point
+   on the ground. */
+void CarSim_PlaceOnGround(Car *c, const float at[3], const float fwd[3]);

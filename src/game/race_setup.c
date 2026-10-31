@@ -65,6 +65,12 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x13c, 0x8000);                              /* FRONTTIREPRESSURE */
     put_i(d, 0x140, 0x8000);                              /* REARTIREPRESSURE */
     put_i(d, 0xc, 1);                                     /* TRANSMISSION: automatic */
+    /* The colours (+0x218 COLORCONFIG: body, stripe, interior, wheels; the car viewer's silver), no race
+       number, colour package 0. */
+    static const uint32_t colours[4] = {0xffb8bcc0u, 0xff202020u, 0xff303030u, 0xffc0c0c0u};
+    memcpy(d + 0x218, colours, sizeof colours);
+    put_i(d, 0x510, -1);                                  /* RACENUMBER */
+    put_i(d, 0x514, 0);                                   /* STRIPEPACKAGE: the colour scheme */
     free(db);
     g_nracecars = 1;
     g_ntrafficcars = 0;

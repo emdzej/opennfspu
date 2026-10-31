@@ -89,6 +89,7 @@ extern int32_t g_sim_tick;
 extern int32_t g_race_wet;
 extern int32_t g_race_network;
 extern int32_t g_race_rollover_events;   /* 0x657a2c */
+extern int32_t g_race_heavy;             /* 0x6573fc: the human cars ten times heavier */
 
 /* ---- task lists (0x414c50 / 0x414cd0 / 0x414d50) ---- */
 

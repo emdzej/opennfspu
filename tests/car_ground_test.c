@@ -18,21 +18,14 @@
 static int fails, checks;
 #define CHECK(x) do { checks++; if (!(x)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); } } while (0)
 
-/* The car at a road node, level and facing +z, still (the grid placement isn't ported yet). */
+/* The car set up for the race (0x49b480 with the specs' mass) and put on the road at a node facing +z
+(the grid placement isn't ported: CarSim_PlaceOnGround stands in), then lifted by `lift`. */
 static void place(Car *c, const float at[3], float lift)
 {
-    float *pos = CAR_F(c, 0x330), *m = CAR_F(c, 0x364);
-    pos[0] = at[0];
-    pos[1] = at[1] + lift;
-    pos[2] = at[2];
-    memset(CAR_F(c, 0x33c), 0, 12);
-    memset(CAR_F(c, 0x388), 0, 12);
-    static const float id[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-    memcpy(m, id, sizeof id);
-    c->b[0x7f] = 1;
-    c->b[0x7c] = 1;
-    *CAR_F(c, 0x84) = 1.0f;   /* the gravity scale (set by the race code, not ported yet) */
-    CarSim_LoadBodyPoints(c); /* (0x49b480's) */
+    CarSim_Init(c, 0, *SPEC_F(c, 0x40) * 0.0078125f, *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));
+    static const float fwd[3] = {0, 0, 1};
+    CarSim_PlaceOnGround(c, at, fwd);
+    CAR_F(c, 0x330)[1] += lift;
     CarSim_BodyPoints(c);
 }
 

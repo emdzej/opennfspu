@@ -5,6 +5,7 @@
 #include "pending.h"
 #include "render/camera_math.h"
 #include "render/r3dcar.h"
+#include "game/wtree.h"
 #include <math.h>
 #include <string.h>
 
@@ -145,4 +146,81 @@ void CarSim_LoadBodyPoints(Car *c)
         else if (zero < q[0] && q[2] < zero) memcpy(corner[3], q, 12);
     }
     memcpy(p, corner, sizeof corner);
+}
+
+void CarSim_Init(Car *c, int32_t id, float mass, float hx, float hy, float hz)
+{
+    *CAR_I(c, 0) = id;
+    c->b[0x7e] = 0;
+    c->b[0x7d] = 0;
+    c->b[0x7c] = 1;
+    PENDING_NOTE(0x531f60, "the car's start time (+0x74, 0x531f60)");
+    memset(c->b + 0x5c, 0, 0x18);         /* +0x5c .. +0x70 */
+    memset(c->b + 0x330, 0, 0x18);        /* the position and velocity */
+    *CAR_F(c, 0x35c) = 0;
+    *CAR_F(c, 0x3a8) = hx;
+    *CAR_F(c, 0x3ac) = hy;
+    *CAR_F(c, 0x3b0) = hz;
+    float r = sqrtf(hy * hy + hx * hx);
+    *CAR_F(c, 0x3b4) = sqrtf(hz * hz + r * r);
+    float m = (*CAR_I(c, CAR_FLAGS) & 0x10) ? hx * hy * hz * K(0x5b368c) : mass;
+    if ((*CAR_I(c, CAR_FLAGS) & 4) && g_race_heavy) m *= K(0x5b240c);
+    else if (DESC_I(c, 0x518)) m *= K(0x5b49b0);   /* TINYCAR */
+    *CAR_F(c, 0x354) = m;
+    *CAR_F(c, 0x358) = K(0x5b24a8) / m;
+    float inertia = m * K(0x5b2460);
+    *CAR_F(c, 0x394) = inertia;
+    *CAR_F(c, 0x398) = K(0x5b24a8) / inertia;
+    memset(c->b + 0x388, 0, 12);          /* the angular velocity */
+    *CAR_F(c, 0x39c) = 0;
+    *CAR_F(c, 0x3a0) = 1.0f;
+    *CAR_F(c, 0x3a4) = 0;
+    *CAR_I(c, 0x460) = 1;
+    *CAR_I(c, 0x464) = 1;
+    *CAR_F(c, 0x84) = 1.0f;               /* the gravity scale */
+    memset(c->b + 0x418, 0, 2);
+    memset(c->b + 0x420, 0, 12);          /* +0x420 .. +0x428 (+0x41c, the last ground height, stays) */
+    *CAR_F(c, 0x360) = 0;
+    *CAR_F(c, 0x40c) = 0;
+    memset(c->b + 0x42c, 0, 0x14);        /* +0x42c .. +0x43c */
+    memset(c->b + 0x454, 0, 12);          /* +0x454 .. +0x45c */
+    memset(c->b + 0x4e4, 0, 0x28);        /* the damage zones */
+    c->b[0x80] = 0;
+    memset(c->b + 0x41a, 0, 2);
+    c->b[0x7f] = 1;
+    *CAR_I(c, 0x3c) = 0;
+    CarSim_LoadBodyPoints(c);             /* 0x49ab30 */
+    CarSim_BodyPoints(c);                 /* 0x49ada0 */
+}
+
+void CarSim_PlaceOnGround(Car *c, const float at[3], const float fwd[3])
+{
+    float fx = fwd[0], fz = fwd[2], n = sqrtf(fx * fx + fz * fz);
+    if (n < 1e-6f) {
+        fx = 0;
+        fz = 1;
+        n = 1;
+    }
+    fx /= n;
+    fz /= n;
+    /* Rows right, up, forward; right = (-fz, 0, fx): the left-handed frame of the original's world, in
+       which positive steering turns towards the first row. */
+    float rot[9] = {-fz, 0, fx, 0, 1, 0, fx, 0, fz};
+    memcpy(CAR_F(c, 0x364), rot, sizeof rot);
+    float ground = WSurface_HeightAt(at);
+    /* The lowest body point on the ground. */
+    float low = 0.0f;
+    for (int i = 0; i < *CAR_I(c, 0x32c); i++)
+        if (CAR_F(c, 0x8c + 12 * i)[1] < low) low = CAR_F(c, 0x8c + 12 * i)[1];
+    float *p = CAR_F(c, 0x330);
+    p[0] = at[0];
+    p[1] = ground - low;
+    p[2] = at[2];
+    *CAR_F(c, 0x41c) = ground;   /* the last ground height, as the grid's placement leaves it */
+    /* The ground frame (+0x490 side, +0x49c normal, +0x4a8 forward) as the force task makes it on level
+       ground, for the drive task that runs before it in a tick. */
+    memcpy(CAR_F(c, 0x490), rot, 12);
+    memcpy(CAR_F(c, 0x49c), rot + 3, 12);
+    memcpy(CAR_F(c, 0x4a8), rot + 6, 12);
+    CarSim_BodyPoints(c);
 }

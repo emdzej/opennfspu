@@ -130,24 +130,13 @@ static bool load(const char *track, const char *carname)
         m[1] = scene_f32(t, 0xcc);
         m[2] = scene_f32(t, 0xd0);
     }
+    /* The race's car set-up (0x49b480 with the specs' mass, as 0x410790 calls it) and a place on the road
+       just past the start line (the grid placement isn't ported). */
+    CarSim_Init(c, 0, *SPEC_F(c, 0x40) * 0.0078125f, *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));
     float fx = m[0], fz = m[2], n = sqrtf(fx * fx + fz * fz);
     if (n < 1e-6f) { fx = 0; fz = 1; n = 1; }
-    fx /= n;
-    fz /= n;
-    /* Rows right, up, forward with right = (-fz, 0, fx): the left-handed frame of the original's Direct3D
-       world (positive steering turns towards the first row). */
-    float rot[9] = {-fz, 0, fx, 0, 1, 0, fx, 0, fz};
-    memcpy(CAR_F(c, 0x364), rot, sizeof rot);
-    float *p = CAR_F(c, 0x330);
-    p[0] = pos[0] + fx * 4.0f;
-    p[2] = pos[2] + fz * 4.0f;
-    p[1] = pos[1];
-    p[1] = WSurface_HeightAt(p) + 0.75f;
-    c->b[0x7f] = 1;
-    c->b[0x7c] = 1;
-    *CAR_F(c, 0x84) = 1.0f;
-    CarSim_LoadBodyPoints(c);
-    CarSim_BodyPoints(c);
+    float at[3] = {pos[0] + fx / n * 4.0f, pos[1], pos[2] + fz / n * 4.0f}, fwd[3] = {fx, 0, fz};
+    CarSim_PlaceOnGround(c, at, fwd);
     CarSim_ResetDrive(c);
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     g_render_cars = draw_cars;

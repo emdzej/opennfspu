@@ -28,6 +28,7 @@
 0040e080	AIState_Purgatory_v2	ai	struct	Virtual slot 2 of AIState_Purgatory (vtable 0x5b2710)
 0040e160	AIState_Purgatory_v0	ai	struct	Virtual slot 0 of AIState_Purgatory (vtable 0x5b2710)
 0040e230	AIState_GotoSlice_v0	ai	struct	Virtual slot 0 of AIState_GotoSlice (vtable 0x5b2720)
+00410790	Car_RaceInit	race	med	The race's per-car set-up (calls 0x49b480, 0x49e010, 0x49aee0, 0x49b000)
 00410dc0	CarSpecs_Load	sim	low	Car and AI specs records ("carSpecs", "AISpecs")
 00411190	Car_Construct	sim	low	Car object with its parts ("Car_tObj", "Parts_tCarParts")
 00412e90	Input_Sample	input	high	Reads keyboard/joystick into the per-player control state (32 Hz, from the timer or the loop)
@@ -637,6 +638,8 @@
 0049ab30	CarSim_LoadBodyPoints	sim	high	The body points from the model's PdnB points, corners first
 0049ae30	CarSim_ShiftCompression	sim	high	The wheels' compressions moved with the body
 0049aee0	CarSim_Track	sim	high	The road tracking task: node, body surface, plane, heading
+0049b000	CarSim_PlaceOnRoad	sim	med	The car put on the road (position, its plane); not ported yet
+0049b480	CarSim_Init	sim	high	The car's simulation state for the race: id, box, mass, inertia, still, upright
 0049b9a0	CarSim_GroundFrame	sim	high	The car's frame on the ground (+0x490..+0x4b0)
 0049bb10	CarSim_ClampTurn	sim	high	Angular velocity limits after a hard landing
 0049bbf0	CarSim_ClampSpin	sim	high	The local angular velocity held within 0.75

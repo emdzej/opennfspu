@@ -13,6 +13,7 @@ int32_t g_sim_tick;
 int32_t g_race_wet;
 int32_t g_race_network;
 int32_t g_race_rollover_events;
+int32_t g_race_heavy;
 
 /* The body's points against the ground (impulses through 0x495ea0, 0x496440, 0x494d60): pending. */
 static void CarSim_BodyOnGround(Car *c, const float n[3], const float at[3], float friction)

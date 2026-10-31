@@ -41,24 +41,12 @@ int main(void)
     CHECK(g_ncars == 1 && g_road && g_road->nnodes > 20);
     if (g_ncars != 1 || !g_road) return 1;
     Car *c = g_cars[0];
-    /* Placed at a node facing the next one (the grid placement isn't ported yet). */
+    /* Placed at a node facing the next one (CarSim_PlaceOnGround stands in for the grid placement). */
     const float *a = Road_NodePos(g_road, 20), *n = Road_NodePos(g_road, 21);
     float f[3] = {n[0] - a[0], 0, n[2] - a[2]};
-    float l = sqrtf(f[0] * f[0] + f[2] * f[2]);
-    f[0] /= l;
-    f[2] /= l;
-    float *m = CAR_F(c, 0x364);
-    float rot[9] = {f[2], 0, -f[0], 0, 1, 0, f[0], 0, f[2]};   /* rows: right, up, forward */
-    memcpy(m, rot, sizeof rot);
+    CarSim_Init(c, 0, *SPEC_F(c, 0x40) * 0.0078125f, *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));
+    CarSim_PlaceOnGround(c, a, f);
     float *pos = CAR_F(c, 0x330);
-    pos[0] = a[0];
-    pos[1] = WSurface_HeightAt(a) + 0.7f;
-    pos[2] = a[2];
-    c->b[0x7f] = 1;
-    c->b[0x7c] = 1;
-    *CAR_F(c, 0x84) = 1.0f;
-    CarSim_LoadBodyPoints(c);
-    CarSim_BodyPoints(c);
     CarSim_ResetDrive(c);
     g_sim_tick = 0;
     run(0x1c8);                         /* the countdown */
