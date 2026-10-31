@@ -11,10 +11,10 @@
 | The 3D driver (THRASH, the original's Direct3D 7 path) on OpenGL ES 3.0, EAGL2 | in place |
 | Textures, car models with their texture pages and colours | in place (no environment maps, decals or licence plates yet) |
 | Tracks: loading, scenes and start grids, the world draw, the sky's horizon | in progress (all objects tested instead of the visibility grid; no clouds yet) |
-| Track road and collision: road nodes, the collision tree of polygons and road edges, the ground under a point | in progress (no roadside collision objects yet) |
+| Track road and collision: road nodes, the collision tree of polygons, road edges and roadside objects (cylinders, boxes), the ground under a point | in progress (no animated objects yet) |
 | Cameras | in progress (fixed viewer cameras; the race cameras aren't ported) |
 | Frontend (menus, showroom, Evolution, Factory Driver) | not started |
-| Simulation (handling, damage, AI, police) | in progress (one car drives from its grid slot behind the start line: ground contact, suspension, engine, gearbox, tyres, the road's walls; no collisions with roadside objects or cars, no damage, AI or police yet) |
+| Simulation (handling, damage, AI, police) | in progress (one car drives from its grid slot behind the start line: ground contact, suspension, engine, gearbox, tyres, the road's walls, roadside posts and trees; no collisions with boxes or cars, no damage, AI or police yet) |
 | Sound, music, speech | not started |
 | Multiplayer | out of scope for now |
 

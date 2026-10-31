@@ -4,6 +4,7 @@
 #include "game/wtree.h"
 #include "pending.h"
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 static float exe_f32(uint32_t va)
@@ -181,6 +182,135 @@ void CarSim_Edges(Car *c)
 
 /* The cars checked against each other this tick (0x628cdc, count 0x628f5c; the simulation step empties
    it). */
+
+/* ---- the world's objects (0x4981f0-0x498d50) ---- */
+
+static void unit3(float v[3])   /* 0x532640 */
+{
+    double r = (double)K(0x5b24a8) / sqrt((double)v[1] * v[1] + (double)v[0] * v[0] + (double)v[2] * v[2]);
+    v[0] = (float)(r * v[0]);
+    v[1] = (float)(v[1] * r);
+    v[2] = (float)(v[2] * r);
+}
+
+/* Within r of the car's box in its right and forward axes (ground plane). 0x4981f0 */
+static bool near_box(Car *c, const float p[3], float r)
+{
+    float d[3] = {p[0] - CAR_F(c, 0x330)[0], 0, p[2] - CAR_F(c, 0x330)[2]};
+    if (r + *CAR_F(c, 0x3a8) < fabsf(dot3(d, CAR_F(c, 0x364)))) return false;
+    return !(r + *CAR_F(c, 0x3b0) < fabsf(dot3(d, CAR_F(c, 0x37c))));
+}
+
+/* The car pushed out along n by the gap between the object's point a and the car's point b: the
+   position and the wheels' contacts move, the velocity takes the push 32 times over and is held to the
+   wheels' speed, the impact (3 x the closing speed) turns and slows the car; a hard one (over 10) dents
+   the zone the push came from. 0x4982f0 */
+static void contact(Car *c, const float n[3], const float a[3], const float b[3])
+{
+    float d[3] = {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+    float t = dot3(n, d);
+    for (int k = 0; k < 3; k++) d[k] = n[k] * t;
+    float *pos = CAR_F(c, 0x330), *vel = CAR_F(c, 0x33c);
+    for (int k = 0; k < 3; k++) pos[k] = d[k] + pos[k];
+    for (int w = 0; w < 4; w++) {
+        CAR_F(c, 0x7f8 + 0xc4 * w)[0] += d[0];
+        CAR_F(c, 0x7f8 + 0xc4 * w)[2] += d[2];
+    }
+    float vn = dot3(vel, n), impact = -vn * K(0x5b2600);
+    if (impact < K(0x5b23f8)) impact = -impact;
+    *CAR_F(c, 0x430) = impact;
+    for (int k = 0; k < 3; k++) vel[k] = d[k] * K(0x5b2644) + vel[k];
+    float ax = fabsf(vel[0]), az = fabsf(vel[2]);
+    float sp = ax <= az ? ax * K(0x5b2468) + az : az * K(0x5b2468) + ax;
+    float k = *CAR_F(c, 0x35c) / sp;
+    if (k < K(0x5b24a8)) {
+        for (int j = 0; j < 3; j++) vel[j] *= k;
+        *CAR_F(c, 0x430) = k * *CAR_F(c, 0x430);
+    }
+    turn_along(c, -vn, n);   /* 0x493e80 */
+    after_hit(c);            /* 0x493db0 */
+    if (K(0x5b241c) < *CAR_F(c, 0x430)) {
+        float r = dot3(n, CAR_F(c, 0x364)), f = dot3(n, CAR_F(c, 0x37c));
+        int zone;
+        if (f < K(0x5b49d0)) zone = 1;
+        else if (K(0x5b2610) < f) zone = 5;
+        else if (r < K(0x5b49d0)) zone = 3;
+        else if (K(0x5b2610) < r) zone = 7;
+        else if (K(0x5b23f8) <= f) zone = K(0x5b23f8) <= r ? 4 : 6;
+        else zone = K(0x5b23f8) <= r ? 2 : 0;
+        (void)zone;
+        PENDING_NOTE(0x494470, "the damage of a zone (0x494470)");
+    }
+}
+
+/* The car against a cylinder: pushed out along the line from its centre once nearer than the box's
+   extent that way (its half width or length over the line's share, 10 when the share is under 0.1) plus
+   the cylinder's radius; a fast car heading at it from close by is pushed through instead. 0x498a10 */
+static void hit_cylinder(Car *c, WTreeObject *o)
+{
+    float ctr[3], pos[3] = {CAR_F(c, 0x330)[0], 0, CAR_F(c, 0x330)[2]};
+    o->e.vt->centre(&o->e, ctr);
+    ctr[1] = 0;
+    float n[3] = {pos[0] - ctr[0], 0, pos[2] - ctr[2]};
+    float dist = sqrtf(n[1] * n[1] + n[0] * n[0] + n[2] * n[2]);
+    if (!(K(0x5b27a8) < dist)) return;
+    unit3(n);
+    float r = o->ovt->radius(o);
+    float a = fabsf(dot3(n, CAR_F(c, 0x364)));
+    float ext = a <= K(0x5b2604) ? 10.0f : *CAR_F(c, 0x3a8) / a;
+    float b = fabsf(dot3(n, CAR_F(c, 0x37c)));
+    float e2 = b <= K(0x5b2604) ? K(0x5b241c) : *CAR_F(c, 0x3b0) / b;
+    if (e2 < ext) ext = e2;
+    if (!(dist < ext + r)) return;
+    if (K(0x5b2400) < *CAR_F(c, 0x35c)) {
+        float v[3] = {CAR_F(c, 0x33c)[0], CAR_F(c, 0x33c)[1], CAR_F(c, 0x33c)[2]};
+        unit3(v);
+        if (K(0x5b23f0) < dot3(n, v) && dist < K(0x5b260c))
+            for (int k = 0; k < 3; k++) n[k] = n[k] * -1.0f;
+    }
+    float on[3], car[3];
+    for (int k = 0; k < 3; k++) {
+        on[k] = n[k] * r + ctr[k];
+        car[k] = n[k] * -ext + pos[k];
+    }
+    contact(c, n, on, car);
+    *CAR_I(c, 0x438) = o->f20 | 0x50000;
+    *CAR_I(c, 0x434) = 0;
+    memcpy(CAR_F(c, 0x440), on, 12);
+}
+
+void CarSim_Objects(Car *c)
+{
+    if (*CAR_I(c, 0x43c) != 0) return;
+    WTreeElems *near = WTree_ObjectsNear(CAR_F(c, 0x330), 5.0f);   /* 0x4737d0 */
+    if (!near) return;
+    for (uint32_t i = 0; i < near->n; i++) {
+        WTreeObject *o = (WTreeObject *)near->e[i];
+        float ctr[3];
+        o->e.vt->centre(&o->e, ctr);
+        if (!near_box(c, ctr, o->ovt->radius(o))) continue;
+        int kind = o->ovt->hitkind(o, CAR_F(c, 0x33c));
+        if (kind == 2) {
+            /* The original tells the two apart by RTTI (dynamic_cast to each). */
+            if (o->shape == WOBJ_CYLINDER)
+                hit_cylinder(c, o);
+            else if (o->shape == WOBJ_BOX)
+                PENDING_NOTE(0x498600, "the car against a box (0x498600: the box's sides, 0x486d40, 0x496580)");
+        } else if (kind == 3) {
+            if (K(0x5b2580) < *CAR_F(c, 0x35c)) {
+                *CAR_F(c, 0x430) = 15.0f;
+                *CAR_I(c, 0x438) = 0x6000f;
+                memcpy(CAR_F(c, 0x440), CAR_F(c, 0x330), 12);
+            }
+        } else if (kind == 1) {
+            *CAR_I(c, 0x438) = *CAR_I(c, 0x44c) | 0x50000;
+            memcpy(CAR_F(c, 0x440), CAR_F(c, 0x330), 12);
+            *CAR_F(c, 0x430) = 15.0f;
+        }
+    }
+    WTreeElems_free(near);   /* (the vector and its array) */
+}
+
 static Car *g_collided[CAR_MAX * 2];
 static int g_ncollided;
 
@@ -193,7 +323,7 @@ void CarSim_Collide(void *car)
     if (*CAR_I(c, 0x43c) > 0) (*CAR_I(c, 0x43c))--;
     if (c->b[0x7c]) {
         CarSim_Edges(c);   /* 0x494f90 */
-        PENDING_NOTE(0x498d50, "the car against the world's objects (0x498d50)");
+        CarSim_Objects(c);  /* 0x498d50 */
     }
     if (g_race_network) return;
     for (int i = 0; i < g_ncollided; i++) {

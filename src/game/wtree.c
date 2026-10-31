@@ -5,6 +5,8 @@
 #include "game/track_pending.h"
 #include "game/world.h"
 #include "pending.h"
+#include "eagl/eagl.h"
+#include "render/r3dcar.h"   /* EAGL_MatAxisAngle */
 #include "render/rmaterial.h"
 #include "vfs.h"
 #include <math.h>
@@ -720,11 +722,17 @@ void PCollideArticleBundle_Build(PCollideArticleBundle *c, WTreeElems *v, bool o
         const uint8_t *e = base + rd32(base + 4) * 12 + 100;   /* the collision level of detail */
         const WObjectDef *def = WObjectDefs_find(rd32(base + 0x44));   /* 0x47ec50 */
         if (def && def->collidetype == 1) {
-            PENDING_NOTE(0x486600, "the cylinder collision object (WTreeElem_CylinderObject)");
+            /* The definition's radius goes in as an integer, the cylinder's own is 0.25 (as 0x475040
+               passes them). */
+            WTreeElems_push(v, WTreeCylinder_new(b, (int)i, def->drivethru, (int32_t)def->radius, k_quarter));
             continue;
         }
         if (def && def->collidetype == 2) {
-            PENDING_NOTE(0x486bf0, "the box collision object (WTreeElem_BoxObject, 0x474c40)");
+            int nh;
+            float rect[16], corners[4][3];
+            WTree_ArticleRect(article, &nh, rect);   /* 0x474c40 (then the entry's matrix, slot 5: identity) */
+            for (int k = 0; k < 4; k++) memcpy(corners[k], rect + 4 * k, 12);
+            WTreeElems_push(v, WTreeBox_new(b, (int)i, corners, def->drivethru));
             continue;
         }
         if (!e[0]) continue;
@@ -744,6 +752,293 @@ void PCollideArticleBundle_Build(PCollideArticleBundle *c, WTreeElems *v, bool o
             if (r == end || UData_key(r) != prk || !(r->info & UDATA_INDEXED) || (r->id & 0xffff) >= hi) break;
         }
     }
+}
+
+
+/* ---- the collision objects (0x4862b0-0x487000) ---- */
+
+static void obj_free(WTreeElem *e) { free(e); }   /* 0x486660, 0x486cf0 */
+
+static void obj_centre(const WTreeElem *e, float out[3])   /* 0x486400 */
+{
+    const WTreeObject *o = (const WTreeObject *)e;
+    for (int k = 0; k < 3; k++) out[k] = (o->bmax[k] + o->bmin[k]) * k_half;
+}
+
+static void obj_bounds(const WTreeElem *e, float mn[3], float mx[3])   /* 0x4864d0 */
+{
+    const WTreeObject *o = (const WTreeObject *)e;
+    memcpy(mn, o->bmin, 12);
+    memcpy(mx, o->bmax, 12);
+}
+
+static bool obj_contains(const WTreeElem *e, const float p[3])   /* 0x486440: in the box's x, z */
+{
+    const WTreeObject *o = (const WTreeObject *)e;
+    return p[0] >= o->bmin[0] && p[0] <= o->bmax[0] && p[2] >= o->bmin[2] && p[2] <= o->bmax[2];
+}
+
+/* The segment crosses one of the box's four sides in the ground plane (min-z, max-x, max-z, min-x
+   order of 0x486510's corner pairs). */
+static bool obj_crosses(const WTreeElem *e, const float seg[6])   /* 0x486510 */
+{
+    const WTreeObject *o = (const WTreeObject *)e;
+    float side[6] = {o->bmin[0], o->bmin[1], o->bmin[2], o->bmin[0], o->bmin[1], o->bmax[2]};
+    if (World_SegmentsCross(seg, side, NULL)) return true;
+    side[0] = o->bmax[0], side[1] = o->bmax[1], side[2] = o->bmax[2];
+    if (World_SegmentsCross(seg, side, NULL)) return true;
+    side[4] = o->bmin[1], side[5] = o->bmin[2], side[3] = o->bmax[0];
+    if (World_SegmentsCross(seg, side, NULL)) return true;
+    side[0] = o->bmin[0], side[1] = o->bmin[1], side[2] = o->bmin[2];
+    return World_SegmentsCross(seg, side, NULL);
+}
+
+static const WTreeElemVtbl obj_vt = {obj_free, obj_centre, obj_bounds, obj_contains, obj_crosses,
+                                     NULL, NULL, NULL, NULL, NULL, NULL};
+
+/* Slot 8 (0x486b90): an animated entry answers from its animation (0x489820, 0x476760); else solid, or
+   drive-through with the definition's flag. */
+static int obj_hitkind(const WTreeObject *o, const float vel[3])
+{
+    (void)vel;
+    PENDING_NOTE(0x489820, "the animated objects' hit kind (0x489820, 0x476760)");
+    return (o->drivethru != 0) + 2;
+}
+
+static float cyl_radius(const WTreeObject *o) { return o->radius; }   /* 0x486650 */
+static float box_radius(const WTreeObject *o) { return o->radius; }   /* 0x486ce0 */
+
+static int cyl_collide(const WTreeObject *o, const float seg[6], float n[3], float at[3])
+{
+    (void)o, (void)seg, (void)n, (void)at;
+    PENDING_NOTE(0x4866b0, "the cylinder against a segment (0x4866b0, the AI's look-ahead)");
+    return 0;
+}
+
+static int box_collide(const WTreeObject *o, const float seg[6], float n[3], float at[3])
+{
+    (void)o, (void)seg, (void)n, (void)at;
+    PENDING_NOTE(0x486d40, "the box against a segment (0x486d40)");
+    return 0;
+}
+
+static const WTreeObjectVtbl cyl_ovt = {cyl_radius, cyl_collide, obj_hitkind};
+static const WTreeObjectVtbl box_ovt = {box_radius, box_collide, obj_hitkind};
+
+/* The entry's box corners, min and max mixed (the bundle's slot 2, 0x4892d0, from slot 4's Base box,
+   0x477ed0): their bounds are the Base box itself. No track bundle has entries with their own matrix
+   (slot 5). */
+static void obj_init(WTreeObject *o, W3DObjectBundle *b, int entry, int32_t drivethru, int32_t f20)   /* 0x4862b0 */
+{
+    o->e.vt = &obj_vt;
+    o->e.kind = WTREE_OBJECT;
+    o->f20 = f20;
+    o->drivethru = drivethru;
+    o->bundle = b;
+    o->f2c = 1;
+    o->entry = (uint16_t)entry;
+    if (b->transformed) PENDING_NOTE(0x4893f0, "a bundle entry's own matrix (the objects' boxes)");
+    const WBase *bs = WArticleBundle_base((WArticleBundle *)b, entry);
+    memcpy(o->bmin, bs->bmin, 12);
+    memcpy(o->bmax, bs->bmax, 12);
+}
+
+WTreeElem *WTreeCylinder_new(W3DObjectBundle *b, int entry, int32_t drivethru, int32_t defradius, float radius)   /* 0x486600 */
+{
+    load_consts();
+    WTreeObject *o = calloc(1, sizeof *o);
+    if (!o) return NULL;
+    obj_init(o, b, entry, drivethru, defradius);
+    o->ovt = &cyl_ovt;
+    o->shape = WOBJ_CYLINDER;
+    o->radius = radius < k_quarter ? k_quarter : radius;
+    return &o->e;
+}
+
+WTreeElem *WTreeBox_new(W3DObjectBundle *b, int entry, const float corners[4][3], int32_t drivethru)   /* 0x486bf0 */
+{
+    load_consts();
+    WTreeObject *o = calloc(1, sizeof *o);
+    if (!o) return NULL;
+    obj_init(o, b, entry, drivethru, 0);
+    o->ovt = &box_ovt;
+    o->shape = WOBJ_BOX;
+    /* Half the box's diagonal in the ground plane, times 0x5b3f90. */
+    float hx = o->bmax[0] - (o->bmin[0] + o->bmax[0]) * k_half, hz = o->bmax[2] - (o->bmin[2] + o->bmax[2]) * k_half;
+    o->radius = (float)(sqrt((double)hz * hz + (double)hx * hx) * (double)exe_f32(0x5b3f90));
+    memcpy(o->corner, corners, sizeof o->corner);
+    return &o->e;
+}
+
+/* The convex hull in the ground plane of n points (16 bytes each), into out (room for n + 2); points
+   within sqrt(0x5c18e4) of their neighbour are dropped. Each new point outside replaces the run of
+   edges it sees. Returns the hull's count. 0x5a0230 */
+static int hull_xz(int n, const float *p, float *out)
+{
+    float eps = exe_f32(0x5c18e4);
+    memcpy(out, p, 16);
+    int h = 1, left = n - 1;
+    if (left == 0) return 1;
+    for (;;) {
+        p += 4;
+        float dx = p[0] - out[0], dz = p[2] - out[2];
+        if (eps < dx * dx + dz * dz) {
+            memcpy(out + 4, p, 16);
+            h = 2;
+        }
+        if (--left == 0) return h;
+        if (h != 1) break;
+    }
+    float *tmp = malloc((size_t)(n + 2) * 16);
+    uint8_t *in = malloc((size_t)n + 2);
+    if (!tmp || !in) {
+        free(tmp);
+        free(in);
+        return h;
+    }
+    for (; left; left--) {
+        p += 4;
+        int outside = 0;
+        for (int e = 0; e < h; e++) {
+            const float *a = out + 4 * e, *b = out + 4 * ((e + 1) % h);
+            in[e] = (p[0] - a[0]) * (b[2] - a[2]) - (p[2] - a[2]) * (b[0] - a[0]) >= k_zero;
+            if (!in[e]) outside++;
+        }
+        if (!outside) continue;
+        int s;
+        if (!in[0]) {
+            if (!in[h - 1]) {
+                s = h;   /* back to the start of the run that wraps past the last edge */
+                while (s > 0 && !in[s - 1]) s--;
+            } else {
+                s = 0;
+            }
+        } else {
+            s = 1;
+            while (in[s]) s++;
+        }
+        s += outside;
+        memcpy(tmp, p, 16);
+        int copy = h + 1 - outside;
+        for (int j = 0, i = s; j < copy; j++, i++) memcpy(tmp + 4 * (j + 1), out + 4 * (i % h), 16);
+        int nh = h + 2 - outside, w = 1;
+        memcpy(out, tmp, 16);
+        for (int r = 0; w < nh; r++) {
+            const float *a = tmp + 4 * r, *b = tmp + 4 * (r + 1);
+            float dx = a[0] - b[0], dz = a[2] - b[2];
+            if (dx * dx + dz * dz <= eps) nh--;
+            else memcpy(out + 4 * w++, b, 16);
+        }
+        h = nh;
+    }
+    free(tmp);
+    free(in);
+    return h;
+}
+
+void WTree_ArticleRect(UData *article, int *nhull, float c[16])
+{
+    load_consts();
+    memset(c, 0, 16 * sizeof *c);
+    *nhull = 0;
+    UData *rb = UData_find(article, kind_id(K_BASE));
+    if (rb == UData_itemsend(article)) return;
+    const uint8_t *base = UData_data(rb);
+    uint16_t vi = rd16(base + 0x6c + rd32(base + 4) * 12);   /* the collision LOD's vertices */
+    UData *rv = UData_find(article, (kind_id(K_VT) & 0xffff0000u) | vi);
+    if (rv == UData_itemsend(article)) return;
+    int n = (int)rv->count;
+    const float *vt = UData_data(rv);
+    float *pts = malloc((size_t)(n + 2) * 16);
+    if (!pts || n < 1) {
+        free(pts);
+        return;
+    }
+    int m = hull_xz(n, vt, pts);
+    *nhull = m;
+    /* The point of the farthest pair found first; the centre is that point (the original averages it
+       with itself). */
+    int far = 0;
+    float best = 0;
+    for (int i = 0; i < m; i++)
+        for (int j = 0; j < m; j++) {
+            float dz = pts[4 * i + 2] - pts[4 * j + 2], dx = pts[4 * i] - pts[4 * j];
+            float d = dz * dz + dx * dx;
+            if (best < d) {
+                far = i;
+                best = d;
+            }
+        }
+    float cx = (pts[4 * far] + pts[4 * far]) * k_half, cy = (pts[4 * far + 1] + pts[4 * far + 1]) * k_half,
+          cz = (pts[4 * far + 2] + pts[4 * far + 2]) * k_half;
+    float *rel = malloc((size_t)m * 16), *rot = malloc((size_t)m * 16);
+    if (!rel || !rot) {
+        free(rel);
+        free(rot);
+        free(pts);
+        return;
+    }
+    for (int i = 0; i < m; i++) {
+        rel[4 * i] = pts[4 * i] - cx;
+        rel[4 * i + 1] = pts[4 * i + 1] - cy;
+        rel[4 * i + 2] = pts[4 * i + 2] - cz;
+        rel[4 * i + 3] = 1.0f;
+    }
+    float least = 1e10f, angle = 0, x0 = 0, z0 = 0, x1 = 0, z1 = 0;
+    EaglMatrix mat;
+    for (float a = 0; a < exe_f32(0x5b3288); a = a + exe_f32(0x5b2604)) {
+        EAGL_MatAxisAngle(&mat, a, 0, 1.0f, 0);
+        EAGL_MatTransform4(&mat, m, rel, 16, rot, 16);
+        float mnx = 1e9f, mnz = 1e9f, mxx = -1e9f, mxz = exe_f32(0x5b4688);   /* 0x474b90 */
+        for (int i = 0; i < m; i++) {
+            const float *q = rot + 4 * i;
+            if (q[0] < mnx) mnx = q[0];
+            if (q[2] < mnz) mnz = q[2];
+            if (mxx < q[0]) mxx = q[0];
+            if (mxz < q[2]) mxz = q[2];
+        }
+        float area = (mxx - mnx) * (mxz - mnz);
+        if (area < least) {
+            angle = a;
+            x0 = mnx, z0 = mnz, x1 = mxx, z1 = mxz;
+            least = area;
+        }
+    }
+    free(rel);
+    free(rot);
+    free(pts);
+    float rect[16] = {x0, 0, z0, 1, x0, 0, z1, 1, x1, 0, z1, 1, x1, 0, z0, 1};
+    EAGL_MatAxisAngle(&mat, -angle, 0, 1.0f, 0);
+    EAGL_MatTransform4(&mat, 4, rect, 16, c, 16);
+    for (int i = 0; i < 4; i++) {
+        c[4 * i] = cx + c[4 * i];
+        c[4 * i + 1] = 0;
+        c[4 * i + 2] = cz + c[4 * i + 2];
+    }
+}
+
+WTreeElems *WTree_ObjectsNear(const float p[3], float r)
+{
+    load_consts();
+    WTree *t = g_world ? g_world->tree : NULL;
+    if (!t) return NULL;
+    WTreeElems *out = NULL;
+    WTreeCells leaves = {0};
+    WTree_LeavesNear(t->root, p, 3.0f, &leaves);
+    for (uint32_t i = 0; i < leaves.n; i++) {
+        WTreeList *l = leaves.c[i] ? leaves.c[i]->list : NULL;
+        for (uint32_t k = 0; l && k < l->n; k++) {
+            if (l->e[k].kind != WTREE_OBJECT) continue;
+            const WTreeObject *o = (const WTreeObject *)l->e[k].elem;
+            /* 0x486480: within r of the box in x and z */
+            if (p[0] + r >= o->bmin[0] && p[0] - r <= o->bmax[0] && p[2] + r >= o->bmin[2] && p[2] - r <= o->bmax[2]) {
+                if (!out) out = calloc(1, sizeof *out);
+                if (out) WTreeElems_push(out, l->e[k].elem);
+            }
+        }
+    }
+    free(leaves.c);
+    return out;
 }
 
 /* ---- the world's tree ---- */

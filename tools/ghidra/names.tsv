@@ -496,6 +496,7 @@
 00473170	WSurface_Reset	world	high	Tracker back to no polygon at a road node
 004731a0	WSurface_FindBelow	world	high	The polygon under a point nearest in height among those with surface bits
 00473290	WSurface_FindAbove	world	high	The polygon above a point by more than 3.5, its flags
+004737d0	WTree_ObjectsNear	world	high	Object elements of the leaves within 3 whose bbox is within r
 00473fc0	WSurface_Update	world	high	A surface tracker's polygon for a point (kept while still on it)
 00474030	WSurface_FindEdge	world	high	The road edge a segment crosses, nearest by mid-height
 00474280	WSurface_ComputeNormal	world	high	The tracker's polygon normal and in-plane edge direction
@@ -510,6 +511,8 @@
 00474b40	PCollideArticleBundle_v0	world	struct	Virtual slot 0 of PCollideArticleBundle (vtable 0x5b4674)
 00474b70	PCollideArticleBundle_v3	world	struct	Virtual slot 3 of PCollideArticleBundle (vtable 0x5b4674)
 00474b80	PCollideArticleBundle_v4	world	struct	Virtual slot 4 of PCollideArticleBundle (vtable 0x5b4674)
+00474b90	Points_BoundsXZ	world	high	min/max x, z of points (max z from 0x5b4688)
+00474c40	WTree_ArticleRect	world	high	Least-area plan rectangle of the collision LOD vertices (hull, 0.1 degree steps to 90)
 00475040	PCollideArticleBundle_Build	world	high	An article bundle's collision elements (polygons, objects)
 00475c10	World_LoadSpecFile	world	high	Loads Tr<nn>.bin ("REQUEST FOR SPEC FILE %d WHEN ONLY %d EXIST")
 00475da0	WAnimatableArticleBundle_v0	world	struct	Virtual slot 0 of WAnimatableArticleBundle (vtable 0x5b469c)
@@ -524,7 +527,7 @@
 00477ca0	WArticleBundle_buildcache	world	high	64-byte lookup cache per entry, then slot 10
 00477cd0	WArticleBundle_fillcache	world	high	Each cache: the article, the end of its items, empty pairs
 00477d40	WArticleBundle_sphere	world	high	Entry's bounding sphere from Base +0x2c/+0x3c (moved by the entry matrix when transformed)
-00477ed0	WArticleBundle_box	world	high	Entry's bounding box from Base +0x14/+0x20
+00477ed0	WArticleBundle_Box	world	high	Slot 4: the entry's Base bmin/bmax
 00477fd0	WInstanceBundle_ctor	world	high	WInstanceBundle (0x44), vtable 0x5b4718
 00478000	WInstanceBundle_v0	world	struct	Virtual slot 0 of WInstanceBundle (vtable 0x5b4718)
 00478050	WInstanceBundle_v5	world	struct	Virtual slot 5 of WInstanceBundle (vtable 0x5b4718)
@@ -601,9 +604,18 @@
 00485fb0	WTreeElem_Tri_v10	world	struct	Virtual slot 10 of WTreeElem_Tri (vtable 0x5b48b0)
 00485fe0	WTreeElem_Tri_v3	world	struct	Virtual slot 3 of WTreeElem_Tri (vtable 0x5b48b0)
 004861c0	WTreeElem_Tri_v9	world	struct	Virtual slot 9 of WTreeElem_Tri (vtable 0x5b48b0)
+004862b0	WTreeElem_Object_ctor	world	high	Object element: bbox from the bundle entry's 8 corners (slot 2), +0x20, +0x24 drivethru, +0x28 bundle, +0x2e entry (port: wtree.c)
+00486400	WTreeElem_Object_Centre	world	high	Bounding box centre
+00486440	WTreeElem_Object_Contains	world	high	Point in the bbox (x, z)
+00486480	WTreeElem_Object_Near	world	high	Point within r of the bbox (x, z)
+004864d0	WTreeElem_Object_Bounds	world	high	Bounding box
+00486510	WTreeElem_Object_Crosses	world	high	Segment crosses one of the bbox sides
+00486600	WTreeElem_CylinderObject_ctor	world	high	Cylinder: radius +0x34 (0.25 at least; the builder always passes 0.25), base +0x20 = (int)def radius
 00486650	WTreeElem_CylinderObject_v5	world	struct	Virtual slot 5 of WTreeElem_CylinderObject (vtable 0x5b490c)
 004866b0	WTreeElem_CylinderObject_v6	world	struct	Virtual slot 6 of WTreeElem_CylinderObject (vtable 0x5b490c)
 004868c0	WTreeElem_CylinderObject_v7	world	struct	Virtual slot 7 of WTreeElem_CylinderObject (vtable 0x5b490c)
+00486b90	WTreeElem_Object_HitKind	world	high	Slot 8: animated entries ask 0x476760; else 2 solid, 3 drive-through
+00486bf0	WTreeElem_BoxObject_ctor	world	high	Box: 4 ground-plane corners +0x34, +0x64 = half bbox diagonal * 1.05
 00486ce0	WTreeElem_BoxObject_v5	world	struct	Virtual slot 5 of WTreeElem_BoxObject (vtable 0x5b4938)
 00486cf0	WTreeElem_BoxObject_v0	world	struct	Virtual slot 0 of WTreeElem_BoxObject (vtable 0x5b4938)
 00486d40	WTreeElem_BoxObject_v6	world	struct	Virtual slot 6 of WTreeElem_BoxObject (vtable 0x5b4938)
@@ -620,6 +632,8 @@
 00489030	WObjectRef_copy	world	high	Copies an object reference
 00489090	W3DObjectBundle_ctor	world	high	R3DTypes::W3DObjectBundle (0x30): kind, serial (0x5d0608), world context
 00489130	R3DTypes_W3DObjectBundle_v1	render	struct	Virtual slot 1 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
+004892d0	W3DObjectBundle_Corners	world	high	Slot 2: an entry's 8 box corners from slot 4, through slot 5 when transformed
+004893f0	W3DObjectBundle_Matrix	world	high	Slot 5: identity
 00489760	WObjectRef_set	world	high	{bundle, 0, index}
 00489bf0	World_SegmentsCross	world	high	Ground-plane segment intersection, parameters in [0, 1]
 00489e40	Edge_ClosestPoint	world	high	Closest point of an edge's line to a point (ground plane)
@@ -652,6 +666,11 @@
 004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
 00494f90	CarSim_Edges	sim	high	The car's eight box probes against the road edges
 00498190	Sim_ClearContacts	sim	high	Clears the cars' per-tick contacts (+0x110c) and the car-car list count (0x628f5c)
+004981f0	CarSim_NearBox	sim	high	Point within r of the car box (right, forward)
+004982f0	CarSim_ObjectContact	sim	high	Push out along n, impact 3x closing speed, velocity +32 push, zone damage over 10
+00498600	CarSim_HitBox	sim	med	Car vs box object (box slot 6 on the car box sides, 0x496580)
+00498a10	CarSim_HitCylinder	sim	high	Car vs cylinder object
+00498d50	CarSim_Objects	sim	high	Car vs world objects near it (port: car_collide.c)
 00498f60	CarSim_Collide	sim	high	The collision task: edges, objects, the other cars
 00499490	CarSim_BodyPlane	sim	high	The car's own ground plane from the body polygon and the road axes
 004996a0	CarSim_SurfaceNoise	sim	high	The surface roughness under a wheel (random bumps by surface kind)
@@ -1978,6 +1997,7 @@
 0059f970	NFS_ErrorHandler	sys	med	Fatal error handler installed in 0x5debf0 (file/line in 0x5deb74/0x5deb78)
 0059f9d0	REAL_errorbox	sys	med	"Error: terminate execution?" (IsDebuggerPresent)
 0059fc60	UFileFind_find	file	med	FindFirstFile/FindNextFile directory enumeration
+005a0230	Hull_XZ	math	high	Incremental convex hull in x, z (eps 0x5c18e4)
 005a0930	Prim_Count	util	high	Primitives in an index list of a type
 005a0970	Prim_Indices	util	high	The vertex indices of primitive k
 005a0a00	Prim_FindStream	util	high	The nth stream of a primitive list with an item id

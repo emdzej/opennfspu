@@ -31,7 +31,7 @@ typedef struct {
     uint16_t (*colour)(const WTreeElem *e, int i);                         /* 10 */
 } WTreeElemVtbl;
 
-enum { WTREE_POLY = 1, WTREE_EDGE = 2 };
+enum { WTREE_OBJECT = 0, WTREE_POLY = 1, WTREE_EDGE = 2 };
 
 /* WTreeElem (8 bytes + the kind's fields). The polygons point at their article's vertices (16 bytes
    each, x y z and a pad) and keep the vertices' colours as 5:5:5. */
@@ -46,6 +46,44 @@ struct WTreeElem {
         struct { float p[2][4]; } edge;                           /* +0x0c, +0x1c */
     } u;
 };
+
+/* The objects' own slots (vtables 0x5b490c cylinder, 0x5b4938 box): their slots 0-4 are the element's,
+   from 5 on these. */
+typedef struct WTreeObject WTreeObject;
+enum { WOBJ_CYLINDER = 1, WOBJ_BOX = 2 };
+typedef struct {
+    float (*radius)(const WTreeObject *o);                                  /* 5 */
+    /* 6: against a segment (seg[0..2] from, [3..5] to, in the ground plane): 0 clear, 1 the segment is
+       inside, 2 it crosses an edge (normal and point out). */
+    int (*collide)(const WTreeObject *o, const float seg[6], float normal[3], float at[3]);
+    int (*hitkind)(const WTreeObject *o, const float vel[3]);               /* 8: 1 animated, 2 solid, 3 drive-through */
+} WTreeObjectVtbl;
+
+/* WTreeElem_Object (0x34 bytes; base ctor 0x4862b0, vtable 0x5b48e0): the bounding box of its bundle
+   entry, the definition's drive-through flag, its bundle and entry. The cylinder (0x38, 0x486600) adds
+   its radius, the box (0x68, 0x486bf0) its four corners in the ground plane and the radius of its
+   bounding box. */
+struct WTreeObject {
+    WTreeElem e;                     /* +0x00: vt, kind 0 */
+    float bmin[3], bmax[3];          /* +0x08, +0x14 */
+    int32_t f20;                     /* +0x20: the cylinder's definition radius as an integer, 0 */
+    int32_t drivethru;               /* +0x24 */
+    struct W3DObjectBundle *bundle;  /* +0x28 */
+    uint8_t f2c;                     /* +0x2c: 1 */
+    uint16_t entry;                  /* +0x2e */
+    const WTreeObjectVtbl *ovt;      /* port: the slots from 5 on */
+    uint8_t shape;                   /* port: WOBJ_CYLINDER or WOBJ_BOX (the original's RTTI) */
+    float radius;                    /* cylinder +0x34 (0.25 at least); box +0x64 */
+    float corner[4][3];              /* box +0x34 .. +0x60 */
+};
+
+/* The objects of the bundle's entries whose definitions make them cylinders or boxes (0x475040's object
+   branch). */
+WTreeElem *WTreeCylinder_new(struct W3DObjectBundle *b, int entry, int32_t drivethru, int32_t defradius, float radius);
+WTreeElem *WTreeBox_new(struct W3DObjectBundle *b, int entry, const float corners[4][3], int32_t drivethru);
+/* The plan-view rectangle of an article's collision vertices: their hull (0x5a0230), the turn (in 0.1
+   degree steps up to 90) whose bounds have the least area; the four corners (x, 0, z, 1). 0x474c40 */
+void WTree_ArticleRect(UData *article, int *nhull, float corners[16]);
 
 /* A leaf's entry: the element's kind, the element. */
 typedef struct { uint8_t kind; WTreeElem *elem; } WTreeEntry;
@@ -78,8 +116,11 @@ typedef struct { WTreeCell **c; uint32_t n, cap; } WTreeCells;
 void WTree_LeavesNear(WTreeCell *c, const float p[3], float r, WTreeCells *out);
 void WTree_CellBounds(const WTreeCell *c, float *x0, float *z0, float *size);
 
+/* The objects whose bounding boxes come within r of p (the leaves within 3 of it); NULL for none. The
+   caller frees it (WTreeElems_free). 0x4737d0 */
+WTreeElems *WTree_ObjectsNear(const float p[3], float r);
 void WTreeElems_push(WTreeElems *v, WTreeElem *e);
-void WTreeElems_free(WTreeElems *v);    /* the vector, not the elements */
+void WTreeElems_free(WTreeElems *v);    /* the vector and its array, not the elements */
 
 /* The elements. pts: vertex pointers; colours: 5:5:5. 0x485330, 0x485ba0, 0x485070 */
 WTreeElem *WTreeQuad_new(const float *const pts[4], const uint16_t colours[4], uint16_t flags);

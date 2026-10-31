@@ -49,10 +49,19 @@ static void one(const char *name, void *user)
     WTree *t = g_world ? g_world->tree : NULL;
     CHECK(t && t->all && t->all->n > 100);
     if (!t || !t->all || !g_road) return;
-    int polys = 0, edges = 0;
+    int polys = 0, edges = 0, cyls = 0, boxes = 0;
     for (uint32_t i = 0; i < t->all->n; i++) {
         polys += t->all->e[i]->kind == WTREE_POLY;
         edges += t->all->e[i]->kind == WTREE_EDGE;
+        if (t->all->e[i]->kind == WTREE_OBJECT) {
+            const WTreeObject *o = (const WTreeObject *)t->all->e[i];
+            cyls += o->shape == WOBJ_CYLINDER;
+            boxes += o->shape == WOBJ_BOX;
+            /* bounding boxes the right way round; cylinders 0.25, boxes their half diagonal */
+            CHECK(o->bmin[0] <= o->bmax[0] && o->bmin[2] <= o->bmax[2]);
+            CHECK(o->shape != WOBJ_CYLINDER || o->radius == 0.25f);
+            CHECK(o->shape != WOBJ_BOX || (o->radius > 0 && isfinite(o->corner[2][0])));
+        }
     }
     CHECK(polys > 0 && edges > 0);
     Walk w = {0};
@@ -76,8 +85,8 @@ static void one(const char *name, void *user)
     }
     CHECK(found * 10 >= tried * 9);
     CHECK(near * 10 >= found * 9);
-    printf("  %-10s %6d polygons %5d edges, %5d leaves (depth %2d), ground under %d of %d nodes, %d within 2\n", base,
-           polys, edges, w.leaves, w.maxdepth, found, tried, near);
+    printf("  %-10s %6d polygons %5d edges %3d cylinders %3d boxes, %5d leaves (depth %2d), ground under %d of %d nodes, %d within 2\n",
+           base, polys, edges, cyls, boxes, w.leaves, w.maxdepth, found, tried, near);
     tracks++;
     BWorld_DeInit();
 }
