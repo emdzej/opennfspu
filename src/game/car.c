@@ -418,6 +418,11 @@ typedef struct {
 
 static void Car_MakeRenderer(Car *c)
 {
+    static bool common;
+    if (!common) {
+        common = true;
+        R3DCar_LoadCommon();   /* carcmn.fsh, the shared pages and the colour packages (0x443690), once */
+    }
     CarRenderer *r = calloc(1, sizeof *r);
     if (!r) return;
     r->state.rot[0] = r->state.rot[4] = r->state.rot[8] = 1;
