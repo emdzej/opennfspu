@@ -8,4 +8,3 @@ void World_BuildBundles(void *world) { PENDING_NOTE(0x487940, "World_BuildBundle
 void WSceneBundle_Reset(void) { PENDING_NOTE(0x482af0, "WSceneBundle reset"); }
 void WSceneBundle_Add(uint32_t type, const float pos[3], const float mat[9]) { PENDING_NOTE(0x482f70, "WSceneBundle add"); }
 void WSceneBundle_Update(bool keep) { PENDING_NOTE(0x482fc0, "WSceneBundle update"); }
-void World_LoadJunctions(const char *path) { PENDING_NOTE(0x480f20, "World_LoadJunctions (.jnc)"); }

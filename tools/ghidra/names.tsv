@@ -557,8 +557,14 @@
 0047ec50	WObjectDefs_find	world	high	Definition by tag; the first one for an unknown tag, 0 for tag 0 (port: src/game/objdefs.c)
 0047ed00	WMidGround_new	world	high	The object-definition holder at 0x628ba0 (8 bytes)
 0047eec0	WObjectDefs_push	world	high	vector push_back of a definition
+004807a0	Road_SplitSegments	world	high	Split a segment where another segment end is within 16 of a node >5 from its ends; ends numbered (port: road.c)
+004809e0	Road_BuildJunctions	world	high	Junctions of segment ends within 16 (max 8), centre, end weights int(1/n)
+00480f20	World_LoadJunctions	world	high	<track>.jnc: 0x24 per junction, end weights
+00481030	Road_JunctionNearest	world	high	Nearest node through a junction near-node list
 00481670	Road_Step	world	high	The node n nodes on along the road (through a junction, else clamped to the segment)
-00481a10	Road_SegmentRange	world	high	A node's segment: progress at its ends (junction +0x28), length, first node
+004817b0	Road_RaceLength	world	high	Road +4 race length (nnodes with one junction), junction +0x28 progress
+00481880	Road_Walk	world	high	Junction distances along the race (recursive), the longest
+00481a10	Road_SegmentRange	world	high	A node segment: progress at its junctions, length, first node
 00482550	WSceneBundle_ctor	world	high	WSceneBundle (0x4c), vtable 0x5b47e0
 00482580	WSceneBundle_v0	world	struct	Virtual slot 0 of WSceneBundle (vtable 0x5b47e0)
 004825b0	WSceneBundle_v5	world	struct	Virtual slot 5 of WSceneBundle (vtable 0x5b47e0)

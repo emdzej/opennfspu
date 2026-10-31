@@ -16,7 +16,6 @@ void *WAnim_create(struct W3DObjectBundle *b);                 /* the anim bundl
 void *R3DTrack_new(void *desc);                                /* operator new(0x28) + 0x44a520 (the track renderer) */
 void R3DTrack_load(void *r3d, void *root);                     /* 0x44a6b0 */
 void World_BuildBundles(void *world);                          /* the rest of 0x487940 after the article bundles */
-void World_LoadJunctions(const char *path);                    /* 0x480f20: <track>.jnc */
 /* The world's scene bundle as the scene's geometry elements fill it (Scene_PlaceGeometry 0x46d120): */
 void WSceneBundle_Reset(void);                                 /* 0x482af0: the slots back to DFLT placeholders */
 void WSceneBundle_Add(uint32_t type, const float pos[3], const float mat[9]);   /* 0x482f70 */

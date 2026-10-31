@@ -309,7 +309,7 @@ void Car_RaceInit(Car *c, uint32_t id)
         if (!start || g_race_type != 4) {
             int from = 1;
             if (!start) {
-                if (g_race_linear) from = g_road->f04 > 99 ? 50 : 1;
+                if (g_race_linear) from = g_road->length > 99 ? 50 : 1;
             } else {
                 float p[3];
                 WSurface_Reset(&c->body, 1);
