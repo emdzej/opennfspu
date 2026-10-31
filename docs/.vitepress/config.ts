@@ -128,6 +128,7 @@ export default defineConfig({
             { text: "Scene elements", link: "/re/scene" },
             { text: "Sky", link: "/re/sky" },
             { text: "Cars", link: "/re/cars" },
+            { text: "Sound", link: "/re/sound" },
             { text: "Textures and rendering", link: "/re/render" },
             { text: "Render system", link: "/re/render-system" },
             { text: "File formats", link: "/formats" },
