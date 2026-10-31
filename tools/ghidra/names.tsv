@@ -98,6 +98,8 @@
 0041c930	HComboTextVisual_setpos	hud	med	Ported in src/game/hud.c / hud_config.c
 0041ca10	HComboTextVisual_setsize	hud	med	Ported in src/game/hud.c / hud_config.c
 0041ca30	HComboTextVisual_v2	hud	struct	Virtual slot 2 of HComboTextVisual (vtable 0x5b297c)
+0041ca80	HComboTextVisual_valuered	hud	med	Ported in src/game/hud.c
+0041ca90	HComboTextVisual_valueplain	hud	med	Ported in src/game/hud.c
 0041cf70	HCongrats_v0	hud	struct	Virtual slot 0 of HCongrats (vtable 0x5b2a40)
 0041d070	HCongrats_v1	hud	struct	Virtual slot 1 of HCongrats (vtable 0x5b2a40)
 0041dd60	HCongrats_v5	hud	struct	Virtual slot 5 of HCongrats (vtable 0x5b2a40)
@@ -108,6 +110,7 @@
 0041e560	HUD_TraysOn	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e5b0	HUD_TraysOff	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e5e0	HUD_NoTrays	hud	med	Ported in src/game/hud.c / hud_config.c
+0041e870	HUD_MultiTimeShown	hud	med	Ported in src/game/hud.c
 0041e920	HUD_GearShown	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e940	HUD_SpeedFigures	hud	med	Ported in src/game/hud.c
 0041e960	HUD_SpeedDial	hud	med	Ported in src/game/hud.c
@@ -161,6 +164,7 @@
 00429350	HMissionSummary_v9	hud	struct	Virtual slot 9 of HMissionSummary (vtable 0x5b2c88)
 004293b0	HMissionSummary_v5	hud	struct	Virtual slot 5 of HMissionSummary (vtable 0x5b2c88)
 00429800	string_assign	stl	med	std::string assign from a range
+0042a0f0	HMultiTime_init	hud	med	Ported in src/game/hud.c
 0042a130	HMultiTime_v0	hud	struct	Virtual slot 0 of HMultiTime (vtable 0x5b2ccc)
 0042a160	HMultiTime_v1	hud	struct	Virtual slot 1 of HMultiTime (vtable 0x5b2ccc)
 0042a290	HMultiTime_v2	hud	struct	Virtual slot 2 of HMultiTime (vtable 0x5b2ccc)
@@ -217,6 +221,7 @@
 004310d0	HTextVisual_v0	hud	struct	Virtual slot 0 of HTextVisual (vtable 0x5b3184)
 00431230	HTextVisual_print	hud	med	Ported in src/game/hud.c / hud_config.c
 00431360	HTextVisual_extent	hud	med	Ported in src/game/hud.c / hud_config.c
+004315d0	HTime_init	hud	med	Ported in src/game/hud.c
 00431620	HTime_v0	hud	struct	Virtual slot 0 of HTime (vtable 0x5b31a0)
 00431650	HTime_v1	hud	struct	Virtual slot 1 of HTime (vtable 0x5b31a0)
 00431760	HTime_v2	hud	struct	Virtual slot 2 of HTime (vtable 0x5b31a0)

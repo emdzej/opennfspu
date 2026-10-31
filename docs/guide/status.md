@@ -13,7 +13,7 @@
 | Tracks: loading, scenes and start grids, the world draw, the sky's horizon | in progress (all objects tested instead of the visibility grid; no clouds yet) |
 | Track road and collision: road nodes, the collision tree of polygons, road edges and roadside objects (cylinders, boxes), the ground under a point | in progress (no animated objects yet) |
 | Cameras | in progress (fixed viewer cameras; the race cameras aren't ported) |
-| Race HUD: fonts, the HUD's 2D layer and art, its layouts (`SaveData\XXhud1XX.hud`, `XXhud2XX.hud`), localised strings | in progress (the start countdown, the gear, the speedometer and tachometer dials and their digital forms; no lap, position, time, damage or map yet) |
+| Race HUD: fonts, the HUD's 2D layer and art, its layouts (`SaveData\XXhud1XX.hud`, `XXhud2XX.hud`), localised strings | in progress (the start countdown, the gear, the speedometer and tachometer dials and their digital forms, the race time and lap times; no position, damage or map yet, no track records) |
 | Frontend (menus, showroom, Evolution, Factory Driver) | not started |
 | Simulation (handling, damage, AI, police) | in progress (one car drives from its grid slot behind the start line: ground contact, suspension, engine, gearbox, tyres, the road's walls, roadside posts, trees and boxes, the body against the ground when the car is over; body damage in nine zones from hard hits; no collisions between cars, no visible dents, AI or police yet) |
 | Sound, music, speech | not started |

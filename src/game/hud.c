@@ -4,6 +4,7 @@
 #include "game/car.h"
 #include "game/car_drive.h"
 #include "game/hud_config.h"
+#include "game/race_car.h"
 #include "game/race_progress.h"
 #include "eagl/eagl.h"
 #include "pending.h"
@@ -649,6 +650,112 @@ static HudVisual *tachdigital_new(void)
     return figures_new(&tachdigital_vt, HUDPOS_TACH, HudConfig_choicei32(0x14), HudConfig_choicei32(0x18), true);
 }
 
+/* ---- the times (HTime 0x4315d0, 0xe8 bytes, vtable 0x5b31a0; HMultiTime 0x42a0f0, 0xe0 bytes, vtable
+   0x5b2ccc) ---- */
+
+/* A time of ticks (64 a second) as mm:ss.hh ("59:59.99" past an hour, 0x5cd1e8), signed ("+" 0x5cd200,
+   "-" 0x5cd1fc) if asked. 0x435640 */
+void HTime_Format(int t, char *out, bool sign)
+{
+    out[0] = 0;
+    if (sign) strcat(out, exe_str(t < 0 ? 0x5cd1fc : 0x5cd200));
+    int a = 0 < t ? t : -t;
+    int secs = (int)((float)a * exe_f32(0x5b2828));
+    int min = secs / 0x3c;
+    int hund = (int)((float)((a & 0x3f) * 100) * exe_f32(0x5b2828));
+    if (0x3c < min) {
+        strcat(out, exe_str(0x5cd1e8));
+        return;
+    }
+    size_t n;
+    if (min < 10) strcat(out, exe_str(0x5ccad0));
+    n = strlen(out);
+    snprintf(out + n, 16, "%d", min);
+    strcat(out, exe_str(0x5cd1f8));   /* ":" */
+    if (secs % 0x3c < 10) strcat(out, exe_str(0x5ccad0));
+    n = strlen(out);
+    snprintf(out + n, 16, "%d", secs % 0x3c);
+    strcat(out, exe_str(0x5cd1f4));   /* "." */
+    if (hund < 10) strcat(out, exe_str(0x5ccad0));
+    n = strlen(out);
+    snprintf(out + n, 16, "%d", hund);
+}
+
+typedef struct {
+    HCombo combo;
+    char text[12];     /* +0xd4 */
+    int32_t flash;     /* +0xe0: ticks the value stays red */
+    int32_t penalties; /* +0xe4 */
+} HTime;
+
+static void value_plain(HCombo *c) { if (c->value) c->value->colour = HudConfig_scheme(); }      /* 0x41ca90 */
+
+/* The race's time (from the start, tick 0x1c0; the finish's once finished, +0xb50 2), with the
+   penalties' (0x657830 each, not ported: 0); "time" (hud.loc 0x12). 0x431650 */
+static void time_draw(HudVisual *v)
+{
+    HTime *t = (HTime *)v;
+    Car *car = local_car();
+    if (always && v->state != 0 && car) {
+        PENDING_NOTE(0x434f00, "the pursuit's red time (game type 9, 0x434f00; red 0x41ca80)");
+        if (t->flash == 0) value_plain(&t->combo);
+        int now = *CAR_I(car, 0xb50) == 2 ? *CAR_I(car, 0xb24) : g_sim_tick - 0x1c0;
+        if (now < 0) now = 0;
+        int pen = t->penalties * 0;   /* (0x657830) */
+        HTime_Format((int)((float)pen * exe_f32(0x5b24e4) + (float)now), t->text, false);
+        const char *s = LOC_string(HudConfig_loc(), 0x12);
+        combo_draw(&t->combo, s ? s : "", t->text);
+    }
+    if (t->flash < 1) t->flash = 0;
+    else if (--t->flash == 0) value_plain(&t->combo);
+}
+
+/* The record or the best or last lap by the split times option (0x657dd8: 1 the record 0x6574b8, 2 the
+   best lap of +0xb28.., 3 the last); a point-to-point race's record (0x657498). Shown by the second
+   layout's +0x4c. 0x42a160 */
+static void multitime_draw(HudVisual *v)
+{
+    HTime *t = (HTime *)v;
+    Car *car = local_car();
+    if (HudConfig_choicei32(0x4c) == 0 || !always || v->state == 0 || !car) return;   /* 0x41e870 */
+    int label, n = 0;
+    PENDING_NOTE(0x433790, "the track records (0x657498, 0x6574b8: HTrackRecords)");
+    if (g_race_linear) label = 0x15, n = 0;
+    else if (g_hud_splits == 1) label = 0x16, n = 0;
+    else if (g_hud_splits == 2) {
+        label = 0x17;
+        int laps = *CAR_I(car, 0xb20);
+        n = 359999;
+        if (laps == 0) n = 0;
+        for (int i = 0; i < laps; i++)
+            if (*CAR_I(car, 0xb28 + 4 * i) < n) n = *CAR_I(car, 0xb28 + 4 * i);
+    } else if (g_hud_splits == 3) {
+        label = 0x18;
+        int laps = *CAR_I(car, 0xb20);
+        n = laps ? *CAR_I(car, 0xb24 + 4 * laps) : 0;
+    } else
+        return;   /* (the original formats its own pointer as a time and draws its text) */
+    HTime_Format(n, t->text, false);
+    const char *s = LOC_string(HudConfig_loc(), label);
+    combo_draw(&t->combo, s ? s : "", t->text);
+}
+
+static void time_reset(HudVisual *v) { figures_reset(v, 0xa4, false); }        /* 0x431760 */
+static void multitime_reset(HudVisual *v) { figures_reset(v, 0x0, true); }     /* 0x42a290 */
+
+static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress};
+static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress};
+
+static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
+{
+    HTime *t = calloc(1, sizeof *t);
+    if (!t) return NULL;
+    int32_t x, y;
+    HudConfig_pos(place, &x, &y);
+    combo_init(&t->combo, vt, x, y, w, h, place, true);
+    return &t->combo.tray.base;
+}
+
 /* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
    the value from tables made once, a cap over its pivot ---- */
 
@@ -849,7 +956,8 @@ void HUD_Init(void)
     always = true;  /* (HUD_LoadStrings 0x41e190 sets 0x60c970) */
     add(gear_new(), true, false);
     add(speed_new(), true, false);
-    PENDING_NOTE(0x4315d0, "HUD_Init's lap and time visuals (0x4315d0, 0x42a0f0)");
+    add(time_new(&time_vt, HUDPOS_TIME, HudConfig_i32(0xa4), HudConfig_i32(0xa8)), true, false);           /* 0x4315d0 */
+    add(time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4)), true, false);   /* 0x42a0f0 */
     PENDING_NOTE(0x42a6f0, "HUD_Init's damage, position and lap visuals (0x42f880, 0x42a6f0, 0x421e20)");
     add(speedometer_new(), true, false);
     add(tach_new(), true, false);

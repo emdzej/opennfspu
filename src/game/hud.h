@@ -28,5 +28,7 @@ struct HudVisual {
 /* The HUD for the race (the visuals ported so far). 0x424420 */
 void HUD_Init(void);
 void HUD_Free(void);
+/* A time of ticks as mm:ss.hh, signed if asked. 0x435640 */
+void HTime_Format(int t, char *out, bool sign);
 /* The HUD over camera c (the overlay view). 0x425910 */
 void HUD_Draw(RenderSystem *r, RCamera *c);

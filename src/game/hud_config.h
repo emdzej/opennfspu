@@ -16,8 +16,10 @@
 enum {
     HUDPOS_GEAR = 0,     /* 0x420b30 (+0x188) */
     HUDPOS_SPEED = 1,    /* 0x420b40 */
+    HUDPOS_TIME = 2,     /* 0x420b50 */
     HUDPOS_TACHDIAL = 6, /* 0x420bb0 */
     HUDPOS_SPEEDO = 7,   /* 0x420bc0 */
+    HUDPOS_MULTITIME = 11, /* 0x420b60: the second record's +0x0c */
     HUDPOS_TACH = 12,    /* 0x420b80: the second record's +0x20 */
     HUDPOS_COUNT = 13,
 };
@@ -34,6 +36,7 @@ typedef struct {
     int32_t speedo_start, speedo_deg, speedo_units;  /* 0x657e14, 0x657e18, 0x657e1c */
 } HudDials;
 extern HudDials g_hud_dials;
+extern int32_t g_hud_splits;     /* 0x657dd8: SPLITTIMES (1 the record, 2 the best lap, 3 the last) */
 extern int32_t g_hud_imperial;   /* 0x657dc0: miles (the front end's Display_SpeedUnits) */
 
 /* The localised strings and the layouts for the player (HUD_LoadStrings 0x41e190, counted: only the
