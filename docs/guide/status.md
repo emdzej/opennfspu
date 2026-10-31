@@ -1,6 +1,6 @@
 # Status
 
-**Early: the renderer draws cars and tracks; not playable yet.**
+**Early: a car can be driven on a track (one car, no race yet).**
 
 | Part | State |
 |---|---|
@@ -14,7 +14,7 @@
 | Track road and collision: road nodes, the collision tree of polygons and road edges, the ground under a point | in progress (no roadside collision objects yet) |
 | Cameras | in progress (fixed viewer cameras; the race cameras aren't ported) |
 | Frontend (menus, showroom, Evolution, Factory Driver) | not started |
-| Simulation (handling, damage, AI, police) | in progress (car specs, engine model and integrators; no forces yet) |
+| Simulation (handling, damage, AI, police) | in progress (one car drives: ground contact, suspension, engine, gearbox, tyres; no collisions with walls or cars, no damage, AI or police yet) |
 | Sound, music, speech | not started |
 | Multiplayer | out of scope for now |
 
@@ -22,7 +22,9 @@ The viewers, with `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--ass
 
 - `--param car=<name>` shows a car (`964`, `959`, `356a`, `boxster`, ...), `colour=<rrggbb>` its body colour;
 - `--param track=<name>` shows a track from its start line (`alps`, `autobahn`, `canyon`, `monaco1`, ...),
-  `yaw=<degrees>` turns the camera.
+  `yaw=<degrees>` turns the camera;
+- `--param drive=<track>` drives a car there (`car=<name>`, default `964`): arrow keys or WASD, space the
+  handbrake; on a pad left/right, A throttle, B brake, X handbrake. `camdist=<metres>` moves the chase camera.
 
 Nothing on this page is a promise of dates. Progress is tracked in the
 [repository](https://github.com/emdzej/opennfspu).

@@ -41,6 +41,8 @@ static void world_pass(RCamera *c)
     }
 }
 
+void (*g_render_cars)(RCamera *c);
+
 void Render_PendingWorld(RCamera *c)
 {
     PENDING_NOTE(0x452590, "Render_World: 0x452590");
@@ -52,7 +54,9 @@ void Render_PendingWorld(RCamera *c)
     rs_set28(g_render->device->rs, 3);
     RLists_Flush();                                            /* 0x4671d0 */
     PENDING_NOTE(0x455130, "Render_World: 0x455130 (particles)");
-    PENDING_NOTE(0x43f610, "Render_World: 0x43f610 (the cars)");
+    /* The cars (0x43f610): the game's car list draws them through the hook until that draw is ported. */
+    if (g_render_cars) g_render_cars(c);
+    else PENDING_NOTE(0x43f610, "Render_World: 0x43f610 (the cars)");
     if (c->v12c == 2) Sky_DrawAfter();
     PENDING_NOTE(0x458ef0, "Render_World: 0x458ef0");
 }
