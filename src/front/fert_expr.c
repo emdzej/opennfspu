@@ -2,7 +2,6 @@
 #include "front/fert_expr.h"
 #include <ctype.h>
 #include <math.h>
-#include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -139,7 +138,7 @@ bool FertExpr_Expand(const char *text, char *out, int cap)
 
 typedef struct {
     const char *p;
-    jmp_buf fail;
+    bool err;       /* (no setjmp in wasm: an error flag, and every step returns 0 after it) */
     int skipping;   /* in a branch C wouldn't evaluate: its arithmetic errors don't count */
 } Ev;
 
@@ -148,7 +147,11 @@ static void skip(Ev *e)
     while (*e->p && isspace((unsigned char)*e->p)) e->p++;
 }
 
-static _Noreturn void fail(Ev *e) { longjmp(e->fail, 1); }
+static int32_t fail(Ev *e)
+{
+    e->err = true;
+    return 0;
+}
 
 static int32_t ternary(Ev *e);
 
@@ -156,11 +159,11 @@ static int32_t call(Ev *e, const char *name, size_t n)
 {
     /* the interpreter's library (0x5ddeac ..): one argument each */
     skip(e);
-    if (*e->p != '(') fail(e);
+    if (*e->p != '(') return fail(e);
     e->p++;
     int32_t a = ternary(e);
     skip(e);
-    if (*e->p != ')') fail(e);
+    if (*e->p != ')') return fail(e);
     e->p++;
 #define IS(s) (n == sizeof(s) - 1 && !memcmp(name, s, n))
     if (IS("abs")) return a < 0 ? -a : a;
@@ -185,18 +188,19 @@ static int32_t call(Ev *e, const char *name, size_t n)
     if (IS("toupper")) return toupper(c);
     if (IS("toascii")) return a & 0x7f;
 #undef IS
-    fail(e);
+    return fail(e);
 }
 
 static int32_t primary(Ev *e)
 {
+    if (e->err) return 0;
     skip(e);
     char c = *e->p;
     if (c == '(') {
         e->p++;
         int32_t v = ternary(e);
         skip(e);
-        if (*e->p != ')') fail(e);
+        if (*e->p != ')') return fail(e);
         e->p++;
         return v;
     }
@@ -217,14 +221,14 @@ static int32_t primary(Ev *e)
             e->p += 3;
             return v;
         }
-        fail(e);
+        return fail(e);
     }
     if (isalpha((unsigned char)c) || c == '_') {
         const char *s = e->p;
         while (isalnum((unsigned char)*e->p) || *e->p == '_') e->p++;
         return call(e, s, (size_t)(e->p - s));   /* (an undefined name is an error) */
     }
-    fail(e);
+    return fail(e);
 }
 
 static int prec(const char *p, int *len)
@@ -273,17 +277,18 @@ static int32_t apply(Ev *e, const char *op, int len, int32_t a, int32_t b)
     case '%':
         if (!b || (a == INT32_MIN && b == -1)) {
             if (e->skipping) return 0;
-            fail(e);
+            return fail(e);
         }
         return op[0] == '/' ? a / b : a % b;
     }
-    fail(e);
+    return fail(e);
 }
 
 static int32_t binary(Ev *e, int min)
 {
     int32_t a = primary(e);
     for (;;) {
+        if (e->err) return 0;
         skip(e);
         int len, p = prec(e->p, &len);
         if (!p || p < min) return a;
@@ -307,7 +312,7 @@ static int32_t ternary(Ev *e)
     int32_t a = ternary(e);
     e->skipping -= !c;
     skip(e);
-    if (*e->p != ':') fail(e);
+    if (*e->p != ':') return fail(e);
     e->p++;
     e->skipping += !!c;
     int32_t b = ternary(e);
@@ -324,11 +329,10 @@ int32_t FertExpr_Eval(const char *text)
     Ev e;
     memset(&e, 0, sizeof e);
     e.p = buf;
-    if (setjmp(e.fail)) return 0;
     skip(&e);
     if (!*e.p) return 0;
     int32_t v = ternary(&e);
     skip(&e);
-    if (*e.p) return 0;   /* (trailing text: an error) */
+    if (e.err || *e.p) return 0;   /* (trailing text: an error) */
     return v;
 }
