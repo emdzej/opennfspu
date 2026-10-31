@@ -49,6 +49,7 @@
 00416160	Sim_ResetCollisionSlots	sim	low	Resets 8 collision-event slots (16 bytes: -1, -100.0f, 0, 0) at 0x608b38
 00416ae0	Race_End	game	med	Race finished/aborted: results, state change
 00417030	Race_TickOdd	game	low	Odd-tick race logic
+004171b0	CarSim_PlayerDistance	sim	high	Distance to the nearest human player's car (+0x78)
 00417820	Race_TickEven	game	low	Even-tick race logic
 00417a80	HUD_Countdown	hud	med	3-2-1-Go and circle art (321go, circlefull)
 00418450	H321Go_v0	hud	struct	Virtual slot 0 of H321Go (vtable 0x5b27ec)
@@ -488,6 +489,7 @@
 00474280	WSurface_ComputeNormal	world	high	The tracker's polygon normal and in-plane edge direction
 00474380	WSurface_Normal	world	high	The tracker's normal (computed on demand)
 00474390	WSurface_Slope	world	high	The tracker's in-plane direction (computed on demand)
+004743a0	WSurface_TrackNode	world	high	The tracker's road node for a point (junction segments pending)
 004744a0	WSurface_HeightAt	world	high	The ground height under a point
 00474550	WSurface_Vertex	world	high	The tracker's polygon vertex i (the zero vector without one)
 004749e0	stl_uninit_copy_ptr	stl	med	std::uninitialized_copy of pointers (vector growth)
@@ -621,11 +623,13 @@
 00493b30	CarSim_TyreBump	sim	high	The tyres' bump amplitude from their parts and damage zones
 004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
 00498190	Sim_ClearContacts	sim	med	Clears the per-tick contact accumulator (+0x110c) of every race car (0x5e8b34, count 0x5e8b58) and traffic car (0x5e8c24, count 0x5e8b5c)
+00499490	CarSim_BodyPlane	sim	high	The car's own ground plane from the body polygon and the road axes
 004996a0	CarSim_SurfaceNoise	sim	high	The surface roughness under a wheel (random bumps by surface kind)
 004999e0	CarSim_Ground	sim	high	The wheels on the ground: contacts, suspension, pitch and roll; mean height
 0049a870	CarSim_RideHeights	sim	high	The lowest and mean body points over the ground (+0x424, +0x428)
 0049ab30	CarSim_LoadBodyPoints	sim	high	The body points from the model's PdnB points, corners first
 0049ae30	CarSim_ShiftCompression	sim	high	The wheels' compressions moved with the body
+0049aee0	CarSim_Track	sim	high	The road tracking task: node, body surface, plane, heading
 0049b9a0	CarSim_GroundFrame	sim	high	The car's frame on the ground (+0x490..+0x4b0)
 0049bb10	CarSim_ClampTurn	sim	high	Angular velocity limits after a hard landing
 0049bbf0	CarSim_ClampSpin	sim	high	The local angular velocity held within 0.75

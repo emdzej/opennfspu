@@ -29,3 +29,7 @@ float CarSim_Ground(Car *c, float out[3]);
 /* The force task (even ticks, priority 0x1e): the ground contact, gravity, landing on the ground and
    bouncing off it. 0x49bcb0 */
 void CarSim_Forces(void *car);
+/* The road tracking task (even ticks, priority 6): the distance to the players, the road node, the
+   body's surface tracker and the car's own ground plane, the surface, the heading against the road.
+   0x49aee0 */
+void CarSim_Track(void *car);

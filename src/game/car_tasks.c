@@ -13,7 +13,6 @@
         (void)car;                                             \
         PENDING_NOTE(0x##addr, what);                          \
     }
-TASK(49aee0, "car task: 0x49aee0 (even, 6)")
 TASK(414830, "car task: 0x414830 (unregistered)")
 TASK(499150, "car task: 0x499150 (even, 0x15)")
 TASK(498f60, "car task: 0x498f60 (even, 0x28)")
@@ -30,7 +29,7 @@ static TaskFn *slot(Car *c, int k) { return (TaskFn *)(void *)&c->p[CARP_TASKS +
 void Car_SetTasks(Car *c)
 {
     uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
-    *slot(c, T_E0C) = task_49aee0;
+    *slot(c, T_E0C) = CarSim_Track;    /* 0x49aee0 */
     *slot(c, T_E10) = task_414830;
     *slot(c, T_E14) = task_499150;
     *slot(c, T_E1C) = CarSim_Drive;    /* 0x49fb20 */

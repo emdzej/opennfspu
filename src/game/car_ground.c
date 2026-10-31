@@ -2,6 +2,7 @@
 #include "game/car_ground.h"
 #include "exe.h"
 #include "game/car_physics.h"
+#include "game/road.h"
 #include "game/sim_math.h"
 #include "game/sim_rand.h"
 #include "pending.h"
@@ -614,4 +615,98 @@ void CarSim_Forces(void *car)
         vel[1] = -vel[1];
     if (vel[0] != K(0x5b23f8) || vel[1] != K(0x5b23f8) || vel[2] != K(0x5b23f8)) unit3(vel, CAR_F(c, 0x348));
     else memcpy(CAR_F(c, 0x348), CAR_F(c, 0x37c), 12);
+}
+
+/* ---- the road tracking task ---- */
+
+/* The distance to the nearest human player's car (+0x78, by the 0.25-weighted ground-plane distance;
+   1000 at most; 0 for a human's own car): what the task rates go by. 0x4171b0 */
+static void player_distance(Car *c)
+{
+    c->b[0x7e] = 0;
+    if (*CAR_I(c, CAR_FLAGS) & 1) {
+        *CAR_F(c, 0x78) = 0;
+        return;
+    }
+    float best = 1000.0f;
+    for (int i = 0; i < g_ncars; i++) {
+        Car *o = g_cars[i];
+        if (!o || !(*CAR_I(o, CAR_FLAGS) & 1)) continue;   /* the human players' list (0x5e8e2c) */
+        float dx = fabsf(CAR_F(c, 0x330)[0] - CAR_F(o, 0x330)[0]), dz = fabsf(CAR_F(c, 0x330)[2] - CAR_F(o, 0x330)[2]);
+        float d = dx <= dz ? dx * K(0x5b2468) + dz : dz * K(0x5b2468) + dx;
+        if (d < best) best = d;
+    }
+    *CAR_F(c, 0x78) = best;
+}
+
+/* The road node nearest the car (the body tracker's, +0x8): from the last one (the junction's other
+   segment, the tracker's +0x4, isn't ported with the junctions). 0x4743a0 */
+static void track_node(Car *c)
+{
+    WSurface *s = &c->body;
+    int16_t old = s->node;
+    if (s->f4 >= 0) PENDING_NOTE(0x481560, "the road node by the junction's two segments");
+    if (g_road && g_road->nnodes) s->node = (int16_t)Road_NearestNode(g_road, CAR_F(c, 0x330), s->node);
+    s->changed = s->node != old;
+    s->node_changed = s->node != old;
+}
+
+static const float *node_vec(int node, int off) { return (const float *)(const void *)(g_road->nodes + node * ROAD_NODE_SIZE + off); }
+
+/* The car's own ground plane from the body's polygon (+0x400 its vertices' mean, +0x3e8 its normal,
+   +0x3f4 its slope, +0x3dc their cross) and the road's axes at the node (+0x3b8, +0x3c4, +0x3d0).
+   0x499490 */
+static void body_plane(Car *c)
+{
+    if (!c->b[0x7f]) return;
+    float *at = CAR_F(c, 0x400), old[3];
+    memcpy(old, at, sizeof old);
+    memset(at, 0, 12);
+    WSurface *s = &c->body;
+    if (!s->none) {
+        for (int i = 0; i < 4; i++) {
+            const float *v = WSurface_Vertex(s, i);
+            at[0] = v[0] + at[0];
+            at[1] = v[1] + at[1];
+            at[2] = v[2] + at[2];
+        }
+        for (int k = 0; k < 3; k++) at[k] *= K(0x5b2468);
+    }
+    if (at[0] == K(0x5b23f8) && at[1] == K(0x5b23f8) && at[2] == K(0x5b23f8)) {
+        memcpy(at, old, sizeof old);
+        return;
+    }
+    if (!s->changed) return;
+    memcpy(CAR_F(c, 0x3e8), WSurface_Normal(s), 12);
+    memcpy(CAR_F(c, 0x3f4), WSurface_Slope(s), 12);
+    cross3(CAR_F(c, 0x3e8), CAR_F(c, 0x3f4), CAR_F(c, 0x3dc));
+    if (!g_road || !g_road->nnodes) return;
+    memcpy(CAR_F(c, 0x3b8), node_vec(s->node, 0x28), 12);
+    memcpy(CAR_F(c, 0x3c4), node_vec(s->node, 0x10), 12);
+    memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
+}
+
+void CarSim_Track(void *car)
+{
+    Car *c = car;
+    if (!c->b[0x7f] || c->b[0x7d] || !c->b[0x7c]) return;
+    player_distance(c);                         /* 0x4171b0 */
+    track_node(c);                              /* 0x4743a0 */
+    WSurface_Update(&c->body, CAR_F(c, 0x330), true);   /* 0x473fc0 (its +9 replaces the node's) */
+    /* The tracker's bytes in the car (+0x8 node, +0x11 changed, +0x12 none, +0x2c surface). */
+    memcpy(c->b + 0x8, &c->body.node, 2);
+    c->b[0x11] = c->body.changed;
+    c->b[0x12] = c->body.none;
+    memcpy(c->b + 0x2c, &c->body.surface, 2);
+    if (c->body.changed) body_plane(c);         /* 0x499490 */
+    *CAR_I(c, 0x460) = c->body.surface;
+    int kind = c->body.surface & 0xf;
+    *CAR_I(c, 0x464) = kind;
+    if (g_race_wet && (kind == 1 || kind == 10)) *CAR_I(c, 0x464) = 2;
+    if (!g_road || !g_road->nnodes) return;
+    /* The heading against the road: the angle of the car's forward to the node's side axis. */
+    float a = (float)asin(dot3(CAR_F(c, 0x37c), node_vec(c->body.node, 0x28)));
+    *CAR_F(c, 0x414) = a;
+    if (dot3(CAR_F(c, 0x37c), node_vec(c->body.node, 0x1c)) < K(0x5b23f8))
+        *CAR_F(c, 0x414) = (K(0x5b23f8) < a ? K(0x5b4a14) : K(0x5b4a10)) - a;
 }
