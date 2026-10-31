@@ -99,6 +99,11 @@ static bool load(const char *name)
         m[1] = scene_f32(t, 0xcc);
         m[2] = scene_f32(t, 0xd0);
     }
+    {   /* --param at=<x>,<y>,<z> puts the camera there instead (a viewer aid) */
+        char v[64];
+        float a[3];
+        if (plat_param("at", v, sizeof v) && sscanf(v, "%f,%f,%f", &a[0], &a[1], &a[2]) == 3) memcpy(pos, a, sizeof a);
+    }
     place_camera(pos, m);
     set_env();
     RLists_Init();

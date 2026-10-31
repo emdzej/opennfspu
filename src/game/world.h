@@ -75,7 +75,10 @@ typedef struct W3DObjectBundle W3DObjectBundle;
 typedef struct {
     void (*dtor)(W3DObjectBundle *b, int free_self);                     /* 0 */
     int (*load)(W3DObjectBundle *b, UData **articles, int count);        /* 1: takes its articles; the count */
-    void (*s2)(void), (*s3)(void), (*s4)(void), (*s5)(void), (*s6)(void), (*s7)(void), (*s8)(void);
+    void (*s2)(void), (*s3)(void), (*s4)(void);
+    /* 5: the entry's own matrix (transformed bundles; NULL for the others in the port) */
+    void (*matrix)(W3DObjectBundle *b, int entry, float out[16]);
+    void (*s6)(void), (*s7)(void), (*s8)(void);
     void (*buildcache)(W3DObjectBundle *b);                              /* 9: 0x477ca0 */
     void (*fillcache)(W3DObjectBundle *b);                               /* 10: 0x477cd0 */
 } W3DObjectBundleVtbl;

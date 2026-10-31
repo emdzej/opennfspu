@@ -139,8 +139,8 @@ const WBase *WArticleBundle_base(WArticleBundle *a, int i)
     return item_data(c->article, r);
 }
 
-/* 0x477d40. The transformed case (entries with their own matrix) moves the centre by the entry's matrix
-   and grows the radius by the matrix's scale; no track bundle sets `transformed`. */
+/* 0x477d40. The transformed case (entries with their own matrix: the scene, instance and animated
+   bundles) moves the centre by the entry's matrix and scales the radius by it. */
 void WArticleBundle_sphere(WArticleBundle *a, int i, float out[4])
 {
     const WBase *bs = WArticleBundle_base(a, i);
@@ -148,7 +148,23 @@ void WArticleBundle_sphere(WArticleBundle *a, int i, float out[4])
     out[1] = bs->centre[1];
     out[2] = bs->centre[2];
     out[3] = bs->radius;
-    if (a->base.transformed) PENDING_NOTE(0x477d40, "WArticleBundle_sphere (transformed entries)");
+    if (a->base.transformed && a->base.vt->matrix) {
+        /* the centre through the entry's matrix; the radius the largest of (r, r, r)'s components through
+           it less its translation (0x5591d0) */
+        EaglMatrix m;
+        a->base.vt->matrix(&a->base, i, m.m);
+        float c[4] = {out[0], out[1], out[2], 1.0f};
+        EAGL_MatTransform4(&m, 1, c, 0x10, c, 0x10);
+        float r = out[3], v[3];
+        for (int k = 0; k < 3; k++) v[k] = r * m.m[k] + r * m.m[4 + k] + r * m.m[8 + k] + m.m[12 + k];
+        float rr = v[0] - m.m[12];
+        if (rr < v[1] - m.m[13]) rr = v[1] - m.m[13];
+        if (rr < v[2] - m.m[14]) rr = v[2] - m.m[14];
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+        out[3] = rr;
+    }
 }
 
 /* 0x477ed0 */
@@ -162,8 +178,9 @@ void WArticleBundle_box(WArticleBundle *a, int i, float bmin[3], float bmax[3])
 /* The slots the world code doesn't call yet (2-8: the drawing and query methods). */
 static void slot_pending(void) { PENDING_NOTE(0x4892d0, "W3DObjectBundle slots 2-8"); }
 
-#define VT(load_fn) { WArticleBundle_dtor, load_fn, slot_pending, slot_pending, slot_pending, slot_pending, \
+#define VT5(load_fn, matrix_fn) { WArticleBundle_dtor, load_fn, slot_pending, slot_pending, slot_pending, matrix_fn, \
                       slot_pending, slot_pending, slot_pending, WArticleBundle_buildcache, WArticleBundle_fillcache }
+#define VT(load_fn) VT5(load_fn, NULL)
 
 /* ------------------------------------------------------------------ the article bundles' loads */
 
@@ -369,9 +386,29 @@ static int WInstanceBundle_load(W3DObjectBundle *b, UData **arts, int n)
     return (int)b->count;
 }
 
-static const W3DObjectBundleVtbl vt_scene = VT(WSceneBundle_load);            /* 0x5b47e0 */
+/* The entry's matrix: the animated bundle's from its animation (WAnimBundle_v5 0x477740, the identity
+   without one), the scene bundle's from its placing (WSceneBundle_v5 0x4825b0: its smacked state, +0x14,
+   is never set there). */
+static void anim_matrix(W3DObjectBundle *b, int entry, float out[16])
+{
+    WAnimEntry *e = ((WAnimBundle *)b)->anims;
+    EaglMatrix m;
+    if (e && e[entry].anim) QuatAnim_Matrix(e[entry].anim, &m);
+    else EAGL_MatIdentity(&m);
+    memcpy(out, m.m, sizeof m.m);
+}
+
+static void scene_matrix(W3DObjectBundle *b, int entry, float out[16])
+{
+    const WPlaced *p = &((WSceneBundle *)b)->placed[entry];
+    EaglMatrix m;
+    EAGL_MatFromRotTrans(&m, p->rot, p->pos);
+    memcpy(out, m.m, sizeof m.m);
+}
+
+static const W3DObjectBundleVtbl vt_scene = VT5(WSceneBundle_load, scene_matrix);            /* 0x5b47e0 */
 static const W3DObjectBundleVtbl vt_instance = VT(WInstanceBundle_load);      /* 0x5b4718 */
-static const W3DObjectBundleVtbl vt_anim = VT(WAnimBundle_load);              /* 0x5b46b8 */
+static const W3DObjectBundleVtbl vt_anim = VT5(WAnimBundle_load, anim_matrix);              /* 0x5b46b8 */
 static const W3DObjectBundleVtbl vt_midground = VT(WMidGroundBundle_load);    /* 0x5b477c */
 static const W3DObjectBundleVtbl vt_static = VT(WStaticBundle_load);          /* 0x5b4814 */
 static const W3DObjectBundleVtbl vt_article = VT(WArticleBundle_load);        /* 0x5b46e8 */
@@ -386,9 +423,25 @@ static W3DObjectBundle *article_bundle(size_t size, const W3DObjectBundleVtbl *v
     return b;
 }
 
-W3DObjectBundle *WSceneBundle_new(void *world) { return article_bundle(sizeof(WSceneBundle), &vt_scene, world); }
-W3DObjectBundle *WInstanceBundle_new(void *world) { return article_bundle(sizeof(WInstanceBundle), &vt_instance, world); }
-W3DObjectBundle *WAnimBundle_new(void *world) { return article_bundle(sizeof(WAnimBundle), &vt_anim, world); }
+W3DObjectBundle *WSceneBundle_new(void *world)   /* 0x482550: transformed */
+{
+    W3DObjectBundle *b = article_bundle(sizeof(WSceneBundle), &vt_scene, world);
+    if (b) b->transformed = b->b5 = 1;
+    return b;
+}
+W3DObjectBundle *WInstanceBundle_new(void *world)
+{
+    /* (0x477fd0 sets transformed and +5, and draws through the animated draw with the smackables' state
+       0x475d80 at +0x14: pending; the port keeps it untransformed on the article draw) */
+    PENDING_NOTE(0x475d80, "the instance bundle's smackable objects (their state, transforms and draw)");
+    return article_bundle(sizeof(WInstanceBundle), &vt_instance, world);
+}
+W3DObjectBundle *WAnimBundle_new(void *world)   /* 0x4776a0: transformed */
+{
+    W3DObjectBundle *b = article_bundle(sizeof(WAnimBundle), &vt_anim, world);
+    if (b) b->transformed = b->b5 = 1;
+    return b;
+}
 W3DObjectBundle *WMidGroundBundle_new(void *world) { return article_bundle(sizeof(WMidGroundBundle), &vt_midground, world); }
 W3DObjectBundle *WStaticBundle_new(void *world) { return article_bundle(sizeof(WStaticBundle), &vt_static, world); }
 W3DObjectBundle *WArticleBundle_new(void *world) { return article_bundle(sizeof(WArticleBundle), &vt_article, world); }

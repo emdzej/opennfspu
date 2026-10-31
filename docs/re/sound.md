@@ -291,3 +291,11 @@ Keys (0x34 bytes): a quaternion, a position, a scale. 0x470ed0 blends two keys l
 nothing normalised), builds the rotation from the blend (0x48a110), scales its rows and adds the
 position. 0x470df0 picks the key pair from the ticks over the rate (looping over all but the last two
 keys) and adds a drift by time.
+
+The animated bundle and the scene bundle are transformed bundles (their constructors set +4 and +5).
+Their entries' bounding spheres follow the entry's matrix (0x477d40): the animation's, or the scene
+object's placing. They draw through RDrawAnimArticleBundle (0x44fe30). Its queue (0x44fe90) puts the
+whole entry into the opaque list; its draw (0x44fee0 → 0x450250) picks the level of detail by distance
+and draws that level's primitive lists under the entry's matrix, with the material's `Am` colour stream
+overridden to white. The instance bundle's knockable objects (their state at +0x14, 0x475d80) and the
+scene objects' placing (the world's per-frame update, 0x488c30) aren't ported.

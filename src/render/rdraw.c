@@ -85,8 +85,8 @@ static void bundle_s4(RDrawObject *o) {}   /* 0x44fe50 */
 static void bundle_sphere(RDrawObject *o, int index, float out[4])
 {
     RDrawBundle *d = (RDrawBundle *)o;
-    /* Slot 3 of the article bundles is 0x477d40; the instance and scene bundles' 0x478630 (their own
-       transforms) and the mid-ground's 0x47cdc0 aren't ported apart from it. */
+    /* Slot 3 of the article and animated bundles is 0x477d40 (the entry's matrix when transformed); the
+       instance and scene bundles' 0x478630 and the mid-ground's 0x47cdc0 aren't ported apart from it. */
     WArticleBundle_sphere((WArticleBundle *)d->bundle, index, out);
 }
 
@@ -205,6 +205,81 @@ static void article_special(RDrawObject *o, int index, const RListEntry *e)
 static const RDrawVtbl article_vtbl = {bundle_dtor, article_queue, article_draw, article_special,
                                        bundle_s4, bundle_sphere, bundle_flags};
 
+/* ---- RDrawAnimArticleBundle ---- */
+
+/* Visible (0x44fe90): the entry whole into the opaque list by its distance (no item: the draw takes its
+   lists itself). */
+static void anim_queue(RDrawObject *o, int index, float dist2)
+{
+    RListEntry q = {NULL, o, 1, (uint16_t)index, fround(dist2)};
+    RLists_Insert(RLIST_OPAQUE, &q);   /* 0x466950 */
+}
+
+/* The level of detail of the article at the squared distance (as article_queue), NULL past them all. */
+static const uint8_t *lod_entry(const uint8_t *base, uint32_t key)
+{
+    uint32_t nlod = rd32(base + 0xc);
+    float d2 = (float)key;
+    for (uint32_t lod = 0; lod < nlod; lod++) {
+        float r = (float)rd16(base + 0x64 + 12 * lod + 0xa);
+        if (d2 < r * r) return base + 0x64 + 12 * lod;
+    }
+    return NULL;
+}
+
+/* An article under a matrix (0x450250): its level's primitive lists, each through its material with the
+   colour stream 'Am' overridden to white (the vertex stream 'vt' too: with no vertex animation, the
+   article's own); its markers ('ef' type 2) pending. */
+static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const EaglMatrix *m)
+{
+    WArticleCache *c = entry_cache(d, index);
+    R3DPart p;
+    part_from(&p, c);
+    const uint8_t *base = R3DPart_Item(&p, R3D_BASE, 0xffffffffu);
+    const uint8_t *lod = base ? lod_entry(base, e->key) : NULL;
+    if (lod && g_eagl && g_eagl->view) {
+        EaglMatStack *st = &g_eagl->view->model;
+        EAGL_StackPush(st);
+        EAGL_MatPreMul(EAGL_StackTopForWrite(st), m);
+        R3DMaterialSet *ms = d->bundle->world;
+        if (lod[0]) {
+            uint32_t lo = rd16(lod + 4), hi = rd16(lod + 6);
+            for (const uint32_t *pr = first_item(&p, R3D_PR, lo, hi); pr; pr = next_item(&p, R3D_PR, hi)) {
+                UData *rec = slot_rec(&p, R3D_PR);
+                uint32_t mi = pr[1] & 0xffff;
+                R3DMaterial *mat = ms && mi < ms->count ? ms->mat[mi] : NULL;
+                if (!mat || !mat->method) continue;
+                static int32_t ov[256];
+                static uint32_t white = 0xffffffffu;
+                R3DMaterial_SetOverride(mat, mat->method->nids <= 256 ? ov : NULL);
+                if (mat->override) R3DMaterial_OverrideStream(mat, 0x416d0001u, &white, 4);   /* 'Am' */
+                R3DMaterial_DrawList(mat, &p, g_world ? g_world->root : NULL, pr, rec->count);
+                mat->override = NULL;   /* +0x0c */
+            }
+        }
+        if (lod[1]) PENDING_NOTE(0x451810, "the animated articles' markers ('ef' type 2)");
+        EAGL_StackPop(st);
+    }
+    part_back(c, &p);
+}
+
+/* Its draw (0x44fee0): the level by the queued distance; without the bundle's smacked state (+0x14) the
+   entry's matrix (the bundle's slot 5) and the article under it. */
+static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
+{
+    RDrawBundle *d = (RDrawBundle *)o;
+    g_rdraw_key = e->key;
+    if (d->bundle->f14) PENDING_NOTE(0x476730, "the smacked objects' pieces and their matrices");
+    if (!d->bundle->vt->matrix) return;
+    EaglMatrix m;
+    d->bundle->vt->matrix(d->bundle, index, m.m);
+    draw_article(d, index, e, &m);
+}
+
+static void anim_special(RDrawObject *o, int index, const RListEntry *e) { (void)o, (void)index, (void)e; }   /* 0x44fe50 */
+
+static const RDrawVtbl anim_vtbl = {bundle_dtor, anim_queue, anim_draw, anim_special, bundle_s4, bundle_sphere, bundle_flags};
+
 /* The base (0x44fca0): the bundle, the visited marks (one per entry, 100 when the count is 10000 or
    more), the link into the list of draw objects. */
 static RDrawBundle *bundle_ctor(RDrawBundle *d, W3DObjectBundle *b)
@@ -222,6 +297,13 @@ RDrawBundle *RDrawArticleBundle_ctor(RDrawBundle *d, W3DObjectBundle *b)
     bundle_ctor(d, b);
     d->bundle2 = b;
     d->base.vt = &article_vtbl;
+    return d;
+}
+
+RDrawBundle *RDrawAnimArticleBundle_ctor(RDrawBundle *d, W3DObjectBundle *b)   /* 0x44fe30 */
+{
+    bundle_ctor(d, b);
+    d->base.vt = &anim_vtbl;
     return d;
 }
 

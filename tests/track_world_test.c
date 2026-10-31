@@ -113,7 +113,8 @@ static void check_track(const char *track)
             for (int c = 0; c < 3; c++) CHECK(bs->bmin[c] <= bs->bmax[c]);
             float s[4];
             WArticleBundle_sphere((WArticleBundle *)b, (int)i, s);
-            CHECK(s[3] == bs->radius);
+            /* (transformed bundles: the radius through the entry's matrix, 0x477d40) */
+            CHECK(b->transformed ? isfinite(s[3]) && s[3] >= 0 : s[3] == bs->radius);
         }
         total += b->count;
     }

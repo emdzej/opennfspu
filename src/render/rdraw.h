@@ -25,5 +25,7 @@ extern RDrawBundle *g_rdraw_list;     /* 0x61bc4c */
 extern uint32_t g_rdraw_key;          /* 0x61975c: the key of the list being drawn (for the layers) */
 
 RDrawBundle *RDrawArticleBundle_ctor(RDrawBundle *d, struct W3DObjectBundle *b);   /* 0x450b10 (base 0x44fca0) */
+/* The transformed bundles' (scene, animated): each entry whole, under its own matrix. 0x44fe30 */
+RDrawBundle *RDrawAnimArticleBundle_ctor(RDrawBundle *d, struct W3DObjectBundle *b);
 /* The visited marks of every draw object cleared (the start of a frame's visibility pass). */
 void RDraw_ClearVisited(void);
