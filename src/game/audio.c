@@ -5,6 +5,7 @@
 #include "game/car_drive.h"
 #include "game/road.h"
 #include "game/scene.h"
+#include "game/music.h"
 #include "game/track.h"
 #include "game/input.h"
 #include "pending.h"
@@ -57,12 +58,14 @@ bool Audio_Init(void)
     int voices = (int32_t)exe_u32(0x5b4b08 + 4u * (uint32_t)q);
     int quality = (int32_t)exe_u32(0x5b4b20 + 4u * (uint32_t)q);
     s_on = SND_Init(rate, 2, voices, quality);
-    PENDING_NOTE(0x4ae080, "music, the speech and the track's sounds (Music_Init 0x4aded0, 0x4ab280)");
+    if (s_on) Music_Init(0x40000, 0x8000, exe_str(0x5d13f8));   /* (the game calls Audio_Init with 0x40000, 0x8000) */
+    PENDING_NOTE(0x4ab280, "the speech (0x4ab280)");
     return s_on;
 }
 
 void Audio_Shutdown(void)
 {
+    Music_Free();
     stream_close();
     SND_Shutdown();
     engines_free();
@@ -1399,6 +1402,7 @@ void Audio_StartRace(void)
     for (int v = 0; v < 16; v++) s_ev[v] = (ElemVoice){NULL, -1, -1, 0};
     s_ev_on = true;
     elems_reset();
+    Music_FadeOut(0x5dc);
     if (!s_on || opt(0x5d1750) <= 0) return;
     /* 0x4a8670: the opponents' engine banks (and the rain's) read before the start */
     PENDING_NOTE(0x657a24, "the rain's bank before the start (the weather)");
@@ -1414,6 +1418,17 @@ void Audio_StartRace(void)
         if (done) break;
     }
     track_banks_load();
+    if (g_replay_mode < 2) {
+        /* the race's playlist (0x657cb8: the front end's song selection; without the front end, every
+           song of its list "game*", 0x5d7948) */
+        int32_t list[0x80];
+        int n = Music_SongList(exe_str(0x5d7948), list, 0x80);
+        Music_SetPlaylist(n, list);
+        Music_Play(NULL, 0);
+    }
+    /* 0x4aafd0: the music's volume from the options' (0x5d14b0's mix of 0x5d1740) */
+    Music_SetVolume((opt(0x5d14b0) * opt(0x5d1740)) >> 7);
+    Music_Play(NULL, 0);
 }
 
 /* The player's car (0x4a7430): its distance from the listener, the Doppler (340 / (340 + the closing

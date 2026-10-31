@@ -297,6 +297,112 @@ static int xa_toloop(SndNode *nd, int n, float *tmp, float *out, int ch)
 
 static int xa_position(SndNode *nd) { return ((SndXa *)nd)->pos; }   /* 0x597b60 */
 
+/* Streamed (0x59c3c0, render 0x59c170): the blocks come from the stream's pull (0x5615b0: each a block's
+   channel data, its first two words the predictor's samples, and its sample count); the samples decoded
+   last call are reported done first (0x561670). Whole frames while the block holds them, a block's
+   last part frame through the leftovers; with no block the rest is silence (once anything was
+   decoded) and the source plays on. */
+typedef struct {
+    SndNode n;
+    SndXaRun run;             /* +0x0c */
+    const uint8_t *data;      /* +0x20 */
+    int32_t len;              /* +0x24 */
+    int32_t pos;              /* +0x28 */
+    SndPull pull;             /* +0x2c, +0x39: the stream and the channel */
+    int32_t done;             /* +0x30 */
+    int8_t nleft;             /* +0x38 */
+    float left[0x1c];         /* +0x3c */
+} SndXaStream;
+
+static int xa_stream(SndNode *nd, int n, float *tmp, float *out, int ch)
+{
+    (void)tmp;
+    (void)ch;
+    SndXaStream *x = (SndXaStream *)nd;
+    x->run.out = out;
+    if (x->done) {
+        x->pull.done(x->pull.ctx, x->pull.ch, x->done);
+        x->done = 0;
+    }
+    while (0 < n) {
+        if (x->nleft) {
+            int c = take(x->nleft, x->left, n, &x->run.out);
+            n -= c;
+            x->nleft = (int8_t)(x->nleft - c);
+            x->done += c;
+            continue;
+        }
+        int pos = x->pos, len = x->len;
+        if (pos + 0x1b < len) {
+            int k = ((len - pos) / 0x1c) * 0x1c;
+            if (n < k) k = ((n + 0x1b) / 0x1c) * 0x1c;
+            x->run.count = k;
+            x->run.in = x->data + (pos * 0xf) / 0x1c;
+            xa_frames(&x->run);
+            n -= k;
+            x->pos += k;
+            x->done += k;
+            continue;
+        }
+        if (pos < len) {   /* the block's last, part frame */
+            x->run.count = 0x1c;
+            x->run.in = x->data + (pos * 0xf) / 0x1c;
+            xa_frames(&x->run);
+            x->pos += 0x1c;
+            int over = x->pos - len;
+            n = over - 0x1c + n;
+            x->run.out -= over;
+            x->done += 0x1c - over;
+        }
+        int cnt = 0;
+        const uint8_t *b = x->pull.pull(x->pull.ctx, x->pull.ch, &cnt);
+        if (!b) {
+            if (0 < n) {
+                if (x->done) memset(x->run.out, 0, (size_t)n * sizeof *out);
+                x->run.out += n;
+                n = 0;
+            }
+            break;
+        }
+        int16_t s1, s2;
+        memcpy(&s1, b, 2);
+        memcpy(&s2, b + 2, 2);
+        x->data = b + 4;
+        x->len = cnt;
+        x->pos = 0;
+        x->run.prev1 = (float)s1;
+        x->run.prev2 = (float)s2;
+    }
+    x->run.out += n;
+    if (n < 0) {
+        memcpy(x->left + x->nleft, x->run.out, (size_t)(-n) * sizeof *out);
+        x->nleft = (int8_t)(x->nleft - n);
+        x->done += n;
+    }
+    return 1;
+}
+
+void SndMix_SetupStream(int i, int codec, const SndPull *pull)
+{
+    SndSource *s = &s_src[i];
+    s->chain = NULL;
+    s->decoder = s->effect = s->resampler = s->lowpass = s->filter = NULL;
+    s->position = NULL;
+    if (codec == 10) {
+        SndXaStream *x = calloc(1, sizeof *x);
+        if (x) {
+            x->n.render = xa_stream;
+            x->pull = *pull;
+            x->n.type = 4;
+            s->decoder = &x->n;
+            chain_add(&s->chain, &x->n);
+        }
+    } else {
+        PENDING_NOTE(0x598280, "the SND streamed decoders other than EA-XA's");
+    }
+    s->state = 1;
+}
+
 /* ---- the resampler (0x59be30, 0x59bbb0) ---- */
 
 typedef struct {

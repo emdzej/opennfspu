@@ -11,6 +11,7 @@
 #include "game/race_car.h"
 #include "game/race_setup.h"
 #include "game/scene.h"
+#include "game/music.h"
 #include "game/track.h"
 #include "snd/snd.h"
 #include "vfs.h"
@@ -100,6 +101,7 @@ int main(void)
     Audio_LoadCollisionSounds((const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
     Audio_LoadTrackSounds();
     Audio_StartRace();
+    Music_SetVolume(0);   /* (the engine's checks without the music) */
     double idle = run(0x40 + 64 * 3, 64, 0);   /* the start's sound over, a second of idling */
     double zidle = zc;
     double full = run(64 * 4, 64 * 2, 0x7f);
@@ -142,6 +144,15 @@ int main(void)
         CHECK(t->b[0x78] == 1 && e->b[0xa2] == 1);
         break;
     }
+    /* The music: a song of the playlist streamed (zzzymus.viv), heard over the idling car. */
+    double quiet = run(64, 64, 0);
+    Music_SetVolume(0x4f);
+    double loud = run(64 * 4, 64 * 2, 0);
+    const MusicSong *song = Music_Current();
+    printf("  music: rms %.0f without, %.0f with: %s (%s, %d ms)\n", quiet, loud, song ? song->name : "none",
+           song && song->artist ? song->artist : "", song ? song->length : 0);
+    CHECK(song && song->name && !strncmp(song->name, "game", 4) && 60000 < song->length);
+    CHECK(loud > quiet * 1.5);
     if (getenv("AUDIO_WAV")) wav(getenv("AUDIO_WAV"));
     Audio_Shutdown();
     printf("audio_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");

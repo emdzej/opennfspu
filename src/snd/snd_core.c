@@ -403,6 +403,15 @@ int SND_Stop(int handle)
 
 bool SND_Playing(int handle) { return s_on && voice_of(handle) >= 0; }
 
+uint32_t SND_Ticks(void) { return s_ticks; }
+
+int SND_Heard(int handle)   /* 0x5910d0 */
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    return v < 0 ? -8 : s_voice[v].out;
+}
+
 /* The play's volume, 0 .. 127, at once (0x5657c0 -> 0x565730; nothing when it is already so). */
 int SND_SetVolume(int handle, int vol)
 {
@@ -541,6 +550,8 @@ int SND_SetPitch(int handle, int pitch)
 
 /* ---- playing ---- */
 
+static const SndPull *s_streaming;   /* (a stream's voice being set up: its sources pull blocks) */
+
 /* The software voice's sources (0x589d90 with 0x596910 and 0x598280): one per channel, then its pitch,
    volume and pan, and they start. */
 static int voice_sources(int i, const SndPatch *s, const uint8_t *bank, int lowfreq)
@@ -554,8 +565,14 @@ static int voice_sources(int i, const SndPatch *s, const uint8_t *bank, int lowf
     for (int c = 0; c < d->n; c++) {
         d->src[c] = v->chv[c];
         d->extra[c] = s->chextra[c];
-        SndMix_SetupSource(d->src[c], s->codec, s->nsamples != 0, bank + s->dataofs[c], s->chdata[c], s->nsamples,
-                           s->loopstart, s->looplen);
+        if (s_streaming) {
+            SndPull pl = *s_streaming;
+            pl.ch = c;
+            SndMix_SetupStream(d->src[c], s->codec, &pl);
+        } else {
+            SndMix_SetupSource(d->src[c], s->codec, s->nsamples != 0, bank + s->dataofs[c], s->chdata[c], s->nsamples,
+                               s->loopstart, s->looplen);
+        }
     }
     dev_pitch(d, v->pitchout);
     dev_volume(d, v->out);
@@ -681,6 +698,17 @@ static int play_patch(const uint8_t *bank, const uint8_t *pt, const SndParams *p
     return last;
 }
 
+/* A stream's voice (0x561050): one layer of the stream's header, its sources fed by the pull. */
+int SND_PlayStream(const SndPatch *hdr, const SndParams *params, const struct SndPullS *pull)
+{
+    if (!s_on) return -10;
+    SndParams p = *params;
+    s_streaming = pull;
+    int h = play_layer(NULL, &p, hdr, p.key, p.velocity, 0);
+    s_streaming = NULL;
+    return h;
+}
+
 int SND_Play(int bank, int patch, SndParams *p)
 {
     if (!s_on) return -10;
@@ -738,6 +766,7 @@ void SND_RemoveTick(void (*fn)(void))   /* 0x560ec0 */
 static void tick(void)
 {
     s_ticks++;
+    SndStream_Service();   /* (0x5666f0: on the device's passes in the original) */
     for (int i = 0; i < s_ntickfn; i++) s_tickfn[i]();
     for (int i = 0; i < s_nvoices; i++) {
         SndVoice *v = &s_voice[i];
@@ -840,6 +869,7 @@ bool SND_Init(int rate, int channels, int voices, int quality)
 
 void SND_Shutdown(void)
 {
+    SndStream_Shutdown();
     s_on = false;
     s_ntickfn = 0;
     SndMix_Free();

@@ -150,3 +150,43 @@ A trigger with +0x9c set fires only once. Only castle and forest have sound trig
 
 Sim_Step ramps the effects volume (0x5d1744) from zero over ticks 0x11 to 0x50, keeping the option's
 value in 0x657ca4.
+
+## Streams and music
+
+SND's stream players (0x566320 .. 0x566d40, 16 of them at 0x6b7680) play a queue of EA streams one after
+another through one voice:
+- A stream is a sequence of chunks: `SCHl` holds a PT header (channels, rate, length; EA-XA by default),
+  `SCCl` a count, `SCDl` the data blocks, `SCEl` the end.
+- A data block starts with its sample count, then one offset per channel, past that table. Each
+  channel's data opens with two 16-bit predictor samples (the previous block's last two), followed by
+  15-byte EA-XA frames of 28 samples.
+- The voice's sources pull the blocks from a ring, the library's stream bank (0x560fb0 .. 0x5616a0), with
+  as many slots as the player's buffer has kilobytes. The streaming decoder (0x59c3c0, render 0x59c170)
+  decodes whole frames while they last and carries a block's partial last frame over through its
+  leftovers. With no block left it plays silence.
+- The lead channel's progress counts against the head entry. An entry played out leaves the queue
+  (0x5662c0, 0x566200).
+- A header in a different format waits until the ring has drained, then the voice is restarted (state 2).
+
+The original reads the files on its file thread (STREAM_*, 0x591000 onwards), waits for a second of
+prebuffer, and has the player take ten chunks a pass. The port reads the chunks from the data files
+itself, when the player's service (0x5666f0, run on the library's ticks) takes them.
+
+The music (0x4ad2a0 .. 0x4ae780, globals at 0x656ab4) plays the songs of `GameData\Music\zzzymus.viv`.
+Entries are named `<kind><n>-<title>-<artist>`, with kinds game, menu, win, lose and vic.
+- Audio_Init calls Music_Init (0x4aded0) with a 256 KB buffer: one stream player and a 25 Hz task
+  (0x4ad790).
+- The playlist (0x4ae240) holds entry numbers, played in order or shuffled. For the shuffle, the next
+  song is any but the current one, picked by the shared random numbers plus GetTickCount; the port uses
+  the library's ticks in milliseconds for GetTickCount.
+- 0x4ae2a0 picks a song by a wildcard pattern (0x4a5d60: `*`, `?`, `#` and the operators `& | ! ~ ^`).
+  Mode 1 plays one matching song once, from just past the playlist's end, then goes back to the list.
+  Mode 2 plays one and empties the list.
+- A change fades the song playing out over 500 ms. A newly queued song starts at volume 0 and is set
+  to the music's volume once the player reports it. The end-of-race kinds (lose, win, vic) play at the
+  options' music volume.
+- A queued song whose read-ahead drops under 0.55 s while more is still to come fades out over what
+  is left.
+- The race start fades the music out over 1.5 s (0x4a8670), sets the race's playlist, and 0x4aafd0 sets
+  the volume (0x5d14b0 times 0x5d1740 over 128) and starts playing. Without the front end, the port's
+  playlist is every song of the front end's "game*" list (Music_LoadSongList 0x4adbf0).

@@ -40,6 +40,16 @@ SndSource *SndMix_Source(int i);
 
 /* A source for the codec (4, 7, 8, 9 8-bit PCM, 10 EA-XA ADPCM, 0x40), with or without a length, its
    data, its length and loop (0x598280). */
+/* A streamed source's blocks: the next block's data for the channel and its sample count (NULL for
+   none yet: 0x5615b0), and the samples played (0x561670). */
+typedef struct SndPullS {
+    const uint8_t *(*pull)(void *ctx, int ch, int *count);
+    void (*done)(void *ctx, int ch, int n);
+    void *ctx;
+    int ch;
+} SndPull;
+/* A streamed source (no length; 0x598280's third variant): only EA-XA (codec 10) here. */
+void SndMix_SetupStream(int i, int codec, const SndPull *pull);
 void SndMix_SetupSource(int i, int codec, bool has_length, const uint8_t *data, const uint8_t *chdata,
                         int nsamples, int loopstart, int looplen);
 void SndMix_Start(int i);                               /* 0x5983e0 */

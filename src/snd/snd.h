@@ -126,3 +126,35 @@ void SND_RemoveTick(void (*fn)(void));
 void SND_Fill(int16_t *out, int n);
 int SND_Rate(void);
 int SND_Channels(void);
+
+/* The heard volume of a play (0x5910d0: the voice's +0x3d), negative for none. */
+int SND_Heard(int handle);
+/* The library's 100 Hz ticks so far (0x6b48e8). */
+uint32_t SND_Ticks(void);
+
+/* ---- streams (src/snd/snd_stream.c) ---- */
+
+/* A stream's voice: one layer of the header, its sources fed by the pull (0x561050). */
+struct SndPullS;
+int SND_PlayStream(const SndPatch *hdr, const SndParams *p, const struct SndPullS *pull);
+/* The players (0x6b7680): the buffer a player of the queue's length and ring of kb blocks takes
+   (0x566d40); open (0x566ae0: the play's parameters, the queue's length, the ring's blocks, the bytes:
+   its handle), stop (0x566bc0), close (0x566b10). */
+int SND_StreamBufferSize(int queue, int kb);
+int SND_StreamOpen(const SndParams *params, int queue, int kb, int bytes);
+int SND_StreamStop(int h);
+int SND_StreamClose(int h);
+/* A file's stream from the offset, after prebuffer ms read ahead (0x566ba0): its id. */
+int SND_StreamQueueFile(int h, int prebuffer, const char *path, uint32_t offset);
+int SND_StreamFade(int h, int ms, int vol);     /* 0x565f60 */
+int SND_StreamSetVolume(int h, int vol);        /* 0x566c90 */
+int SND_StreamVolume(int h);                    /* 0x566cd0 */
+/* The entries queued, the head's id, the ms in the ring (0x565ec0). */
+void SND_StreamStatus(int h, int32_t out[3]);
+/* An entry's state (0 not started, 1 queued, 2 playing, 3 gone), ms played, ms left, ms read ahead
+   (0x565d90). */
+void SND_StreamEntry(int32_t id, int32_t out[4]);
+/* The players' service (0x5666f0) and their end (0x5661c0), from the library. */
+void SndStream_Service(void);
+void SndStream_Shutdown(void);
+
