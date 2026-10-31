@@ -2,6 +2,7 @@
    Car_Construct 0x411190): the simulation's per-car work. Each is pending until its port lands; the
    registration (lists and priorities) is the original's. */
 #include "game/car.h"
+#include "game/race_progress.h"
 #include "game/car_collide.h"
 #include "game/car_drive.h"
 #include "game/car_ground.h"
@@ -17,7 +18,6 @@
 TASK(414830, "car task: 0x414830 (unregistered)")
 TASK(499150, "car task: 0x499150 (even, 0x15)")
 TASK(4102e0, "car task: 0x4102e0 (even, 0x32)")
-TASK(4169d0, "car task: 0x4169d0 (every tick, 0x19)")
 TASK(4a0e10, "car task: 0x4a0e10 (traffic, +0xe1c)")
 TASK(4083c0, "car task: 0x4083c0 (replay)")
 TASK(49b6b0, "car task: 0x49b6b0 (+0xe24 variant)")
@@ -38,7 +38,7 @@ void Car_SetTasks(Car *c)
     *slot(c, T_E28) = CarSim_Turn;   /* 0x49b850 */
     *slot(c, T_E2C) = CarSim_Collide;  /* 0x498f60 */
     *slot(c, T_E30) = task_4102e0;
-    *slot(c, T_E18) = task_4169d0;
+    *slot(c, T_E18) = CarSim_RaceTask;   /* 0x4169d0 */
     if (f & 0x80) {
         *slot(c, T_E10) = NULL;
         *slot(c, T_E14) = NULL;

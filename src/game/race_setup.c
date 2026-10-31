@@ -2,6 +2,7 @@
 #include "game/race_setup.h"
 #include "game/car.h"
 #include "game/car_damage.h"
+#include "game/race_progress.h"
 #include "vfs.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -75,6 +76,7 @@ bool RaceSetup_SingleCar(const char *name)
     free(db);
     /* Damage on (0x657a2c, the front end's damage option; a stand-in until the options are ported). */
     g_race_damage = 1;
+    g_race_laps = 2;   /* 0x6573f0: two laps (the front end's choice; a stand-in) */
     g_nracecars = 1;
     g_ntrafficcars = 0;
     return true;

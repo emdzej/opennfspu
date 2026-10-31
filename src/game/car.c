@@ -29,9 +29,14 @@ static float exe_f32(uint32_t va)
 }
 #define K(va) exe_f32(va)   /* the float constant the original reads at va */
 
-/* The car lists of 0x40f1c0 the port keeps (the original has a dozen; the others come with their users). */
-static Car *g_allcars[CAR_MAX];   /* 0x5e8b88 */
-static int g_nallcars;
+CarList g_racers, g_humans, g_opponents, g_viewed, g_rivals, g_cops, g_chasers, g_ranked, g_ordered;
+int32_t g_race_view_opponents;
+static int g_created;   /* 0x5e8bd0 */
+
+static void list_add(CarList *l, Car *c)
+{
+    if (l->n < CAR_MAX * 3) l->c[l->n++] = c;
+}
 
 /* ---- task lists ---- */
 
@@ -377,33 +382,58 @@ static void Car_AddToLists(Car *c)
     uint32_t cls = (uint32_t)DESC_I(c, 8);
     if (!(cls & 0x80)) {
         g_cars[g_ncars] = c;
-        g_allcars[g_nallcars++] = c;
+        list_add(&g_ranked, c);
+        list_add(&g_ordered, c);
         g_ncars++;
         const char *name = exe_str(0x5d61e8 + 7u * (uint32_t)DESC_I(c, 0));   /* the TYPE's name */
         snprintf((char *)c->b + CAR_NAME, 9, "%s", name);
     }
-    static int created;   /* 0x5e8bd0 */
-    *CAR_I(c, CAR_INDEX) = created++;
+    *CAR_I(c, CAR_INDEX) = g_created++;
     *CAR_I(c, CAR_FLAGS) = 0;
     *CAR_I(c, CAR_PLAYER) = -1;
     c->b[CAR_NAME2] = 0;
+    int32_t *f = CAR_I(c, CAR_FLAGS);
     if (cls & 0x80) {
         g_traffic[g_ntraffic++] = c;
-        *CAR_I(c, CAR_FLAGS) |= 0x80;
+        *f |= 0x80;
     }
     if (cls & 1) {
-        static int players;   /* 0x5e8bfc */
-        *CAR_I(c, CAR_PLAYER) = players++;
-        *CAR_I(c, CAR_FLAGS) |= 4 | 1 | 0x100;
-        if (cls & 0x40) *CAR_I(c, CAR_FLAGS) |= 0x300;
+        *CAR_I(c, CAR_PLAYER) = g_humans.n;
+        list_add(&g_humans, c);
+        *f |= 4;
+        list_add(&g_racers, c);
+        *f |= 1;
+        list_add(&g_viewed, c);
+        uint32_t was = (uint32_t)*f;
+        *f = (int32_t)(was | 0x100);
+        if (cls & 0x40) *f = (int32_t)(was | 0x300);
     }
-    if (cls & 2) *CAR_I(c, CAR_FLAGS) |= 2 | 8 | 1;
-    if (cls & 4) *CAR_I(c, CAR_FLAGS) |= 2 | 0x10;
+    if (cls & 2) {
+        list_add(&g_opponents, c);
+        *f |= 2;
+        list_add(&g_rivals, c);
+        *f |= 8;
+        list_add(&g_racers, c);
+        *f |= 1;
+        if (g_race_view_opponents) {
+            list_add(&g_viewed, c);
+            *f |= 0x100;
+        }
+    }
+    if (cls & 4) {
+        list_add(&g_opponents, c);
+        *f |= 2;
+        list_add(&g_cops, c);
+        *f |= 0x10;
+    }
     if (cls & 0x18) {
-        *CAR_I(c, CAR_FLAGS) |= 2 | 0x20;
-        if (cls & 0x10) *CAR_I(c, CAR_FLAGS) |= 0x60;
+        list_add(&g_opponents, c);
+        *f |= 2;
+        list_add(&g_chasers, c);
+        uint32_t was = (uint32_t)*f;
+        *f = (int32_t)(was | 0x20);
+        if (cls & 0x10) *f = (int32_t)(was | 0x60);
     }
-    PENDING_NOTE(0x40f1c0, "the car lists of the other users (0x5e8c00, 0x5e8e2c, 0x5e8b10, 0x5e8aec, ...)");
 }
 
 /* The car's specs, AI specs, task functions, renderer and wheels. 0x410dc0 (CarSpecs_Load) */
@@ -469,7 +499,10 @@ static void Car_LoadSpecs(Car *c, int i)
 void Car_Construct(void)
 {
     Parts_Load();
-    g_ncars = g_ntraffic = g_nallcars = 0;
+    g_ncars = g_ntraffic = 0;   /* 0x5e8b58, 0x5e8b5c and the lists' counts */
+    g_created = 0;
+    CarList *lists[] = {&g_racers, &g_humans, &g_opponents, &g_viewed, &g_rivals, &g_cops, &g_chasers, &g_ranked, &g_ordered};
+    for (size_t k = 0; k < sizeof lists / sizeof *lists; k++) lists[k]->n = 0;
     for (int i = 0; i < g_nracecars + g_ntrafficcars && i < CAR_MAX; i++) {
         Car *c = MEM_alloc(exe_str(0x5cc5b4), (int)sizeof(Car), 0);   /* "Car_tObj" (0x1254) */
         memset(c, 0, sizeof *c);

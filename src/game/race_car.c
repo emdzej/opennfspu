@@ -71,9 +71,9 @@ void Race_GridSlot(Car *c, int start, int *node, float out[3])
     uint32_t slot = (uint32_t)DESC_I(c, 0x174);   /* the grid position (the description's +0x174) */
     int by = dir;
     if (g_race_mode == 3 && g_race_knockout)
-        by = (((int)(g_ncars - slot) - 1) * (0xea / g_nracecars) + 1) * dir;
-    else if (g_ncars > 2)
-        by = ((int)(g_ncars - slot) * 3 + 1) * dir;
+        by = (((int)(g_racers.n - slot) - 1) * (0xea / g_nracecars) + 1) * dir;
+    else if (g_racers.n > 2)
+        by = ((int)(g_racers.n - slot) * 3 + 1) * dir;
     *node = Road_Step(g_road, start, by, -1);
     uint32_t side = slot & 1;
     if (*CAR_I(c, 0xeac) * g_race_side == -1) side = 1 - side;

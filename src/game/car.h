@@ -51,7 +51,9 @@ enum {
     CARP_PARTS,                           /* +0x768: 20 */
     CARP_WHEELS = CARP_PARTS + CAR_NPARTS, /* +0x7b8 + 0xc4 i: 4 */
     CARP_TASKS = CARP_WHEELS + 4,         /* +0xe0c: 10 */
-    CARP_COUNT = CARP_TASKS + 10,
+    CARP_SWAPPED = CARP_TASKS + 10,       /* +0x550: the car last swapped places with (0x417730) */
+    CARP_PREVRIVAL,                       /* +0x10c4: the rival ahead in the order (0x40b3f0) */
+    CARP_COUNT,
 };
 
 /* The wheels' surface trackers are WSurface objects at +0x7bc + 0xc4 i (in the wheel's bytes from +4):
@@ -73,7 +75,7 @@ static inline int32_t *SPEC_I(Car *c, int off) { return (int32_t *)(void *)(CAR_
 static inline int32_t DESC_I(Car *c, int off) { int32_t v; memcpy(&v, CAR_DESCB(c) + off, 4); return v; }
 
 /* The race cars (0x5e8b34, count 0x5e8b58), all cars in creation order, traffic (0x5e8c24, 0x5e8b5c). */
-extern Car *g_cars[CAR_MAX];
+extern Car *g_cars[CAR_MAX];   /* 0x5e8b34: the race's cars (not traffic), count 0x5e8b58 */
 extern int g_ncars;
 extern Car *g_traffic[CAR_MAX];
 extern int g_ntraffic;
@@ -82,6 +84,20 @@ extern int g_ntraffic;
    0x65807c): what the front end hands the race. */
 extern uint8_t g_cardesc[CAR_MAX][CARDESC_SIZE];
 extern int g_nracecars, g_ntrafficcars;
+
+/* The race's car lists (0x40f1c0), by the description's CLASS bits (+0x08). A car of several bits is in
+   several lists, an opponent of two kinds twice in the opponents'. */
+typedef struct { Car *c[CAR_MAX * 3]; int n; } CarList;
+extern CarList g_racers;      /* 0x5e8e2c, 0x5e8ae8: the humans and the opponents (flags 1) */
+extern CarList g_humans;      /* 0x5e8c00, 0x5e8bfc: class 1 (flags 4); their index is the car's +0x524 */
+extern CarList g_opponents;   /* 0x5e8aec, 0x5e8e28: class 2, 4, 8 or 0x10 (flags 2) */
+extern CarList g_viewed;      /* 0x5e8b10, 0x5e8ab8: the humans (and the class-2 opponents with 0x657414) (flags 0x100) */
+extern CarList g_rivals;      /* 0x5e8bd4, 0x5e8bf8: class 2 (flags 8) */
+extern CarList g_cops;        /* 0x5e8b60, 0x5e8e24: class 4 (flags 0x10) */
+extern CarList g_chasers;     /* 0x5e8ac4, 0x5e8abc: class 8 or 0x10 (flags 0x20; 0x10 also 0x40) */
+extern CarList g_ranked;      /* 0x5e8b88: the race's cars by their race distance less laps (0x417730), rank +0x528 */
+extern CarList g_ordered;     /* 0x5e8bac: by race distance (+0x550 the car swapped with, +0x554 when) */
+extern int32_t g_race_view_opponents;   /* 0x657414 (class-2 opponents viewed too) */
 
 /* The race's state the simulation reads: the tick counter (0x606ac4, 64 Hz), wet roads (0x6573f8), a
    network game (0x657408). */

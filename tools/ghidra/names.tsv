@@ -14,10 +14,13 @@
 00405930	AIHigh_Opponent_v0	ai	struct	Virtual slot 0 of AIHigh_Opponent (vtable 0x5b2560)
 00406080	AIHigh_Traffic_v0	ai	struct	Virtual slot 0 of AIHigh_Traffic (vtable 0x5b2588)
 004067c0	AI_TickAll	ai	high	Calls each car's AI controller (0x5e6774[i], virtual slot 0); a controller without state is first created by 0x414b30
+00406900	Race_InitTables	race	high	Lane table 0x5e7550 (0, 1/i), 0x40e6d0, AI_LoadLineSpeeds
 00406950	Traffic_LoadConfig	ai	med	Loads trafcfg.dat (traffic configuration)
 00406db0	AI_Reset	ai	high	The car's AI state for the race (direction 0xeb0/0xeac, rates, targets)
 00407f50	AI_LoadPersonalities	ai	med	Loads prsonal.bin, scripts.bin, hhglue.bin (AI driver personalities and scripts)
+00408870	Car_Steady	race	high	On the ground and under control
 0040ad40	AI_LoadTuning	ai	med	Loads tuning.bin (AI tuning)
+0040b3f0	Race_Leaders	race	high	Leaders 0x5e6df0.. and rival chain
 0040b600	AIState_Normal_v0	ai	struct	Virtual slot 0 of AIState_Normal (vtable 0x5b2668)
 0040ca40	AIState_Racing_v0	ai	struct	Virtual slot 0 of AIState_Racing (vtable 0x5b26b8)
 0040cad0	AIState_Idle_v0	ai	struct	Virtual slot 0 of AIState_Idle (vtable 0x5b252c)
@@ -31,7 +34,9 @@
 0040e230	AIState_GotoSlice_v0	ai	struct	Virtual slot 0 of AIState_GotoSlice (vtable 0x5b2720)
 0040e6b0	Road_NoLanes	world	high	Node 1's +0x38 lane count is zero
 0040e6d0	Race_SetSide	race	med	0x5e753c = 1, 0x5e7544 = Road_NoLanes, 0x5e7540 = 0xbe
+0040ec10	Car_Lanes	race	high	Lanes covered (+0xea8 bits) and centre lane (+0x1020)
 0040f110	Car_ClearRace	race	high	The car's race counters cleared (+0xb24 = 0x1c0)
+0040f1c0	Car_AddToLists	race	high	The race car lists by CLASS: racers 0x5e8e2c, humans 0x5e8c00, opponents 0x5e8aec, ... (port: car.c)
 004105e0	Race_GridSlot	race	high	Grid slot: node ahead of the start by the description's +0x174 position, offset across the road by its parity
 00410790	Car_RaceInit	race	high	The race's per-car set-up: 0x49b480, the carried damage, the grid slot from the start trigger, the placement, the progress, the controls and race fields (port: src/game/race_car.c)
 00410dc0	CarSpecs_Load	sim	low	Car and AI specs records ("carSpecs", "AISpecs")
@@ -54,11 +59,16 @@
 00415fe0	Race_UpdatePositions	game	med	Ranks the cars for the race positions
 00416160	Sim_ResetCollisionSlots	sim	low	Resets 8 collision-event slots (16 bytes: -1, -100.0f, 0, 0) at 0x608b38
 004162b0	Race_Progress	race	high	Race progress 0..1 at a road node (reversed on reverse tracks)
+00416330	Race_CarProgress	race	high	Racer distance +0xaf8, laps, lap times, finish +0xb50, ranking table 0x608b38
+004169d0	CarSim_RaceTask	race	high	Every-tick car task (even ticks): odometer +0xd00, racer progress 0x416330, else road progress (port: race_progress.c)
 00416ae0	Race_End	game	med	Race finished/aborted: results, state change
 00417030	Race_TickOdd	game	low	Odd-tick race logic
 004171b0	CarSim_PlayerDistance	sim	high	Distance to the nearest human player's car (+0x78)
 00417280	Car_SetFrame	race	high	Car orientation +0x364 from the road axes +0x3b8 (right and forward negated against the road)
 00417330	Car_SetGroundFrame	race	high	Ground frame +0x490 from the road axes +0x3b8 (as 0x417280)
+00417460	Race_CountLap	race	high	Lap counter: line crossings (circuit, wrong-way laps +0x534) or finish progress (point to point)
+004176a0	Car_AcrossRoad	race	high	Car box half extent along the road right
+00417730	Race_Positions	race	high	Bubble sorts of the car order (+0x528 place, +0x550/+0x554 swaps)
 00417820	Race_TickEven	game	low	Even-tick race logic
 00417a80	HUD_Countdown	hud	med	3-2-1-Go and circle art (321go, circlefull)
 00418450	H321Go_v0	hud	struct	Virtual slot 0 of H321Go (vtable 0x5b27ec)

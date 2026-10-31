@@ -1,5 +1,6 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "game/race_progress.h"
 #include "exe.h"
 #include "game/car.h"
 #include "game/car_collide.h"
@@ -39,11 +40,12 @@ void Sim_Step(void)
         Sim_ClearContacts();                  /* 0x498190 */
         PENDING_NOTE(0x4067c0, "AI_TickAll");
         TaskList_Run(&g_tasks_even);
-        PENDING_NOTE(0x417820, "Race_TickEven");
+        Race_TickEven();                      /* 0x417820 */
     }
     TaskList_Run(&g_tasks_tick);
     if (g_sim_tick & 1) {
-        PENDING_NOTE(0x417030, "Race_TickOdd, Race_UpdatePositions, Audio_Tick, World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
+        Race_TickOdd();                       /* 0x417030 */
+        PENDING_NOTE(0x417030, "the odd tick's Race_UpdatePositions, Audio_Tick, World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");
     g_sim_tick++;
