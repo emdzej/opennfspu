@@ -85,7 +85,7 @@ int main(void)
     char err[256];
     if (!exe_init(err, sizeof err)) { printf("FAIL %s\n", err); return 1; }
     fake_install_graphics();
-    snprintf(g_track_name, sizeof g_track_name, "autobahn");
+    snprintf(g_track_name, sizeof g_track_name, "%s", getenv("AUDIO_TRACK") ? getenv("AUDIO_TRACK") : "autobahn");
     Track_Load();
     CHECK(RaceSetup_SingleCar("964"));
     if (getenv("AUDIO_OPP")) CHECK(RaceSetup_Opponents(1));

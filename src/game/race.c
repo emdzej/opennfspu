@@ -1,6 +1,7 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
 #include "game/audio.h"
+#include "game/scene.h"
 #include "game/sim_rand.h"
 #include "game/race_car.h"
 #include "game/ai.h"
@@ -27,6 +28,8 @@ static void Sim_ClearContacts(void)
         if (g_traffic[i]) *CAR_I(g_traffic[i], CAR_CONTACTS) = 0;
 }
 
+static int32_t s_fxsaved;   /* 0x657ca4 */
+
 void Sim_Step(void)
 {
     PENDING_NOTE(0x4b0d70, "the replay's tick (0x4b0d70)");
@@ -38,7 +41,13 @@ void Sim_Step(void)
             g_race_countdown = (uint8_t)(g_race_countdown + 1);
         }
         if (g_sim_tick > 0x1bf) g_race_started = 1;
-        PENDING_NOTE(0x5d1744, "the start's volume ramp (0x5d1744, 0x657ca4)");
+        /* the effects' volume from nothing over ticks 0x11 .. 0x50 */
+        if (g_sim_tick == 0) {
+            s_fxsaved = g_audio_fx;
+            g_audio_fx = 0;
+        } else if (0x10 < g_sim_tick && g_sim_tick < 0x51) {
+            g_audio_fx = ((g_sim_tick - 0x10) * s_fxsaved) >> 6;
+        }
     }
     if (!(g_sim_tick & 1)) {
         Race_ResetRanking();                  /* 0x416160 */
@@ -53,7 +62,8 @@ void Sim_Step(void)
         Audio_Tick();                         /* 0x4a7ef0 (Race_TickOdd's) */
         Race_UpdatePositions();               /* 0x415fe0 */
         Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
-        PENDING_NOTE(0x417030, "the odd tick's World_Tick, the cars' renderers' and particles' ticks, Scene_Tick");
+        PENDING_NOTE(0x417030, "the odd tick's World_Tick, the cars' renderers' and particles' ticks");
+        Scene_Tick();                         /* 0x470b10 */
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");
     g_sim_tick++;

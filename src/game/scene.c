@@ -3,11 +3,14 @@
 #include "game/scene.h"
 #include "exe.h"
 #include "game/track.h"
+#include "game/car.h"
+#include "game/world.h"
 #include "game/track_pending.h"
 #include "platform.h"
 #include "render/camera_math.h"
 #include "vfs.h"
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -716,4 +719,103 @@ bool Scene_StartLine(float pos[3], float mat[9])
     scene_pos(t, pos);
     scene_mat(t, mat);
     return true;
+}
+
+/* ---------------------------------------------------------------------------- the triggers' tick */
+
+/* The car against an event trigger (0x470620): a line trigger (+0x80 1) is crossed when either of the
+   car's diagonals (wheel 0 to wheel 3, wheel 1 to wheel 2) crosses its two ends on the ground plane,
+   the first diagonal's ends within 3.5 of the line's height; a long car (its description's +0x518)
+   has each diagonal extended, the far end by its length, the near one by twice that again (as the
+   original's two steps do). A sphere trigger (0) holds the car's centre within its radius (+0x84);
+   other shapes always hit. */
+static void stretch(float *a, float *b)
+{
+    float t[3];
+    for (int k = 0; k < 3; k++) t[k] = b[k] - a[k];
+    for (int k = 0; k < 3; k++) b[k] += t[k];
+    for (int k = 0; k < 3; k++) t[k] = a[k] - b[k];
+    for (int k = 0; k < 3; k++) a[k] += t[k];
+}
+
+static bool trigger_hit(const SceneElem *t, Car *c)
+{
+    int shape = scene_i32(t, 0x80);
+    if (shape == 1) {
+        float q[6], p[6];
+        memcpy(q, t->b + TRIG_END_A, 12);
+        memcpy(q + 3, t->b + TRIG_END_B, 12);
+        memcpy(p, CAR_F(c, 0x7f8), 12);
+        memcpy(p + 3, CAR_F(c, 0xa44), 12);
+        bool longcar = DESC_I(c, 0x518) != 0;
+        if (longcar) stretch(p + 3, p);
+        if (!(q[1] <= p[1] + 3.5f && q[1] <= p[4] + 3.5f && p[1] - 3.5f <= q[1] && p[4] - 3.5f <= q[1])) return false;   /* 0x5b38ec */
+        q[1] = q[4] = p[1] = p[4] = 0;
+        if (World_SegmentsCross(p, q, NULL)) return true;
+        memcpy(p, CAR_F(c, 0x8bc), 12);
+        memcpy(p + 3, CAR_F(c, 0x980), 12);
+        p[1] = p[4] = 0;
+        if (longcar) stretch(p + 3, p);
+        return World_SegmentsCross(p, q, NULL);
+    }
+    if (shape != 0) return true;
+    float at[3];
+    scene_pos(t, at);
+    const float *cp = CAR_F(c, 0x330);
+    float d[3] = {cp[0] - at[0], cp[1] - at[1], cp[2] - at[2]};
+    float l = 0;
+    if (d[0] != 0 || d[1] != 0 || d[2] != 0) l = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);   /* 0x532890 */
+    return l < scene_f32(t, 0x84);
+}
+
+/* The trigger's facing (+0xc8, 0x470a30) against the car's forward axis and its direction (+0xbc,
+   0x470920) against the car's way of moving (up when it stands): more than 0.5 each, a zero vector
+   any; its speed window (+0x90 .. +0x94, 0x470ac0), each with 0.1 to spare. */
+static bool trigger_takes(const SceneElem *t, Car *c)
+{
+    if (!trigger_hit(t, c)) return false;
+    const float *f = (const float *)(const void *)(t->b + 0xc8);
+    if (!(f[0] == 0 && f[1] == 0 && f[2] == 0)) {
+        const float *a = CAR_F(c, 0x37c);
+        if (!(f[0] * a[0] + f[1] * a[1] + f[2] * a[2] > 0.5f)) return false;   /* 0x5b23f0 */
+    }
+    const float *g = (const float *)(const void *)(t->b + 0xbc);
+    if (!(g[0] == 0 && g[1] == 0 && g[2] == 0)) {
+        const float *v = CAR_F(c, 0x33c);
+        float u[3] = {0, 1, 0};
+        if (v[0] != 0 || v[1] != 0 || v[2] != 0) {
+            float l = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            for (int k = 0; k < 3; k++) u[k] = v[k] / l;
+        }
+        if (!(g[0] * u[0] + g[1] * u[1] + g[2] * u[2] > 0.5f)) return false;
+    }
+    float speed = *CAR_F(c, 0x35c);
+    return scene_f32(t, 0x90) < speed + 0.1f && speed < scene_f32(t, 0x94) + 0.1f;   /* 0x5b2604 */
+}
+
+void Scene_Tick(void)
+{
+    SceneList *l = Scene_EventTriggers();
+    for (int i = 0; l && i < l->n; i++) {
+        SceneElem *t = l->e[i];
+        int type = scene_i32(t, TRIG_TYPE);
+        /* (type 3 tests every racer, with the race cars' list and nothing done on a hit) */
+        if ((type != 4 && type != 7) || g_ncars < 1) continue;
+        /* the first race car's (the original passes it to all four tests) */
+        if (!trigger_takes(t, g_cars[0])) continue;
+        if (t->b[0x78] && scene_i32(t, 0x9c) != 0) continue;   /* fired, and once only */
+        if (type == 4) {
+            /* the linked sound element (+0xd8): a one-shot (kind 1) with a sound has its trigger set
+               (0x4abea0, 0x4abeb0). (+0xe0 1 with type 0 or 1 calls 0x4aac00: never here.) */
+            int16_t link = scene_i16(t, TRIG_LINK1);
+            SceneList *all = Scene_List();
+            if (-1 < link && all && link < all->n) {
+                SceneElem *a = all->e[link];
+                if (a->kind == SCENE_AUDIO && scene_i16(a, 0x88) == 1 && -1 < scene_i16(a, 0x8a)) a->b[0xa2] = 1;
+            }
+        } else {
+            PENDING_NOTE(0x482fa0, "the animation triggers (type 7: the linked object's 0x482fa0)");
+        }
+        t->b[0x78] = 1;
+    }
 }

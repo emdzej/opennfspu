@@ -19,6 +19,7 @@
 #include <string.h>
 
 int32_t g_sound_quality;
+int32_t g_audio_fx = 0x7f;   /* 0x5d1744: the effects' volume (the start ramps it up) */
 
 static const char *sound_dir(void) { return "GameData\\Sounds\\"; }   /* 0x65b318 (the install's) */
 static int32_t opt(uint32_t va) { return (int32_t)exe_u32(va); }      /* the options' starting values */
@@ -46,6 +47,7 @@ static AudioBank s_banks[8];
 
 bool Audio_Init(void)
 {
+    g_audio_fx = opt(0x5d1744);   /* (the options' starting value) */
     if (g_sound_quality == 3) return false;
     for (int i = 0; i < 8; i++) s_banks[i].slot = -1;
     int q = g_sound_quality;
@@ -112,13 +114,13 @@ static int category_volume(int bank, int patch, int vol)
 {
     if (bank == s_banks[2].slot) return (opt(0x5d1748) * opt(0x5d14d8) * vol * 0x55) >> 0x15;
     if (bank == s_banks[5].slot) return (opt(0x5d1750) * opt(0x5d14bc) * vol * 0x55) >> 0x15;
-    if (patch == 0xc || patch == 0xd) return (opt(0x5d1744) * vol) >> 7;
+    if (patch == 0xc || patch == 0xd) return (g_audio_fx * vol) >> 7;
     if ((bank == s_banks[0].slot || bank == s_banks[1].slot) && patch == 2) {
-        int v = opt(0x5d1744) * vol;
+        int v = g_audio_fx * vol;
         return 0x7e < v ? 0x7f : v;
     }
-    if (3 <= patch && patch <= 5 && bank == s_banks[0].slot) return (opt(0x5d14d0) * opt(0x5d1744) * vol * 0x55) >> 0x15;
-    if (0x11 <= patch && patch <= 0x1c) return (opt(0x5d14cc) * opt(0x5d1744) * vol * 0x55) >> 0x15;
+    if (3 <= patch && patch <= 5 && bank == s_banks[0].slot) return (opt(0x5d14d0) * g_audio_fx * vol * 0x55) >> 0x15;
+    if (0x11 <= patch && patch <= 0x1c) return (opt(0x5d14cc) * g_audio_fx * vol * 0x55) >> 0x15;
     if (patch == 10 || patch == 0xb) return (opt(0x5d14e0) * opt(0x5d1750) * vol * 0x55) >> 0x15;
     if (patch == 0xf) return (opt(0x5d14e8) * opt(0x5d1748) * vol * 0x55) >> 0x15;
     return -1;   /* the rest's (below) */
@@ -135,7 +137,7 @@ static int play_once(int bank, int patch, int angle, int vol, int bend, int pitc
     else {
         v = category_volume(bank, patch, vol);
         if (v < 0) {
-            v = (int8_t)((opt(0x5d14d4) * opt(0x5d1744) * vol * 0x55) >> 0x15);
+            v = (int8_t)((opt(0x5d14d4) * g_audio_fx * vol * 0x55) >> 0x15);
             if (0x2f < patch) {
                 p.f0a = (int8_t)(0x7f - vel);
                 PENDING_NOTE(0x656869, "the reverb's level under roofs (0x656869)");
@@ -184,7 +186,7 @@ static int play_slot(int slot, int patch, int vel, int pitch, int vol, int angle
     if (h[1] == patch && h[0] != -1 && !SND_Playing(h[0])) h[0] = h[1] = -1;
     if (h[1] == patch && h[0] != -1) {
         int v = category_volume(bank, patch, vol);
-        if (v < 0) v = (opt(0x5d14d4) * opt(0x5d1744) * vol * 0x55) >> 0x15;
+        if (v < 0) v = (opt(0x5d14d4) * g_audio_fx * vol * 0x55) >> 0x15;
         if (patch == 0x10) v = (opt(0x5d14dc) * opt(0x5d1750) * vol * 0x55) >> 0x15;
         SND_SetVolume(h[0], v);
         if (opt(0x5d1760)) SND_SetPanByte(h[0], pan_byte(angle));
@@ -1090,6 +1092,7 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
 
 static float s_listener[3], s_lastlistener[3];   /* 0x655e50, 0x655f44 */
 static float s_lright[3], s_lfwd[3];              /* 0x655e5c, 0x655e74 */
+static const float *s_lvel;                       /* 0x655e44: the listener's speed (the camera's car's), NULL from the TV cameras */
 
 /* An angle from (x, y) in 1024 steps (0x565030: by octant from the exe's arctangent bytes 0x5e24ac). */
 static int angle(int x, int y)
@@ -1297,12 +1300,13 @@ static void elem_play(SceneElem *e, int tick8, const float *vel, int vol, int he
                 if (g_r3d_mirror) x = -x;
                 pan = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
             }
-            /* 0x4a6ce0: the Doppler of the element's speed (the listener's own is pending) */
+            /* 0x4a6ce0: the Doppler of the element's speed less the listener's */
             float closing = 0;
             float q[3] = {rec[0] - s_listener[0], rec[1] - s_listener[1], rec[2] - s_listener[2]};
-            if ((q[0] != 0 || q[1] != 0 || q[2] != 0) && vel) {
+            if (q[0] != 0 || q[1] != 0 || q[2] != 0) {
                 float l = sqrtf(dot3(q, q)), u[3] = {q[0] / l, q[1] / l, q[2] / l};
-                closing = dot3(u, vel);
+                if (vel) closing = dot3(u, vel);
+                if (s_lvel) closing -= dot3(u, s_lvel);
             }
             pitch = (int)(340.0 / ((double)closing + 340.0) * 65536.0);
         }
@@ -1417,11 +1421,12 @@ static void player_tick(Car *c)
         float l = sqrtf(dot3(d, d));
         for (int k = 0; k < 3; k++) u[k] = d[k] / l;
         closing = dot3(u, CAR_F(c, 0x33c));
-        PENDING_NOTE(0x655e44, "the listener's own speed in the Doppler");
+        if (s_lvel) closing -= dot3(u, s_lvel);
     }
     int pitch = (int)(340.0 / ((double)closing + 340.0) * 65536.0);   /* 0x5b4b40, 0x5b4b38 */
     int pan = 0;
-    if (opt(0x5d1760) && g_racecam[0].mode != 0) {
+    if (opt(0x5d1760) && g_race_players == 1) pan = 0xc000;   /* (the first viewport's side) */
+    else if (opt(0x5d1760) && g_racecam[0].mode != 0) {
         int x = (int)(dot3(d, s_lright) * 65536.0f), y = (int)(dot3(d, s_lfwd) * 65536.0f);
         if (g_r3d_mirror) x = -x;
         pan = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
@@ -1435,7 +1440,7 @@ static void player_tick(Car *c)
     float red = *SPEC_F(c, 0x94) + (DESC_I(c, 0xc) == 1 ? 1000.0f : 2000.0f);   /* (+0x558: the description) */
     if (5 < *(uint16_t *)(void *)(c->b + 0x418)) red -= 500.0f;
     int rpmvol = (int)(*CAR_F(c, 0xdb4) * 127.0f / red);
-    int speedv = abs((int)(*CAR_F(c, 0xec0) * 65536.0f));
+    int speedv = s_lvel ? 0 : abs((int)(*CAR_F(c, 0xec0) * 65536.0f));   /* 0x655f5c */
     int heading = 0;
     if (opt(0x5d1760)) {
         int x = (int)(dot3(CAR_F(c, 0x3d0), s_lright) * 65536.0f), y = (int)(dot3(CAR_F(c, 0x3d0), s_lfwd) * 65536.0f);
@@ -1446,7 +1451,7 @@ static void player_tick(Car *c)
     car_sounds(c, dist, rpmvol, pitch, pan, heading, speedv, facing);
     /* The car's sound events of this tick (the last first): the ends of looped ones, the rest played,
        the impacts from the contact point (+0x440). */
-    if (!opt(0x5d1744)) return;
+    if (!g_audio_fx) return;
     for (int k = *CAR_I(c, 0x110c) - 1; 0 <= k; k--) {
         const uint8_t *r = c->b + 0x1110 + k * 0x18;
         int32_t type, id, kind, surf;
@@ -1595,6 +1600,7 @@ static void near_tick(int vp, int i)
     if (d[0] != 0 || d[1] != 0 || d[2] != 0) {
         float l = sqrtf(dot3(d, d)), u[3] = {d[0] / l, d[1] / l, d[2] / l};
         closing = dot3(u, CAR_F(c, 0x33c));
+        if (s_lvel) closing -= dot3(u, s_lvel);
     }
     int pitch = (int)(340.0 / ((double)closing + 340.0) * 65536.0);   /* 0x5b4b40, 0x5b4b38 */
     if (pitch < 0) return;
@@ -1615,7 +1621,9 @@ static void near_tick(int vp, int i)
     }
     int du = (dist + ((dist >> 31) & 0xffff)) >> 0x10;
     n->dist2 = du * du < 0x1324 ? du * du : 0x1324;
-    n->speed = abs((int)(*CAR_F(c, 0xec0) * 65536.0f));   /* (less the viewport car's with a listener speed) */
+    float sp = *CAR_F(c, 0xec0);
+    if (s_lvel && g_humans.n > 0) sp -= *CAR_F(g_humans.c[0], 0xec0);   /* (the viewport's car, 0x655f50) */
+    n->speed = abs((int)(sp * 65536.0f));
     int rpm16 = (int)(*CAR_F(c, 0xdb4) / *SPEC_F(c, 0x94) * 65536.0f);
     rpm16 = rpm16 < 0 ? 0 : 0x20000 < rpm16 ? 0x20000 : rpm16;
     int speed = (int)(*CAR_F(c, 0xd60) * 65536.0f);
@@ -1668,6 +1676,7 @@ void Audio_Tick(void)
     memcpy(s_listener, cam->eye, sizeof s_listener);
     memcpy(s_lright, cam->orient, sizeof s_lright);
     memcpy(s_lfwd, cam->orient + 6, sizeof s_lfwd);
+    s_lvel = cam->mode != 0xb && (cam->mode == 0xc || cam->mode == 0xe) ? NULL : cam->car ? CAR_F(cam->car, 0x33c) : NULL;
     stream_tick();   /* 0x4b07f0 */
     PENDING_NOTE(0x4a8150, "the thunder (0x4a8150)");
     int n = g_sound_quality == 0 ? 4 : g_sound_quality == 1 ? 2 : 1;

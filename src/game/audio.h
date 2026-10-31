@@ -8,7 +8,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-extern int32_t g_sound_quality;    /* 0x657c98: 0 high .. 2 low, 3 none */
+extern int32_t g_sound_quality;
+extern int32_t g_audio_fx;         /* 0x5d1744: the effects' volume, 0 .. 0x7f (the options') */    /* 0x657c98: 0 high .. 2 low, 3 none */
 
 bool Audio_Init(void);
 void Audio_Shutdown(void);
