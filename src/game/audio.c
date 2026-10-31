@@ -184,7 +184,11 @@ static int play_slot(int slot, int patch, int vel, int pitch, int vol, int angle
     }
     if (slot == 0x33) return play_once(bank, patch, angle, vol, b, pitch, velocity);
     int32_t *h = s_slot[slot];
-    if (h[1] == patch && h[0] != -1 && !SND_Playing(h[0])) h[0] = h[1] = -1;
+    if (h[1] == patch) {
+        if (!SND_Playing(h[0])) h[0] = h[1] = -1;
+        /* a streamed bank no longer cached lets the slot go (-3 the cars', the others as the track's) */
+        if (bank < -1 && stream_bank(bank == -3 ? 1 : 0, patch, false) == -1) h[0] = h[1] = -1;
+    }
     if (h[1] == patch && h[0] != -1) {
         int v = category_volume(bank, patch, vol);
         if (v < 0) v = (opt(0x5d14d4) * g_audio_fx * vol * 0x55) >> 0x15;
