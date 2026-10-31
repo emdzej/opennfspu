@@ -25,8 +25,9 @@ static char car_name[64];     /* --param car=<name>: that car in the viewer (Gam
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
-static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (gamesetup) */
+static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (default gamesetup) */
 static bool fe_on;
+static char race_track[64];   /* the race the front end started (GameMain 0x4b6840: FE, then the race) */
 
 bool app_init(void)
 {
@@ -53,6 +54,9 @@ bool app_init(void)
     if (!plat_param("drive", drive_name, sizeof drive_name)) drive_name[0] = 0;
     if (!plat_param("screen", screen_name, sizeof screen_name)) screen_name[0] = 0;
     if (!plat_param("fe", fe_start, sizeof fe_start)) fe_start[0] = 0;
+    /* Without a viewer parameter the game starts as the original does: in the front end. */
+    if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest)
+        snprintf(fe_start, sizeof fe_start, "gamesetup");
     return true;
 }
 
@@ -60,9 +64,20 @@ bool app_frame(void)
 {
     g_app_frames++;
     if (plat_frame_shown()) {
-        if (fe_start[0]) {
+        if (race_track[0]) {
+            DRIVE_selftest(race_track, car_name);
+        } else if (fe_start[0]) {
             if (!fe_on) fe_on = FEApp_Init(fe_start);
-            if (fe_on) FEApp_Frame();
+            if (fe_on) {
+                FEApp_Frame();
+                if (FEApp_Result() == FE_PLAY) {
+                    snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
+                    g_drive_laps = FEApp_Laps();
+                    g_drive_opponents = FEApp_Opponents();
+                } else if (FEApp_Result() == FE_QUIT) {
+                    return false;
+                }
+            }
         } else if (screen_name[0]) FE_selftest(screen_name);
         else if (drive_name[0]) DRIVE_selftest(drive_name, car_name);
         else if (track_name[0]) TRACK_selftest(track_name);

@@ -94,9 +94,10 @@ static bool load(const char *track, const char *carname)
     RaceViews_ctor(&views);
     if (!RaceSetup_SingleCar(carname)) return false;
     char v[8];
-    int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : 0;   /* --param opponents=<n> */
+    int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : g_drive_opponents;   /* --param opponents=<n> */
     g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
     if (0 < opponents) RaceSetup_Opponents(opponents);
+    if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
     if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
     Car_Construct();
     if (g_ncars < 1) return false;
@@ -168,6 +169,8 @@ static void read_controls(void)
     g_input_packet[2] = up ? 0x7f : 0;
     g_input_packet[3] = down ? 0x7f : 0;
 }
+
+int g_drive_opponents, g_drive_laps;
 
 bool DRIVE_selftest(const char *track, const char *car)
 {

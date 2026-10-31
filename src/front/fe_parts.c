@@ -402,6 +402,7 @@ void FEControl_Draw(FertControl *c, int32_t ox, int32_t oy)
 
 void FEWindow_Draw(FertControl *w)
 {
-    if (w->screen) FEControl_Draw(w->screen, 0, 0);
+    /* (the screen object, the layout's first section, holds the screen's settings: room, callback list,
+       music; the window's draw doesn't draw it) */
     for (int i = w->nchildren - 1; 0 <= i; i--) FEControl_Draw(w->children[i], 0, 0);   /* 0x528390: last first */
 }

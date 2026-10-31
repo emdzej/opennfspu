@@ -22,3 +22,11 @@ void FEApp_Back(void);
 /* One pass of the pump and a frame. */
 void FEApp_Frame(void);
 FertControl *FEApp_Top(void);
+
+/* Whether the front end is done: a race to start (PLAYGAME on a screen that can play) or the game to
+   end (QUIT); the race it set up. */
+typedef enum { FE_RUNNING, FE_PLAY, FE_QUIT } FEResult;
+FEResult FEApp_Result(void);
+const char *FEApp_Track(void);
+int FEApp_Laps(void);
+int FEApp_Opponents(void);

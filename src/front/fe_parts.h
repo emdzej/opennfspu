@@ -44,5 +44,5 @@ void FEParts_Init(void);
 void FEPart_Draw(FertPart *p, int32_t ox, int32_t oy);
 /* A control's current state's parts at its position plus the offset (0x4c7e30 / 0x5250b0). */
 void FEControl_Draw(FertControl *c, int32_t ox, int32_t oy);
-/* A window: its screen, then its controls, the last first (0x528390). */
+/* A window: its controls, the last first (0x528390). */
 void FEWindow_Draw(FertControl *w);

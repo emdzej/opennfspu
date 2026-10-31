@@ -13,38 +13,55 @@
 enum { STACK = 16 };
 
 static FertControl *s_stack[STACK];   /* +0xd8: the screens */
+static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu, bottombar.lay) */
+static FEResult s_result;
+static char s_track[64] = "coastal";
+static int s_laps = 1, s_opponents;
 static int s_depth;
 static RCamera *s_camera;
 static int32_t s_mouse[2] = {-1, -1}; /* the pump's last poll (+0x14 ..) */
 static uint32_t s_buttons;
 static bool s_ready;
 
-/* fe.txt's language (Options_Language; the options module isn't ported yet) */
-static int language(void)
+/* A key of fe.txt, the options file the original reads with Options_Read 0x4b6450 (not ported yet). */
+static bool fe_key(const char *key, char *out, size_t cap)
 {
-    size_t n = 0;
+    size_t n = 0, kl = strlen(key);
     char *t = (char *)vfs_read_all("fe.txt", &n);
-    int v = 0;
-    if (!t) return 0;
+    bool found = false;
+    if (!t) return false;
     char *b = realloc(t, n + 1);
     if (!b) {
         free(t);
-        return 0;
+        return false;
     }
     b[n] = 0;
     for (char *l = b; l && *l;) {
         char *e = strpbrk(l, "\r\n");
         if (e) *e++ = 0;
         while (*l == ' ') l++;
-        if (!strncmp(l, "language", 8) && (l[8] == ' ' || l[8] == '=')) {
+        if (!strncmp(l, key, kl) && (l[kl] == ' ' || l[kl] == '=')) {
             char *q = strchr(l, '=');
-            if (q) v = atoi(q + 1);
+            if (q) {
+                q++;
+                while (*q == ' ') q++;
+                snprintf(out, cap, "%s", q);
+                found = true;
+            }
         }
         l = e;
     }
     free(b);
-    return v;
+    return found;
 }
+
+static int fe_int(const char *key, int def)
+{
+    char v[64];
+    return fe_key(key, v, sizeof v) ? atoi(v) : def;
+}
+
+static int language(void) { return fe_int("language", 0); }
 
 static FertControl *load_screen(const char *name)
 {
@@ -76,8 +93,10 @@ bool FEApp_Init(const char *start)
         FE2D_Init();                                 /* 0x4d88c0 */
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
         PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, 3D rooms, music, movies");
+        s_bar = load_screen("bottombar");
         s_ready = true;
     }
+    s_result = FE_RUNNING;
     return FEApp_GotoScreen(start, true);
 }
 
@@ -149,17 +168,56 @@ static void on_leave(FertControl *c)   /* 0x4c7820 */
     }
 }
 
+FEResult FEApp_Result(void) { return s_result; }
+const char *FEApp_Track(void) { return s_track; }
+int FEApp_Laps(void) { return s_laps; }
+int FEApp_Opponents(void) { return s_opponents; }
+
+static bool can_play(void)
+{
+    FertControl *w = FEApp_Top();
+    if (!w || !w->screen) return false;
+    for (int k = 0; k < w->screen->nparts; k++) {
+        FertAttr *a = FertAttrList_find(&w->screen->parts[k]->attrs, "canplaygame");
+        if (a) return FertAttr_int(a) != 0;   /* (0x4d5df0: data.canplaygame) */
+    }
+    return false;
+}
+
+/* The callbacks the bottom bar's buttons and the screens' controls name (0x50cd90 through the screen's
+   callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, the screens' own pending. */
+static void callback(const char *cb)
+{
+    if (!strcmp(cb, "GOBACK")) {
+        FEApp_Back();
+    } else if (!strcmp(cb, "OPTIONS")) {
+        FEApp_GotoScreen("options", true);
+    } else if (!strcmp(cb, "QUIT")) {
+        s_result = FE_QUIT;
+    } else if (!strcmp(cb, "PLAYGAME")) {
+        if (!can_play()) return;
+        /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
+           accessors pending: fe.txt's as the original's defaults). */
+        char v[64];
+        if (fe_key("track_name", v, sizeof v)) snprintf(s_track, sizeof s_track, "%s", v);
+        s_laps = fe_int("num_laps", 1);
+        s_opponents = fe_int("numopponentracecars", 0);
+        s_result = FE_PLAY;
+    } else {
+        char m[160];
+        snprintf(m, sizeof m, "front end: callback %s (0x50cd90, pending)", cb);
+        plat_log(m);
+    }
+}
+
 static void on_up(FertControl *c)
 {
     if (c->feflags & 0x10) return;   /* 0x4c7a10: disabled */
     if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.BOTTOMBARBUTTON")) {   /* 0x4c8f50 */
         PENDING_NOTE(0x4aab80, "the front end's click sound (5)");
         const char *cb = data_str(c, "callback");
-        if (cb && *cb) {
-            char m[160];
-            snprintf(m, sizeof m, "front end: callback %s (0x50cd90, pending)", cb);
-            plat_log(m);
-        }
+        if (cb && *cb) callback(cb);
+        if (s_result != FE_RUNNING) return;
         const char *dest = data_str(c, "destination");
         if (dest && *dest) FEApp_GotoScreen(dest, true);
     }
@@ -210,11 +268,16 @@ static void poll(void)   /* 0x529530 */
     if (mx != s_mouse[0] || my != s_mouse[1]) {
         s_mouse[0] = mx;
         s_mouse[1] = my;
+        if (s_bar) window_event(s_bar, 7, mx, my);
         window_event(w, 7, mx, my);
     }
     uint32_t changed = b ^ s_buttons;
-    if (changed & 1) window_event(FEApp_Top(), (b & 1) ? 4 : 8, mx, my);
     s_buttons = b;
+    if (changed & 1) {
+        /* (FEApplication_v3 0x4d22a0: the bottom bar first, then the top screen) */
+        if (s_bar && FertWindow_hit(s_bar, mx, my)) window_event(s_bar, (b & 1) ? 4 : 8, mx, my);
+        else window_event(FEApp_Top(), (b & 1) ? 4 : 8, mx, my);
+    }
 }
 
 void FEApp_Frame(void)
@@ -227,9 +290,24 @@ void FEApp_Frame(void)
     View_Begin(g_render, s_camera);
     RCamera_Setup2D(s_camera);
     g_fe_depth = 0.99998474f;   /* 0x4d2980 */
+    if (s_bar) {
+        /* the play button enabled with the screen's canplaygame (0x4d7c70 -> 0x4c79c0 / 0x4c79e0) */
+        for (int i = 0; i < s_bar->nchildren; i++) {
+            FertControl *c = s_bar->children[i];
+            if (strcmp(c->name, "ID_PLAYGAMEBUTTON")) continue;
+            uint32_t f = c->feflags;
+            if (can_play()) c->feflags &= ~0x10u;
+            else if (FertControl_findState(c, "disabled") >= 0) c->feflags |= 0x10;
+            if (f != c->feflags) refresh_state(c);
+        }
+    }
     if (w) {
         for (int i = 0; i < w->nchildren; i++) FertControl_Update(w->children[i]);   /* (the controls' ticks) */
         FEWindow_Draw(w);
+    }
+    if (s_bar) {
+        for (int i = 0; i < s_bar->nchildren; i++) FertControl_Update(s_bar->children[i]);
+        FEWindow_Draw(s_bar);   /* (0x4d2980: the bottom bar over the screens) */
     }
     FE2D_Flush();
     View_End(g_render);
