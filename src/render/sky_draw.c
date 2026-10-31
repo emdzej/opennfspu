@@ -380,7 +380,6 @@ static Sky *Sky_ctor(Sky *s, const char *name)
     s->f60 = 1;
     Sky_CreateConfig(name);                                  /* 0x4594d0 */
     s->config = Sky_Config();
-    PENDING_NOTE(0x45ca40, "the sky's colour grid (0x627e3c)");
     lightning_create(s->config);                             /* 0x45cb00 */
     Sun_Create(s->config);                                   /* 0x4600b0 */
     Sky_CreateLight(g_renderopts.skyrendering);             /* 0x459820 */
