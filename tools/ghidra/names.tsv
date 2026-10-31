@@ -753,9 +753,17 @@
 00494470	CarSim_ZoneDamage	sim	high	Zone dent (half the impact, 1.5x knockout, max 100) spreading to neighbours; spin kick, crash over 80
 00494d60	CarSim_ImpactDamage	sim	high	Impact +0x430 (>10) on the zone facing n (roof when up.n < -0.5) (port: src/game/car_damage.c)
 00494f90	CarSim_Edges	sim	high	The car's eight box probes against the road edges
+00495570	CarSim_BFaceInA	sim	med	b face centre in a
+00495800	CarSim_AFaceInB	sim	med	a face centre in b
+00495aa0	CarSim_BCornerInA	sim	med	b corner in a
+00495ca0	CarSim_ACornerInB	sim	med	a corner in b
 00495ea0	CarSim_ContactImpulse	sim	high	Normal (0.3; traffic 0.4 or 0.6/size) and friction impulse at a point
 00496440	CarSim_ClampSpin	sim	high	Angular velocity held to 0.75 (tiny 2.25, light traffic 6.75)
 00496580	CarSim_BodyImpulse	sim	high	Body points behind a plane: impulse at their mean, push out by the deepest, spin clamp, impact (port: src/game/car_impulse.c)
+004967d0	CarSim_CarsRespond	sim	med	Impulse between two cars
+00496f40	CarSim_BoxesTouch	sim	med	Box against box: faces then corners
+00497a80	CarSim_CarsSeparate	sim	med	Push overlapping cars apart
+00498040	CarSim_Cars	sim	med	Two cars against each other
 00498190	Sim_ClearContacts	sim	high	Clears the cars' per-tick contacts (+0x110c) and the car-car list count (0x628f5c)
 004981f0	CarSim_NearBox	sim	high	Point within r of the car box (right, forward)
 004982f0	CarSim_ObjectContact	sim	high	Push out along n, impact 3x closing speed, velocity +32 push, zone damage over 10

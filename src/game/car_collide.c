@@ -1,5 +1,6 @@
 /* The cars' collisions (see car_collide.h). */
 #include "game/car_collide.h"
+#include "game/car_cars.h"
 #include "exe.h"
 #include "game/car_damage.h"
 #include "game/car_impulse.h"
@@ -383,7 +384,14 @@ void CarSim_Collide(void *car)
         float r = *CAR_F(o, 0x3b4) + *CAR_F(c, 0x3b4);
         if (fabsf(CAR_F(c, 0x338)[0] - CAR_F(o, 0x338)[0]) < r && fabsf(CAR_F(c, 0x330)[0] - CAR_F(o, 0x330)[0]) < r &&
             fabsf(CAR_F(c, 0x334)[0] - CAR_F(o, 0x334)[0]) < r)
-            PENDING_NOTE(0x498040, "the cars against each other (0x498040, 0x496440)");
+        {
+            /* The spins in radians for the impulses, back to turns after. */
+            for (int k = 0; k < 3; k++) CAR_F(c, 0x388)[k] *= 6.2831855f, CAR_F(o, 0x388)[k] *= 6.2831855f;   /* 0x40c90fdb */
+            CarSim_Cars(c, o);   /* 0x498040 */
+            for (int k = 0; k < 3; k++) CAR_F(c, 0x388)[k] *= 0.15915494f, CAR_F(o, 0x388)[k] *= 0.15915494f;   /* 0x3e22f981 */
+            CarSim_ClampSpin(c);   /* 0x496440 */
+            CarSim_ClampSpin(o);
+        }
     }
     if (g_ncollided < CAR_MAX * 2) g_collided[g_ncollided++] = c;
 }
