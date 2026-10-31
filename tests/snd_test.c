@@ -42,6 +42,46 @@ static void bank(const char *name)
     free(b);
 }
 
+/* SND_coll's first patch played: sound comes, and ends with the sample (4133 samples at 16 kHz: about
+   a quarter of a second). */
+static void play(void)
+{
+    size_t size = 0;
+    uint8_t *b = vfs_read_all("GameData/Sounds/SND_coll.bnk", &size);
+    CHECK(SND_Init(32000, 2, 48, 100));
+    int slot = SND_BankAdd(b);
+    CHECK(slot == 0);
+    SndParams p;
+    SND_ParamsDefault(&p);
+    int h = SND_Play(slot, 0, &p);
+    CHECK(h >= 0);
+    CHECK(SND_Playing(h));
+    static int16_t out[32000 * 2];
+    SND_Fill(out, 32000 / 4);
+    if (getenv("SND_DUMP")) {   /* the first quarter second, raw 16-bit stereo at 32 kHz */
+        FILE *f = fopen(getenv("SND_DUMP"), "wb");
+        if (f) {
+            fwrite(out, sizeof *out, 32000 / 4 * 2, f);
+            fclose(f);
+        }
+    }
+    long peak = 0, sum = 0;
+    for (int i = 0; i < 32000 / 4 * 2; i++) {
+        long a = out[i] < 0 ? -out[i] : out[i];
+        if (a > peak) peak = a;
+        sum += a;
+    }
+    printf("  SND_coll 0: peak %ld, mean %ld over 0.25 s\n", peak, sum / (32000 / 2));
+    CHECK(peak > 1000 && peak < 32768);
+    SND_Fill(out, 32000);
+    CHECK(!SND_Playing(h));
+    long tail = 0;
+    for (int i = 32000; i < 64000; i++) tail += out[i] < 0 ? -out[i] : out[i];
+    CHECK(tail == 0);
+    SND_Shutdown();
+    free(b);
+}
+
 int main(void)
 {
     if (!vfs_mount_default() || !vfs_exists("Porsche.exe")) { printf("snd_test: no game data, skipped\n"); return 0; }
@@ -51,6 +91,7 @@ int main(void)
     bank("GameData/Sounds/fesfx.bnk");
     bank("GameData/Sounds/lilfesfx.bnk");
     bank("GameData/Sounds/LilSND_coll.bnk");
+    play();
     printf("snd_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");
     return fails != 0;
 }

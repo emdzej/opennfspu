@@ -4,7 +4,8 @@
 #include <stdbool.h>
 
 #define APP_FRAME_HZ 60.0
-#define APP_AUDIO_RATE 44100
+/* The sound library's device rate at the game's high sound quality (0x5b4ae4: 32000, 22050, 16000). */
+#define APP_AUDIO_RATE 32000
 
 bool app_init(void);        /* data mounted: check the exe, set up the driver; false = fatal (logged) */
 bool app_frame(void);       /* one frame; false = the game quit */

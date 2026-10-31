@@ -4,6 +4,7 @@
    scene instead of a blank frame, thrash_test=2 EAGL's;
    car=<name> shows a car (CAR_selftest). */
 #include "app.h"
+#include "snd/snd.h"
 #include "exe.h"
 #include "platform.h"
 #include "eagl/eagl.h"
@@ -65,6 +66,18 @@ bool app_frame(void)
     return true;
 }
 
-void app_audio(float *stereo, unsigned frames) { memset(stereo, 0, (size_t)frames * 2 * sizeof *stereo); }
+/* The sound library's device (DirectSound and its thread in the original): its fill, as 16-bit stereo
+   (0x58f970), to the platform's floats. */
+void app_audio(float *stereo, unsigned frames)
+{
+    static int16_t buf[4096 * 2];
+    while (frames) {
+        unsigned n = frames < 4096 ? frames : 4096;
+        SND_Fill(buf, (int)n);
+        for (unsigned i = 0; i < n * 2; i++) stereo[i] = (float)buf[i] * (1.0f / 32768.0f);
+        stereo += n * 2;
+        frames -= n;
+    }
+}
 
 void app_exit(void) { Render_Shutdown(); }

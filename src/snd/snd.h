@@ -74,3 +74,44 @@ typedef struct {
 bool SND_TagNext(SndTags *t);
 /* One layer of the patch from *p on (*p moves past it); true when another layer follows (0xfe). */
 bool SND_PatchParse(const uint8_t **p, SndPatch *out);
+
+/* ---- the library ---- */
+
+/* The configuration (0x6b4800, 0x7c bytes; the fields the port uses). */
+extern uint8_t g_snd_quality;     /* 0x6b4825: the resampler's four taps from 50 */
+
+/* The play parameters (0x561710 sets their defaults; 0x1c bytes). */
+typedef struct {
+    int32_t patch;            /* +0x00: -1 */
+    int8_t bank;              /* +0x04: 0xff */
+    int8_t key;               /* +0x05: 60 */
+    int8_t velocity;          /* +0x06: 127 */
+    int8_t pan;               /* +0x07: 64 */
+    int8_t vol;               /* +0x08: 127 */
+    int8_t f09;               /* +0x09: 64 */
+    int8_t f0a;               /* +0x0a: 127 */
+    int8_t f0b;               /* +0x0b: 0 (non-zero: the pan words at +0x18, +0x1a) */
+    uint16_t pitch;           /* +0x0c: 0x1000 (4.12) */
+    uint16_t f0e, f10;        /* +0x0e, +0x10: 0x1000 */
+    uint16_t f12;             /* +0x12: 0xffff (the lowpass) */
+    uint16_t f14;             /* +0x14: 0 */
+    uint8_t pad16[2];
+    int16_t pan18, pan1a;     /* +0x18, +0x1a */
+} SndParams;
+void SND_ParamsDefault(SndParams *p);                       /* 0x561710 */
+
+/* The library's start with the device's rate, channels and voices (SNDAUTHOR 0x564ba0 with the
+   defaults 0x58a2a0, the game's settings 0x4a6480). */
+bool SND_Init(int rate, int channels, int voices, int quality);
+void SND_Shutdown(void);
+/* A bank in memory: its slot (SNDbankadd 0x564fe0), -9 for none free; and its removal (0x564e70). */
+int SND_BankAdd(const uint8_t *bank);
+void SND_BankRemove(int slot);
+/* Plays the bank's patch (SNDplay 0x5652f0): the voice's handle, negative for none. */
+int SND_Play(int bank, int patch, SndParams *p);
+int SND_Stop(int handle);                                   /* 0x5651e0 */
+bool SND_Playing(int handle);                               /* 0x565800 (the original returns 1 when not) */
+/* Fills n frames of interleaved 16-bit samples, the library's ticks at 100 Hz among them (0x58f970). */
+void SND_Fill(int16_t *out, int n);
+int SND_Rate(void);
+int SND_Channels(void);
