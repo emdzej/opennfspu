@@ -1,5 +1,6 @@
 /* The front end's side of FERT's parts and controls (fe_parts.h). */
 #include "front/fe_parts.h"
+#include "pending.h"
 #include "front/fe2d.h"
 #include "real/font.h"
 #include "real/loc.h"
@@ -408,6 +409,13 @@ void FEWindow_Draw(FertControl *w)
        music; the window's draw doesn't draw it) */
     for (int i = w->nchildren - 1; 0 <= i; i--) {   /* 0x528390: last first */
         FertControl *c = w->children[i];
+        if (!strcmp(c->id, "NFS5.3DCAR")) continue;
+        if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) {
+            /* FEMovieCircle_v15 0x4cd520: its stencil shapes cut the movie (FEMovieBox_v15) into the oval;
+               none of its parts is drawn plainly. The movies aren't ported: nothing until they are. */
+            PENDING_NOTE(0x4cd520, "FEMovieCircle: the movie in the oval (the stencil, FEMovieBox)");
+            continue;
+        }   /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
         if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, 0, 0);
         else FEControl_Draw(c, 0, 0);
     }

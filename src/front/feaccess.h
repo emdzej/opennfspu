@@ -25,6 +25,9 @@ void FEAccess_SetPos(FEAccessor *a, int pos);
 /* The text of the current item. */
 const char *FEAccess_Text(const FEAccessor *a);
 
+/* A car accessor's current car file (its .crp's name), NULL for other kinds. */
+const char *FEAccess_CarFile(const FEAccessor *a);
+
 /* The race the choices describe: the track's name (its .crp), the car's file, the opponents. */
 const char *FEData_Track(void);
 const char *FEData_Car(void);

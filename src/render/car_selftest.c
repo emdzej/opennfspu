@@ -73,7 +73,8 @@ static bool load(const char *name)
     state.spec = &spec;
     R3DCar_Init(&car, &state);
     char path[96];
-    snprintf(path, sizeof path, "GameData\\CarModel\\%s", name);
+    if (strchr(name, '\\')) snprintf(path, sizeof path, "%s", name);   /* (a full path: the front end's rooms) */
+    else snprintf(path, sizeof path, "GameData\\CarModel\\%s", name);
     g_r3d_frontend = 1;
     /* The colours before the load, as CarSpecs_Load does (0x410fcf, then the load through the vtable):
        the pages are tinted with them while they are composed. */

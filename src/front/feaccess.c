@@ -143,6 +143,11 @@ const char *FEAccess_Text(const FEAccessor *a)
     return "";
 }
 
+const char *FEAccess_CarFile(const FEAccessor *a)
+{
+    return a && a->kind == ACC_CAR && a->count ? car_file(a->pos) : NULL;
+}
+
 const char *FEData_Track(void)
 {
     FEAccessor *a = FEAccess_Find("Track1.Track");

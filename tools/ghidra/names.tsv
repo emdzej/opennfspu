@@ -2540,3 +2540,22 @@
 005aee70	real_5aee70	real	range	EA real library object linked between CRT objects (near loadshp.c); not identified yet
 005af1f0	crt_5af1f0	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
 005af324	crt_5af324	crt	range	MSVC 6 C/C++ runtime (statically linked; not ported)
+004d0bb0	FE3DObject_ctor	frontend	high	A front-end 3D object: own car state and R3DCar; kind 0 a car (GameData\CarModel), 2 a room model (FEData\Models)
+004d1030	FE3DObject_Draw	frontend	high	Draws the object's R3DCar (0x442fd0)
+004d1050	FE3DObject_RotY	frontend	high	Sets the rotation about y (turns)
+004d1070	FE3DObject_RotX	frontend	high	Turns the rotation further about x
+004d10e0	FE3DObject_RotZ	frontend	high	Turns the rotation further about z
+004d1150	FE3DObject_SetPos	frontend	high	Position with half the height added
+004e6d60	FE3DRoom_ctor	frontend	high	The 3D room's defaults: place, spin, light, the camera's half angle
+004e6f10	FE3DRoom_Create	frontend	high	A room by its id through the factory map 0x6909c0
+004e7b60	FE3DRoom_Light	frontend	high	An object's light block from the room's colours, or the car's fixed light
+004e9570	FESpinning3DRoom_ctor	frontend	high	Spinning room: its model (+0x2ec)
+004e9690	FESpinning3DRoom_Draw	frontend	high	Places, lights, spins and draws the model and the car
+004e91d0	FEGarage3DRoom_ctor	frontend	high	The garage room's values (model "garage")
+004e98a0	FESpinning3DRoom_SetCar	frontend	high	The car in the room, placed at the room's place
+004e1010	FE_CreateOverlayScreen	frontend	med	The overlay screen of a screen's "screen" id (screenempty, screendarkoval, ...)
+00521180	FEStyle_Shadow	frontend	high	The red gradient behind a bar
+00521090	FEStyle_Shine	frontend	high	The shine over a bar (two gouraud halves)
+005211f0	FEStyle_Bevel	frontend	high	A bevel inside a bar
+00520780	FEStyle_DropShadow	frontend	high	A drop shadow out from a bar
+005208d0	FEStyle_Inset	frontend	high	A hovered bar's inset

@@ -3,8 +3,10 @@
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
+#include "front/fe3d.h"
 #include "pending.h"
 #include "platform.h"
+#include "render/r3dcar.h"
 #include "render/render.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -95,13 +97,20 @@ bool FEApp_Init(const char *start)
         FEData_Init();                               /* (the data areas' accessors, 0x4e4bc0 ..) */
         FE2D_Init();                                 /* 0x4d88c0 */
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
-        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, 3D rooms, music, movies");
+        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, the 3D rooms but the garage, music, movies");
         s_bar = load_screen("bottombar");
         s_ready = true;
     }
     s_result = FE_RUNNING;
+    g_r3d_frontend = 1;   /* 0x65b928: the application (the car renderer's showroom mode) */
     while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     return FEApp_GotoScreen(start, true);
+}
+
+void FEApp_End(void)
+{
+    FE3D_Free();
+    g_r3d_frontend = 0;
 }
 
 bool FEApp_GotoScreen(const char *name, bool push)
@@ -296,13 +305,38 @@ static void poll(void)   /* 0x529530 */
     }
 }
 
+/* The screen's room (the application's +0xe8 from the screen's "room", 0x4d2137 -> 0x4e6f10) and the car
+   its 3D car control puts in it (FECar3DControl_v21 0x4bf9a0: position type 0, the accessor's car). */
+static void sync_room(FertControl *w)
+{
+    const char *room = NULL;
+    if (w && w->screen) {
+        FertAttr *a = FertAttrList_find(&w->screen->attrs, "room");
+        for (int k = 0; !a && k < w->screen->nparts; k++) a = FertAttrList_find(&w->screen->parts[k]->attrs, "room");
+        if (a) room = FertAttr_str(a);
+    }
+    FE3D_SetRoom(room);
+    const char *car = NULL;
+    for (int i = 0; w && i < w->nchildren; i++) {
+        FertControl *c = w->children[i];
+        if (strcmp(c->id, "NFS5.3DCAR")) continue;
+        const char *pt = data_str(c, "positiontype");
+        if (pt && atoi(pt) != 0) continue;
+        car = FEAccess_CarFile(FEAccess_Find(data_str(c, "accessor")));
+    }
+    FE3D_SetCar(car);
+}
+
 void FEApp_Frame(void)
 {
     poll();
     FertControl *w = FEApp_Top();
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
+    sync_room(w);
     Render_BeginFrame(g_render);
     if (tm) TexManager_begin(tm);
+    /* the room first, in the 3D camera (0x4d2980); then the 2D over it */
+    s_camera->clear = FE3D_Draw() ? 0 : 0xff000000u;
     View_Begin(g_render, s_camera);
     RCamera_Setup2D(s_camera);
     g_fe_depth = 0.99998474f;   /* 0x4d2980 */

@@ -47,6 +47,39 @@ room), `callbacklist`, `musicfile`. Each further `[section.n]` places a control 
   LocalizedText. The EventPump (0x5bb150) delivers MouseMove, MouseButton, MouseWheel, KeyPress and
   Timer events.
 
+## 3D rooms
+
+The application keeps three things beside its screen stack: the overlay screen of the screen's `screen`
+attribute (+0xe4: `ID_SCREEN` is `screenempty.lay`, `ID_MOVIEOVAL` `screenmovieoval.lay`, ...; 0x4e1010),
+the bottom bar (+0xe0) and the 3D room of its `room` attribute (+0xe8, made by name through the factory
+map 0x6909c0: `ID_GARAGE`, `ID_DEALER`, `ID_FACTORY`, `ID_TRACK`, `ID_VICTORY`; 0x4e6f10). Its frame
+(0x4d2980) draws the room first, in its own 3D camera (+0xfc: type 6, half angle 45 until a room sets
+its own, an identity frame), then the 2D over it.
+
+- **FE3DObject** (0x4d0bb0): a car state of its own (0x1254 bytes) and an R3DCar on it. Kind 0 loads
+  `GameData\CarModel\<name>`, kind 2 a room model from `FEData\Models\`. Its position is set with
+  half its height added (0x4d1150), its rotation about y set and about x and z turned further
+  (0x4d1050, 0x4d1070, 0x4d10e0, in turns).
+- **FE3DRoom** (0x4e6d60) holds the room's place (+0x278), rotation (+0x284), the camera's half angle
+  (+0x290), the ambient and diffuse colours (+0x294, +0x2a0, 0..255), the light's direction (+0x2b8)
+  and the car the screen puts in it (+0x26c).
+- **FESpinning3DRoom** (0x4e9570) owns its model (+0x2ec). Its draw (0x4e9690) places the model and
+  the car at the room's place, gives both their light (0x4e7b60: the room's colours for the model; a
+  fixed 0.3 / 0.7 grey from (0, -0.707, 0.707) for the car), turns both about y once every +0x270
+  seconds (30), turns the model's hinges 8 and 9, and draws them.
+- **FEGarage3DRoom** (0x4e91d0): the model `garage` at (0, -1.1, 4.8), half angle 37.5, ambient
+  (55, 65, 55), diffuse 120. Its tick turns the car's hinges 1 and 2. Its draw also sets the car's floor
+  shadow (the 'FESH' texture and a matrix from the car's footprint), which is pending.
+- **FECar3DControl** (`NFS5.3DCAR`, 0x4bf870 ..): with position type 0, it makes the accessor's car and
+  hands it to the room (slot 41). It draws none of its parts (its `area` rect is a placeholder for the
+  layout editor).
+
+Port deviation: with these identity orientations, the port draws the models upside down while their
+positions are right. The race's cars carry a half turn about their forward axis that the front end's
+objects don't, and where the original makes up for it is not found yet. Until then the port draws each
+front-end object with that half turn added, about the point the original's draw puts at its position
+(`FE3DObject_Draw`).
+
 ## The port's order
 
 1. FERT's model: templates, layouts, controls, parts, attributes. Check: every template and layout
@@ -55,4 +88,4 @@ room), `callbacklist`, `musicfile`. Each further `[section.n]` places a control 
 3. The event pump from gasm's mouse and keys, and the controls' behaviours.
 4. `FEApplication_Run` 0x4d2e70 as an app state: the data areas, the main screen, quick race, the
    race's start and the return to the menus.
-5. The rest: career, dealership, garage, options, Factory Driver, the 3D rooms, movies.
+5. The rest: career, dealership, garage, options, Factory Driver, the other 3D rooms, movies.

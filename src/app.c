@@ -81,6 +81,7 @@ bool app_frame(void)
             if (fe_on) {
                 FEApp_Frame();
                 if (FEApp_Result() == FE_PLAY) {
+                    FEApp_End();
                     snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
                     g_drive_laps = FEApp_Laps();
