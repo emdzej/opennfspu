@@ -52,6 +52,19 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x8, 1);                                     /* CLASS: the human player */
     put_i(d, 0x200, 0xe);                                 /* SPEECHCOLOUR */
     for (int k = 0; k < 20; k++) put_i(d, 0x28 + 4 * k, 0);   /* PARTINDEX: the front end's owned-car parts */
+    /* The setup screen's sliders (FECarSetup 0x4f06f0) at their middle, as 1/65536ths (the brake bias
+       times 100); the gear and final ratio offsets and the toe at none. A stand-in until the front end's
+       defaults are ported. */
+    put_i(d, 0x114, 0x8000);                              /* FRONTDOWNFORCE */
+    put_i(d, 0x118, 0x8000);                              /* REARDOWNFORCE */
+    put_i(d, 0x11c, 0x8000 * 100);                        /* BRAKEBIAS */
+    put_i(d, 0x120, 0x8000);                              /* RIDEHEIGHT */
+    put_i(d, 0x124, 0x8000);                              /* SUSPENSIONTRAVEL */
+    put_i(d, 0x130, 0x8000);                              /* SUSPENSIONSTIFFNESS */
+    put_i(d, 0x134, 0x8000);                              /* SHOCKRATE */
+    put_i(d, 0x13c, 0x8000);                              /* FRONTTIREPRESSURE */
+    put_i(d, 0x140, 0x8000);                              /* REARTIREPRESSURE */
+    put_i(d, 0xc, 1);                                     /* TRANSMISSION: automatic */
     free(db);
     g_nracecars = 1;
     g_ntrafficcars = 0;

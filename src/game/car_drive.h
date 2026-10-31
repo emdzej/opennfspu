@@ -14,6 +14,7 @@ extern int32_t g_drive_front_down, g_drive_rear_down;
 extern int32_t g_race_demo;
 extern int32_t g_race_players;
 extern int32_t g_race_mode;      /* 0x6573e8 */
+extern int32_t g_race_alt_grip;  /* 0x606ae0 */
 
 /* The controls into the model's pedals, gear and steering. 0x49db10 */
 void CarSim_Controls(Car *c);
@@ -33,3 +34,24 @@ void CarSim_AutoShift(Car *c);
 /* The engine: its speed (+0xdb4) by the throttle, the clutch and the wheels, and the drive torque less
    the air's drag. 0x49e230 */
 float CarSim_Engine(Car *c);
+
+/* The aero parts' wear (type 6). 0x493aa0 */
+float CarSim_AeroWear(Car *c);
+/* The wheels' loads (+0xa8 of each tracker: +0x864, +0x928, +0x9ec, +0xab0) from the weight, the grip of
+   their surface and tyre, the transfer by braking and cornering, and the downforce; the gravity scale
+   (+0x84). 0x4a16e0 */
+void CarSim_TyreLoads(Car *c);
+
+/* The tyres' wear (type 9). 0x4938f0 */
+float CarSim_TyreWear(Car *c);
+/* Wheel w's forces from its torque, load, slip and the friction circle (the wheel objects at
+   +0x7b8 + 0xc4 w). 0x4a1eb0 */
+void CarSim_Tyre(Car *c, int w);
+
+/* The drive task (even ticks, priority 0x1e): the controls, steering, engine, loads and tyres into the
+   car's accelerations; on its side or roof no grip. 0x49fb20 (0x49ef50) */
+void CarSim_Drive(void *car);
+
+/* The drive's state back to the start: neutral (first gear for an automatic), the wheels' trackers the
+   body's, the front wheels marked. 0x49e010 */
+void CarSim_ResetDrive(Car *c);

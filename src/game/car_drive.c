@@ -1,6 +1,8 @@
 /* The cars' drive (see car_drive.h). */
 #include "game/car_drive.h"
 #include "exe.h"
+#include "game/car_ground.h"
+#include "game/sim_math.h"
 #include "game/sim_rand.h"
 #include "pending.h"
 #include <math.h>
@@ -508,4 +510,573 @@ float CarSim_Engine(Car *c)
         return v - drag;
     }
     return (float)(torque - drag);
+}
+
+/* ---- the tyres' loads ---- */
+
+int32_t g_race_alt_grip;   /* 0x606ae0: the second grip table where there is no roof over the car */
+
+float CarSim_AeroWear(Car *c) { return wear_sum(c, 6); }   /* 0x493aa0 */
+
+void CarSim_TyreLoads(Car *c)
+{
+    float load = *CAR_F(c, 0x4a0) * spec_f(c, 0xf4) * K(0x5b25bc);   /* the weight along the ground's normal */
+    bool alt = g_race_alt_grip && WSurface_FindAbove(&c->body, CAR_F(c, 0x330), NULL) == 0;   /* 0x473290 */
+    float front = spec_f(c, 0xf0);
+    bool assisted = (*CAR_I(c, CAR_FLAGS) & 8) || *CAR_I(c, 0xda8);
+    for (int i = 0; i < 4; i++) {
+        int w = 0xc4 * i;
+        int32_t tyre = *SPEC_I(c, 0x1c0);
+        uint32_t surf = (uint32_t)*CAR_I(c, 0x844 + w) & 0xf;
+        float grip;
+        /* The grip by tyre and surface (three tyres per surface): 0x5d0e44 in the open, 0x5d0d48 else. */
+        if (alt) {
+            if (assisted && tyre == 0) tyre = 1;
+            grip = K(0x5d0e44 + 4u * (uint32_t)(tyre + (int32_t)surf * 3));
+            *CAR_I(c, 0x838 + w) = 1;
+        } else {
+            if (assisted && tyre == 1) tyre = 0;
+            grip = K(0x5d0d48 + 4u * (uint32_t)(tyre + (int32_t)surf * 3));
+            *CAR_I(c, 0x838 + w) = 0;
+        }
+        float share = i < 2 ? front : K(0x5b24a8) - front;
+        *CAR_F(c, 0x864 + w) = i < 2 ? grip * front * load * K(0x5b23f0) : share * grip * load * K(0x5b23f0);
+    }
+    /* The loads moved by braking and accelerating (front to rear)... */
+    float move = (*CAR_F(c, 0xd54) * spec_f(c, 0xf8) * K(0x5b4a9c) * load * K(0x5b4a98)) / spec_f(c, 0x11c);
+    if (c->b[0xd7f] && K(0x5b23f8) < *CAR_F(c, 0xd60)) {
+        float s = *CAR_F(c, 0xdc0);
+        if (s < K(0x5b23f8)) s = -s;
+        s = K(0x5b24a8) - s * K(0x5b241c);
+        if (s < K(0x5b23f8)) s = K(0x5b23f8);
+        move = s * move;
+    }
+    float fl = *CAR_F(c, 0x864) - move, fr = *CAR_F(c, 0x928) - move;
+    *CAR_F(c, 0x864) = fl;
+    *CAR_F(c, 0x928) = fr;
+    *CAR_F(c, 0x9ec) = move + *CAR_F(c, 0x9ec);
+    *CAR_F(c, 0xab0) = move + *CAR_F(c, 0xab0);
+    if (g_race_wet) {
+        *CAR_F(c, 0x864) = fl * K(0x5b27a4);
+        *CAR_F(c, 0x928) = fr * K(0x5b27a4);
+    }
+    /* ... and by cornering (left to right). */
+    float side = (*CAR_F(c, 0xd4c) * spec_f(c, 0xf8) * K(0x5b4a9c) * load * K(0x5b23f4)) / spec_f(c, 0x11c);
+    float other = side / spec_f(c, 0x130);
+    if (side <= K(0x5b23f8)) {
+        *CAR_F(c, 0x864) -= side;
+        *CAR_F(c, 0x9ec) -= side;
+        *CAR_F(c, 0x928) = other + *CAR_F(c, 0x928);
+    } else {
+        *CAR_F(c, 0x864) -= other;
+        *CAR_F(c, 0x9ec) -= other;
+        *CAR_F(c, 0x928) = side + *CAR_F(c, 0x928);
+        other = side;
+    }
+    uint32_t g = 0x3f947ae1u;   /* the gravity scale: 1.16, more with the rear's downforce */
+    memcpy(CAR_F(c, 0x84), &g, 4);
+    *CAR_F(c, 0xab0) = other + *CAR_F(c, 0xab0);
+    if (K(0x5b2400) < *CAR_F(c, 0xd60)) {
+        /* Downforce with the speed (less with the aero parts' wear). */
+        double a = (double)K(0x5b24a8) - (double)CarSim_AeroWear(c) * K(0x5b3284);
+        double df = a * spec_f(c, 0x10c) * *CAR_F(c, 0xd60);
+        *CAR_F(c, 0x864) = (float)(df + *CAR_F(c, 0x864));
+        *CAR_F(c, 0x928) = (float)(df + *CAR_F(c, 0x928));
+        double dr = a * spec_f(c, 0x110) * *CAR_F(c, 0xd60);
+        *CAR_F(c, 0x9ec) = (float)(dr + *CAR_F(c, 0x9ec));
+        *CAR_F(c, 0xab0) = (float)(dr + *CAR_F(c, 0xab0));
+        if (K(0x5b4a0c) < *CAR_F(c, 0x3a0)) *CAR_F(c, 0x84) = (float)(dr * K(0x5b2608) + *CAR_F(c, 0x84));
+    }
+}
+
+/* ---- the tyres ---- */
+
+float CarSim_TyreWear(Car *c) { return wear_sum(c, 9); }   /* 0x4938f0 */
+
+/* A wheel object's fields (W = car + 0x7b8 + 0xc4 i): +0x8c the surface, +0x90 the sideways and +0x98
+   the lengthways force, +0x9c the sideways and +0xa4 the lengthways speed of the ground under the wheel
+   (scaled by -16), +0xa8 the drive or brake torque in, +0xac the load, +0xb4 the steering angle, +0xb8
+   the sliding, +0xbc locked, +0xc0 a front wheel. */
+#define WF(c, w, off) CAR_F(c, 0x7b8 + 0xc4 * (w) + (off))
+#define WI(c, w, off) CAR_I(c, 0x7b8 + 0xc4 * (w) + (off))
+
+static double turns_to_rad(double t)
+{
+    double k;
+    const uint8_t *p = exe_data(0x5bb2c0, 8);
+    if (p) memcpy(&k, p, 8);
+    else k = 6.283185307179586;
+    return t * k;
+}
+
+/* atan2 in turns (0x5bb2c8 is 1 / 2 pi). 0x5325d0 */
+static double atan2_turns(float y, float x)
+{
+    double k;
+    const uint8_t *p = exe_data(0x5bb2c8, 8);
+    if (p) memcpy(&k, p, 8);
+    else k = 0.15915494309189535;
+    return atan2((double)y, (double)x) * k;
+}
+
+/* A wheel locked (or held by the handbrake): the friction circle against its sliding. 0x4a1a50 */
+static void tyre_locked(Car *c, int w)
+{
+    float cap = (float)(((double)K(0x5b24a8) - (double)CarSim_TyreWear(c) * K(0x5b3284)) * *WF(c, w, 0xac));
+    float a = *WF(c, w, 0x9c), b = *WF(c, w, 0xa4);
+    if (a < K(0x5b23f8)) a = -a;
+    if (b < K(0x5b23f8)) b = -b;
+    float mag = a <= b ? a * K(0x5b2468) + b : b * K(0x5b2468) + a;
+    float k = K(0x5d0f50 + 4u * (uint32_t)*SPEC_I(c, 0x1c0));
+    float *slide = WF(c, w, 0xb8);
+    if (mag <= cap) *slide = 0;
+    else *slide = (*slide * K(0x5b2600) + (mag - cap)) * K(0x5b2468);
+    float s = *slide * K(0x5b49b4);
+    *slide = K(0x5b24a8) < s ? K(0x5b24a8) : s;
+    float m = mag < K(0x5b23f8) ? -mag : mag;
+    float f = a;   /* (a near-still wheel keeps the sideways speed's size as its factor) */
+    if (K(0x5b27a8) < m) f = (cap - cap / k) / mag;
+    *WF(c, w, 0x90) = f * *WF(c, w, 0x9c);
+    *WF(c, w, 0x98) = f * *WF(c, w, 0xa4);
+}
+
+/* The friction circle of a rolling wheel, with the traction control (the description's TRACTION, +0x20)
+   holding the driven wheels' spin. 0x4a1ba0 */
+static void tyre_grip(Car *c, int w)
+{
+    float l = *WF(c, w, 0x98) * (g_race_wet ? K(0x5b23f0) : K(0x5b25e8)), s = *WF(c, w, 0x90);
+    if (l < K(0x5b23f8)) l = -l;
+    if (s < K(0x5b23f8)) s = -s;
+    float big = l, small = s;
+    if (l < s) {
+        big = s;
+        small = l;
+    }
+    float mag = small * K(0x5b2468) + big;
+    float cap = (float)(((double)K(0x5b24a8) - (double)CarSim_TyreWear(c) * K(0x5b3284)) * *WF(c, w, 0xac));
+    int32_t front = *WI(c, w, 0xc0);
+    float lf = *WF(c, w, 0x98);
+    if (lf < K(0x5b23f8)) lf = -lf;
+    bool spin = (cap < lf && 0x80 < c->b[0xd7f]) || *CAR_I(c, front ? 0xdbc : 0xdb8) == 2;
+    float k = !front && spin ? 4.0f : K(0x5d0f50 + 4u * (uint32_t)*SPEC_I(c, 0x1c0));
+    float *slide = WF(c, w, 0xb8);
+    bool tc = DESC_I(c, 0x20) != 0;
+    if (mag <= cap) {
+        *slide = 0;
+    } else {
+        bool held = false;
+        if (tc && !front) {
+            float a = *CAR_F(c, 0xdc0);
+            if (a < K(0x5b23f8)) a = -a;
+            held = a < K(0x5b2638);
+        }
+        bool slides = !held && (*CAR_I(c, 0xda8) == 0 || (*WI(c, w, 0x8c) < 2 && *SPEC_I(c, 0x1c0) != 2));
+        if (slides) {
+            float r = (mag - cap) / k;
+            if (cap / k <= r) r = cap / k;
+            float f = (cap - r) / mag;
+            *slide = (*slide * K(0x5b2600) + (mag - cap) * (front ? K(0x5b23f0) : K(0x5b240c))) * K(0x5b2468);
+            *WF(c, w, 0x90) *= f;
+            *WF(c, w, 0x98) *= f;
+        } else {
+            *slide = 0;
+            if ((int8_t)c->b[0xd82] > 2 || *CAR_I(c, 0xda8)) *WF(c, w, 0x90) = (cap / mag) * *WF(c, w, 0x90);
+            *WF(c, w, 0x98) = (cap / mag) * *WF(c, w, 0x98);
+        }
+    }
+    if (!front && spin && !tc) *slide = mag;
+    float v = *slide;
+    if (K(0x5b24a8) < v) v = K(0x5b24a8);
+    *slide = v;
+    if (tc) *slide = v * K(0x5b23f0);
+}
+
+/* Rotates (x, z) by t turns. */
+static void rotate(float *x, float *z, float t)
+{
+    double sn = sin(turns_to_rad(t)), cs = cos(turns_to_rad(t));
+    float a = *x, b = *z;
+    *x = (float)(cs * a - (double)(float)sn * b);
+    *z = (float)(cs * b + (double)(float)sn * a);
+}
+
+void CarSim_Tyre(Car *c, int w)
+{
+    float load = *WF(c, w, 0xac);
+    bool braking = false;
+    float steer = spec_f(c, 0xfc) * *WF(c, w, 0xb4) * K(0x5b4aa4);
+    *WF(c, w, 0xb8) = 0;
+    *WI(c, w, 0xbc) = 0;
+    *WF(c, w, 0x98) = 0;
+    *WF(c, w, 0x90) = 0;
+    if (steer != K(0x5b23f8)) rotate(WF(c, w, 0x9c), WF(c, w, 0xa4), steer * K(0x5b2640));   /* into the wheel's frame */
+    float *drive = WF(c, w, 0xa8), vz = *WF(c, w, 0xa4);
+    int8_t gear = (int8_t)c->b[0xd82];
+    if (K(0x5b23f8) <= *drive || K(0x5b23f8) <= vz) {
+        if (K(0x5b23f8) < *drive && K(0x5b23f8) < vz && (g_drive_throttle <= K(0x5b2468) || gear < 2)) {
+            if (vz < *drive) *drive = vz;
+            braking = true;
+        }
+    } else if (g_drive_throttle <= K(0x5b2468) || gear != 0) {
+        if (*drive < vz) *drive = vz;
+        braking = true;
+    }
+    float f = spec_f(c, 0xf4) * *drive;
+    *drive = f;
+    float fwd = *CAR_F(c, 0xd60), afwd = fwd < K(0x5b23f8) ? -fwd : fwd;
+    bool over;
+    if (braking) {
+        float af = f < K(0x5b23f8) ? -f : f;
+        over = !(af <= *WF(c, w, 0xac));
+    } else {
+        over = false;
+    }
+    if (!over && c->b[0xd85] && *WI(c, w, 0xc0) == 0 && K(0x5b23f0) < afwd) over = true;   /* the handbrake */
+    if (over) {
+        if (c->b[0xd85]) {
+            tyre_locked(c, w);
+            *WI(c, w, 0xbc) = 1;
+            return;
+        }
+        /* Locking under hard braking without ABS (the description's +0x24). */
+        float lim = K(0x5b26a8) - *WF(c, w, 0xac);
+        if (DESC_I(c, 0x24) == 0 && fwd <= lim + lim && 0xeb < c->b[0xd80] && (K(0x5b2400) <= afwd || *CAR_I(c, 0xdb8)) &&
+            (*CAR_I(c, 0xda8) == 0 || (*WI(c, w, 0x8c) < 2 && *SPEC_I(c, 0x1c0) != 2))) {
+            tyre_locked(c, w);
+            *WI(c, w, 0xbc) = 1;
+            return;
+        }
+        float cap = *WF(c, w, 0xac);
+        if (cap < f) *drive = cap;
+        else if (f < -cap) *drive = -cap;
+        if (DESC_I(c, 0x24) && fwd < K(0x5b24dc)) {
+            /* ABS: locked one tick in four. */
+            if ((g_sim_tick & 3) == 0) {
+                tyre_locked(c, w);
+                *WI(c, w, 0xbc) = 1;
+                return;
+            }
+            *WF(c, w, 0xb8) = 0;
+        }
+    }
+    /* The sideways force by the slip angle. */
+    float vx = *WF(c, w, 0x9c);
+    vz = *WF(c, w, 0xa4);
+    double ang, a;
+    if ((vz < K(0x5b23f8) ? -vz : vz) == K(0x5b23f8)) {
+        ang = K(0x5b23f8);
+        a = K(0x5b23f8);
+    } else {
+        ang = atan2_turns(vx, vz * K(0x5b2448));
+        if (K(0x5b23f8) < vz && K(0x5b23f8) < vx) {
+            ang = ((double)K(0x5b23f0) - ang) * K(0x5b26b0);
+        } else {
+            if (K(0x5b23f8) < vz && vx < K(0x5b23f8)) ang = (double)K(0x5b2448) - ang;
+            ang = ang * K(0x5b26b0);
+        }
+        a = (float)ang;
+    }
+    double aa = ang < K(0x5b23f8) ? -ang : ang;
+    if (*WI(c, w, 0xc0) == 0) {
+        float m = K(0x5b24a8);
+        if (K(0x5b24a8) < (float)aa && (m = (float)aa, K(0x5b2580) < m)) m = K(0x5b2580);
+        float lat = m * load * K(0x5b23f0);
+        if (a < K(0x5b23f8)) lat = -lat;
+        float al = lat < K(0x5b23f8) ? -lat : lat;
+        if (vx <= K(0x5b23f8)) *WF(c, w, 0x90) = -al < vx ? vx : -al;
+        else *WF(c, w, 0x90) = vx <= al ? vx : al;
+    } else {
+        if (K(0x5b26a8) < aa) aa = K(0x5b26a8);
+        double lat = aa * load * K(0x5b49b0);
+        if (a < K(0x5b23f8)) lat = -lat;
+        *WF(c, w, 0x90) = (float)lat;
+        float ax = vx < K(0x5b23f8) ? -vx : vx, az = vz < K(0x5b23f8) ? -vz : vz;
+        if (az + ax < K(0x5b2644)) {
+            double al = lat < K(0x5b23f8) ? -lat : lat;
+            if (vx <= K(0x5b23f8)) *WF(c, w, 0x90) = (float)(-al < vx ? vx : -al);
+            else *WF(c, w, 0x90) = (float)(vx <= al ? vx : al);
+        }
+    }
+    *WF(c, w, 0x94) = 0;
+    *WF(c, w, 0x98) = *WF(c, w, 0xa8);
+    tyre_grip(c, w);   /* 0x4a1ba0 */
+    if (g_race_wet && *WI(c, w, 0xc0)) *WF(c, w, 0x90) *= K(0x5b2480);
+    if (steer != K(0x5b23f8)) {
+        /* Back into the car's frame. */
+        float t = steer * K(0x5b4aa0);
+        double sn = sin(turns_to_rad(t)), cs = cos(turns_to_rad(t));
+        float x = *WF(c, w, 0x90), z = *WF(c, w, 0x98);
+        *WF(c, w, 0x90) = (float)(cs * x - (double)(float)sn * z);
+        *WF(c, w, 0x98) = (float)((double)(float)sn * x + cs * z);
+    }
+}
+
+/* ---- the drive task ---- */
+
+/* The ground's gravity in the car's ground frame (0x628fa0). */
+static float g_drive_gravity[3];
+
+static float dot(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+static int clampi(int v, int lo, int hi) { return v < lo ? lo : hi < v ? hi : v; }
+
+/* 0x49ef50 */
+static void drive(Car *c)
+{
+    g_drive_front_down = 1;
+    g_drive_rear_down = 1;
+    if (*CAR_I(c, 0x83c) && *CAR_I(c, 0x900) && K(0x5b26a0) < *CAR_F(c, 0x424)) g_drive_front_down = 0;
+    if (*CAR_I(c, 0x9c4) && *CAR_I(c, 0xa88) && K(0x5b26a0) < *CAR_F(c, 0x424)) g_drive_rear_down = 0;
+    const float *side = CAR_F(c, 0x490), *up = CAR_F(c, 0x49c), *fw = CAR_F(c, 0x4a8);
+    const float *vel = CAR_F(c, 0x33c), *av = CAR_F(c, 0x388);
+    *CAR_F(c, 0xd58) = dot(vel, side);
+    *CAR_F(c, 0xd5c) = dot(vel, up);
+    *CAR_F(c, 0xd60) = dot(vel, fw);
+    *CAR_F(c, 0xd64) = dot(av, side);
+    *CAR_F(c, 0xd68) = dot(av, up);
+    *CAR_F(c, 0xd6c) = dot(av, fw);
+    float fwd = *CAR_F(c, 0xd60), speed = *CAR_F(c, 0x35c);
+    *CAR_F(c, 0xdc0) = fwd <= K(0x5b2400) ? 0.0f : *CAR_F(c, 0xd58) / fwd;   /* the slide angle */
+    /* The ground's speed under the wheels (with the yaw's part at the axles). */
+    float k = K(0x5b2644) * K(0x5b2448);
+    float ux = *CAR_F(c, 0xd58) * k, uy = *CAR_F(c, 0xd5c) * k, uz = *CAR_F(c, 0xd60) * k;
+    float yaw = spec_f(c, 0x1b4) * *CAR_F(c, 0x38c) * K(0x5b2644) * K(0x5b2448);
+    if (K(0x5b241c) <= speed) yaw = (speed + K(0x5b26f4)) * yaw * K(0x5b4a84);
+    else yaw = (speed + K(0x5b2408)) * yaw * K(0x5b4a2c);
+    float g[3] = {0.0f, -9.8f, 0.0f};
+    uint32_t gb = 0xc11ccccdu;
+    memcpy(&g[1], &gb, 4);
+    g_drive_gravity[0] = dot(g, side);
+    g_drive_gravity[1] = dot(g, up);
+    g_drive_gravity[2] = dot(g, fw);
+    for (int w = 0; w < 4; w++) {
+        *WF(c, w, 0x9c) = w < 2 ? yaw + ux : ux - yaw;
+        *WF(c, w, 0xa0) = uy;
+        *WF(c, w, 0xa4) = uz;
+    }
+    CarSim_Controls(c);   /* 0x49db10 */
+    /* The steering: the driver's, the slope's pull and the front wheels' damage. */
+    int slope = clampi((int)rintf(g_drive_gravity[0] * K(0x5b2608)), -0x40, 0x40);
+    float wobble = *CAR_F(c, 0x4ec) * K(0x5b2468) - *CAR_F(c, 0x4e4) * K(0x5b2468);
+    float shake = 0.0f;
+    if ((g_sim_tick & 3) == 0) {
+        uint32_t r = SimRand_Next();
+        shake = (float)((((double)(r & 0xffff) * K(0x5b253c) - K(0x5b23f0)) * CarSim_TyreBump(c)) * K(0x5b23f0));
+        if (speed < K(0x5b243c)) shake = shake * speed * K(0x5b49ec);
+        wobble = shake + wobble;
+    }
+    int steer = clampi((int)rintf(wobble) + *CAR_I(c, 0xd94) + slope, -0x7f, 0x7f);
+    /* The force feedback (+0x55c..+0x564). */
+    if (!g_drive_front_down) {
+        memset(CAR_F(c, 0x55c), 0, 12);
+    } else {
+        float x = ((*CAR_F(c, 0x934) + *CAR_F(c, 0x870)) * K(0x5b2404)) / spec_f(c, 0xf4);
+        if (K(0x5b24e8) <= x) x = K(0x5b24e8);
+        *CAR_F(c, 0x564) = x;
+        *CAR_F(c, 0x55c) = K(0x5b24a8) - x;
+        float y = shake * K(0x5b2484) + *CAR_F(c, 0x564) * K(0x5b275c);
+        *CAR_F(c, 0x564) = y < K(0x5b23f8) ? -y : y;
+        *CAR_F(c, 0x560) = ((float)slope + wobble) * *CAR_F(c, 0x55c) * K(0x5b242c);
+        if (speed <= K(0x5b251c)) *CAR_F(c, 0x55c) = *CAR_F(c, 0x55c) * speed * K(0x5b2484);
+        else *CAR_F(c, 0x55c) *= K(0x5b2764);
+    }
+    /* The front wheels' angles (less lock at speed). */
+    float lock = spec_f(c, 0xfc);
+    if (speed < K(0x5b2408)) lock = (K(0x5b36e8) - speed * K(0x5b4a2c)) * lock;
+    if (K(0x5b2470) <= lock) lock = K(0x5b2470);
+    lock = (K(0x5b4a80) / spec_f(c, 0xfc)) * lock;
+    float toe = spec_f(c, 0x100);
+    float *a0 = WF(c, 0, 0xb4), *a1 = WF(c, 1, 0xb4);
+    *a0 = ((float)steer + toe) * (K(0x5b24a8) - *CAR_F(c, 0x4e4) * K(0x5b4a7c)) * lock * K(0x5b4a78);
+    *a1 = ((float)steer - toe) * (K(0x5b24a8) - *CAR_F(c, 0x4ec) * K(0x5b4a7c)) * lock * K(0x5b4a78);
+    if (K(0x5b26d4) < fwd) {
+        float d = fwd * K(0x5b4a84);
+        *a0 /= d;
+        *a1 /= d;
+    }
+    for (int w = 0; w < 2; w++) *CAR_F(c, 0xac8 + 4 * w) = *CAR_F(c, 0xac8 + 4 * w) * K(0x5b23f0) + *WF(c, w, 0xb4) * K(0x5b23f0);
+    float torque = CarSim_Engine(c);   /* 0x49e230 */
+    if (!g_drive_front_down && !g_drive_rear_down) {
+        memset(CAR_F(c, 0xd4c), 0, 12);
+        for (int w = 0; w < 4; w++) *WF(c, w, 0xb8) = 0;
+        return;
+    }
+    *CAR_I(c, 0xd2c) = 0;
+    /* The brakes (held to what stops the car this tick), shared front and rear by the specs' +0x108. */
+    float brake = (float)(((double)K(0x5b24a8) - (double)CarSim_BrakeWear(c) * K(0x5b3284)) * spec_f(c, 0x104) * g_drive_brake);
+    float af = fwd < K(0x5b23f8) ? -fwd : fwd;
+    if (af * K(0x5b2644) < brake) brake = af * K(0x5b2644);
+    if (K(0x5b23f8) < fwd) brake = -brake;
+    float fbrake = brake * spec_f(c, 0x108);
+    CarSim_TyreLoads(c);   /* 0x4a16e0 */
+    memset(CAR_F(c, 0xd4c), 0, 12);
+    /* The torque to the wheels by the specs' front share (+0x5c) and their loads. */
+    float share = spec_f(c, 0x5c);
+    float l0 = *WF(c, 0, 0xac), l1 = *WF(c, 1, 0xac), l2 = *WF(c, 2, 0xac), l3 = *WF(c, 3, 0xac);
+    *WF(c, 0, 0xa8) = (torque * share * l0) / (l1 + l0);
+    *WF(c, 1, 0xa8) = (l1 * share * torque) / (l1 + l0);
+    *WF(c, 2, 0xa8) = ((K(0x5b24a8) - share) * l2 * torque) / (l2 + l3);
+    *WF(c, 3, 0xa8) = ((K(0x5b24a8) - share) * l3 * torque) / (l2 + l3);
+    for (int w = 0; w < 4; w++) {
+        *WI(c, w, 0xbc) = 0;
+        *WF(c, w, 0x98) = 0;
+        *WF(c, w, 0x90) = 0;
+    }
+    float fb = fbrake * K(0x5b23f0), rb = (brake - fbrake) * K(0x5b23f0);
+    *WF(c, 0, 0xa8) += fb;
+    *WF(c, 1, 0xa8) += fb;
+    *WF(c, 2, 0xa8) += rb;
+    *WF(c, 3, 0xa8) += rb;
+    if (g_drive_front_down) {
+        CarSim_Tyre(c, 0);
+        CarSim_Tyre(c, 1);
+    }
+    if (g_drive_rear_down) {
+        CarSim_Tyre(c, 2);
+        CarSim_Tyre(c, 3);
+    }
+    /* The forces and the yaw torque in the ground frame, then into the world. */
+    float *F = CAR_F(c, 0xd4c);
+    F[1] = 0;
+    float lon = *WF(c, 3, 0x98) + *WF(c, 2, 0x98) + *WF(c, 1, 0x98) + *WF(c, 0, 0x98);
+    float rearlat = *WF(c, 3, 0x90) + *WF(c, 2, 0x90);
+    F[0] = *WF(c, 1, 0x90) + *WF(c, 0, 0x90) + rearlat;
+    F[2] = lon * spec_f(c, 0x1bc);
+    float t[3] = {0.0f, 0.0f, 0.0f};
+    t[1] = ((*WF(c, 1, 0x90) + *WF(c, 0, 0x90)) - rearlat) * spec_f(c, 0x1b8) -
+           (((*WF(c, 2, 0x98) + *WF(c, 0, 0x98)) - *WF(c, 1, 0x98)) - *WF(c, 3, 0x98)) * spec_f(c, 0x1b8);
+    float rt[9];
+    Mat3_Transpose(CAR_F(c, 0x490), rt);
+    CarSim_SlopePull(c);   /* 0x49eeb0 */
+    float *acc = CAR_F(c, 0xd40), *tw = CAR_F(c, 0xd34);
+    acc[0] = dot(F, rt);
+    acc[1] = dot(F, rt + 3);
+    acc[2] = dot(F, rt + 6);
+    tw[0] = dot(t, rt);
+    tw[1] = dot(t, rt + 3);
+    tw[2] = dot(t, rt + 6);
+    float *v = CAR_F(c, 0x33c), *w = CAR_F(c, 0x388);
+    float dt = K(0x5b24b8);
+    v[0] = acc[0] * dt + v[0];
+    v[1] = acc[1] * dt + v[1];
+    v[2] = acc[2] * dt + v[2];
+    w[0] = tw[0] * dt + w[0];
+    w[2] = (float)((double)tw[2] * dt + w[2]);
+    w[1] = tw[1] * (DESC_I(c, 0x518) ? K(0x5b24b8) : K(0x5b4a74)) + w[1];
+    *CAR_F(c, 0xe08) = *CAR_F(c, 0xe08) * K(0x5b260c) + F[0] * K(0x5b2468);
+    *CAR_F(c, 0xe04) = F[2] * K(0x5b2604) + *CAR_F(c, 0xe04) * K(0x5b25e8);
+    if (g_race_wet) {
+        float s = *CAR_F(c, 0xdc0);
+        if (s < K(0x5b23f8)) s = -s;
+        if (K(0x5b2400) < s) s = K(0x5b2400);
+        float m = K(0x5b24a8) - s * K(0x5b4a30);
+        for (int j = 0; j < 3; j++) v[j] *= m;
+    }
+    if (*CAR_I(c, 0x464) == 3 && K(0x5b4a70) < speed) {
+        uint32_t m = 0x3f7eb852u;
+        float f;
+        memcpy(&f, &m, 4);
+        for (int j = 0; j < 3; j++) v[j] *= f;
+        return;
+    }
+    int8_t gear = (int8_t)c->b[0xd82];
+    if (gear > 1 && g_drive_throttle < K(0x5b2468) && speed < K(0x5b2408) && K(0x5b2464) < spec_f(c, 0xf4)) {
+        /* Coasting slowly in gear: the yaw bleeds the speed. */
+        float y = *CAR_F(c, 0x38c);
+        if (y < K(0x5b23f8)) y = -y;
+        float f = K(0x5b24a8) - y * K(0x5b3f6c);
+        v[0] = f * v[0];
+        v[2] = f * v[2];
+        return;
+    }
+    if (gear == 1) {
+        float gz = g_drive_gravity[2];
+        if (gz < K(0x5b23f8)) gz = -gz;
+        if (gz < K(0x5b23f0)) {
+            /* Rolling in neutral on the level. */
+            float f = 0.99f;
+            int s = *CAR_I(c, 0xd94);
+            if (s < 1) s = -s;
+            if (K(0x5b2470) <= af && s < 0x21) f = 0.998f;
+            for (int j = 0; j < 3; j++) {
+                v[j] *= f;
+                w[j] *= f;
+            }
+            return;
+        }
+    }
+    if (c->b[0xd85] && speed < K(0x5b24a8))
+        for (int j = 0; j < 3; j++) v[j] *= 0.5f;
+}
+
+void CarSim_Drive(void *car)
+{
+    Car *c = car;
+    if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
+        drive(c);
+        return;
+    }
+    /* Over on its side or roof: no grip. */
+    *CAR_I(c, 0xdb8) = 0;
+    *CAR_I(c, 0xdc0) = 0;
+    for (int w = 0; w < 4; w++) *WI(c, w, 0xb8) = 0;
+    float *rpm = CAR_F(c, 0xdb4);
+    *rpm = *rpm <= K(0x5b24e0) ? 0.0f : *rpm - K(0x5b24e0);
+    if (*CAR_F(c, 0x424) < K(0x5b23f0)) {
+        uint32_t m = 0x3f733333u;
+        float f;
+        memcpy(&f, &m, 4);
+        for (int j = 0; j < 3; j++) CAR_F(c, 0x33c)[j] *= f;
+        if (*CAR_F(c, 0x3a0) < K(0x5b23f4)) {
+            *CAR_F(c, 0x38c) *= K(0x5b25f4);
+            *CAR_F(c, 0xdc4) *= K(0x5b25f4);
+            *CAR_F(c, 0xdc8) *= K(0x5b25f4);
+        }
+    }
+}
+
+void CarSim_ResetDrive(Car *c)
+{
+    uint8_t *b = c->b;
+    bool automatic = DESC_I(c, 0xc) == 1;
+    b[0xd7e] = b[0xd82] = automatic ? 2 : 1;   /* first gear (automatic) or neutral */
+    *CAR_I(c, 0xd98) = 0;
+    b[0xd89] = b[0xd88] = b[0xd8b] = b[0xd8c] = 0;
+    b[0xd7c] = b[0xd7d] = 0;
+    *CAR_I(c, 0xd90) = 0;
+    b[0xd83] = b[0xd84] = b[0xd7f] = b[0xd80] = 0;
+    *CAR_I(c, 0xd94) = 0;
+    b[0xd81] = 1;
+    b[0xd85] = 0;
+    for (int w = 0; w < 4; w++) {
+        c->surf[w] = c->body;   /* 0x4730f0: the body's tracker */
+        int t = 0x7bc + 0xc4 * w;
+        memset(b + t + 0x30, 0, 0x30);   /* the point, contact and normal */
+        *CAR_F(c, t + 0x4c) = 1.0f;      /* the normal's y */
+        memset(b + t + 0x60, 0, 0x1c);
+        *CAR_I(c, t + 0x80) = 0;
+        *CAR_I(c, t + 0x84) = 0;
+        *CAR_I(c, t + 0x88) = 1;
+        *CAR_I(c, t + 0xb4) = 0;
+    }
+    for (int w = 0; w < 4; w++) *WF(c, w, 0xb4) = 0;
+    *WI(c, 0, 0xc0) = 1;   /* the front wheels */
+    *WI(c, 1, 0xc0) = 1;
+    *WI(c, 2, 0xc0) = 0;
+    *WI(c, 3, 0xc0) = 0;
+    memset(CAR_F(c, 0xac8), 0, 8);
+    *CAR_F(c, 0xe08) = *CAR_F(c, 0xe04) = 0;
+    memset(CAR_F(c, 0xd34), 0, 0x3c);    /* +0xd34 .. +0xd6c: the torques, forces, local speeds */
+    memset(CAR_F(c, 0x103c), 0, 12);
+    *CAR_I(c, 0xdb0) = *CAR_I(c, 0xdb0) ? 0x3c : 1;
+    *CAR_F(c, 0xdb4) = 0;
+    *CAR_I(c, 0xdbc) = 0;
+    *CAR_F(c, 0xdc0) = 0;
+    *CAR_F(c, 0x54c) = 0;
+    *CAR_I(c, 0xdb8) = 0;
+    *CAR_I(c, 0xd2c) = 0;
+    *CAR_I(c, 0x540) = 0;
+    *CAR_F(c, 0xdc4) = *CAR_F(c, 0xdc8) = 0;
+    *CAR_I(c, 0xe94) = 0;
+    *CAR_I(c, 0xc) = -1;
 }
