@@ -139,4 +139,9 @@ const float *WSurface_Vertex(const WSurface *s, int i);
 /* The ground height under p (a fresh tracker). 0x4744a0 */
 float WSurface_HeightAt(const float p[3]);
 
+/* The road edge the segment seg (start, end) crosses whose midpoint is nearest the segment's in height,
+   among the edges within |dx| + |dz| of its start; its points into out, its flag into *flag. Only with
+   the tracker on a polygon. 0x474030 */
+bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *flag);
+
 extern WTree *g_wtree;   /* the world's (BWorld +0x24) */

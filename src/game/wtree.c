@@ -920,3 +920,36 @@ float WSurface_HeightAt(const float p[3])
     WSurface_ComputeNormal(&s);
     return (float)plane_height(s.normal, v, p);
 }
+
+bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
+{
+    load_consts();
+    WTree *t = world_tree();
+    if (!s->elem || !t) return false;
+    float r = fabsf(seg[3] - seg[0]) + fabsf(seg[5] - seg[2]);
+    WTreeCells leaves = {0};
+    WTree_LeavesNear(t->root, seg, r, &leaves);
+    WTreeElem *best = NULL;
+    float bestd = k_far;
+    for (uint32_t i = 0; i < leaves.n; i++) {
+        WTreeList *l = leaves.c[i]->list;
+        for (uint32_t k = 0; l && k < l->n; k++) {
+            if (l->e[k].kind != WTREE_EDGE) continue;
+            WTreeElem *e = l->e[k].elem;
+            if (!e->vt->crosses(e, seg)) continue;
+            /* The nearest by the heights of the two midpoints. */
+            float d = (WTreeEdge_point(e, 1)[1] + WTreeEdge_point(e, 0)[1]) * k_half - (seg[4] + seg[1]) * k_half;
+            if (d <= k_zero) d = -d;
+            if (d < bestd) {
+                bestd = d;
+                best = e;
+            }
+        }
+    }
+    free(leaves.c);
+    if (!best) return false;
+    memcpy(out, WTreeEdge_point(best, 0), 12);
+    memcpy(out + 3, WTreeEdge_point(best, 1), 12);
+    if (flag) *flag = best->w8;
+    return true;
+}

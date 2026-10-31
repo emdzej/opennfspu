@@ -486,6 +486,7 @@
 004731a0	WSurface_FindBelow	world	high	The polygon under a point nearest in height among those with surface bits
 00473290	WSurface_FindAbove	world	high	The polygon above a point by more than 3.5, its flags
 00473fc0	WSurface_Update	world	high	A surface tracker's polygon for a point (kept while still on it)
+00474030	WSurface_FindEdge	world	high	The road edge a segment crosses, nearest by mid-height
 00474280	WSurface_ComputeNormal	world	high	The tracker's polygon normal and in-plane edge direction
 00474380	WSurface_Normal	world	high	The tracker's normal (computed on demand)
 00474390	WSurface_Slope	world	high	The tracker's in-plane direction (computed on demand)
@@ -599,6 +600,7 @@
 00489130	R3DTypes_W3DObjectBundle_v1	render	struct	Virtual slot 1 of R3DTypes::W3DObjectBundle (vtable 0x5b384c)
 00489760	WObjectRef_set	world	high	{bundle, 0, index}
 00489bf0	World_SegmentsCross	world	high	Ground-plane segment intersection, parameters in [0, 1]
+00489e40	Edge_ClosestPoint	world	high	Closest point of an edge's line to a point (ground plane)
 00489f90	Plane_HeightAt	world	high	The height of a plane through a point at (x, z)
 00489fd0	Quad_Warp	world	high	Distance of a quad's fourth vertex from the plane of the first three
 0048aca0	CConClient_v0	scene	struct	Virtual slot 0 of CConClient (vtable 0x5b4968)
@@ -621,8 +623,13 @@
 00493a10	CarSim_GearboxWear	sim	high	The gearbox parts' wear (type 3)
 00493aa0	CarSim_AeroWear	sim	high	The aero parts' wear (type 6)
 00493b30	CarSim_TyreBump	sim	high	The tyres' bump amplitude from their parts and damage zones
+00493db0	CarSim_AfterHit	sim	high	Velocity damped and local speeds after a hit
+00493e80	CarSim_TurnAlong	sim	high	Slow glancing hits turn the car along the wall
+00493f70	CarSim_HitWall	sim	high	The car pushed out of a wall, bounced off its normal; the impact
 004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
+00494f90	CarSim_Edges	sim	high	The car's eight box probes against the road edges
 00498190	Sim_ClearContacts	sim	med	Clears the per-tick contact accumulator (+0x110c) of every race car (0x5e8b34, count 0x5e8b58) and traffic car (0x5e8c24, count 0x5e8b5c)
+00498f60	CarSim_Collide	sim	high	The collision task: edges, objects, the other cars
 00499490	CarSim_BodyPlane	sim	high	The car's own ground plane from the body polygon and the road axes
 004996a0	CarSim_SurfaceNoise	sim	high	The surface roughness under a wheel (random bumps by surface kind)
 004999e0	CarSim_Ground	sim	high	The wheels on the ground: contacts, suspension, pitch and roll; mean height

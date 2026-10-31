@@ -429,6 +429,10 @@ static void Car_MakeRenderer(Car *c)
     snprintf(path, sizeof path, "GameData\\CarModel\\%s", (const char *)CAR_DESCB(c) + 0x228);
     R3DCar_LoadCrp(&r->car, path);
     c->p[CARP_R3D] = &r->car;
+    /* The sizes the load writes into the state are the car's own fields in the original (+0x3a8 the half
+       box, +0x3b4 the radius): the simulation's collisions read them there. */
+    memcpy(CAR_F(c, 0x3a8), r->state.halfsize, 12);
+    *CAR_F(c, 0x3b4) = r->state.radius;
     PENDING_NOTE(0x478e30, "the car's wheel objects (+0x7b8, 0x478e30)");
 }
 
