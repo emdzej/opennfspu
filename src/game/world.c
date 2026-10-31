@@ -2,6 +2,7 @@
 #include "game/world.h"
 #include "eagl/eagl.h"
 #include "exe.h"
+#include "game/anim.h"
 #include "game/track_pending.h"
 #include "game/wtree.h"
 #include "render/rdraw.h"
@@ -405,6 +406,8 @@ void W3DObjectBundle_delete(W3DObjectBundle *b)
         free(in->protos);
         free(in->proto);
         free(in->placed);
+    } else if (b->vt == &vt_anim) {
+        WAnim_free(((WAnimBundle *)b)->anims, b->count);   /* (WAnimBundle's dtor 0x4776d0) */
     }
     b->vt->dtor(b, 1);
 }

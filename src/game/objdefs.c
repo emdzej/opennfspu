@@ -18,6 +18,8 @@ static float exe_f32(uint32_t va)
 
 static WObjectDef **defs;   /* 0x628ba0 +0: the definitions */
 static int ndefs, capdefs;
+static WAudioDef **auds;   /* the holder's +4 */
+static int nauds, capauds;
 
 static bool kept(char c)
 {
@@ -226,6 +228,10 @@ static const char *parse_anim(const char *p)
 
 void WObjectDefs_free(void)
 {
+    for (int i = 0; i < nauds; i++) free(auds[i]);
+    free(auds);
+    auds = NULL;
+    nauds = capauds = 0;
     for (int i = 0; i < ndefs; i++) {
         for (int k = 0; k < defs[i]->npieces; k++) free(defs[i]->piece[k]);
         free(defs[i]);
@@ -233,6 +239,84 @@ void WObjectDefs_free(void)
     free(defs);
     defs = NULL;
     ndefs = capdefs = 0;
+}
+
+/* ---- the audio sections (the holder's +4) ---- */
+
+static bool short_value(const char **pp, const char *key, int16_t *out)   /* 0x47d2b0 */
+{
+    int32_t v;
+    if (!int_value(pp, key, &v)) return false;
+    *out = (int16_t)v;
+    return true;
+}
+
+/* A section:sound (0x18 bytes, WMidGround_ParseSound 0x47d840). */
+static const char *parse_sound(const char *p, WSoundDef *d)
+{
+    const char *head = exe_str(0x5d024c);   /* "section:sound{" */
+    if (!match(p, head)) return NULL;
+    p += strlen(head);
+    while (*p != '}') {
+        if (short_value(&p, exe_str(0x5d0244), &d->patch) || float_value(&p, exe_str(0x5d023c), &d->range) ||
+            float_value(&p, exe_str(0x5d0234), &d->fadein) || short_value(&p, exe_str(0x5d022c), &d->trigger) ||
+            short_value(&p, exe_str(0x5d0224), &d->fadeout) || short_value(&p, exe_str(0x5d0218), &d->minrepeat) ||
+            short_value(&p, exe_str(0x5d0208), &d->randomrepeat) || short_value(&p, exe_str(0x5d0200), &d->volume))
+            continue;
+        const char *q = strchr(p, ';');
+        if (!q) {
+            q = strchr(p, '}');
+            if (!q) return NULL;
+            return q + 1;
+        }
+        p = q + 1;
+    }
+    return p + 1;
+}
+
+/* A section:audio (0x28 bytes, WMidGround_ParseAudio 0x47d570): its tag and up to eight sounds. */
+static const char *parse_audio(const char *p)
+{
+    const char *head = exe_str(0x5d01f0);   /* "section:audio{" */
+    if (!match(p, head)) return NULL;
+    p += strlen(head);
+    WAudioDef *a = calloc(1, sizeof *a);
+    if (!a) return NULL;
+    while (*p && *p != '}') {
+        if (match(p, exe_str(0x5d01e0))) {   /* section:sound */
+            WSoundDef *d = a->n < WAUD_MAXSOUNDS ? &a->sound[a->n] : NULL;
+            WSoundDef spare;
+            memset(&spare, 0, sizeof spare);
+            const char *q = parse_sound(p, d ? d : &spare);
+            if (!q) break;
+            if (d) a->n++;
+            p = q;
+            continue;
+        }
+        if (tag_value(&p, exe_str(0x5d01dc), &a->tag)) continue;   /* tag */
+        const char *q = strchr(p, ';');
+        if (!q) break;
+        p = q + 1;
+    }
+    if (nauds == capauds) {
+        int n = capauds ? capauds * 2 : 4;
+        WAudioDef **na = realloc(auds, (size_t)n * sizeof *na);
+        if (!na) {
+            free(a);
+            return *p ? p + 1 : p;
+        }
+        auds = na;
+        capauds = n;
+    }
+    auds[nauds++] = a;
+    return *p ? p + 1 : p;
+}
+
+const WAudioDef *WObjectDefs_findaudio(uint32_t type)   /* 0x47ecb0 */
+{
+    for (int i = 0; i < nauds; i++)
+        if (auds[i]->tag == type) return auds[i];
+    return NULL;
 }
 
 void WMidGround_LoadObjectDefs(const char *path)
@@ -258,8 +342,8 @@ void WMidGround_LoadObjectDefs(const char *path)
         if (match(p, exe_str(0x5d01cc))) {   /* section:anim */
             p = parse_anim(p);
         } else if (match(p, exe_str(0x5d01bc))) {   /* section:audio */
-            PENDING_NOTE(0x47d570, "WMidGround_ParseAudio (the track's sound sections)");
-            p = skip_section(p);
+            const char *q = parse_audio(p);
+            p = q ? q : skip_section(p);
         } else {
             p = skip_section(p);
         }

@@ -39,6 +39,12 @@ int main(void)
     CHECK(WObjectDefs_find(tag("ZZZZ")) == WObjectDefs_at(0));   /* an unknown type: the first */
     CHECK(WObjectDefs_find(0) == NULL);
     CHECK(n == 64);
+    /* The audio section: TRAN's sound (PatchID 833, Range 300, FadeIn 17, Volume 100). */
+    uint32_t tran;
+    memcpy(&tran, "TRAN", 4);
+    const WAudioDef *a = WObjectDefs_findaudio(tran);
+    CHECK(a && a->n == 1 && a->sound[0].patch == 833 && a->sound[0].range == 300.0f && a->sound[0].fadein == 17.0f &&
+          a->sound[0].volume == 100);
     printf("objdefs_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");
     return fails != 0;
 }

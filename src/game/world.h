@@ -125,7 +125,7 @@ typedef WArticleBundle WStaticBundle;      /* 0x34; ctor 0x483350 */
 typedef WArticleBundle WMidGroundBundle;   /* 0x34; ctor 0x47cb40 */
 typedef struct {                   /* WAnimBundle (0x38; ctor 0x4776a0) */
     WArticleBundle a;
-    void *anims;                   /* +0x34: the entries' animations (0x4713f0) */
+    struct WAnimEntry *anims;      /* +0x34: the entries' animations, sounds, types (game/anim.h) */
 } WAnimBundle;
 
 /* A visibility wall (0x1c bytes; from the 'Vis ' item's 0x18-byte records, two points each): the

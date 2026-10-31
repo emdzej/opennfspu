@@ -13,6 +13,9 @@
 #include "game/scene.h"
 #include "game/music.h"
 #include "game/hud.h"
+#include "game/anim.h"
+#include "game/world.h"
+#include "game/track.h"
 #include "game/race_progress.h"
 #include "game/track.h"
 #include "snd/snd.h"
@@ -168,6 +171,32 @@ int main(void)
         run(64, 64, 0);
         printf("  siren: rms %.0f without, %.0f with\n", plain, siren);
         CHECK(siren > plain * 1.2);
+    }
+    /* The autobahn's train (an animated TRAN with animdefs.txt's sound 833): the car put beside it for
+       two seconds, then back (0x4aed00's animated objects). */
+    W3DObjectBundle *ab = g_world ? g_world->anim : NULL;
+    WAnimEntry *es = ab ? ((WAnimBundle *)ab)->anims : NULL;
+    for (uint32_t i = 0; es && i < ab->count; i++) {
+        if (!es[i].nsounds) continue;
+        EaglMatrix m;
+        QuatAnim_At(es[i].anim, g_sim_tick + 64, &m);
+        static Car keep;
+        Car *c = g_cars[0];
+        keep = *c;
+        double far = run(64, 64, 0);
+        float d[3] = {m.m[12] + 20 - CAR_F(c, 0x330)[0], m.m[13] + 2 - CAR_F(c, 0x330)[1], m.m[14] - CAR_F(c, 0x330)[2]};
+        for (int k = 0; k < 3; k++) {
+            CAR_F(c, 0x330)[k] += d[k];
+            for (int w = 0; w < 4; w++) CAR_F(c, 0x7f8 + 0xc4 * w)[k] += d[k];
+        }
+        for (int k = 0; k < 3; k++) CAR_F(c, 0x33c)[k] = 0;
+        Camera_Init(0, g_cars[0], 2);
+        double near = run(64 * 2, 64, 0);
+        *c = keep;
+        Camera_Init(0, g_cars[0], 2);
+        printf("  the train (%u sounds): rms %.0f away, %.0f beside it\n", es[i].nsounds, far, near);
+        CHECK(near > far * 1.2);
+        break;
     }
     /* The music: a song of the playlist streamed (zzzymus.viv), heard over the idling car. */
     double quiet = run(64, 64, 0);

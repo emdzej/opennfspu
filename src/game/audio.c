@@ -6,6 +6,7 @@
 #include "game/road.h"
 #include "game/scene.h"
 #include "game/music.h"
+#include "game/anim.h"
 #include "game/track.h"
 #include "game/wtree.h"
 #include "game/input.h"
@@ -1429,7 +1430,41 @@ static void elems_tick(Car *c, int heading)
             elem_play(e, tick8, NULL, 0x80, heading, s_listener);
     }
     (void)c;
-    if (g_world && g_world->anim) PENDING_NOTE(0x4aed00, "the animated objects' sounds (the world's bundle +0x34 lists)");
+    /* The animated objects' sounds, every tick: each at its object, which moves; its speed from where the
+       animation is half a second on (x2); near or with a voice, played with the volume its FadeIn and
+       FadeOut make (8 x FadeIn: positive silent, else its negative; 8 x FadeOut below 0: 0x80 plus it,
+       below -0x80 silent) and the tick's hundreds part in eighths as its time. */
+    W3DObjectBundle *ab = g_world ? g_world->anim : NULL;
+    WAnimEntry *es = ab ? ((WAnimBundle *)ab)->anims : NULL;
+    for (uint32_t i = 0; es && i < ab->count; i++) {
+        WAnimEntry *e = &es[i];
+        if (!e->nsounds || !e->anim) continue;
+        int tick = g_sim_tick;
+        EaglMatrix m0, m1;
+        QuatAnim_At(e->anim, tick, &m0);
+        QuatAnim_At(e->anim, tick + 0x20, &m1);
+        const float *p0 = m0.m + 12, *p1 = m1.m + 12;
+        float rd = rough_dist(p0, s_listener[0], s_listener[2]);
+        float vel[3] = {(p1[0] - p0[0]) + (p1[0] - p0[0]), (p1[1] - p0[1]) + (p1[1] - p0[1]), (p1[2] - p0[2]) + (p1[2] - p0[2])};
+        for (uint32_t k = 0; k < e->nsounds; k++) {
+            SceneElem *se = &e->sounds[k];
+            memcpy(se->b + SCENE_POS, p0, 12);
+            int v = scene_i16(se, AE_VOICE);
+            if (v != -1 && s_ev[v].e != se) scene_set_i16(se, AE_VOICE, -1);
+            if (!(rd < ae_f(se, AE_RADIUS) + 100.0f) && !(-1 < scene_i16(se, AE_VOICE))) continue;
+            scene_set_i16(se, AE_NEXT, scene_i16(se, AE_PERIOD));
+            int vol = 0x80;
+            int x = (int)(ae_f(se, AE_INNER) * 8.0f);   /* 0x5b2608 */
+            if (0 < x) vol = 0;
+            else if (0 < x + 0x80) vol = -x;
+            int r = scene_i16(se, AE_RANDOM) * 8;
+            if (r != 0) {
+                if (r + 0x80 < 0) vol = 0;
+                else if (r < 0) vol = r + 0x80;
+            }
+            elem_play(se, (tick % 100) >> 3, vel, vol, heading, s_listener);
+        }
+    }
 }
 
 /* The track's sounds near the start asked for and read before the race (Audio_LoadTrackBanks

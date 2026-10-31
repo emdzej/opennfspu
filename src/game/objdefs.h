@@ -1,7 +1,7 @@
 /* The track's object definitions (WObjectDefs, from GameData\Track\animdefs.txt): per tagged object type
    its collision kind (cylinder, box, smackable), mass, radius, sound kind, its animation's pieces and
    speeds. Read by WMidGround_ParseObjectDefs (0x47ea60) into the object at 0x628ba0 (0x47ed00): +0 the
-   definitions (a vector of 0x8c-byte records), +4 the audio sections' (pending). The text is read
+   definitions (a vector of 0x8c-byte records), +4 the audio sections'. The text is read
    lowercased with everything but letters, digits and ";{}=:" dropped, and "//" comments cut. */
 #pragma once
 #include <stdint.h>
@@ -36,6 +36,31 @@ typedef struct {
     int32_t frametickoffset;              /* +0x84 */
     int32_t tickspervertframe;            /* +0x88: 8 */
 } WObjectDef;
+
+/* A sound of an object type (0x18 bytes, WMidGround_ParseSound 0x47d840): the track.viv entry, its
+   range, then the values the type's sound records take as their inner radius (FadeIn), period
+   (Trigger), the period's random part (FadeOut), repeats and their random part, volume (percent). */
+typedef struct {
+    int16_t patch;        /* +0x00: PatchID */
+    float range;          /* +0x04 */
+    float fadein;         /* +0x08 */
+    int16_t trigger;      /* +0x0c */
+    int16_t fadeout;      /* +0x0e */
+    int16_t minrepeat;    /* +0x10 */
+    int16_t randomrepeat; /* +0x12 */
+    int16_t volume;       /* +0x14 */
+} WSoundDef;
+
+enum { WAUD_MAXSOUNDS = 8 };
+/* An object type's sounds (0x28 bytes, WMidGround_ParseAudio 0x47d570). */
+typedef struct {
+    uint32_t tag;         /* +0x00 */
+    int32_t n;            /* +0x04 */
+    WSoundDef sound[WAUD_MAXSOUNDS];   /* (the original keeps pointers at +0x08) */
+} WAudioDef;
+
+/* The type's sounds, NULL for none. 0x47ecb0 */
+const WAudioDef *WObjectDefs_findaudio(uint32_t type);
 
 /* Reads the definitions from path (0x47ed00 makes the holder, 0x47ea60 parses). */
 void WMidGround_LoadObjectDefs(const char *path);

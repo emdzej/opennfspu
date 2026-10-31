@@ -258,3 +258,36 @@ end).
   Doppler (pitch × 64 / 65536). Its volume follows the distance over 70; the numbered kind takes the
   options' mix of 0x5d1750 and 0x5d14c4 in one product, the other in two steps. Its pan follows too.
 - When the siren goes off, it is reset (0x4aad20) and fades over five ticks.
+
+## The animated objects' sounds
+
+The objects of the animated bundle (articles with an `Anqt` item, WAnimBundle_load 0x477780) each get a
+QuatAnim (0x4713f0): the keys, looping, a key every 0.1 s (6.4 ticks), started at load. Their type's
+sounds come from animdefs.txt's `SECTION:Audio` (WMidGround_ParseAudio 0x47d570, WMidGround_ParseSound
+0x47d840, looked up by 0x47ecb0). The only one in the data is TRAN's, PatchID 833 with Range 300: the
+train on the autobahn. Each sound becomes a CAudioElem-shaped record, with the keys landing in fields
+that mean something else there:
+
+| Key | Record field |
+|---|---|
+| Range | radius |
+| FadeIn | inner radius |
+| Trigger | period |
+| FadeOut | the period's random part |
+| MinRepeat | repeats |
+| RandomRepeat | the repeats' random part |
+| Volume | volume |
+
+The record's kind and voice are left as the heap had them: the array isn't cleared.
+
+On every odd tick, 0x4aed00 puts each such record at its object's position: the animation's matrix at
+the tick (slot 3, 0x470df0). Its speed comes from the position half a second later, times two. A record
+within its radius + 100, or holding a voice, gets its period as its time. It then plays through
+0x4ae890 at a volume made from FadeIn and FadeOut: 8 × FadeIn above 0 silences it, else gives its
+negative; 8 × FadeOut below 0 gives 0x80 plus it, and below -0x80 silences it. The train's Doppler
+comes from its own movement.
+
+Keys (0x34 bytes): a quaternion, a position, a scale. 0x470ed0 blends two keys linearly (no slerp,
+nothing normalised), builds the rotation from the blend (0x48a110), scales its rows and adds the
+position. 0x470df0 picks the key pair from the ticks over the rate (looping over all but the last two
+keys) and adds a drift by time.
