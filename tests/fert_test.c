@@ -1,0 +1,90 @@
+/* FERT's model (front/fert.c): every control template and screen of FEData\Controls registered, every
+   layout of FEData\Layouts loaded into a window, each of its sections made into a control of its
+   template; a few templates and a layout checked against their files. Skips (exit 0) without data. */
+#include "exe.h"
+#include "front/fert.h"
+#include "vfs.h"
+#include "vfs_host.h"
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
+
+static int fails, checks;
+#define CHECK(x) do { checks++; if (!(x)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); } } while (0)
+
+static char names[256][260];
+static int nnames;
+
+static void on_layout(const char *name, bool is_dir, void *user)
+{
+    (void)user;
+    size_t l = strlen(name);
+    if (!is_dir && l > 4 && !strcasecmp(name + l - 4, ".lay") && nnames < 256) snprintf(names[nnames++], 260, "%s", name);
+}
+
+int main(void)
+{
+    if (!vfs_mount_default() || !vfs_exists("Porsche.exe")) { printf("fert_test: no game data, skipped\n"); return 0; }
+    char err[256];
+    if (!exe_init(err, sizeof err)) { printf("FAIL %s\n", err); return 1; }
+    int n = Fert_ListControls("FEData\\Controls");
+    printf("  %d templates: %d controls, %d screens\n", n, Fert_ControlCount(), Fert_ScreenCount());
+    CHECK(Fert_ControlCount() > 60 && Fert_ScreenCount() >= 1);
+
+    /* Label.ctr: two parts, two states, label a LOCALIZEDTEXT with its font, data's typed attributes. */
+    FertControl *c = Fert_MakeControl("REAL.LABEL");
+    CHECK(c && c->nparts == 2 && c->nstates == 2);
+    if (c && c->nparts == 2) {
+        FertPart *label = c->parts[FertControl_findPart(c, "label")], *data = c->parts[FertControl_findPart(c, "data")];
+        CHECK(label->kind == FPART_LOCALIZEDTEXT);
+        CHECK(!strcmp(FertAttrList_find(&label->attrs, "fontPathName")->value, "univers8b.ffn"));
+        CHECK(FertAttr_color(FertAttrList_find(&label->attrs, "foreColor")) == 0xffffffffu);
+        CHECK(data->kind == FPART_DATA && data->attrs.n == 4);
+        FertAttr *ns = FertAttrList_find(&data->attrs, "nosize");
+        CHECK(ns && ns->type == FATTR_INT && FertAttr_int(ns) == 1 && !ns->exposed);
+        CHECK(FertAttrList_find(&data->attrs, "transon")->exposed);
+        CHECK(!FertAttrList_find(&c->attrs, "size")->exposed);
+        int h = FertControl_findState(c, "hidden");
+        CHECK(h >= 0 && c->states[h].nparts == 1);
+    }
+    FertControl_free(c);
+
+    /* bottombar.lay: its screen, then the controls with their layout values. */
+    FertControl *w = FertControl_new(true);
+    CHECK(FertWindow_LoadLayout(w, "FEData\\Layouts\\bottombar.lay"));
+    CHECK(w->screen != NULL);
+    FertControl *lab = NULL;
+    for (int i = 0; i < w->nchildren; i++)
+        if (!strcmp(w->children[i]->name, "ID_ACCOUNTTHINGY")) lab = w->children[i];
+    CHECK(lab && !strcmp(lab->id, "REAL.LABEL"));
+    if (lab) {
+        int32_t p[2];
+        FertAttr_point(FertAttrList_find(&lab->attrs, "pos"), p);
+        CHECK(p[0] == 191 && p[1] == 464);
+        FertPart *l = lab->parts[FertControl_findPart(lab, "label")];
+        CHECK(!strcmp(FertAttrList_find(&l->attrs, "fontPathName")->value, "univers7b.ffn"));
+        CHECK(!strcmp(FertAttrList_find(&l->attrs, "stringID")->value, "10504"));
+        CHECK(FertAttr_int(FertAttrList_find(&lab->parts[FertControl_findPart(lab, "data")]->attrs, "align")) == 2);
+    }
+    FertControl_free(w);
+
+    /* Every layout. */
+    vfs_list("FEData\\Layouts", on_layout, NULL);
+    int sections = 0, made = 0, unknown = 0;
+    for (int i = 0; i < nnames; i++) {
+        char path[300];
+        snprintf(path, sizeof path, "FEData\\Layouts\\%s", names[i]);
+        FertControl *lw = FertControl_new(true);
+        bool ok = FertWindow_LoadLayout(lw, path);
+        CHECK(ok);
+        if (!lw->screen) { printf("  %s: no screen\n", names[i]); unknown++; }
+        made += lw->nchildren;
+        FertControl_free(lw);
+        (void)sections;
+    }
+    printf("  %d layouts, %d controls placed, %d without a screen\n", nnames, made, unknown);
+    CHECK(nnames > 90 && made > 500);
+    Fert_FreeTemplates();
+    printf("fert_test: %d/%d checks passed\n", checks - fails, checks);
+    return fails ? 1 : 0;
+}
