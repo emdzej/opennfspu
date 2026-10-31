@@ -8,6 +8,7 @@
 
 #include "front/fert.h"
 #include "render/hud2d.h"
+#include "front/fe2d.h"
 
 /* The folders the original's path table holds (0x65b330 controls, 0x65b334 art, 0x65b340 locale,
    0x65b344 layouts; set at start). */
@@ -25,6 +26,12 @@ void FEFont_Release(HudFont *f);
    a string by id (0x4e0270): "" for 0, "Not Found" for none. */
 void FEStrings_Load(int language);
 const char *FEStrings_Get(int id);
+
+/* An FSH's shapes as images (FE_ValidateShapes 0x4d67f0): loaded once and counted, packed into 256 x 256
+   texture pages by the places they store; an image by index (0x4d74e0); a release (0x4d7270). */
+void FEShapes_Load(const char *path);
+FeImage *FEShapes_Image(const char *path, int index);
+void FEShapes_Release(const char *path);
 
 /* A path name attribute as a file path (0x52caa0): as it is when absolute ("x:", "\\\\"), else under
    the registry's root (the art folder). */

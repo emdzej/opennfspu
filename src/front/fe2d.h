@@ -15,6 +15,8 @@ typedef struct {
     Texture *tex;          /* +0x00 */
     float u0, u1, v0, v1;  /* +0x04 */
     int32_t w, h;          /* +0x14 */
+    int32_t cx, cy;        /* +0x1c: the shape's centre, negated */
+    char name[0x6c];       /* +0x24 (0x90 bytes in all) */
 } FeImage;
 
 extern float g_fe_depth;   /* 0x65b954 */

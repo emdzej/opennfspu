@@ -89,6 +89,11 @@ typedef struct {
     FertAttrList attrs;      /* +0x04 */
     char name[FERT_NAME];    /* +0x08 */
     char type[FERT_NAME];    /* +0x14: the id it was made from */
+    /* a shape part's image (+0x198) and the bank it came from (+0x19c), the front end's */
+    void *image;
+    char bank[260];
+    int32_t bankindex;
+    bool hidden;             /* +0x1ac */
 } FertPart;
 
 /* A part of an id (the factory 0x4e5830), NULL for an unknown one. */
@@ -140,6 +145,10 @@ void FertControl_Update(FertControl *c);
 /* The front end's text measuring for a text part (FETextPart_v4 0x4e6800): the size of its text in its
    font; false without a font. */
 extern bool (*Fert_MeasureText)(const FertPart *p, int32_t *w, int32_t *h);
+/* The front end's part classes after their attributes' evaluation (a shape part loads its image,
+   FEShapePart_v8 0x4e6140) and as they go. */
+extern void (*Fert_PartEvalHook)(FertPart *p);
+extern void (*Fert_PartFreeHook)(FertPart *p);
 int FertControl_findPart(const FertControl *c, const char *name);
 int FertControl_findState(const FertControl *c, const char *name);
 

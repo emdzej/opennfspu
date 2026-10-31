@@ -70,7 +70,8 @@ void FE2D_Init(void)
         EAGL_MaterialAddLayer(&s_mat, EAGL_CreateLayer(3, 0, 0));      /* texture coordinates */
         EAGL_MaterialAddLayer(&s_mat, EAGL_CreateLayer(4, 0, 0));      /* the texture */
         EAGL_MaterialAddLayer(&s_mat, EAGL_CreateLayer(8, 0, 0));      /* the render states */
-        EAGL_MaterialAddLayer(&s_mat, EAGL_CreateLayer(0x12, 0, 0));   /* the two-stage draw */
+        EAGL_MaterialAddLayer(&s_mat, EAGL_CreateLayer(0, 0, 0));      /* the draw (0x53f370, which Ghidra
+                                                                           names EAGL_LayerDraw2_ctor) */
         EAGL_MaterialBind(&s_mat);
         s_pos = calloc(BATCH * 4, sizeof *s_pos);
         s_col = calloc(BATCH * 4, sizeof *s_col);

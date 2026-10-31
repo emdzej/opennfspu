@@ -285,9 +285,12 @@ FertPart *FertPart_new(const char *id, const char *name)
     return p;
 }
 
+void (*Fert_PartFreeHook)(FertPart *p);
+
 void FertPart_free(FertPart *p)
 {
     if (!p) return;
+    if (Fert_PartFreeHook) Fert_PartFreeHook(p);   /* (the front end's parts let go of their art) */
     FertAttrList_free(&p->attrs);
     free(p);
 }
@@ -472,6 +475,7 @@ void FertControl_parseLayout(FertControl *c, IniData *ini)
 }
 
 bool (*Fert_MeasureText)(const FertPart *p, int32_t *w, int32_t *h);
+void (*Fert_PartEvalHook)(FertPart *p);
 
 void FertControl_Update(FertControl *c)
 {
@@ -488,6 +492,7 @@ void FertControl_Update(FertControl *c)
         FertPart *p = c->parts[k];
         /* (a text part evaluates twice when the first took over 3 timer ticks: not in the port) */
         for (int i = 0; i < p->attrs.n; i++) FertAttr_eval(p->attrs.a[i]);
+        if (Fert_PartEvalHook) Fert_PartEvalHook(p);
         int32_t w, h;
         if ((p->kind == FPART_TEXT || p->kind == FPART_LOCALIZEDTEXT) && Fert_MeasureText && Fert_MeasureText(p, &w, &h)) {
             FertAttr *sz = FertAttrList_find(&p->attrs, "size");
