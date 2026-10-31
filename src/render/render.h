@@ -75,6 +75,9 @@ typedef struct {
 RenderState *RenderState_ctor(RenderState *rs);          /* 0x537470 */
 void RenderState_Send(RenderState *rs);                  /* 0x5374d0 */
 void RenderState_SetCull(RenderState *rs, int cull);     /* 0x537600 */
+void RenderState_SetFogMode(RenderState *rs, int mode);          /* 0x537670: 0 off, 1 on, 4 exp, 8 exp2 */
+void RenderState_SetFogDensity(RenderState *rs, float density);  /* 0x537690 */
+void RenderState_SetFogColour(RenderState *rs, uint32_t argb);   /* 0x5376f0 */
 
 /* ---- the graphics device (EAGL device, vtable 0x5bc41c; the windowed kind 0x5bc3f0) ---- */
 

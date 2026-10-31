@@ -1,6 +1,7 @@
 /* The render system (render.h): Render_Init and the render system object, the graphics device, the
    render-state object, display mode and quality, cameras and views, the race frame. */
 #include "render/render.h"
+#include "render/sky.h"
 #include "game/hud.h"
 #include "exe.h"
 #include "platform.h"
@@ -99,6 +100,27 @@ void RenderState_SetCull(RenderState *rs, int cull)
         rs->cull = cull;
         EAGL_RSSetDevice(rs->cull, rs->biasbase);
     }
+}
+
+/* The fog's states (THRASH 0x15 the mode, 0x0e the density, 0x0f the colour). 0x537670, 0x537690, 0x5376f0 */
+void RenderState_SetFogMode(RenderState *rs, int mode)
+{
+    rs->state15 = mode;
+    EAGL_RSSet(0x15, (uintptr_t)mode);
+}
+
+void RenderState_SetFogDensity(RenderState *rs, float density)
+{
+    uint32_t u;
+    memcpy(&u, &density, 4);
+    rs->state0e = (int32_t)u;
+    EAGL_RSSetAlias(0xe, u);
+}
+
+void RenderState_SetFogColour(RenderState *rs, uint32_t argb)
+{
+    rs->state0f = (int32_t)argb;
+    EAGL_RSSet(0xf, argb);
 }
 
 /* ---- the graphics device ---- */
@@ -453,7 +475,8 @@ void Render_MainViews(RaceViews *rv)
     c->viewdist2 = c->viewdist * c->viewdist;
     Render_PendingCameraUpdate(c);                       /* 0x461060 */
     RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 1 : 2);
-    Render_PendingSkyLight();                            /* 0x459940, 0x466da0 */
+    c->clear = Sky_ClearColour(false);                   /* 0x459940, 0x466da0 */
+    if (c->view) c->view->background = c->clear;
     View_Begin(g_render, c);
     Render_PendingWorld(c);                              /* 0x468a20 */
     View_End(g_render);

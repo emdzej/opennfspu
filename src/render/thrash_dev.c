@@ -98,7 +98,9 @@ static const char *FS =
     "  }\n"
     "  if (u_specular != 0) cur.rgb = min(cur.rgb + v_specular.rgb, 1.0);\n"
     "  if (u_fog != 0) {\n"
-    "    float f, z = gl_FragCoord.z;\n"
+    /* Table fog by the eye depth (W fog: 1/rhw, which DX7 drivers with WFOG use for transformed
+       vertices). */
+    "    float f, z = 1.0 / gl_FragCoord.w;\n"
     "    if (u_fogmode == 1) f = exp(-z * u_fogparams.z);\n"
     "    else if (u_fogmode == 2) f = exp(-(z * u_fogparams.z) * (z * u_fogparams.z));\n"
     "    else if (u_fogmode == 3) f = (u_fogparams.y - z) / (u_fogparams.y - u_fogparams.x);\n"

@@ -4,7 +4,6 @@
 #include "render/render.h"
 
 void Render_PendingCameraUpdate(RCamera *c);   /* 0x461060 -> 0x464e40: the camera follows its target */
-void Render_PendingSkyLight(void);             /* 0x459940 / 0x466da0: the sky's light environment */
 /* Port: the cars of the world draw, set by the game (0x43f610 draws them in the original). */
 extern void (*g_render_cars)(RCamera *c);
 void Render_PendingWorld(RCamera *c);          /* 0x468a20: the world, cars and objects of the view */

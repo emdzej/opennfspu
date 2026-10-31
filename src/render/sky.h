@@ -44,3 +44,6 @@ const uint8_t *Sky_Fsh(void);                    /* 0x627e50 */
 void Sky_Create(const char *name, bool reload);
 void Sky_DrawBefore(void);   /* 0x45d690: the update (0x45cef0) and the draw (0x45d3b0) of the main view's sky */
 void Sky_DrawAfter(void);    /* 0x45d6b0: the pass after the world (0x45d060) */
+/* The view's clear colour from the light slot and the weather's blend at the eye (the mirror's while
+   the first camera's 0x627f43 bit 4 is set, during the mirror's view). 0x459940 */
+uint32_t Sky_ClearColour(bool mirror);
