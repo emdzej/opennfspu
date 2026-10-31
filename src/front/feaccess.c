@@ -2,6 +2,7 @@
 #include "front/feaccess.h"
 #include "front/fe_parts.h"
 #include "exe.h"
+#include "game/options.h"
 #include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@ struct FEAccessor {
     AccKind kind;
     int pos, count, min;
     uint32_t list;   /* ACC_LIST: the exe's zero-ended string ids (FEListAccessor 0x4bb260) */
+    uint32_t key;    /* the option it keeps (its key's address), 0 none */
 };
 
 enum { NACC = 64 };
@@ -74,17 +76,19 @@ static const char *car_file(int i) { return (const char *)s_car + CAR_SIZE * s_c
 
 /* An option's value from fe.txt by its key in the options' table (Options_Parse 0x4b0db0 fills it with
    (id, target, key) triples: the keys' addresses are its instruction operands). */
-static int option(uint32_t key, int def)
-{
-    char v[64];
-    return fe_key(exe_str(key), v, sizeof v) ? atoi(v) : def;
-}
+static int option(uint32_t key, int def) { return Options_Int(key, def); }
 
 static int list_count(uint32_t list)
 {
     int n = 0;
     while (n < 64 && exe_u32(list + 4u * (unsigned)n)) n++;
     return n;
+}
+
+static void add_list(const char *name, uint32_t list, uint32_t key)   /* FEListAccessor 0x4bb260 */
+{
+    FEAccessor *a = add(name, ACC_LIST, list_count(list), 0, option(key, 0));
+    if (a) a->list = list, a->key = key;
 }
 
 /* The audio data area (FEdaAudio_v0 0x4e3fb0): the five levels 0..127 (FEIntAccessor 0x4b9ef0, options
@@ -95,18 +99,14 @@ static void audio(void)
     static const struct { const char *name; uint32_t key; } lv[5] = {
         {"Audio.MusicLevel", 0x5d618c}, {"Audio.SfxLevel", 0x5d6180}, {"Audio.EngineLevel", 0x5d6174},
         {"Audio.SpeechLevel", 0x5d6168}, {"Audio.AmbientLevel", 0x5d6158}};
-    for (int i = 0; i < 5; i++) add(lv[i].name, ACC_INT, 0x80, 0, option(lv[i].key, 0x7f));
-    FEAccessor *a = add("Audio.Mode", ACC_LIST, list_count(0x5b6c1c), 0, option(0x5d6198, 0));
-    if (a) a->list = 0x5b6c1c;
-    a = add("Audio.Quality", ACC_LIST, list_count(0x5b6c08), 0, option(0x5d61a0, 0));
-    if (a) a->list = 0x5b6c08;
+    for (int i = 0; i < 5; i++) {
+        FEAccessor *a = add(lv[i].name, ACC_INT, 0x80, 0, option(lv[i].key, 0x7f));
+        if (a) a->key = lv[i].key;
+    }
+    add_list("Audio.Mode", 0x5b6c1c, 0x5d6198);
+    add_list("Audio.Quality", 0x5b6c08, 0x5d61a0);
 }
 
-static void add_list(const char *name, uint32_t list, uint32_t key)   /* FEListAccessor 0x4bb260 */
-{
-    FEAccessor *a = add(name, ACC_LIST, list_count(list), 0, option(key, 0));
-    if (a) a->list = list;
-}
 
 /* The display data area (FEdaDisplay_v0 0x4e4610): the HUD's choices (options 0x5b .. 0x69). */
 static void display(void)
@@ -134,7 +134,8 @@ static void graphics(void)
         {"Graphics.TextureDetail", 0x5b6d5c, 0x5d6050}, {"Graphics.Reflections", 0x5b6d94, 0x5d6014},
         {"Graphics.SkyRendering", 0x5b6d4c, 0x5d6004}};
     for (int i = 0; i < 11; i++) add_list(g[i].name, g[i].list, g[i].key);
-    add("Graphics.GammaCorrection", ACC_INT, 401, 0, option(0x5d606c, 100));
+    FEAccessor *a = add("Graphics.GammaCorrection", ACC_INT, 401, 0, option(0x5d606c, 100));
+    if (a) a->key = 0x5d606c;
 }
 
 void FEData_Init(void)
@@ -192,6 +193,7 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
 {
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
+    if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
 }
 
 const char *FEAccess_Text(const FEAccessor *a)

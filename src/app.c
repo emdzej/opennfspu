@@ -4,6 +4,7 @@
    scene instead of a blank frame, thrash_test=2 EAGL's;
    car=<name> shows a car (CAR_selftest). */
 #include "app.h"
+#include "game/options.h"
 #include "snd/snd.h"
 #include "exe.h"
 #include "platform.h"
@@ -42,6 +43,7 @@ bool app_init(void)
        the options (fe.txt), the render system (Render_Init 0x4673b0). */
     THRASH_registerdll(&THRASH_dx7z);
     RenderOptions_Load();
+    Options_Apply();
     Render_Init();
     if (!g_render || !g_render->device || !g_render->device->rs) {
         plat_log("OpenNFSPU: the render system could not start (OpenGL ES 3.0 needed)");
@@ -89,6 +91,9 @@ bool app_frame(void)
                 FEApp_Frame();
                 if (FEApp_Result() == FE_PLAY) {
                     FEApp_End();
+                    Options_Save();        /* (fe.txt written back) */
+                    RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */
+                    Options_Apply();
                     snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
                     g_drive_laps = FEApp_Laps();

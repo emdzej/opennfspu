@@ -1,5 +1,6 @@
 /* The game's audio (see audio.h). */
 #include "game/audio.h"
+#include "game/options.h"
 #include "exe.h"
 #include "game/camera.h"
 #include "game/car_drive.h"
@@ -54,7 +55,7 @@ static AudioBank s_banks[8];
 
 bool Audio_Init(void)
 {
-    g_audio_fx = opt(0x5d1744);   /* (the options' starting value) */
+    g_audio_fx = Options_Int(0x5d6180, opt(0x5d1744));   /* SFXLEVEL (the front end's Audio.SfxLevel, 0x5d1744) */
     if (g_sound_quality == 3) return false;
     for (int i = 0; i < 8; i++) s_banks[i].slot = -1;
     int q = g_sound_quality;
@@ -1533,7 +1534,7 @@ void Audio_StartRace(void)
         Music_Play(NULL, 0);
     }
     /* 0x4aafd0: the music's volume from the options' (0x5d14b0's mix of 0x5d1740) */
-    Music_SetVolume((opt(0x5d14b0) * opt(0x5d1740)) >> 7);
+    Music_SetVolume((opt(0x5d14b0) * Options_Int(0x5d618c, opt(0x5d1740))) >> 7);   /* MUSICLEVEL */
     Music_Play(NULL, 0);
 }
 
