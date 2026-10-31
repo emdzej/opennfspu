@@ -6,6 +6,7 @@
 #include "game/car.h"
 #include "game/car_drive.h"
 #include "game/car_physics.h"
+#include "game/car_respawn.h"
 #include "game/race_car.h"
 #include "game/race_setup.h"
 #include "game/road.h"
@@ -72,6 +73,15 @@ int main(void)
     CHECK(*CAR_F(c, 0x374) > 0.95f);
     float h = pos[1] - WSurface_HeightAt(pos);
     CHECK(h > -0.5f && h < 2.0f);
+    /* The reset key (+0xd89) after the start: the car back on its road node, still. */
+    g_sim_tick = 0x400;
+    *CAR_I(c, 0xb4c) = 0;
+    *CAR_F(c, 0x35c) = 0;
+    c->b[0xd89] = 1;
+    CarSim_HitTask(c);
+    float vel = fabsf(CAR_F(c, 0x33c)[0]) + fabsf(CAR_F(c, 0x33c)[1]) + fabsf(CAR_F(c, 0x33c)[2]);
+    printf("  reset: key %d, velocity %.3f, timer %d\n", c->b[0xd89], vel, *CAR_I(c, 0xb4c));
+    CHECK(c->b[0xd89] == 0 && vel == 0 && *CAR_I(c, 0xb4c) == 0x9f);
     printf("car_drive_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");
     return fails != 0;
 }
