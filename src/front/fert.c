@@ -677,3 +677,78 @@ bool FertWindow_LoadLayout(FertControl *w, const char *path)
     free(text);
     return true;
 }
+
+/* ---------------------------------------------------------------- rectangles and hits */
+
+static void attr_pt(const FertAttrList *l, const char *name, int32_t out[2])
+{
+    FertAttr *a = FertAttrList_find(l, name);
+    out[0] = out[1] = 0;
+    if (a) FertAttr_point(a, out);
+}
+
+void FertPart_rect(const FertPart *p, int32_t r[4])
+{
+    if (p->kind == FPART_DATA) {   /* 0x52b140 */
+        r[0] = r[1] = r[2] = r[3] = 0;
+        return;
+    }
+    int32_t pos[2], size[2];   /* 0x52a5a0, 0x52aa60, 0x52b040 */
+    attr_pt(&p->attrs, "pos", pos);
+    attr_pt(&p->attrs, "size", size);
+    r[0] = pos[0];
+    r[1] = pos[1];
+    r[2] = pos[0] + size[0];
+    r[3] = pos[1] + size[1];
+}
+
+void FertControl_rect(const FertControl *c, int32_t r[4])
+{
+    int32_t a[4] = {0, 0, 0, 0}, pos[2];
+    FertAttr *au = FertAttrList_find(&c->attrs, "autosize");
+    if (!au || FertAttr_int(au) == 0) {
+        int32_t size[2];
+        attr_pt(&c->attrs, "size", size);
+        a[2] = size[0];
+        a[3] = size[1];
+    } else if (0 <= c->state && c->state < c->nstates) {
+        const FertState *s = &c->states[c->state];
+        for (int i = 0; i < s->nparts; i++) {
+            int32_t q[4];
+            FertPart_rect(c->parts[s->parts[i]], q);
+            if (q[0] < a[0]) a[0] = q[0];
+            if (q[1] < a[1]) a[1] = q[1];
+            if (a[2] < q[2]) a[2] = q[2];
+            if (a[3] < q[3]) a[3] = q[3];
+        }
+    }
+    attr_pt(&c->attrs, "pos", pos);   /* 0x524b90 */
+    r[0] = a[0] + pos[0];
+    r[1] = a[1] + pos[1];
+    r[2] = a[2] + pos[0];
+    r[3] = a[3] + pos[1];
+}
+
+bool FertControl_contains(const FertControl *c, int32_t x, int32_t y)
+{
+    int32_t r[4];
+    FertControl_rect(c, r);
+    return r[0] != r[2] && r[0] <= x && x <= r[2] && r[1] <= y && y <= r[3];
+}
+
+FertControl *FertWindow_hit(FertControl *w, int32_t x, int32_t y)
+{
+    int32_t pos[2];
+    attr_pt(&w->attrs, "pos", pos);
+    for (int i = 0; i < w->nchildren; i++)
+        if (FertControl_contains(w->children[i], x - pos[0], y - pos[1])) return w->children[i];
+    return NULL;
+}
+
+bool FertControl_setState(FertControl *c, const char *name)
+{
+    int k = FertControl_findState(c, name);
+    if (k < 0) return false;
+    c->state = k;
+    return true;
+}

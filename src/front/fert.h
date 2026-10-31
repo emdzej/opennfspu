@@ -128,6 +128,12 @@ typedef struct FertControl {
     int nchildren;
     struct FertControl *screen;      /* +0x11c: a window's screen (its layout's first section) */
     bool window;
+    /* the front end's (FEControl): its flags (+0x10c: 2 keep, 4 hover, 8 selected, 0x10 disabled,
+       0x20 hidden, 0x40 focused), the states it has (+0x110) */
+    uint32_t feflags, fecaps;
+    struct FertControl *hover;       /* +0x110 of a window: the control under the mouse */
+    struct FertControl *focus;       /* +0x120 of a window */
+    int32_t mouse[2];                /* +0x114 */
 } FertControl;
 
 FertControl *FertControl_new(bool window);   /* 0x523f60 (Control), 0x527bc0 (Window) */
@@ -150,6 +156,16 @@ extern bool (*Fert_MeasureText)(const FertPart *p, int32_t *w, int32_t *h);
 extern void (*Fert_PartEvalHook)(FertPart *p);
 extern void (*Fert_PartFreeHook)(FertPart *p);
 int FertControl_findPart(const FertControl *c, const char *name);
+/* A part's rectangle (slot 2: its pos to pos + size; none for DATA) and the control's (0x524c40: (0, 0)
+   to its size, or with autosize the union of its state's parts' with (0, 0); then at its pos). */
+void FertPart_rect(const FertPart *p, int32_t r[4]);
+void FertControl_rect(const FertControl *c, int32_t r[4]);
+/* Whether (x, y) is in it, edges included, a rectangle of no width never (0x525310). */
+bool FertControl_contains(const FertControl *c, int32_t x, int32_t y);
+/* The window's first control at (x, y) (0x528830; the window's pos taken off). */
+FertControl *FertWindow_hit(FertControl *w, int32_t x, int32_t y);
+/* The state by name, if it has one (0x524e00 by its index). */
+bool FertControl_setState(FertControl *c, const char *name);
 int FertControl_findState(const FertControl *c, const char *name);
 
 /* ---- the template registry (FERT_ListControls 0x52c140; the global 0x69caf4) ---- */

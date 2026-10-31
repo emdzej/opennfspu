@@ -13,6 +13,7 @@
 #include "render/track_selftest.h"
 #include "render/drive_selftest.h"
 #include "front/fe_selftest.h"
+#include "front/feapp.h"
 #include "render/render.h"
 #include "render/thrash.h"
 #include "static_init.h"
@@ -24,6 +25,8 @@ static char car_name[64];     /* --param car=<name>: that car in the viewer (Gam
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
+static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (gamesetup) */
+static bool fe_on;
 
 bool app_init(void)
 {
@@ -49,6 +52,7 @@ bool app_init(void)
     if (!plat_param("track", track_name, sizeof track_name)) track_name[0] = 0;
     if (!plat_param("drive", drive_name, sizeof drive_name)) drive_name[0] = 0;
     if (!plat_param("screen", screen_name, sizeof screen_name)) screen_name[0] = 0;
+    if (!plat_param("fe", fe_start, sizeof fe_start)) fe_start[0] = 0;
     return true;
 }
 
@@ -56,7 +60,10 @@ bool app_frame(void)
 {
     g_app_frames++;
     if (plat_frame_shown()) {
-        if (screen_name[0]) FE_selftest(screen_name);
+        if (fe_start[0]) {
+            if (!fe_on) fe_on = FEApp_Init(fe_start);
+            if (fe_on) FEApp_Frame();
+        } else if (screen_name[0]) FE_selftest(screen_name);
         else if (drive_name[0]) DRIVE_selftest(drive_name, car_name);
         else if (track_name[0]) TRACK_selftest(track_name);
         else if (car_name[0]) CAR_selftest(car_name);

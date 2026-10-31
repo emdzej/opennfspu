@@ -44,6 +44,21 @@ void plat_display_size(int *w, int *h)
 }
 bool plat_frame_shown(void) { return gasm_gl_frame_shown() != 0; }
 
+bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel)
+{
+    uint8_t p[GASM_POINTER_BYTES];
+    *x = *y = *wheel = 0;
+    *buttons = 0;
+    if (gasm_pointer(p, sizeof p) < (int32_t)sizeof p) return false;
+    uint32_t b;
+    memcpy(x, p + GASM_POINTER_OFF_X, 4);
+    memcpy(y, p + GASM_POINTER_OFF_Y, 4);
+    memcpy(wheel, p + GASM_POINTER_OFF_WHEEL_Y, 4);
+    memcpy(&b, p + GASM_POINTER_OFF_BUTTONS, 4);
+    *buttons = b & 7u;
+    return true;
+}
+
 /* ---- raw keyboard (gasm 0.5) ---- */
 
 /* GASM_KEY_* (W3C KeyboardEvent.code) -> DirectInput code (DIK_*, from OpenBallance): the set-1 scan

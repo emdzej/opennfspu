@@ -23,6 +23,9 @@ uint32_t plat_pad(int player);          /* stable within a frame */
 bool plat_keys(uint8_t keys[KEY_COUNT]);
 /* Key presses since the previous frame, in order (no auto-repeat); count, at most cap. */
 int plat_key_presses(uint8_t *codes, int cap);
+/* The mouse: its position in drawable pixels (plat_display_size's), its buttons held (1 left, 2 right,
+   4 middle), the wheel's lines this frame (> 0 down). False without a pointer. */
+bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel);
 /* Launch parameter (gasm --param / URL query); false if unset. */
 bool plat_param(const char *name, char *dst, size_t cap);
 /* Calls per second of app_frame from now on; the audio per frame follows. */

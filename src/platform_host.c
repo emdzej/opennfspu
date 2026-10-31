@@ -25,6 +25,12 @@ bool plat_param(const char *name, char *dst, size_t cap)
 
 void plat_set_frame_rate(double hz) {}
 void plat_display_size(int *w, int *h) { *w = 640; *h = 480; }
+bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel)
+{
+    *x = *y = *wheel = 0;
+    *buttons = 0;
+    return false;
+}
 bool plat_frame_shown(void) { return true; }
 uint8_t *plat_load_user_file(const char *name, size_t *size) { return NULL; }
 bool plat_save_user_file(const char *name, const void *data, size_t size) { return false; }
