@@ -29,9 +29,11 @@ static size_t npcm, cap;
    level of the last `last` ticks. */
 static double zc;   /* the zero crossings a second of the measured part (the pitch, roughly) */
 
+static int8_t steer;
+
 static double run(int ticks, int last, uint8_t throttle)
 {
-    uint8_t pkt[4] = {0, 0, throttle, 0};
+    uint8_t pkt[4] = {0, (uint8_t)steer, throttle, 0};
     double sum = 0;
     size_t n0 = npcm + (size_t)(ticks - last) * (size_t)(SND_Rate() / 64) * 2;
     for (int t = 0; t < ticks; t++) {
@@ -107,6 +109,10 @@ int main(void)
     double after = run(16, 16, 0);
     printf("  impact: rms %.0f before, %.0f after\n", before, after);
     CHECK(after > before * 1.2);
+    /* A hard turn on the throttle: the tyres skid (the wheels' events 0x12, 0x14). */
+    steer = 0x3f;
+    run(64 * 2, 64, 0x7f);
+    steer = 0;
     if (getenv("AUDIO_WAV")) wav(getenv("AUDIO_WAV"));
     Audio_Shutdown();
     printf("audio_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");

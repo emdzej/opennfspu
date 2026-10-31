@@ -93,6 +93,7 @@ static int load_bank(const char *name, int k)
 
 static int32_t s_slot[0x50][2];   /* 0x656180: each slot's play and patch */
 static int32_t s_level;           /* 0x656860: the last impact's level, a sixteenth, falling */
+static int8_t s_slotvel[0x50];    /* 0x5d17e8 */
 static uint32_t s_lastpick[17];   /* 0x65644c ..: the patch picked last in each set */
 
 /* A pan angle to a byte: the front half's (0x4a96b0, 0x4a99e0). */
@@ -265,7 +266,48 @@ static void event_sound(int id, int kind, int surf, int strength, int dist, int 
     if (g_racecam[0].mode == 0xc) att <<= 2;
     int vol = (att + ((att >> 31) & 0xffff)) >> 0x10;
     if (-1 < id) {
-        PENDING_NOTE(0x4a9190, "the cars' looped event sounds (scrapes, skids)");
+        /* The looped ones: the skids and scrapes (0x12 .. 0x15, the players' fronts and rears), by
+           the surface and the tyres; the fronts with a squeal (id + 4) while the car turns hard. */
+        Car *car = 0x12 <= id && id <= 0x15 ? g_cars[(id - 0x12) & 1] : NULL;
+        if (strength < 1) {
+            stop_slot(id);
+            if (id == 0x12 || id == 0x13) {
+                stop_slot(id + 4);
+                if (car) *CAR_I(car, 0x1108) = 0;
+            }
+            return;
+        }
+        int patch;
+        switch (surf) {
+        case 5: case 8: case 9: case 0xd: patch = kind == 3 ? 0x28 : kind == 1 ? 0x2e : kind == 2 ? 0x2f : 0x2a; break;
+        case 6: patch = kind == 3 ? 0x28 : 0x2d; break;
+        case 7: patch = 0x29; break;
+        case 10: case 0xb: patch = 0x2b; break;
+        default: patch = 0x2c; break;
+        }
+        int vel;
+        if (car || s_slot[id][1] != patch) {
+            vel = (strength * 0x7f) / 0xa0000;
+            if (0x7f < vel) vel = 0x7f;
+            if (!car) s_slotvel[id] = (int8_t)vel;
+        } else {
+            vel = s_slotvel[id];
+        }
+        if (car) {
+            int k = (strength * 0x7f + ((strength * 0x7f >> 31) & 0xffff)) >> 0x10;
+            if (0x7f < k) k = 0x7f;
+            vol = vol * k >> 7;
+            if (id == 0x12 || id == 0x13) {
+                if (vol < 0x1f) {
+                    stop_slot(id + 4);
+                    *CAR_I(car, 0x1108) = 0;
+                } else if ((0 < *CAR_F(car, 0x11cc) && 30.0f < *CAR_F(car, 0x500)) || (*CAR_F(car, 0x11cc) < 0 && 30.0f < *CAR_F(car, 0x4f0))) {
+                    play_slot(id + 4, 0x28, vel + 10, 0x10000, vol * 3, angle, 0x7f);   /* 0x5b2408 */
+                    *CAR_I(car, 0x1108) = vol;
+                }
+            }
+        }
+        play_slot(id, patch, vel, 0x10000, 0x7e < vol ? 0x7f : vol, angle, 0x7f);
         return;
     }
     int lv;
@@ -770,7 +812,7 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     int rpm16 = (int)(*CAR_F(c, 0xdb4) / *SPEC_F(c, 0x94) * 65536.0f);   /* 0x5b3e68 */
     int throttle = *CAR_I(c, 0xdb0) == 0 ? -1 : *CAR_I(c, 0x548) == 0 ? eased >> 1 : 0x7f;
     int engvol = ((opt(0x5d1748) * opt(0x5d14c8) * 0x55 >> 7) * vol) >> 0xe;
-    PENDING_NOTE(0x4aed00, "the tyres' sounds (0x4aed00)");
+    PENDING_NOTE(0x4aed00, "the scene's sound elements (0x4aed00)");
     engine_snap(0, engvol, rpm16, throttle, view, DESC_I(c, 0x518) ? pitch * 2 : pitch, pan, facing);
 }
 

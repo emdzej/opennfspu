@@ -1,5 +1,6 @@
 /* A race car's hits and its return to the road (see car_respawn.h). */
 #include "game/car_respawn.h"
+#include "game/sim_rand.h"
 #include "exe.h"
 #include "game/ai.h"
 #include "game/car_drive.h"
@@ -165,6 +166,74 @@ static void race_part(Car *c)
     if (*t < 1 && (dot3(CAR_F(c, 0x3c4), CAR_F(c, 0x370)) < K(0x5b2604) || *CAR_I(c, 0x464) == 0)) *t = 0xc0;
 }
 
+/* The wheels' skid events (0x40fc20): the front's (0x12) and the rear's (0x14) slips (the wheels' +0x870
+   sums, at most 10) on the ground, by the surface (0x5cc4d8; wet asphalt in the open as 6) and the tyres
+   (the specs' +0x1c0: 0, 2, 1); starts (2, 4) while slipping, ends (3, 5) after (the +0xe00 bits). */
+static void wheel_sounds(Car *c)
+{
+    float front = *CAR_F(c, 0x934) + *CAR_F(c, 0x870), rear = *CAR_F(c, 0xabc) + *CAR_F(c, 0x9f8);
+    bool open = g_race_wet && WSurface_FindAbove(&c->body, CAR_F(c, 0x330), NULL) == 0;
+    float f = 0;
+    if (*CAR_F(c, 0x78) < K(0x5b26f0) && *CAR_F(c, 0x424) < K(0x5b2604) && K(0x5b23f0) < *CAR_F(c, 0x3a0)) {
+        if (0 < front) f = K(0x5b241c) < front ? 10.0f : front;
+        if (0 < rear) {
+            if (K(0x5b241c) < rear) rear = 10.0f;
+        } else {
+            rear = 0;
+        }
+    } else {
+        rear = 0;
+    }
+    int surf = (int32_t)exe_u32(0x5cc4d8 + 4u * (uint32_t)*CAR_I(c, 0x464));
+    if (surf == 5 && open) surf = 6;
+    int tyre = *SPEC_I(c, 0x1c0), kind = tyre == 1 ? 2 : tyre == 2 ? 1 : 0;
+    int32_t *bits = CAR_I(c, 0xe00);
+    if (f == 0) {
+        if (*bits & 1) {
+            Car_AddEvent(c, 3, 0x12, kind, surf, 0, 0);
+            *bits -= 1;
+        }
+    } else if (0 < f || (*CAR_I(c, 0x52c) & 4)) {
+        Car_AddEvent(c, 2, 0x12, kind, surf, f, 0);
+        *bits |= 1;
+    }
+    if (rear == 0) {
+        if (*bits & 2) {
+            Car_AddEvent(c, 5, 0x14, kind, surf, 0, 0);
+            *bits -= 2;
+        }
+    } else if (0 < rear || (*CAR_I(c, 0x52c) & 4)) {
+        Car_AddEvent(c, 4, 0x14, kind, surf, rear * 0.5f, 0);
+        *bits |= 2;
+    }
+}
+
+/* The ground's sounds (0x410050): on the wheels, the body's scrape ended and the wheels' skids; off
+   them, the body scraping (0x14, kind 3) above a tenth of a metre a second, a random part less, or its
+   end (the bits taken down either way, as the original). */
+static void ground_sounds(Car *c)
+{
+    int32_t *bits = CAR_I(c, 0xe00);
+    if (K(0x5b23f4) < *CAR_F(c, 0x3a0)) {
+        if (*bits & 4) {
+            Car_AddEvent(c, 5, 0x14, 3, 5, 0, 0);
+            *bits -= 4;
+        }
+        wheel_sounds(c);
+        return;
+    }
+    float v = *CAR_F(c, 0x35c) * K(0x5b2468);
+    int surf = (int32_t)exe_u32(0x5cc4d8 + 4u * (uint32_t)*CAR_I(c, 0x464));
+    if (*CAR_F(c, 0x424) < K(0x5b23f4) && K(0x5b2604) < v) {
+        float r = (float)SimRand_Next() * v * K(0x5b2680) * K(0x5b253c);
+        Car_AddEvent(c, 4, 0x14, 3, surf, v - r, 0);
+        *bits |= 4;
+        return;
+    }
+    Car_AddEvent(c, 5, 0x14, 3, 5, 0, 0);
+    *bits -= 4;
+}
+
 void CarSim_HitTask(void *car)
 {
     Car *c = car;
@@ -177,7 +246,7 @@ void CarSim_HitTask(void *car)
     if (!(*CAR_I(c, CAR_FLAGS) & 0x80)) {
         PENDING_NOTE(0x40a790, "the AI's notice of a hit");
         race_part(c);   /* 0x40f7a0 */
-        PENDING_NOTE(0x410050, "the car's sounds of the ground (the +0x110c events)");
+        ground_sounds(c);   /* 0x410050 */
         return;
     }
     PENDING_NOTE(0x4102e0, "the traffic's hit sounds");
