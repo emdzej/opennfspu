@@ -718,12 +718,12 @@ void PCollideArticleBundle_Build(PCollideArticleBundle *c, WTreeElems *v, bool o
         if (!base) continue;   /* (the original reads a NULL Base) */
         if (base[0] & 0x40) continue;
         const uint8_t *e = base + rd32(base + 4) * 12 + 100;   /* the collision level of detail */
-        const uint8_t *def = WObjectDefs_find(rd32(base + 0x44));   /* 0x47ec50 */
-        if (def && rd32(def + 0x10) == 1) {
+        const WObjectDef *def = WObjectDefs_find(rd32(base + 0x44));   /* 0x47ec50 */
+        if (def && def->collidetype == 1) {
             PENDING_NOTE(0x486600, "the cylinder collision object (WTreeElem_CylinderObject)");
             continue;
         }
-        if (def && rd32(def + 0x10) == 2) {
+        if (def && def->collidetype == 2) {
             PENDING_NOTE(0x486bf0, "the box collision object (WTreeElem_BoxObject, 0x474c40)");
             continue;
         }

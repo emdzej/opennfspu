@@ -539,12 +539,21 @@
 0047cba0	WMidGroundBundle_load	world	high	Takes Base & 0x6000; entry flag 0x400000 without 0x2000
 0047cdc0	WMidGroundBundle_v3	world	struct	Virtual slot 3 of WMidGroundBundle (vtable 0x5b477c)
 0047ced0	WMidGroundBundle_v2	world	struct	Virtual slot 2 of WMidGroundBundle (vtable 0x5b477c)
+0047d080	Defs_Match	world	high	Text starts with a key (lowercased)
+0047d0d0	Defs_After	world	high	Text after a key, NULL if not there
+0047d140	Defs_Bool	world	high	key=<int>; as a bool
+0047d200	Defs_Int	world	high	key=<int>;
+0047d360	Defs_Float	world	high	key=<float>;
+0047d410	Defs_String	world	high	key=<text>; copied
+0047d4d0	Defs_SkipSection	world	high	Past a {...} section (nested)
 0047d570	WMidGround_ParseAudio	world	med	Track object definitions: section:audio
 0047d840	WMidGround_ParseSound	world	med	section:sound
-0047dbb0	WMidGround_ParseAnim	world	med	section:anim
-0047e680	WMidGround_ParsePiece	world	med	section:piece
-0047ea60	WMidGround_ParseObjectDefs	world	med	objectDefs (animdefs.txt)
-0047ec50	WObjectDefs_find	world	med	animdefs.txt definition of a Base type (default: the first)
+0047dbb0	WMidGround_ParseAnim	world	high	section:anim (port: src/game/objdefs.c)
+0047e680	WMidGround_ParsePiece	world	high	section:piece (port: src/game/objdefs.c)
+0047ea60	WMidGround_ParseObjectDefs	world	high	objectDefs (animdefs.txt) (port: src/game/objdefs.c)
+0047ec50	WObjectDefs_find	world	high	Definition by tag; the first one for an unknown tag, 0 for tag 0 (port: src/game/objdefs.c)
+0047ed00	WMidGround_new	world	high	The object-definition holder at 0x628ba0 (8 bytes)
+0047eec0	WObjectDefs_push	world	high	vector push_back of a definition
 00481670	Road_Step	world	high	The node n nodes on along the road (through a junction, else clamped to the segment)
 00481a10	Road_SegmentRange	world	high	A node's segment: progress at its ends (junction +0x28), length, first node
 00482550	WSceneBundle_ctor	world	high	WSceneBundle (0x4c), vtable 0x5b47e0

@@ -4,8 +4,6 @@
 
 void *RDrawAnimArticleBundle_new(struct W3DObjectBundle *b) { PENDING_NOTE(0x44fe30, "RDrawAnimArticleBundle ctor"); return NULL; }
 void *WAnim_create(struct W3DObjectBundle *b) { PENDING_NOTE(0x4713f0, "WAnim_create"); return NULL; }
-const uint8_t *WObjectDefs_find(uint32_t type) { PENDING_NOTE(0x47ec50, "WObjectDefs_find"); return NULL; }
-void WMidGround_LoadObjectDefs(const char *path) { PENDING_NOTE(0x47ea60, "WMidGround_ParseObjectDefs"); }
 void World_BuildBundles(void *world) { PENDING_NOTE(0x487940, "World_BuildBundles (line bundle, links, edges, Vis walls' users)"); }
 void WSceneBundle_Reset(void) { PENDING_NOTE(0x482af0, "WSceneBundle reset"); }
 void WSceneBundle_Add(uint32_t type, const float pos[3], const float mat[9]) { PENDING_NOTE(0x482f70, "WSceneBundle add"); }

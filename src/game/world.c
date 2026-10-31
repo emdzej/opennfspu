@@ -243,8 +243,8 @@ static void placed_init(WPlaced *p)
 static void placed_type(WPlaced *p, const WBase *bs)
 {
     p->type = bs->type;
-    const uint8_t *def = WObjectDefs_find(p->type);   /* 0x47ec50 */
-    if (def) p->flag = def[0x15];
+    const WObjectDef *def = WObjectDefs_find(p->type);   /* 0x47ec50 */
+    if (def) p->flag = def->triggerable;   /* +0x15 */
 }
 
 /* WSceneBundle_v1 0x482680: the prototypes ('tr' + Base 0x8000; copied, not taken), then room for the
