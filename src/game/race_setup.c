@@ -2,6 +2,7 @@
 #include "game/race_setup.h"
 #include "game/car.h"
 #include "game/car_damage.h"
+#include "game/hud_config.h"
 #include "game/race_progress.h"
 #include "vfs.h"
 #include <stdint.h>
@@ -73,6 +74,14 @@ bool RaceSetup_SingleCar(const char *name)
     memcpy(d + 0x218, colours, sizeof colours);
     put_i(d, 0x510, -1);                                  /* RACENUMBER */
     put_i(d, 0x514, 0);                                   /* STRIPEPACKAGE: the colour scheme */
+    /* The HUD's dials (0x4eadb0, the units option km/h). */
+    int16_t g[0x12];
+    memcpy(g, rec + 0x300, sizeof g);
+    HudDials *h = &g_hud_dials;
+    if (!g_hud_imperial) h->speedo_kmh = g[0], h->speedo_start = g[3], h->speedo_deg = g[4], h->speedo_units = g[1];
+    else h->speedo_mph = g[6], h->speedo_start = g[9], h->speedo_deg = g[10], h->speedo_units = g[7];
+    h->tach = g[12], h->tach_start = g[15], h->tach_deg = g[16], h->tach_units = g[13];
+    h->needle = g[14], h->pivot = g[17];
     free(db);
     /* Damage on (0x657a2c, the front end's damage option; a stand-in until the options are ported). */
     g_race_damage = 1;

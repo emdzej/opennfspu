@@ -10,7 +10,11 @@ extern int32_t g_race_linear;     /* 0x657494: a point-to-point race (no laps) *
 extern int32_t g_race_type;       /* 0x6573ec: the game type (4: the skill test) */
 extern int32_t g_race_knockout;   /* 0x657400 (with g_race_mode 3: the grid spread over the road) */
 extern int32_t g_race_side;       /* 0x5e753c: the grid's side flip with the car's direction (1 by 0x40e6d0) */
-extern int32_t g_hud_metric;      /* 0x628a28: the units (km/h); the car's +0xd87 */
+
+/* The car's AI figures from its specs (red line, gear ratios). 0x406f50 */
+void AI_Setup(Car *c);
+/* The AI's state for the race. 0x406db0 */
+void AI_Reset(Car *c);
 
 /* The race's progress at road node n, 0..1 along the race (from its segment's ends; backwards on a
    reversed track, where a circuit's 1 is 0). 0x4162b0 */

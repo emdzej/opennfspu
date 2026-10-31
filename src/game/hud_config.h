@@ -15,8 +15,26 @@
    +0x0c and +0x20. */
 enum {
     HUDPOS_GEAR = 0,     /* 0x420b30 (+0x188) */
+    HUDPOS_SPEED = 1,    /* 0x420b40 */
+    HUDPOS_TACHDIAL = 6, /* 0x420bb0 */
+    HUDPOS_SPEEDO = 7,   /* 0x420bc0 */
+    HUDPOS_TACH = 12,    /* 0x420b80: the second record's +0x20 */
     HUDPOS_COUNT = 13,
 };
+
+/* The dials' options (0x657df4 .. 0x657e1c, the race keys 0x6a .. 0x74: SPEEDOSTYLEKMH .. SPEEDOTOTALUNITS),
+   which the front end takes from the car's nfs5.car record (0x4eadb0): +0x300 the km/h speedometer's
+   {style, total units, -, start angle, degrees per unit (thousandths), -}, +0x30c the mph one's, +0x318
+   the tachometer's {style, total units, needle style, start angle, degrees per unit, needle pivot}. */
+typedef struct {
+    int32_t speedo_kmh, speedo_mph;  /* 0x657df4, 0x657df8: the face's image */
+    int32_t needle, pivot;           /* 0x657dfc, 0x657e00 */
+    int32_t tach;                    /* 0x657e04 */
+    int32_t tach_start, tach_deg, tach_units;        /* 0x657e08, 0x657e0c, 0x657e10 */
+    int32_t speedo_start, speedo_deg, speedo_units;  /* 0x657e14, 0x657e18, 0x657e1c */
+} HudDials;
+extern HudDials g_hud_dials;
+extern int32_t g_hud_imperial;   /* 0x657dc0: miles (the front end's Display_SpeedUnits) */
 
 /* The localised strings and the layouts for the player (HUD_LoadStrings 0x41e190, counted: only the
    first loads). w, h: the screen. */

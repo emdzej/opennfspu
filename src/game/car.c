@@ -1,5 +1,6 @@
 /* The race's cars (see car.h). */
 #include "game/car.h"
+#include "game/race_car.h"
 #include "exe.h"
 #include "pending.h"
 #include "real/mem.h"
@@ -487,7 +488,8 @@ static void Car_LoadSpecs(Car *c, int i)
         c->p[CARP_AISPECS] = MEM_alloc(exe_str(0x5cc590), AISPECS_SIZE, 0);   /* "AISpecs" */
         Sim_LoadCarSim(c);
         Sim_LoadCarAis(c);
-        PENDING_NOTE(0x406f50, "the car's AI set-up (0x406f50, 0x406db0)");
+        AI_Setup(c);   /* 0x406f50 */
+        AI_Reset(c);   /* 0x406db0 */
     } else {
         c->p[CARP_SPECS] = NULL;
         c->p[CARP_AISPECS] = NULL;

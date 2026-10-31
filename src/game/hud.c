@@ -9,6 +9,8 @@
 #include "pending.h"
 #include "render/hud2d.h"
 #include "render/hudart.h"
+#include "render/r3dcar.h"
+#include <math.h>
 #include "real/font.h"
 #include "real/loc.h"
 #include "vfs.h"
@@ -49,6 +51,20 @@ typedef struct {
 } H321Go;
 
 static int32_t exe_i32(uint32_t va) { return (int32_t)exe_u32(va); }
+static double exe_f64(uint32_t va)
+{
+    uint64_t u = (uint64_t)exe_u32(va) | (uint64_t)exe_u32(va + 4) << 32;
+    double d;
+    memcpy(&d, &u, 8);
+    return d;
+}
+static float exe_f32(uint32_t va)
+{
+    uint32_t u = exe_u32(va);
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
 
 static void go_destroy(HudVisual *v)
 {
@@ -489,6 +505,8 @@ static void combo_init(HCombo *c, const HudVisualVtbl *vt, int x, int y, int w, 
     combo_setpos(&c->tray.base, x, y);
 }
 
+static Car *local_car(void) { return g_race_local < g_racers.n ? g_racers.c[g_race_local] : NULL; }
+
 /* ---- the gear (HGear, 0xd4 bytes, vtable 0x5b2b44; 0x421c60) ---- */
 
 /* "GEAR" (hud.loc 10) and the gear: R and N (0x46e1, 0x46e2), the digits' strings (0x5ccc10) from first.
@@ -496,7 +514,7 @@ static void combo_init(HCombo *c, const HudVisualVtbl *vt, int x, int y, int w, 
 static void gear_draw(HudVisual *v)
 {
     if (HudConfig_choicei32(0x64) != 1 || v->state == 0) return;   /* 0x41e920, 0x42a310 */
-    Car *car = g_race_local < g_racers.n ? g_racers.c[g_race_local] : NULL;
+    Car *car = local_car();
     if (!car) return;
     const uint8_t *loc = HudConfig_loc();
     int g = (int8_t)car->b[0xd82];
@@ -539,6 +557,287 @@ static HudVisual *gear_new(void)
     return &c->tray.base;
 }
 
+/* ---- the speed and the revs in figures (HSpeed 0x42e490, 0xd8 bytes, vtable 0x5b2fd8; HTachDigital
+   0x42f660, 0xdc bytes, vtable 0x5b30e0) ---- */
+
+typedef struct {
+    HCombo combo;
+    char text[8];   /* +0xd4 */
+} HFigures;
+
+/* n in decimal, zero-padded to `digits` (the pads 0x5ccad0 "0", 0x5ccef4 "00", 0x5ccef0 "000"); the
+   zeros alone below `least`. */
+static void figures(char *out, int n, int digits)
+{
+    static const uint32_t pad[4] = {0, 0x5ccad0, 0x5ccef4, 0x5ccef0};
+    int off = 0;
+    for (int p = digits - 1, lim = 10; p > 0; p--, lim *= 10)
+        if (n < lim) {
+            off = p;
+            break;
+        }
+    if (off) memcpy(out, exe_str(pad[off]), (size_t)off + 1);
+    snprintf(out + off, 8 - (size_t)off, "%d", n);   /* _itoa 0x5a175c */
+}
+
+/* The speed in three figures, km/h (+0xec4 m/s x 3.6, 0x5b3018) or mph (x 0x5b3014); "000" below 1 m/s
+   (0x5ccef0). Shown by the second layout's +0x30 1. 0x42e4d0 */
+static void speed_draw(HudVisual *v)
+{
+    HFigures *f = (HFigures *)v;
+    Car *car = local_car();
+    if (HudConfig_choicei32(0x30) != 1 || v->state == 0 || !car) return;   /* 0x41e940 */
+    float ms = *CAR_F(car, 0xec4);
+    int n = g_hud_imperial ? (int)(ms * exe_f32(0x5b3014)) : (int)(ms * exe_f32(0x5b3018));
+    int label = g_hud_imperial ? 0x14 : 0xb;
+    /* (the pads chosen by the speed before the slow test: 10 and 100) */
+    int off = n < 10 ? 2 : n < 100 ? 1 : 0;
+    if (off) memcpy(f->text, exe_str(off == 2 ? 0x5ccef4 : 0x5ccad0), (size_t)off + 1);
+    if (ms < 1.0f) memcpy(f->text, exe_str(0x5ccef0), 4);   /* (0x5b24a8) */
+    else snprintf(f->text + off, sizeof f->text - (size_t)off, "%d", n);
+    const char *s = LOC_string(HudConfig_loc(), label);
+    combo_draw(&f->combo, s ? s : "", f->text);
+}
+
+/* The revs (+0xdb4) in four figures, "0000" below 1 (0x5cd05c); "rpm" (0x46e0). Shown by +0x38 1.
+   0x42f6c0 */
+static void tachdigital_draw(HudVisual *v)
+{
+    HFigures *f = (HFigures *)v;
+    Car *car = local_car();
+    if (HudConfig_choicei32(0x38) != 1 || v->state == 0 || !car) return;   /* 0x41e9a0 */
+    int n = (int)*CAR_F(car, 0xdb4);
+    if (n < 1) memcpy(f->text, exe_str(0x5cd05c), 5);
+    else figures(f->text, n, 4);
+    const char *s = LOC_string(HudConfig_loc(), 0x46e0);
+    combo_draw(&f->combo, s ? s : "", f->text);
+}
+
+/* Their sizes, places and colours again (0x42e640, 0x42f810). */
+static void figures_reset(HudVisual *v, int size_off, bool choice)
+{
+    HCombo *c = (HCombo *)v;
+    int w = choice ? HudConfig_choicei32(size_off) : HudConfig_i32(size_off);
+    int h = choice ? HudConfig_choicei32(size_off + 4) : HudConfig_i32(size_off + 4);
+    tray_setsize(&c->tray, w, h, h / 2);
+    int32_t x, y;
+    HudConfig_pos(c->place, &x, &y);
+    combo_setpos(v, x, y);
+    combo_reset(c);
+}
+static void speed_reset(HudVisual *v) { figures_reset(v, 0x9c, false); }
+static void tachdigital_reset(HudVisual *v) { figures_reset(v, 0x14, true); }
+
+static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress};
+static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress};
+
+static HudVisual *figures_new(const HudVisualVtbl *vt, int place, int w, int h, bool keep)
+{
+    HFigures *f = calloc(1, sizeof *f);
+    if (!f) return NULL;
+    int32_t x, y;
+    HudConfig_pos(place, &x, &y);
+    combo_init(&f->combo, vt, x, y, w, h, place, keep);
+    return &f->combo.tray.base;
+}
+
+/* 0x42e490: the record's +0x9c size, place 1, measured once */
+static HudVisual *speed_new(void) { return figures_new(&speed_vt, HUDPOS_SPEED, HudConfig_i32(0x9c), HudConfig_i32(0xa0), true); }
+/* 0x42f660: the second record's +0x14 size, place 12 */
+static HudVisual *tachdigital_new(void)
+{
+    return figures_new(&tachdigital_vt, HUDPOS_TACH, HudConfig_choicei32(0x14), HudConfig_choicei32(0x18), true);
+}
+
+/* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
+   the value from tables made once, a cap over its pivot ---- */
+
+enum { DIAL_STEPS = 900 };   /* the tables' room (0x2a30 bytes each) */
+
+typedef struct {
+    HTray tray;
+    HudArt *face, *back, *needle, *cap;   /* +0xc4, +0xc8, +0xcc, +0xd0 */
+    int32_t w, h;                          /* +0xd4, +0xd8 */
+    float corner[4][DIAL_STEPS][3];        /* +0xdc: the needle's corners at each unit, from the centre */
+    int place;                             /* +0xa99c, +0xa9a0: its setter and getter of the places */
+    int32_t units;                         /* +0xa9a4 */
+    int32_t hx, hy, cx, cy;                /* +0xa9b0 .. +0xa9bc: half its size, its centre */
+    int32_t style;                         /* +0xa9c0: the needle's (0: with a cap) */
+    float redline;                         /* HTach +0xa9d0: the share of the revs below the red line */
+} HDial;
+
+/* At (x, y) through the places' table; the disc and face at its corner, the cap centred. 0x421790 */
+static void dial_setpos(HudVisual *v, int x, int y)
+{
+    HDial *d = (HDial *)v;
+    int32_t px, py;
+    HudConfig_setpos(d->place, x, y);
+    HudConfig_pos(d->place, &px, &py);
+    tray_place(&d->tray, px, py);
+    if (d->face) HudArt_place(d->face, px, py);
+    if (d->back) HudArt_place(d->back, px, py);
+    if (d->needle) HudArt_place(d->needle, d->w / 2 + px, d->h / 2 + py);
+    if (d->cap) HudArt_place(d->cap, (d->w / 2 - d->cap->w / 2) + px, (d->h / 2 - d->cap->h / 2) + py);
+    d->hx = d->w / 2, d->hy = d->h / 2;
+    d->cx = d->hx + px, d->cy = d->hy + py;
+}
+
+/* The dial at value n (at most its units less one; no lower bound). 0x421670 */
+static void dial_draw(HDial *d, int n)
+{
+    if (d->tray.base.state == 0) return;
+    tray_draw(&d->tray);
+    if (!HudConfig_notrays()) HudArt_draw(d->back);
+    if (d->units <= n) n = d->units - 1;
+    if (n < 0 || DIAL_STEPS <= n) return;   /* (port: the original reads outside its tables) */
+    float cx = (float)d->cx, cy = (float)d->cy, q[12];
+    static const int order[4] = {2, 3, 1, 0};
+    for (int k = 0; k < 4; k++) {
+        const float *c = d->corner[order[k]][n];
+        q[3 * k] = cx + c[0];
+        q[3 * k + 1] = cy - c[1];
+        q[3 * k + 2] = 0;
+    }
+    HudArt_draw(d->face);
+    if (d->needle) {
+        HudArt_setcorners(d->needle, q);
+        HudArt_draw(d->needle);
+    }
+    if (d->style == 0) HudArt_draw(d->cap);
+}
+
+static void dial_destroy(HudVisual *v)   /* 0x4215a0 */
+{
+    HDial *d = (HDial *)v;
+    HudArt_free(d->face);
+    HudArt_free(d->back);
+    HudArt_free(d->needle);
+    HudArt_free(d->cap);
+    free(d);
+}
+
+/* Its place and the divider's colours again. 0x4218a0 */
+static void dial_reset(HudVisual *v)
+{
+    int32_t x, y;
+    HudConfig_pos(((HDial *)v)->place, &x, &y);
+    v->vt->setpos(v, x, y);
+    tray_colours(&((HDial *)v)->tray);
+}
+
+/* back: the disc's image (circletach 0); face, needle, cap: images of their files; place: its entry of
+   the places; w, h: its size; nw, nh: the needle's; pivot: the needle's pivot from its end; start: the
+   angle of unit 0 in degrees, step: degrees a unit; units: the face's. The tables turn from start by
+   step a unit with the constants the original has (3.14, 1/180, 1.57). 0x4212c0 */
+static void dial_init(HDial *d, const HudVisualVtbl *vt, const char *back, int backi, const char *face, int facei, const char *cap,
+                      int capi, const char *needle, int style, int place, int w, int h, int nw, int nh, int pivot, float start, float step,
+                      int units)
+{
+    int32_t x, y;
+    HudConfig_pos(place, &x, &y);
+    tray_init(&d->tray, vt, x, y, w, h, 0, true, 0, false, false);
+    d->w = w, d->h = h;
+    d->place = place;
+    d->units = units;
+    d->style = style;
+    d->back = HudArt_load(back, backi, x, y, w, h, false, false, false);
+    if (d->back) HudArt_setcolours(d->back, 0x80000000u, 0x80000000u, 0x80000000u, 0x80000000u);
+    d->face = HudArt_load(face, facei, x, y, w, h, false, false, true);
+    d->needle = HudArt_load(needle, style, x, y, nw, nh, false, false, false);
+    d->cap = HudArt_load(cap, capi, x, y, 0x14, 0x14, false, false, false);
+    HudConfig_pos(place, &x, &y);
+    dial_setpos(&d->tray.base, x, y);
+    double pi = exe_f64(0x5b2aa0), deg = exe_f64(0x5b2a98), quarter = exe_f64(0x5b2a90);
+    double a = (double)start * pi * deg;   /* (x87: extended precision) */
+    float da = step * (float)pi * (float)deg;
+    float half = (float)((nw + 1) / 2);
+    for (int i = units - 1; 0 <= i; i--) {
+        float px = (float)(cos(a - quarter) * half), py = (float)(sin(a - quarter) * half);
+        double c = cos(a), s = sin(a);
+        if (i < DIAL_STEPS) {
+            float *t0 = d->corner[0][i], *t1 = d->corner[1][i], *t2 = d->corner[2][i], *t3 = d->corner[3][i];
+            t0[0] = (float)(-pivot * c - px), t0[1] = (float)(-pivot * s - py), t0[2] = 0;
+            t1[0] = (float)(px - pivot * c), t1[1] = (float)(py - pivot * s), t1[2] = 0;
+            double lc = (double)(nh - pivot) * c;
+            float ls = (float)((double)(nh - pivot) * s);
+            t2[0] = (float)(lc - px), t2[1] = ls - py, t2[2] = 0;
+            t3[0] = (float)(px + lc), t3[1] = py + ls, t3[2] = 0;
+        }
+        a = (double)da + a;
+    }
+}
+
+/* ---- the speedometer (HSpeedometer, vtable 0x5b3020; 0x42e670) and the tachometer (HTach, 0xa9d4
+   bytes, vtable 0x5b3098; 0x42f300) ---- */
+
+/* km/h or mph, a unit each. Shown by the second layout's +0x30 2. 0x42e7a0 */
+static void speedometer_draw(HudVisual *v)
+{
+    Car *car = local_car();
+    if (HudConfig_choicei32(0x30) != 2 || v->state == 0 || !car) return;   /* 0x41e960 */
+    float ms = *CAR_F(car, 0xec4);
+    dial_draw((HDial *)v, g_hud_imperial ? (int)(ms * exe_f32(0x5b3014)) : (int)(ms * exe_f32(0x5b3018)));
+}
+
+/* The revs scaled to the red line (+0xee0), in tens. Shown by +0x38 2. 0x42f5c0 */
+static void tach_draw(HudVisual *v)
+{
+    Car *car = local_car();
+    if (HudConfig_choicei32(0x38) != 2 || !car) return;   /* 0x41e980 */
+    int n = (int)(*CAR_F(car, 0xdb4) * ((HDial *)v)->redline + exe_f32(0x5b30d8));
+    dial_draw((HDial *)v, n / 10);
+}
+
+/* Its size (the record's +0xc4, no divider), place (6), then the dial's. 0x42f4f0 */
+static void tach_setpos(HudVisual *v, int x, int y)
+{
+    HDial *d = (HDial *)v;
+    tray_setsize(&d->tray, HudConfig_i32(0xc4), HudConfig_i32(0xc8), 0);
+    int32_t px, py;
+    HudConfig_setpos(HUDPOS_TACHDIAL, x, y);
+    HudConfig_pos(HUDPOS_TACHDIAL, &px, &py);
+    dial_setpos(v, px, py);
+    PENDING_NOTE(0x42f4f0, "the tachometer's two texts (+0xa9c4, +0xa9c8; placed, never drawn)");
+}
+
+static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress};
+static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress};
+
+static HudVisual *speedometer_new(void)
+{
+    HDial *d = calloc(1, sizeof *d);
+    if (!d) return NULL;
+    const HudDials *o = &g_hud_dials;
+    int night = g_r3d_night != 0, st = o->needle;
+    const char *face = exe_str(exe_u32(0x5ccefc + 4u * (unsigned)(night + g_hud_imperial * 2)));
+    const char *needle = exe_str(exe_u32(0x5ccf0c + 4u * (unsigned)night));
+    dial_init(d, &speedometer_vt, exe_str(0x5ccf94), 0, face, g_hud_imperial ? o->speedo_mph : o->speedo_kmh, needle, 5, needle, st,
+              HUDPOS_SPEEDO, HudConfig_i32(0xd4), HudConfig_i32(0xd8), exe_i32(0x5ccf18 + 8u * (unsigned)st),
+              exe_i32(0x5ccf1c + 8u * (unsigned)st), o->pivot, (float)o->speedo_start, (float)o->speedo_deg * exe_f32(0x5b3060),
+              o->speedo_units);
+    return &d->tray.base;
+}
+
+static HudVisual *tach_new(void)
+{
+    HDial *d = calloc(1, sizeof *d);
+    if (!d) return NULL;
+    const HudDials *o = &g_hud_dials;
+    int night = g_r3d_night != 0, st = o->needle;
+    const char *needle = exe_str(exe_u32(0x5ccfd4 + 4u * (unsigned)night));
+    dial_init(d, &tach_vt, exe_str(0x5ccf94), 0, exe_str(exe_u32(0x5ccfcc + 4u * (unsigned)night)), o->tach, needle, 5, needle, st,
+              HUDPOS_TACHDIAL, HudConfig_i32(0xc4), HudConfig_i32(0xc8), exe_i32(0x5ccfe0 + 8u * (unsigned)st),
+              exe_i32(0x5ccfe4 + 8u * (unsigned)st), o->pivot, (float)o->tach_start, (float)o->tach_deg * exe_f32(0x5b3060), o->tach_units);
+    PENDING_NOTE(0x42f300, "the tachometer's texts (0xa9c4, 0xa9c8)");
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_TACHDIAL, &x, &y);
+    tach_setpos(&d->tray.base, x, y);
+    Car *car = local_car();
+    int red = car ? *CAR_I(car, 0xee0) : 0;
+    d->redline = red ? (float)(red - 0x2ee) / (float)red : 0;
+    return &d->tray.base;
+}
+
 /* ---- the HUD ---- */
 
 void HUD_Init(void)
@@ -549,6 +848,12 @@ void HUD_Init(void)
     HudConfig_Load("", 0, g_display.width, g_display.height);
     always = true;  /* (HUD_LoadStrings 0x41e190 sets 0x60c970) */
     add(gear_new(), true, false);
+    add(speed_new(), true, false);
+    PENDING_NOTE(0x4315d0, "HUD_Init's lap and time visuals (0x4315d0, 0x42a0f0)");
+    PENDING_NOTE(0x42a6f0, "HUD_Init's damage, position and lap visuals (0x42f880, 0x42a6f0, 0x421e20)");
+    add(speedometer_new(), true, false);
+    add(tach_new(), true, false);
+    add(tachdigital_new(), true, false);
     PENDING_NOTE(0x424420, "HUD_Init's other visuals (gauges, lap, position, time, map, messages)");
     add(countdown_new(), false, false);
     Hud2D_Init();   /* 0x419d70 */

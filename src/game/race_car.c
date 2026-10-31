@@ -9,6 +9,7 @@
 #include "game/sim_math.h"
 #include "game/wtree.h"
 #include "pending.h"
+#include "render/r3dcar.h"
 #include <string.h>
 
 int32_t g_race_reverse;
@@ -16,7 +17,6 @@ int32_t g_race_linear;
 int32_t g_race_type;
 int32_t g_race_knockout;
 int32_t g_race_side;
-int32_t g_hud_metric;
 
 static float ground_normal[3];   /* 0x628f70: the ground's normal under the wheels */
 
@@ -235,8 +235,36 @@ static void parts_wear(Car *c, bool apply)
     }
 }
 
+/* The AI's figures of the car (+0xee0 ..): the red line (the specs' +0x94), each gear's ratio of it
+   (+0xef4, neutral none) and its inverse (+0xf10), the specs' +0x54, +0xf4 times g (9.8, 0x5b25bc),
+   and its rates' defaults. 0x406f50 */
+void AI_Setup(Car *c)
+{
+    *CAR_I(c, 0xee0) = (int32_t)*SPEC_F(c, 0x94);
+    for (int i = 0; i < 7; i++) {
+        if (i == 1) {
+            *CAR_I(c, 0xef8) = 0;
+            *CAR_I(c, 0xf14) = 0;
+            continue;
+        }
+        float r = *SPEC_F(c, 0x94) / *SPEC_F(c, 0x60 + 4 * i);
+        if (r < 0) r = -r;
+        *CAR_F(c, 0xef4 + 4 * i) = r;
+        *CAR_F(c, 0xf10 + 4 * i) = 1.0f / r;
+    }
+    *CAR_I(c, 0xed8) = *SPEC_I(c, 0x54);
+    float g = *SPEC_F(c, 0xf4) * K(0x5b25bc);
+    *CAR_F(c, 0x1088) = 2.6f;   /* (0x40266666) */
+    *CAR_F(c, 0x1018) = 1.0f;
+    *CAR_F(c, 0x10bc) = 1.0f;
+    *CAR_I(c, 0x10d8) = 0;
+    *CAR_I(c, 0x10dc) = 0;
+    *CAR_F(c, 0x1084) = g;
+    *CAR_F(c, 0x10d4) = 1.0f;
+}
+
 /* The AI's state for the race (its direction along the road, its targets and rates). 0x406db0 */
-static void ai_reset(Car *c)
+void AI_Reset(Car *c)
 {
     uint32_t flags = (uint32_t)*CAR_I(c, CAR_FLAGS);
     int dir = g_race_reverse ? -1 : 1;
@@ -402,7 +430,7 @@ void Car_RaceInit(Car *c, uint32_t id)
     c->b[0xd81] = 1;
     c->b[0xd85] = 0;
     c->b[0xd86] = 0;
-    c->b[0xd87] = g_hud_metric ? 3 : 0;
+    c->b[0xd87] = g_r3d_night ? 3 : 0;   /* the lights on at night (0x628a28) */
     c->b[0xd89] = 0;
     c->b[0xd88] = 0;
     set_i(c, 0xd98, 0);
@@ -410,7 +438,7 @@ void Car_RaceInit(Car *c, uint32_t id)
     c->b[0xd8c] = 0;
     set_i(c, 0xdfc, 0);
     set_i(c, 0xe00, 0);
-    ai_reset(c);
+    AI_Reset(c);
     set_i(c, 0x10e4, 0);
     set_i(c, 0x110c, 0);
     set_i(c, 0x1108, 0);

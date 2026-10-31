@@ -14,6 +14,9 @@ enum { LOOK = 0x1e0, CHOICE = 0x68 };
 /* The save directory (0x65b360: an entry of the path table the game fills at startup, not ported). */
 static const char *save_dir = "SaveData\\";
 
+HudDials g_hud_dials;
+int32_t g_hud_imperial;
+
 static int loads;            /* 0x60c978 */
 static uint8_t *loc;         /* 0x60c974 */
 static uint8_t *looks;       /* 0x60c964 */

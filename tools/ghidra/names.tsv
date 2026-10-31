@@ -17,6 +17,7 @@
 00406900	Race_InitTables	race	high	Lane table 0x5e7550 (0, 1/i), 0x40e6d0, AI_LoadLineSpeeds
 00406950	Traffic_LoadConfig	ai	med	Loads trafcfg.dat (traffic configuration)
 00406db0	AI_Reset	ai	high	The car's AI state for the race (direction 0xeb0/0xeac, rates, targets)
+00406f50	AI_SetupCar	hud	med	Ported in src/game/hud.c
 00407f50	AI_LoadPersonalities	ai	med	Loads prsonal.bin, scripts.bin, hhglue.bin (AI driver personalities and scripts)
 00408870	Car_Steady	race	high	On the ground and under control
 0040ad40	AI_LoadTuning	ai	med	Loads tuning.bin (AI tuning)
@@ -108,12 +109,20 @@
 0041e5b0	HUD_TraysOff	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e5e0	HUD_NoTrays	hud	med	Ported in src/game/hud.c / hud_config.c
 0041e920	HUD_GearShown	hud	med	Ported in src/game/hud.c / hud_config.c
+0041e940	HUD_SpeedFigures	hud	med	Ported in src/game/hud.c
+0041e960	HUD_SpeedDial	hud	med	Ported in src/game/hud.c
+0041e980	HUD_TachDial	hud	med	Ported in src/game/hud.c
+0041e9a0	HUD_TachFigures	hud	med	Ported in src/game/hud.c
 0041ea70	HUD_LoadLayout	hud	med	Loads a .hud layout (1.hud, nfs5-1.hud)
 0041f7c0	HUD_LoadLayouts	hud	med	Ported in src/game/hud.c / hud_config.c
 0041fb60	HUD_LayoutPixels	hud	med	Ported in src/game/hud.c / hud_config.c
 00420510	HUD_SchemeColour	hud	med	Ported in src/game/hud.c / hud_config.c
 004211f0	FastAlloc_alloc	mem	high	STL allocator: small blocks (<=256 B) from per-size free lists, else heap
+004212c0	HDial_init	hud	med	Ported in src/game/hud.c
 004215a0	HDial_v0	hud	struct	Virtual slot 0 of HDial (vtable 0x5b2aac)
+00421670	HDial_drawvalue	hud	med	Ported in src/game/hud.c
+00421790	HDial_setpos	hud	med	Ported in src/game/hud.c
+004218a0	HDial_reset	hud	med	Ported in src/game/hud.c
 00421ad0	HExit_v0	hud	struct	Virtual slot 0 of HExit (vtable 0x5b2b0c)
 00421b40	HExit_v1	hud	struct	Virtual slot 1 of HExit (vtable 0x5b2b0c)
 00421b90	HExit_v9	hud	struct	Virtual slot 9 of HExit (vtable 0x5b2b0c)
@@ -179,18 +188,22 @@
 0042e1b0	HReplaySave_v0	hud	struct	Virtual slot 0 of HReplaySave (vtable 0x5b2f8c)
 0042e220	HReplaySave_v1	hud	struct	Virtual slot 1 of HReplaySave (vtable 0x5b2f8c)
 0042e290	HReplaySave_v9	hud	struct	Virtual slot 9 of HReplaySave (vtable 0x5b2f8c)
+0042e490	HSpeed_init	hud	med	Ported in src/game/hud.c
 0042e4d0	HSpeed_v1	hud	struct	Virtual slot 1 of HSpeed (vtable 0x5b2fd8)
 0042e640	HSpeed_v2	hud	struct	Virtual slot 2 of HSpeed (vtable 0x5b2fd8)
+0042e670	HSpeedometer_init	hud	med	Ported in src/game/hud.c
 0042e770	HSpeedometer_v0	hud	struct	Virtual slot 0 of HSpeedometer (vtable 0x5b3020)
 0042e7a0	HSpeedometer_v1	hud	struct	Virtual slot 1 of HSpeedometer (vtable 0x5b3020)
 0042e980	HTable_v0	hud	struct	Virtual slot 0 of HTable (vtable 0x5b3078)
 0042e9b0	HTable_v1	hud	struct	Virtual slot 1 of HTable (vtable 0x5b3078)
 0042f000	HTable_v5	hud	struct	Virtual slot 5 of HTable (vtable 0x5b3078)
 0042f1f0	HTable_v2	hud	struct	Virtual slot 2 of HTable (vtable 0x5b3078)
+0042f300	HTach_init	hud	med	Ported in src/game/hud.c
 0042f4a0	HTach_v0	hud	struct	Virtual slot 0 of HTach (vtable 0x5b3098)
 0042f4f0	HTach_v12	hud	struct	Virtual slot 12 of HTach (vtable 0x5b3098)
 0042f5c0	HTach_v1	hud	struct	Virtual slot 1 of HTach (vtable 0x5b3098)
 0042f610	HTach_v2	hud	struct	Virtual slot 2 of HTach (vtable 0x5b3098)
+0042f660	HTachDigital_init	hud	med	Ported in src/game/hud.c
 0042f6c0	HTachDigital_v1	hud	struct	Virtual slot 1 of HTachDigital (vtable 0x5b30e0)
 0042f810	HTachDigital_v2	hud	struct	Virtual slot 2 of HTachDigital (vtable 0x5b30e0)
 0042fe60	HTextDamage_v0	hud	struct	Virtual slot 0 of HTextDamage (vtable 0x5b3120)
@@ -1155,6 +1168,7 @@
 004ea860	FEVictory3DRoom_Load	frontend	med	Victory room and era movies (er3pc-av.mad, er4pc-av.mad)
 004eaa30	FEVictory3DRoom_v0	frontend	struct	Virtual slot 0 of FEVictory3DRoom (vtable 0x5b73fc)
 004eaa80	FEVictory3DRoom_v1	frontend	struct	Virtual slot 1 of FEVictory3DRoom (vtable 0x5b73fc)
+004eadb0	FE_SetHudDials	hud	med	Ported in src/game/hud.c
 004f06f0	FECarSetup_Load	frontend	med	Car setup values (FDownForce, RDownForce, BrakeBias, ...)
 004f1070	FECarSetupCallbackList_v0	frontend	struct	Virtual slot 0 of FECarSetupCallbackList (vtable 0x5b7558)
 004f1130	FECarSetupCallbackList_v1	frontend	struct	Virtual slot 1 of FECarSetupCallbackList (vtable 0x5b7558)
