@@ -23,6 +23,7 @@
 #include "render/render_pending.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
+#include "game/camera.h"
 #include "render/noise.h"
 #include "render/sky.h"
 #include <math.h>
@@ -34,8 +35,6 @@ static bool ready, failed;
 static RaceViews views;
 static float env[64];
 static double ticks_due;
-static float cam_eye[3], cam_look[3];
-static bool cam_set;
 
 static void set_env(void)   /* the track viewer's light until the sky's is ported */
 {
@@ -71,48 +70,6 @@ static void draw_cars(RCamera *c)
     }
 }
 
-/* The camera behind the car and above it, looking a little ahead of it; it eases after the car. */
-static void chase_camera(Car *car)
-{
-    const float *p = CAR_F(car, 0x330), *fw = CAR_F(car, 0x37c);
-    float fx = fw[0], fz = fw[2], n = sqrtf(fx * fx + fz * fz);
-    if (n < 1e-4f) { fx = 0; fz = 1; n = 1; }
-    fx /= n;
-    fz /= n;
-    static float dist = -1;
-    if (dist < 0) {   /* --param camdist=<metres> */
-        char v[16];
-        dist = plat_param("camdist", v, sizeof v) ? (float)atof(v) : 6.5f;
-    }
-    float eye[3] = {p[0] - fx * dist, p[1] + dist * 0.34f, p[2] - fz * dist};
-    float look[3] = {p[0] + fx * 3.0f, p[1] + 0.6f, p[2] + fz * 3.0f};
-    if (!cam_set) {
-        memcpy(cam_eye, eye, sizeof eye);
-        memcpy(cam_look, look, sizeof look);
-        cam_set = true;
-    }
-    for (int k = 0; k < 3; k++) {
-        cam_eye[k] += (eye[k] - cam_eye[k]) * 0.18f;
-        cam_look[k] += (look[k] - cam_look[k]) * 0.3f;
-    }
-    float g = WSurface_HeightAt(cam_eye) + 0.8f;   /* not under the ground */
-    if (cam_eye[1] < g) cam_eye[1] = g;
-    RFrame *f = &views.main->frame;
-    memcpy(f->eye, cam_eye, sizeof cam_eye);
-    /* back (towards the eye), right = up x back, up' = back x right; rows (-right, up', forward) */
-    float bx = cam_eye[0] - cam_look[0], by = cam_eye[1] - cam_look[1], bz = cam_eye[2] - cam_look[2];
-    float bn = sqrtf(bx * bx + by * by + bz * bz);
-    bx /= bn;
-    by /= bn;
-    bz /= bn;
-    float rx = bz, rz = -bx, rn = sqrtf(rx * rx + rz * rz);
-    rx /= rn;
-    rz /= rn;
-    float ux = by * rz, uy = bz * rx - bx * rz, uz = -by * rx;
-    float o[9] = {-rx, 0, -rz, ux, uy, uz, -bx, -by, -bz};
-    memcpy(f->orient, o, sizeof o);
-}
-
 static bool load(const char *track, const char *carname)
 {
     snprintf(g_track_name, sizeof g_track_name, "%s", track);
@@ -137,6 +94,15 @@ static bool load(const char *track, const char *carname)
     Input_Reset(false);
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
     AI_MakeControllers();  /* 0x406580 */
+    {
+        /* The race camera on the viewed car (--param follow=<car>), in its list's first mode or
+           --param cam=<mode>. */
+        int follow = plat_param("follow", v, sizeof v) ? atoi(v) : 0;
+        if (follow < 0 || follow >= g_ncars) follow = 0;
+        g_camera_car = follow;
+        int mode = plat_param("cam", v, sizeof v) ? atoi(v) : DESC_I(g_cars[follow], 0x208);
+        Camera_Init(0, g_cars[follow], mode);
+    }
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
     set_env();
@@ -170,6 +136,12 @@ static void read_controls(void)
     if (steer < target) steer = steer + step < target ? steer + step : target;
     else if (steer > target) steer = steer - step > target ? steer - step : target;
     g_input_packet[0] = (uint8_t)((hand ? 1 : 0) | (reset ? 5 << 3 : 0));
+    /* The cameras (the original's configured view keys): C the next of the car's list, B looking back. */
+    static bool was_c;
+    bool cam_key = kb && keys[0x2e];
+    if (cam_key && !was_c) Camera_NextMode(0);
+    was_c = cam_key;
+    g_look[2] = kb && keys[0x30];
     g_input_packet[1] = (uint8_t)(int8_t)steer;
     g_input_packet[2] = up ? 0x7f : 0;
     g_input_packet[3] = down ? 0x7f : 0;
@@ -221,13 +193,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         HUD_RaceOver();     /* 0x426a40 */
         PENDING_NOTE(0x415300, "the replay's speeds and cameras");
     }
-    static int follow = -1;   /* --param follow=<car>: the camera behind another car */
-    if (follow < 0) {
-        char v[8];
-        follow = plat_param("follow", v, sizeof v) ? atoi(v) : 0;
-        if (follow >= g_ncars) follow = 0;
-    }
-    chase_camera(g_cars[follow]);
+    Camera_Update();   /* 0x463af0 (the race loop's, after the ticks) */
     char lv[4];
     if (plat_param("ailog", lv, sizeof lv) && g_sim_tick % 128 < 2)
         for (int i = 0; i < g_ncars; i++) {

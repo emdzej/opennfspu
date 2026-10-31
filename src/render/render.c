@@ -2,6 +2,7 @@
    render-state object, display mode and quality, cameras and views, the race frame. */
 #include "render/render.h"
 #include "render/sky.h"
+#include "game/camera.h"
 #include "game/hud.h"
 #include "exe.h"
 #include "platform.h"
@@ -473,7 +474,7 @@ void Render_MainViews(RaceViews *rv)
     c->range = 400.0f;
     c->viewdist = (float)g_renderopts.viewdistance;      /* 0x6197cc */
     c->viewdist2 = c->viewdist * c->viewdist;
-    Render_PendingCameraUpdate(c);                       /* 0x461060 */
+    Camera_ToView(c->update[1], c, c->update[0]);        /* Camera_Track 0x461060 -> 0x464e40 */
     RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 1 : 2);
     c->clear = Sky_ClearColour(false);                   /* 0x459940, 0x466da0 */
     if (c->view) c->view->background = c->clear;

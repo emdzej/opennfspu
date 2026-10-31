@@ -1286,3 +1286,148 @@ bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *
     if (flag) *flag = best->w8;
     return true;
 }
+
+/* ---- the cameras' queries (0x473380 .. 0x473d60) ---- */
+
+void WTree_LeavesAlong(WTreeCell *c, const float seg[6], WTreeCells *out)
+{
+    load_consts();
+    float x0 = seg[3] <= seg[0] ? seg[3] : seg[0], x1 = seg[0] <= seg[3] ? seg[3] : seg[0];
+    float z0 = seg[5] <= seg[2] ? seg[5] : seg[2], z1 = seg[2] <= seg[5] ? seg[5] : seg[2];
+    while (!is_leaf(c)) {
+        float s = level_size[c->id >> 28];
+        float cx = ((float)(c->id & 0x3fff) + k_half) * s - origin;
+        float cz = ((float)(c->id >> 14 & 0x3fff) + k_half) * s - origin;
+        if (x1 < cx || x0 < cx) {
+            if (z1 < cz || z0 < cz) {
+                if (c->child[2]) WTree_LeavesAlong(c->child[2], seg, out);
+                if (cz <= z0 || cz <= z1)
+                    if (c->child[0]) WTree_LeavesAlong(c->child[0], seg, out);
+            } else if (c->child[0]) {
+                WTree_LeavesAlong(c->child[0], seg, out);
+            }
+            if (x0 < cx && x1 < cx) return;
+        }
+        if (z1 < cz || z0 < cz) {
+            if (c->child[3]) WTree_LeavesAlong(c->child[3], seg, out);
+            if (z0 < cz && z1 < cz) return;
+        }
+        c = c->child[1];
+        if (!c) return;
+    }
+    cells_push(out, c);
+}
+
+static WTreeCell *world_root(void)
+{
+    WTree *t = g_world ? g_world->tree : NULL;
+    return t ? t->root : NULL;
+}
+
+/* The polygons whose ground-plane outline holds p, in the leaves within r: ceilings (flag 0x8000, no
+   surface bits) or the ground (surface bits). */
+static WTreeElems *polys_at(const float p[3], float r, bool ceiling)
+{
+    WTreeElems *out = calloc(1, sizeof *out);
+    WTreeCell *root = world_root();
+    if (!out || !root) return out;
+    WTreeCells leaves = {0};
+    WTree_LeavesNear(root, p, r, &leaves);
+    for (uint32_t i = 0; i < leaves.n; i++) {
+        WTreeList *l = leaves.c[i] ? leaves.c[i]->list : NULL;
+        for (uint32_t k = 0; l && k < l->n; k++) {
+            WTreeElem *e = l->e[k].elem;
+            if (!e->vt->contains(e, p) || l->e[k].kind != WTREE_POLY) continue;
+            bool keep = ceiling ? (e->flags & 0x8000) && !(e->flags & 0xf) : (e->flags & 0xf) != 0;
+            if (keep) WTreeElems_push(out, e);
+        }
+    }
+    free(leaves.c);
+    return out;
+}
+
+WTreeElems *WTree_CeilingsAt(const float p[3], float r) { return polys_at(p, r, true); }   /* 0x473380 */
+WTreeElems *WTree_GroundAt(const float p[3], float r) { return polys_at(p, r, false); }    /* 0x4735b0 */
+
+WTreeElems *WTree_ObjectsAlong(const float from[3], const float seg[6])   /* 0x473940 */
+{
+    (void)from;
+    WTreeElems *out = NULL;
+    WTreeCell *root = world_root();
+    if (!root) return NULL;
+    WTreeCells leaves = {0};
+    WTree_LeavesAlong(root, seg, &leaves);
+    for (uint32_t i = 0; i < leaves.n; i++) {
+        WTreeList *l = leaves.c[i] ? leaves.c[i]->list : NULL;
+        for (uint32_t k = 0; l && k < l->n; k++) {
+            if (l->e[k].kind != WTREE_OBJECT) continue;
+            WTreeObject *o = (WTreeObject *)l->e[k].elem;
+            float n[3], at[3];
+            if (!o->ovt->collide(o, seg, n, at)) continue;
+            if (!out) out = calloc(1, sizeof *out);
+            if (out) WTreeElems_push(out, l->e[k].elem);
+        }
+    }
+    free(leaves.c);
+    return out;
+}
+
+/* Whether the segment (x0, z0)-(x1, z1) meets the circle of radius r round (cx, cz): either root of
+   the quadratic within [0, 1] (a negative discriminant's root is NaN and fails both). 0x489d20 */
+static bool segment_meets_circle(float x0, float z0, float x1, float z1, float cx, float cz, float r)
+{
+    float dx = x1 - x0, dz = z1 - z0;
+    float a = dx * dx + dz * dz;
+    float b = (x0 - cx) * dx + (z0 - cz) * dz;
+    b = b + b;
+    float m = z0 * cz + x0 * cx;
+    double disc = sqrt((double)(b * b - (((cz * cz + cx * cx + z0 * z0 + x0 * x0) - (m + m)) - r * r) * a * 4.0f));
+    double a2 = (double)a + (double)a;
+    float t1 = (float)((-(double)b - disc) / a2);
+    double t2 = (disc - (double)b) / a2;
+    if (t1 >= 0.0f && t1 <= 1.0f) return true;
+    return t2 >= 0.0 && t2 <= 1.0;
+}
+
+WTreeElems *WTree_EdgesNear(const float p[3], float r)   /* 0x473b00 */
+{
+    WTreeElems *out = calloc(1, sizeof *out);
+    WTreeCell *root = world_root();
+    if (!out || !root) return out;
+    WTreeCells leaves = {0};
+    WTree_LeavesNear(root, p, r, &leaves);
+    for (uint32_t i = 0; i < leaves.n; i++) {
+        WTreeList *l = leaves.c[i] ? leaves.c[i]->list : NULL;
+        for (uint32_t k = 0; l && k < l->n; k++) {
+            if (l->e[k].kind != WTREE_EDGE) continue;
+            const WTreeElem *e = l->e[k].elem;
+            const float *a = WTreeEdge_point(e, 0), *b = WTreeEdge_point(e, 1);
+            if (segment_meets_circle(a[0], a[2], b[0], b[2], p[0], p[2], r)) WTreeElems_push(out, l->e[k].elem);
+        }
+    }
+    free(leaves.c);
+    return out;
+}
+
+WTreeElems *WTree_EdgesAlong(const float seg[6])   /* 0x473d60 */
+{
+    WTreeElems *out = calloc(1, sizeof *out);
+    WTreeCell *root = world_root();
+    if (!out || !root) return out;
+    WTreeCells leaves = {0};
+    WTree_LeavesAlong(root, seg, &leaves);
+    for (uint32_t i = 0; i < leaves.n; i++) {
+        WTreeList *l = leaves.c[i] ? leaves.c[i]->list : NULL;
+        for (uint32_t k = 0; l && k < l->n; k++) {
+            if (l->e[k].kind != WTREE_EDGE) continue;
+            const WTreeElem *e = l->e[k].elem;
+            const float *a = WTreeEdge_point(e, 0), *b = WTreeEdge_point(e, 1);
+            float edge[6] = {a[0], a[1], a[2], b[0], b[1], b[2]}, at[3];
+            if (World_SegmentsCross(seg, edge, at)) WTreeElems_push(out, l->e[k].elem);   /* 0x489bf0 */
+        }
+    }
+    free(leaves.c);
+    return out;
+}
+
+double WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]) { return plane_height(n, v, p); }

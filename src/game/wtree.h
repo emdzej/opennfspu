@@ -187,4 +187,18 @@ float WSurface_HeightAt(const float p[3]);
    the tracker on a polygon. 0x474030 */
 bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *flag);
 
+/* The cameras' queries of the world's tree (each returns a vector the caller frees, WTreeElems_free).
+   The leaves the segment's box overlaps (0x484690); the polygons holding p in the leaves within r:
+   ceilings (flag 0x8000 and no surface bits, 0x473380) or ground (surface bits, 0x4735b0); the objects
+   the segment hits (NULL for none; from: the original's unused first argument, 0x473940); the road
+   edges within r of p (0x473b00) or crossing the segment (0x473d60). */
+void WTree_LeavesAlong(WTreeCell *c, const float seg[6], WTreeCells *out);
+WTreeElems *WTree_CeilingsAt(const float p[3], float r);
+WTreeElems *WTree_GroundAt(const float p[3], float r);
+WTreeElems *WTree_ObjectsAlong(const float from[3], const float seg[6]);
+WTreeElems *WTree_EdgesNear(const float p[3], float r);
+WTreeElems *WTree_EdgesAlong(const float seg[6]);
+/* The height of the plane through v with normal n at p's (x, z). 0x489f90 */
+double WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]);
+
 extern WTree *g_wtree;   /* the world's (BWorld +0x24) */

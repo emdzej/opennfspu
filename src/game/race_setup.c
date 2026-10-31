@@ -56,6 +56,12 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x8, 1);                                     /* CLASS: the human player */
     put_i(d, 0x200, 0xe);                                 /* SPEECHCOLOUR */
     {
+        /* _CAMERA: the car's camera list (the front end's camera option; a stand-in until it is ported):
+           the near chase, the far chase, the hood, in the car. */
+        static const int32_t cams[4] = {2, 5, 1, 0};
+        for (int k = 0; k < 4; k++) put_i(d, 0x208 + 4 * k, cams[k]);
+    }
+    {
         /* SKILLSLOW .. SKILLDEFAULT 1, their ranges 0 (the player's, as the front end writes them). */
         float sk[8] = {1, 1, 1, 1, 0, 0, 0, 0};
         memcpy(d + 0x154, sk, sizeof sk);

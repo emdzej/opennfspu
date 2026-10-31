@@ -2343,6 +2343,8 @@ void HUD_Init(void)
     HudConfig_trays(true);   /* (0x657de4, the trays option: on) */
 }
 
+bool HUD_ModalShown(void) { return nmodal > 0; }   /* 0x426a20 */
+
 static void push_modal(HudVisual *v)
 {
     if (v && nmodal < 8) modal[nmodal++] = v;
