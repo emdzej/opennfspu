@@ -358,6 +358,18 @@ int Music_SongList(const char *pattern, int32_t *out, int cap)
     return n;
 }
 
+/* The ms of the song playing played so far (its stream entry's, 0x565d90), 0 for none. */
+int Music_PlayedMs(void)
+{
+    Music *m = s_music;
+    if (!m || m->player < 0) return 0;
+    int32_t st[3], e[4];
+    SND_StreamStatus(m->player, st);
+    if (st[0] <= 0) return 0;
+    SND_StreamEntry(st[1], e);
+    return e[0] == 2 ? e[1] : 0;
+}
+
 const MusicSong *Music_Current(void) { return s_music && s_music->song ? &s_music->info : NULL; }
 
 /* 25 times a second (0x4ad790). */

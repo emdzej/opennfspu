@@ -131,6 +131,8 @@ int main(void)
         float m[3] = {(a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2}, n[3] = {-(b[2] - a[2]), 0, b[0] - a[0]};
         float l = sqrtf(n[0] * n[0] + n[2] * n[2]);
         Car *c = g_cars[0];
+        static Car keep;
+        keep = *c;   /* (the wheels moved onto the trigger: the car put back after) */
         for (int k = 0; k < 3; k += 2) {
             CAR_F(c, 0x7f8)[k] = CAR_F(c, 0x8bc)[k] = m[k] + n[k] / l * 2;
             CAR_F(c, 0xa44)[k] = CAR_F(c, 0x980)[k] = m[k] - n[k] / l * 2;
@@ -144,6 +146,7 @@ int main(void)
         SceneElem *e = Scene_List()->e[scene_i16(t, TRIG_LINK1)];
         printf("  trigger %d: fired %d, its sound element's one-shot %d\n", i, t->b[0x78], e->b[0xa2]);
         CHECK(t->b[0x78] == 1 && e->b[0xa2] == 1);
+        *c = keep;
         break;
     }
     /* A lap done: the announcer says its number (0x427790). */
@@ -155,15 +158,27 @@ int main(void)
     run(64 * 3, 64, 0);   /* (its end) */
     printf("  lap's announcement: rms %.0f before, %.0f after\n", still, said);
     CHECK(said > still * 1.2);
+    /* An opponent made a cop car with its siren on (flag 0x20, +0xecc bit 1: 0x4aac60, 0x4aad80). */
+    if (1 < g_ncars) {
+        double plain = run(64, 64, 0);
+        *CAR_I(g_cars[1], CAR_FLAGS) |= 0x20;
+        *CAR_I(g_cars[1], 0xecc) |= 2;
+        double siren = run(64 * 2, 64, 0);
+        *CAR_I(g_cars[1], 0xecc) &= ~2;
+        run(64, 64, 0);
+        printf("  siren: rms %.0f without, %.0f with\n", plain, siren);
+        CHECK(siren > plain * 1.2);
+    }
     /* The music: a song of the playlist streamed (zzzymus.viv), heard over the idling car. */
     double quiet = run(64, 64, 0);
     Music_SetVolume(0x4f);
     double loud = run(64 * 6, 64 * 4, 0);
     const MusicSong *song = Music_Current();
-    printf("  music: rms %.0f without, %.0f with: %s (%s, %d ms)\n", quiet, loud, song ? song->name : "none",
-           song && song->artist ? song->artist : "", song ? song->length : 0);
+    int played = Music_PlayedMs();
+    printf("  music: rms %.0f without, %.0f with: %s (%s, %d ms), %d ms played\n", quiet, loud, song ? song->name : "none",
+           song && song->artist ? song->artist : "", song ? song->length : 0, played);
     CHECK(song && song->name && !strncmp(song->name, "game", 4) && 60000 < song->length);
-    CHECK(loud > quiet * 1.2);
+    CHECK(4000 < played && played < 7000);   /* (about six seconds, less the queue's start) */
     if (getenv("AUDIO_WAV")) wav(getenv("AUDIO_WAV"));
     Audio_Shutdown();
     printf("audio_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");

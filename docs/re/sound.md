@@ -247,3 +247,14 @@ The game:
 - Resets the send at the race start.
 
 The hardware reverb (DirectSound 3D, 0x58e530) isn't ported.
+
+## Sirens
+
+A near car carrying flag 0x20 (a cop car) has a siren whenever bit 1 of its +0xecc is set (0x4a6e50's
+end).
+- Start (0x4aac60): SND_coll's patch 9 for flag 0x40's kind. Otherwise patch 8 for even records and 6
+  for odd ones, with a number counted across the race (0x656490). It plays in slot 0x2d plus the record.
+- Each tick (0x4aad80): the siren restarts when its play has ended. Its velocity byte comes from the
+  Doppler (pitch × 64 / 65536). Its volume follows the distance over 70; the numbered kind takes the
+  options' mix of 0x5d1750 and 0x5d14c4 in one product, the other in two steps. Its pan follows too.
+- When the siren goes off, it is reset (0x4aad20) and fades over five ticks.

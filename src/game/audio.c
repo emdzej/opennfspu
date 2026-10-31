@@ -42,6 +42,7 @@ static int stream_bank(int type, int idx, bool look);
 static int32_t s_thunder_wait, s_thunder = -1, s_thunder_angle;   /* 0x656494, 0x656834, 0x656498 */
 static int8_t s_revlevel;          /* 0x656869: the reverb's send, 8 in the open, 100 under a roof */
 static bool s_revset;              /* 0x656868 */
+static int32_t s_sircount;          /* 0x656490: the sirens started (their alternation) */
 static int32_t s_nearvol = 0x80;   /* 0x655f34: 0x80 less the cars close to the listener */
 typedef struct {
     int32_t slot;      /* 0x6564a0: the SND bank */
@@ -1463,6 +1464,7 @@ void Audio_StartRace(void)
     /* 0x4a8430: no thunder waiting; 0x4ae850: the elements' voices */
     s_thunder = -1;
     s_thunder_angle = s_thunder_wait = 0;
+    s_sircount = 0;
     for (int v = 0; v < 16; v++) s_ev[v] = (ElemVoice){NULL, -1, -1, 0};
     s_ev_on = true;
     elems_reset();
@@ -1572,6 +1574,44 @@ static void player_tick(Car *c)
     }
 }
 
+/* The near cars' sirens (0x65686c ..: 4 each): on, the start's alternation number (-1 for flag 0x40's
+   kind), the plays' velocity byte (0x5d1878), the updates; their plays in slots 0x2d + the record. */
+static int32_t s_siren[4], s_sirnum[4], s_sirvel[4] = {0x20, 0x20, 0x20, 0x20}, s_sirn[4];
+
+static int siren_patch(int i, bool alt) { return alt ? 9 : (i & 1) == 1 ? 6 : 8; }
+
+static void siren_reset(int i)   /* 0x4aad20 */
+{
+    s_siren[i] = 0;
+    s_sirvel[i] = 0x20;
+    s_sirn[i] = 0;
+    if (s_slot[0x2d + i][0] != -1) SND_Fade(s_slot[0x2d + i][0], 5, -1);
+}
+
+static void siren_start(int i, bool alt)   /* 0x4aac60 */
+{
+    s_siren[i] = 1;
+    s_sirnum[i] = alt ? -1 : s_sircount++;
+    s_slot[0x2d + i][0] = play_once(s_banks[3].slot, siren_patch(i, alt), 0x40, 0, s_sirvel[i], 0x10000, 0x7f);
+}
+
+/* Each tick (0x4aad80): restarted when its play ended; its velocity by the Doppler, its volume by the
+   distance (the alternating ones' at the effects' mix), its pan. */
+static void siren_update(int i, int vol, int pitch, int pan, bool alt)
+{
+    if (!s_siren[i]) return;
+    int32_t *h = &s_slot[0x2d + i][0];
+    if (!SND_Playing(*h)) *h = play_once(s_banks[3].slot, siren_patch(i, alt), 0x40, 0, s_sirvel[i], 0x10000, 0x7f);
+    s_sirn[i]++;
+    int v = (pitch * 0x40 + ((pitch * 0x40 >> 31) & 0xffff)) >> 0x10;
+    v = v < 0 ? 0 : 0x7f < v ? 0x7f : v;
+    SND_SetVelocity(*h, v);
+    int lv = s_sirnum[i] == -1 ? ((opt(0x5d1750) * opt(0x5d14c4) * 0x55 >> 7) * vol) >> 0xe
+                               : (opt(0x5d1750) * opt(0x5d14c4) * vol * 0x55) >> 0x15;
+    SND_SetVolume(*h, lv);
+    if (opt(0x5d1760)) SND_SetPanByte(*h, pan_byte(pan));
+}
+
 /* The cars near the listener (0x655d60: 4 x 0x38 bytes) whose sounds play in their slots: the engine's
    road noise i + 6, its lden and ldex banks i + 10 and i + 14, its events i + 0x22, the horn i + 0x27. */
 typedef struct {
@@ -1630,7 +1670,7 @@ static void near_update(int n)
             if (s_near[r].car && s_near[r].car != NEAR_GONE) continue;
             if (s_near[r].car) {
                 /* (the engine's slots are stopped only for a car of none: never) */
-                PENDING_NOTE(0x4aad20, "the sirens' state (0x65686c)");
+                if (s_siren[r]) siren_reset(r);
                 stop_slot(r + 0x22);
                 stop_slot(r + 0x27);
             }
@@ -1643,6 +1683,7 @@ static void near_update(int n)
         stop_slot(r + 6);
         stop_slot(r + 10);
         stop_slot(r + 14);
+        if (s_siren[r]) siren_reset(r);
         stop_slot(r + 0x22);
         stop_slot(r + 0x27);
         near_reset(&s_near[r], NULL);
@@ -1731,6 +1772,7 @@ static void near_tick(int vp, int i)
         if (s_on) event_sound(id < 0 ? -1 : i + 0x22, kind, surf, (int)(strength * 65536.0f), dist, pan);   /* 0x4aa9a0 */
     }
     int hvol = ((0x1324 - n->dist2) * 0x7f) / 0x1324;
+    int facing_pitch = pitch;
     int type = DESC_I(c, 0);
     int hpatch = (type == 0x30) + 10, hvel = (int8_t)exe_data(0x5d1478 + (uint32_t)type, 1)[0];
     if (!(*CAR_I(c, CAR_FLAGS) & 4)) {
@@ -1755,7 +1797,18 @@ static void near_tick(int vp, int i)
         stop_slot(i + 0x27);
         n->horn = 0;
     }
-    if ((*CAR_I(c, CAR_FLAGS) & 0x20) && (*CAR_I(c, 0xecc) & 2)) PENDING_NOTE(0x4aac60, "the cop cars' sirens (0x4aac60, 0x4aad80)");
+    /* A cop car's siren (flag 0x20) while it is on (+0xecc bit 1): flag 0x40's kind (patch 9), else
+       patch 8 or 6 by the record; stopped when it goes off. */
+    uint32_t flags = (uint32_t)*CAR_I(c, CAR_FLAGS);
+    if (flags & 0x20) {
+        if (*CAR_I(c, 0xecc) & 2) {
+            if (!s_siren[i]) siren_start(i, (flags & 0x40) != 0);
+            else siren_update(i, hvol, facing_pitch, pan, (flags & 0x40) != 0);
+        } else if (s_siren[i]) {
+            siren_reset(i);
+            stop_slot(i + 0x2d);
+        }
+    }
 }
 
 void Audio_Thunder(int delay, int angle)
