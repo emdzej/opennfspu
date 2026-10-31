@@ -1,5 +1,7 @@
 /* The game's EAGL layers: see rlayers.h. */
 #include "render/rlayers.h"
+#include "render/r3dcar.h"
+#include "render/headlights.h"
 #include "exe.h"
 #include "pending.h"
 #include "platform.h"
@@ -56,11 +58,12 @@ static EaglLayer *exec_light(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_spectex(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_shadowmap(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_vertexlight(EaglLayer *, EaglStream *, EaglStream *);
 
 static const RLayerClass classes[] = {
     {0x8001, -1, 0x5b3c18, 1, true, false, 0, 0, 0x20, NULL, 0x448bf0, "RCustomLayers::LayerUVAnimate"},
-    {0x8002, -1, 0, 0, false, false, 4, 0, 0, NULL, 0x452fe0, "Headlights::LayerVertexLight"},
-    {0x8003, -1, 0, 0, false, false, 4, 0, 0, NULL, 0x452fe0, "Headlights::LayerVertexLight_Opaque"},
+    {0x8002, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight"},
+    {0x8003, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight_Opaque"},
     {0x8004, -1, 0, 0, false, true, 0, 4, 0, NULL, 0x453b70, "Headlights::LayerUVLight"},
     {0x8005, 5, 0, 0, true, true, 4, 0, 0x20, exec_fullambient, 0x448b60, "RCustomLayers::LayerFullAmbient"},
     {0x8006, 5, 0x5b3c20, 1, false, true, 4, 0, 0x20, NULL, 0x448e30, "RCustomLayers::LayerSetAlpha"},
@@ -138,6 +141,8 @@ EaglLayer *RLayers_Create(uint32_t type, uint32_t id)
         r->cls = c;
         for (uint32_t k = 0; k < 2 * c->ndeps && k < 6; k++) r->deptable[k] = exe_u32(c->deps + 4 * k);
         if (c->param) r->base.param = c->param;
+        /* the headlights' vertex layers mark the track as night (0x628a28) */
+        if (type == 0x8002 || type == 0x8003 || type == 0x8011) g_r3d_night = 1;
         return &r->base;
     }
     return NULL;
@@ -749,5 +754,56 @@ static EaglLayer *exec_shadowmap(EaglLayer *l, EaglStream *s0, EaglStream *s1)
         for (int k = 0; k < c->nverts; k++, o += stride) memcpy(o, cache[idx[k]], 8);
     }
 #undef SHUV
+    return l->next;
+}
+
+/* 0x452fe0 (Headlights::LayerVertexLight and _Opaque): the vertices' colours (dependency 0) with the
+   headlights' colour added by the light of their positions (dependency 2, through the index list of
+   dependency 1), each channel at most 255; without lights on the colours as they are. (The viewed car's
+   lights, its R3DObject's +0x2d4 bytes 0 and 1, are taken as on at night; the cop lights' pass 0x452920
+   is pending.) */
+static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0, (void)s1;
+    EaglContext *c = g_eagl;
+    if (!l->dep || l->ndeps < 3) dep_assert();
+    const uint32_t *col = dep_data(l, 0);
+    const uint8_t *idx = dep_present(l, 1) ? EAGL_LayerData(l->dep[1]) : NULL;
+    const float *pos = dep_data(l, 2);
+    uint32_t npos = dep_info(l, 2) >> 4;
+    int stride = (int)l->param, per = c->prim, n = c->nverts;
+    bool all = (c->flags & EAGL_CF_INSIDE) || per == 1;
+    bool on = g_r3d_night != 0;
+    uint8_t *o = c->verts + 0x10;
+    if (on && col && pos) {
+        Headlights_Light((int)npos, pos, EAGL_StackTop(&c->view->model)->m);
+        uint32_t hc = g_headlight_colour;
+        uint32_t (*pc)[2] = c->primcodes;
+        int k = 0;
+        while (k < n) {
+            if (!all && (*pc)[0] != 0) {
+                k += per;
+                o += per * stride;
+            } else {
+                for (int v = 0; v < per && k < n; v++, k++, o += stride) {
+                    float li = g_headlight_light[idx ? idx[k] : (k < 256 ? k : 255)];
+                    uint32_t cv = col[k], out;
+                    if (li <= 0.0f) out = cv | 0xff000000u;
+                    else {
+                        int r = (int)lrintf((float)(hc >> 16 & 0xff) * li) + (int)(cv >> 16 & 0xff);
+                        int g = (int)lrintf((float)(hc >> 8 & 0xff) * li) + (int)(cv >> 8 & 0xff);
+                        int b = (int)lrintf(li * (float)(hc & 0xff)) + (int)(cv & 0xff);
+                        out = (uint32_t)(r < 0xff ? r : 0xff) << 16 | (uint32_t)(b < 0xff ? b : 0xff) |
+                              0xff000000u | (uint32_t)(g < 0xff ? g : 0xff) << 8;
+                    }
+                    memcpy(o, &out, 4);
+                }
+            }
+            pc++;
+        }
+    } else if (col) {
+        for (int k = 0; k < n; k++, o += stride) memcpy(o, &col[k], 4);
+    }
+    c->flags |= EAGL_CF_DIFFUSE;
     return l->next;
 }

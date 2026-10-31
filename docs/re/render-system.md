@@ -142,3 +142,22 @@ the layer after the next draw layer, unless the stride is 0x20 and the id 0xe.
 The two-stage draw layer's kernels (0x542090, 0x544780, 0x546bb0) are the one-stage ones run with
 40-byte vertices: the second coordinate set, both textures (0x535fb0), the two-set format (setstate 0x2a
 1) and each stage's blend (0x29, 0x10029).
+
+## Headlights
+
+Night tracks (industrial and the Monaco set) are those whose materials make the headlights' vertex
+layers: the layer factory sets the night flag (0x628a28) when it makes 0x8002, 0x8003 or 0x8011. That
+flag also picks the HUD's night dials and the night car pages.
+- Headlights_Load (0x452460) reads `GameData\Render\night.psh`, an SHPP file; its `nght` entry is the
+  beam, a 128 × 128 byte table.
+- Each frame (0x452590) builds the viewed car's headlight space: the world into the car's frame.
+- A point's light (0x4527e0) comes from the table at its depth × 1.28 and side × 3.62, less 32 ×
+  |height|, divided by 256.
+- Headlights::LayerVertexLight (0x452fe0; its _Opaque twin is the same code) adds the headlights' colour
+  (0xff808080) times that light to each vertex colour, a channel at most 255. Its dependencies (0x5b3d70)
+  are the colours, the index list and the positions.
+
+Not ported yet:
+- the cars' light switches (R3DObject +0x2d4), taken as on;
+- the cop cars' red and blue light (0x452920);
+- the UV and ambient variants (0x453b70, 0x453490), which no track uses at the default options.

@@ -1,6 +1,7 @@
 /* The drive mode (see drive_selftest.h). */
 #include "render/drive_selftest.h"
 #include "eagl/eagl.h"
+#include "render/headlights.h"
 #include "game/ai.h"
 #include "game/car.h"
 #include "game/car_drive.h"
@@ -82,6 +83,7 @@ static bool load(const char *track, const char *carname)
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sky_LoadFsh(g_track_name, false);
     CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
+    Headlights_Load();                  /* 0x452460 */
     RaceViews_ctor(&views);
     if (!RaceSetup_SingleCar(carname)) return false;
     char v[8];
@@ -91,6 +93,7 @@ static bool load(const char *track, const char *carname)
     if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
     Car_Construct();
     if (g_ncars < 1) return false;
+    Headlights_SetCar(g_cars[0]);   /* 0x452550 (the viewed car's) */
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
@@ -219,6 +222,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         }
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     if (tm) TexManager_begin(tm);
+    Headlights_Update();   /* 0x452590 */
     Render_Frame(&views);
     if (tm) TexManager_end(tm);
     return true;
