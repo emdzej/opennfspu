@@ -50,3 +50,6 @@ foreach(src ${TEST_SRC})
   target_compile_options(${t} PRIVATE ${PU_WARN})
   add_test(NAME ${t} COMMAND ${t} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endforeach()
+# audio_test again on castle, which has sound triggers
+add_test(NAME audio_test_castle COMMAND audio_test WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(audio_test_castle PROPERTIES ENVIRONMENT "AUDIO_TRACK=castle")

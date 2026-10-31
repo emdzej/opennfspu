@@ -10,6 +10,7 @@
 #include "game/race.h"
 #include "game/race_car.h"
 #include "game/race_setup.h"
+#include "game/scene.h"
 #include "game/track.h"
 #include "snd/snd.h"
 #include "vfs.h"
@@ -116,6 +117,31 @@ int main(void)
     steer = 0x3f;
     run(64 * 2, 64, 0x7f);
     steer = 0;
+    /* castle's sound triggers (type 4): the car's diagonals across the first one's line set its sound
+       element's one-shot going (Scene_Tick 0x470b10). */
+    SceneList *ev = Scene_EventTriggers();
+    for (int i = 0; ev && i < ev->n; i++) {
+        SceneElem *t = ev->e[i];
+        if (scene_i32(t, TRIG_TYPE) != 4) continue;
+        const float *a = (const float *)(void *)(t->b + TRIG_END_A), *b = (const float *)(void *)(t->b + TRIG_END_B);
+        float m[3] = {(a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2}, n[3] = {-(b[2] - a[2]), 0, b[0] - a[0]};
+        float l = sqrtf(n[0] * n[0] + n[2] * n[2]);
+        Car *c = g_cars[0];
+        for (int k = 0; k < 3; k += 2) {
+            CAR_F(c, 0x7f8)[k] = CAR_F(c, 0x8bc)[k] = m[k] + n[k] / l * 2;
+            CAR_F(c, 0xa44)[k] = CAR_F(c, 0x980)[k] = m[k] - n[k] / l * 2;
+        }
+        CAR_F(c, 0x7f8)[1] = CAR_F(c, 0xa44)[1] = m[1];
+        const float *f = (const float *)(void *)(t->b + 0xc8), *g = (const float *)(void *)(t->b + 0xbc);
+        memcpy(CAR_F(c, 0x37c), f, 12);
+        for (int k = 0; k < 3; k++) CAR_F(c, 0x33c)[k] = g[k] * 10.0f;
+        *CAR_F(c, 0x35c) = 10.0f;
+        Scene_Tick();
+        SceneElem *e = Scene_List()->e[scene_i16(t, TRIG_LINK1)];
+        printf("  trigger %d: fired %d, its sound element's one-shot %d\n", i, t->b[0x78], e->b[0xa2]);
+        CHECK(t->b[0x78] == 1 && e->b[0xa2] == 1);
+        break;
+    }
     if (getenv("AUDIO_WAV")) wav(getenv("AUDIO_WAV"));
     Audio_Shutdown();
     printf("audio_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");
