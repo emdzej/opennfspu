@@ -97,6 +97,7 @@ bool FEApp_Init(const char *start)
         s_ready = true;
     }
     s_result = FE_RUNNING;
+    while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     return FEApp_GotoScreen(start, true);
 }
 

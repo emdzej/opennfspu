@@ -12,3 +12,5 @@ bool DRIVE_selftest(const char *track, const char *car);
 /* The race the front end set up (its race description: fe.txt's numopponentracecars, num_laps), used
    unless the launch parameters say otherwise. */
 extern int g_drive_opponents, g_drive_laps;
+/* The race's end, for the front end to take over again. */
+void DRIVE_Shutdown(void);

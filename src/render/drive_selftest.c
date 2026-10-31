@@ -31,6 +31,8 @@
 #include "game/camera.h"
 #include "render/noise.h"
 #include "render/sky.h"
+#include "render/sky_sun.h"
+#include "render/carlight.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -236,4 +238,40 @@ bool DRIVE_selftest(const char *track, const char *car)
     Render_Frame(&views);
     if (tm) TexManager_end(tm);
     return true;
+}
+
+/* The race's end (GameShutdown 0x4b66e0 with Render_RaceShutdown, as far as the port has them): the HUD,
+   the AI, the sounds, the cars' renderers and tasks, the render module's art and lights, the world; a
+   later DRIVE_selftest loads a race again. (The replay's save, the sky object and the cars' memory stay:
+   their ends aren't ported.) */
+void DRIVE_Shutdown(void)
+{
+    if (!ready) return;
+    HUD_Free();        /* 0x4252f0 */
+    AI_Free();
+    Audio_Shutdown();  /* 0x4a8850 */
+    for (int i = 0; i < g_ncars; i++) {
+        R3DCar *r = g_cars[i] ? g_cars[i]->p[CARP_R3D] : NULL;
+        if (r) {
+            R3DCar_Free(r);
+            g_cars[i]->p[CARP_R3D] = NULL;
+        }
+    }
+    g_ncars = 0;
+    g_tasks_tick.count = g_tasks_even.count = 0;   /* (the lists are the race's) */
+    g_render_cars = NULL;
+    Headlights_Free();      /* 0x452530 */
+    CarEnv_Free();          /* 0x440fd0 */
+    SpriteBank_Free();      /* 0x4520c0 */
+    Sun_Free();             /* 0x4600e0 */
+    DynLights_Free();       /* 0x455ec0 */
+    Sprites_Free();         /* 0x451480 */
+    Render_FreeCommonFsh(); /* 0x448af0 */
+    Scene_Clear();          /* 0x46cf60 */
+    BWorld_DeInit();        /* 0x471ba0 */
+    g_race_over = 0;
+    g_race_view = 0;
+    g_replay_mode = 0;
+    ticks_due = 0;
+    ready = failed = false;
 }

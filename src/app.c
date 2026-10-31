@@ -66,6 +66,16 @@ bool app_frame(void)
     if (plat_frame_shown()) {
         if (race_track[0]) {
             DRIVE_selftest(race_track, car_name);
+            /* (the in-race menus, HUD_HandleInput 0x425eb0, aren't ported: Escape quits the race as their
+               "quit" does, RaceLoop's actions 4 / 5, and the front end comes back) */
+            uint8_t k[16];
+            int nk = plat_key_presses(k, 16);
+            for (int i = 0; i < nk; i++)
+                if (k[i] == 0x01 && fe_start[0]) {
+                    DRIVE_Shutdown();
+                    race_track[0] = 0;
+                    fe_on = false;
+                }
         } else if (fe_start[0]) {
             if (!fe_on) fe_on = FEApp_Init(fe_start);
             if (fe_on) {
