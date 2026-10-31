@@ -4,7 +4,12 @@
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
 #include "front/fe3d.h"
+#include "game/audio.h"
+#include "game/music.h"
+#include "game/options.h"
 #include "real/mouse.h"
+#include "exe.h"
+#include "app.h"
 #include "pending.h"
 #include "platform.h"
 #include "render/r3dcar.h"
@@ -23,6 +28,8 @@ static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents;
 static char s_car[64] = "964";
 static int s_depth;
+static bool s_sound;
+static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
 static char s_overlay_id[32];
@@ -180,18 +187,27 @@ bool FEApp_Init(const char *start)
         FE2D_Init();                                 /* 0x4d88c0 */
         FE_ControlDrawHook = indicator_draw;
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
-        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, the 3D rooms but the garage, music, movies");
+        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, the 3D rooms but the garage, movies");
         s_bar = load_screen("bottombar");
         s_ready = true;
     }
     s_result = FE_RUNNING;
-    g_r3d_frontend = 1;   /* 0x65b928: the application (the car renderer's showroom mode) */
+    g_r3d_frontend = 1;
+    /* The sound (GameMain's Audio_Init 0x4a6610 before the front end; the port's race closes it at its
+       end, so it opens again here) and the menus' music. */
+    if (!s_sound) s_sound = Audio_Init();
+    s_music_at = -1;   /* 0x65b928: the application (the car renderer's showroom mode) */
     while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     return FEApp_GotoScreen(start, true);
 }
 
 void FEApp_End(void)
 {
+    if (s_sound) {
+        Music_FadeOut(0x5dc);   /* (FEApplication_Run's end) */
+        Audio_Shutdown();       /* (the port's race opens it again) */
+        s_sound = false;
+    }
     FE3D_Free();
     g_r3d_frontend = 0;
 }
@@ -630,9 +646,24 @@ static void draw_combos(FertControl *w)
     }
 }
 
+/* The menus' music (FEMainScreen_v1 0x50faf0): a song of "Menu*" (0x5dca14) every 0x1e00 ticks (a minute),
+   the one before faded out, at the options' level (MUSICLEVEL). */
+static void menu_music(void)
+{
+    if (!s_sound) return;
+    int32_t now = (int32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+    if (s_music_at < 0 || s_music_at < now - 0x1e00) {
+        Music_FadeOut(0);   /* 0x4ae190 */
+        Music_SetVolume((int32_t)((exe_u32(0x5d14b0) * (uint32_t)Options_Int(0x5d618c, (int)exe_u32(0x5d1740))) >> 7));
+        Music_Play(exe_str(0x5dca14), 0);
+        s_music_at = now;
+    }
+}
+
 void FEApp_Frame(void)
 {
     poll();
+    menu_music();
     FertControl *w = FEApp_Top();
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     sync_room(w);
