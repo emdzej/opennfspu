@@ -5,6 +5,7 @@
 #include "game/car_drive.h"
 #include "game/car_physics.h"
 #include "game/race_setup.h"
+#include "game/race.h"
 #include "game/scene.h"
 #include "game/track.h"
 #include "game/wtree.h"
@@ -186,9 +187,7 @@ bool DRIVE_selftest(const char *track, const char *car)
     ticks_due -= n;
     for (int i = 0; i < n && i < 4; i++) {
         read_controls(c);
-        g_sim_tick++;
-        TaskList_Run(&g_tasks_tick);
-        if (!(g_sim_tick & 1)) TaskList_Run(&g_tasks_even);
+        Sim_Step();   /* 0x415010 */
     }
     chase_camera(c);
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;

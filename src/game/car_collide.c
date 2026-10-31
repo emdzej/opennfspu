@@ -180,10 +180,11 @@ void CarSim_Edges(Car *c)
 }
 
 /* The cars checked against each other this tick (0x628cdc, count 0x628f5c; the simulation step empties
-   it, which the port does on the tick's first car). */
+   it). */
 static Car *g_collided[CAR_MAX * 2];
 static int g_ncollided;
-static int32_t g_collided_tick = -1;
+
+void CarSim_ClearCollided(void) { g_ncollided = 0; }
 
 void CarSim_Collide(void *car)
 {
@@ -193,10 +194,6 @@ void CarSim_Collide(void *car)
     if (c->b[0x7c]) {
         CarSim_Edges(c);   /* 0x494f90 */
         PENDING_NOTE(0x498d50, "the car against the world's objects (0x498d50)");
-    }
-    if (g_collided_tick != g_sim_tick) {
-        g_collided_tick = g_sim_tick;
-        g_ncollided = 0;
     }
     if (g_race_network) return;
     for (int i = 0; i < g_ncollided; i++) {

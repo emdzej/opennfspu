@@ -10,3 +10,5 @@ float CarSim_HitWall(Car *c, const float n[3], const float p[3], const float pus
 void CarSim_Edges(Car *c);
 /* The collision task (even ticks, priority 0x28). 0x498f60 */
 void CarSim_Collide(void *car);
+/* Empties the list of the cars checked against each other (0x628f5c = 0 in Sim_ClearContacts). */
+void CarSim_ClearCollided(void);

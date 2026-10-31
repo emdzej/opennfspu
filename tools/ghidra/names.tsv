@@ -629,7 +629,7 @@
 00493f70	CarSim_HitWall	sim	high	The car pushed out of a wall, bounced off its normal; the impact
 004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
 00494f90	CarSim_Edges	sim	high	The car's eight box probes against the road edges
-00498190	Sim_ClearContacts	sim	med	Clears the per-tick contact accumulator (+0x110c) of every race car (0x5e8b34, count 0x5e8b58) and traffic car (0x5e8c24, count 0x5e8b5c)
+00498190	Sim_ClearContacts	sim	high	Clears the cars' per-tick contacts (+0x110c) and the car-car list count (0x628f5c)
 00498f60	CarSim_Collide	sim	high	The collision task: edges, objects, the other cars
 00499490	CarSim_BodyPlane	sim	high	The car's own ground plane from the body polygon and the road axes
 004996a0	CarSim_SurfaceNoise	sim	high	The surface roughness under a wheel (random bumps by surface kind)
