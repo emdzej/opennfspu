@@ -4,6 +4,7 @@
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
 #include "front/fe3d.h"
+#include "real/mouse.h"
 #include "pending.h"
 #include "platform.h"
 #include "render/r3dcar.h"
@@ -277,19 +278,9 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
 static void poll(void)   /* 0x529530 */
 {
     FertControl *w = FEApp_Top();
-    float fx, fy, wheel;
+    int32_t mx, my;
     uint32_t b;
-    if (!w || !plat_mouse(&fx, &fy, &b, &wheel)) return;
-    int dw, dh;
-    plat_display_size(&dw, &dh);
-    int mw = g_display.width, mh = g_display.height;
-    if (dw <= 0 || dh <= 0 || mw <= 0 || mh <= 0) return;
-    /* the present's letterbox undone (thrash_dev.c's dev_present) */
-    float sx = 1, sy = 1, a = (float)mw / (float)mh, da = (float)dw / (float)dh;
-    if (da > a) sx = a / da;
-    else sy = da / a;
-    float nx = (fx / (float)dw * 2.0f - 1.0f) / sx, ny = (fy / (float)dh * 2.0f - 1.0f) / sy;
-    int32_t mx = (int32_t)((nx + 1.0f) * 0.5f * (float)mw), my = (int32_t)((ny + 1.0f) * 0.5f * (float)mh);
+    if (!w || !MOUSE_state(&mx, &my, &b)) return;
     if (mx != s_mouse[0] || my != s_mouse[1]) {
         s_mouse[0] = mx;
         s_mouse[1] = my;

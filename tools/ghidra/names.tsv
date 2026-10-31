@@ -2559,3 +2559,12 @@
 005211f0	FEStyle_Bevel	frontend	high	A bevel inside a bar
 00520780	FEStyle_DropShadow	frontend	high	A drop shadow out from a bar
 005208d0	FEStyle_Inset	frontend	high	A hovered bar's inset
+0042a3a0	HPause_ctor	hud	high	The pause menu: billboard (hud.loc 0x46d0) and the buttons continue, race again, quit (2, 3, 0x1a)
+004218c0	HExit_ctor	hud	high	The exit menu (0x46ba): view replay 0x15, exit to windows 4, exit to game menu 5, cancel 0x18
+0041b160	HButtonVisual_ctor	hud	high	A HUD button: rect, text, bevel flag (+0x103)
+0041b320	HButtonVisual_Input	hud	high	Click when the button goes down on it (+0x101)
+0041b540	HButtonVisual_Layout	hud	high	Corners, frame lines, the text centred
+004267c0	HUD_PushPause	hud	high	The pause menu into the modal list, opening
+00415130	Race_PauseCheck	race	high	Input_Action 8: pause when no modal screen; in the replay, the race's end
+00435ee0	HUD_DropShadow	hud	high	Two quads (dx, dy) out from a rect's bottom and right (tables 0x5b3418, 0x5b3428)
+00436090	HUD_Inset	hud	high	Four quads inside a rect (tables 0x5b3438 ..)

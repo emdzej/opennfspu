@@ -18,6 +18,7 @@ typedef struct {
     void (*setpos)(HudVisual *v, int x, int y);   /* slot 12 */
     int (*progress)(HudVisual *v);                /* slot 14: of the fade, 0..100 (0x434950) */
     bool (*done)(HudVisual *v);                   /* slot 3: a modal visual finished (it leaves the modal list) */
+    int (*input)(HudVisual *v, int x, int y, int click);   /* slot 9: the mouse; the action chosen (0 none) */
 } HudVisualVtbl;
 
 struct HudVisual {
@@ -37,6 +38,13 @@ void HUD_RaceOver(void);
 bool HUD_ModalShown(void);
 /* Every visual hidden, the modal list emptied (the replay's start). 0x425740 */
 void HUD_HideAll(void);
+/* The pause menu up (0x4267c0: HPause into the modal list, opening). */
+void HUD_Pause(void);
+/* The mouse to the HUD (HUD_HandleInput 0x425eb0): the first modal visual's action, the menus' own
+   moves done (resume 2 closes the pause, quit 0x1a opens the exit's, 0x18 goes back): the race loop's
+   to act on (2 resume, 3 restart, 4 / 5 / 0x15 the race's end). click: the left button went down. */
+int HUD_HandleInput(int x, int y, bool click);
+
 /* A time of ticks as mm:ss.hh, signed if asked. 0x435640 */
 void HTime_Format(int t, char *out, bool sign);
 /* The HUD over camera c (the overlay view). 0x425910 */

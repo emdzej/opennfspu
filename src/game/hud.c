@@ -1,5 +1,6 @@
 /* The race HUD (see hud.h). */
 #include "game/hud.h"
+#include "real/mouse.h"
 #include "exe.h"
 #include "game/car.h"
 #include "game/car_drive.h"
@@ -152,7 +153,7 @@ static void go_draw(HudVisual *v)
     if (v->state != 0) v->state = 0;
 }
 
-static const HudVisualVtbl go_vt = {go_destroy, go_draw, NULL, NULL, NULL, NULL, NULL};   /* 0x5b27ec */
+static const HudVisualVtbl go_vt = {go_destroy, go_draw, NULL, NULL, NULL, NULL, NULL, NULL};   /* 0x5b27ec */
 
 static HudVisual *countdown_new(void)
 {
@@ -566,7 +567,7 @@ static void gear_reset(HudVisual *v)
     combo_reset(c);
 }
 
-static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL};
+static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *gear_new(void)
 {
@@ -649,8 +650,8 @@ static void figures_reset(HudVisual *v, int size_off, bool choice)
 static void speed_reset(HudVisual *v) { figures_reset(v, 0x9c, false); }
 static void tachdigital_reset(HudVisual *v) { figures_reset(v, 0x14, true); }
 
-static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL};
-static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL};
+static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *figures_new(const HudVisualVtbl *vt, int place, int w, int h, bool keep)
 {
@@ -763,8 +764,8 @@ static void multitime_draw(HudVisual *v)
 static void time_reset(HudVisual *v) { figures_reset(v, 0xa4, false); }        /* 0x431760 */
 static void multitime_reset(HudVisual *v) { figures_reset(v, 0x0, true); }     /* 0x42a290 */
 
-static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL};
-static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL};
+static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
 {
@@ -947,7 +948,7 @@ static void position_destroy(HudVisual *v)   /* 0x42ad40 */
     free(p);
 }
 
-static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL};
+static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *position_new(void)
 {
@@ -1142,7 +1143,7 @@ static void gdamage_reset(HudVisual *v)
     tray_colours(&g->tray);
 }
 
-static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL};
+static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *gdamage_new(void)
 {
@@ -1588,7 +1589,7 @@ static void map_destroy(HudVisual *v)   /* 0x4320f0 */
     free(m);
 }
 
-static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL};
+static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *map_new(void)
 {
@@ -1645,8 +1646,8 @@ static void frame(int x, int y, int w, int h, int s, int p)
     quad_table(left, t + 0x30);
 }
 
-/* A bevel of b pixels inside (x, y, w, h). 0x436380 */
-static void bevel(int x, int y, int w, int h, int b)
+/* Four quads b pixels inside (x, y, w, h): top, right, bottom, left, coloured from table (4 x 4 colours). */
+static void inner(int x, int y, int w, int h, int b, uint32_t table)
 {
     if (g_hud_opaque) return;
     float fx = (float)x, fy = (float)y, x1 = (float)(x + w), y1 = (float)(y + h);
@@ -1654,11 +1655,14 @@ static void bevel(int x, int y, int w, int h, int b)
     float right[16] = {x1 - b, fy, 0, 1, x1, fy, 0, 1, x1, y1, 0, 1, x1 - b, y1, 0, 1};
     float bottom[16] = {fx, y1 - b, 0, 1, x1, y1 - b, 0, 1, x1, y1, 0, 1, fx, y1, 0, 1};
     float left[16] = {fx, fy, 0, 1, fx + b, fy, 0, 1, fx + b, y1, 0, 1, fx, y1, 0, 1};
-    quad_table(top, 0x5b3478);
-    quad_table(right, 0x5b3488);
-    quad_table(bottom, 0x5b3498);
-    quad_table(left, 0x5b34a8);
+    quad_table(top, table);
+    quad_table(right, table + 0x10);
+    quad_table(bottom, table + 0x20);
+    quad_table(left, table + 0x30);
 }
+
+/* A bevel of b pixels inside (x, y, w, h). 0x436380 */
+static void bevel(int x, int y, int w, int h, int b) { inner(x, y, w, h, b, 0x5b3478); }
 
 static void flat(const float q[16], uint32_t col)   /* 0x419f70 */
 {
@@ -1822,6 +1826,94 @@ static void bb_free(HBillBoard *b)   /* 0x41a760 */
     text_free(b->tsub);
     text_free(b->tkey);
     text_free(b->tkey2);
+}
+
+/* ---- the buttons (HButtonVisual, 0x104 bytes, vtable 0x5b2904; 0x41b160): a red bar with its text, amber
+   under the mouse, a click when the button goes down on it ---- */
+
+typedef struct {
+    int32_t x, y, w, h;      /* (HVisual 0x436670) */
+    float quad[16];          /* +0x14 */
+    float lines[5][8];       /* +0x54: the frame's four sides and a second right one */
+    const char *text;        /* +0xf4 */
+    HText *ttext;            /* +0xf8 */
+    uint32_t colour;         /* +0xfc: 0 the red / amber */
+    uint8_t hover, clicked;  /* +0x100, +0x101 */
+    uint8_t pressed;         /* +0x102 */
+    uint8_t bevelled;        /* +0x103 */
+} HButton;
+
+/* The corners, the frame and the text centred in it. 0x41b540 */
+static void button_layout(HButton *b, int x, int y, int w, int h)
+{
+    b->x = x, b->y = y, b->w = w, b->h = h;
+    box(x, y, w, h, b->quad);
+    float fx = (float)x, fy = (float)y, x1 = (float)(x + w), y1 = (float)(y + h);
+    float l[5][8] = {{fx, fy, 0, 1, x1, fy, 0, 1}, {x1, fy, 0, 1, x1, y1, 0, 1}, {x1, y1, 0, 1, fx, y1, 0, 1},
+                     {fx, y1, 0, 1, fx, fy, 0, 1}, {x1 + 1.0f, fy, 0, 1, x1 + 1.0f, y1, 0, 1}};
+    memcpy(b->lines, l, sizeof l);
+    if (b->ttext && b->ttext->font && b->ttext->font->font) {
+        float a, c, tw, th;
+        text_extent(b->ttext, b->text ? b->text : "", &a, &c, &tw, &th);
+        b->ttext->x = (int)(((float)w - tw) * 0.5f + fx);
+        b->ttext->y = (int)(((float)h - th) * 0.5f + fy);
+    }
+}
+
+static HButton *button_new(int x, int y, int w, int h, const char *text, bool bevelled)
+{
+    HButton *b = calloc(1, sizeof *b);
+    if (!b) return NULL;
+    b->text = text;
+    b->bevelled = bevelled;
+    b->ttext = text_new(HudConfig_font(0x4c), 0xffffffffu, (uint32_t)HudConfig_i32(0x14), x, y, w, h, 0, false);   /* 0x430e50 */
+    button_layout(b, x, y, w, h);
+    return b;
+}
+
+static void button_free(HButton *b)
+{
+    if (!b) return;
+    text_free(b->ttext);
+    free(b);
+}
+
+/* The click (0x41b320): the button goes down on it. */
+static void button_input(HButton *b, int click)
+{
+    b->clicked = click == 1 && b->hover;
+    if (b->clicked) PENDING_NOTE(0x4aab80, "the buttons' sound (9)");
+}
+
+static int32_t s_mouse_x = -1, s_mouse_y = -1;   /* (MOUSE_getstate 6, sampled with the HUD's input) */
+static uint32_t s_mouse_b;
+
+/* 0x41b360 */
+static void button_draw(HButton *b)
+{
+    float mx = (float)s_mouse_x, my = (float)s_mouse_y;
+    b->hover = b->quad[0] < mx && mx < b->quad[4] && b->quad[1] < my && my < b->quad[13];
+    uint32_t fill, ink = 0xff000000u;
+    if (b->colour) fill = b->colour;
+    else if (b->hover) fill = 0xfffab400u;
+    else fill = 0xffbc0000u, ink = 0xffffffffu;
+    flat(b->quad, fill);
+    for (int i = 0; i < 5; i++) line2(b->lines[i], b->lines[i] + 4, 0x5b28f8);
+    if (b->ttext) b->ttext->colour = ink;
+    text_print(b->ttext, b->text ? b->text : "", 1.0f, 1.0f);
+    if (b->bevelled) {
+        if ((!(s_mouse_b & 1) || !b->hover) && !b->pressed) tray_shade(b->x, b->y, b->w, b->h, 100);   /* 0x435d00 */
+        else if (!g_hud_opaque) inner(b->x, b->y, b->w, b->h, exe_i32(0x5cc910), 0x5b3438);   /* 0x436090 */
+        if (!g_hud_opaque) {   /* the shadow, 0x435ee0 (5, 5) */
+            int x = b->x, y = b->y, w = b->w, h = b->h, d = 5;
+            float bot[16] = {(float)(x + d), (float)(y + h), 0, 1, (float)(x + w), (float)(y + h), 0, 1,
+                             (float)(x + w + d), (float)(y + h + d), 0, 1, (float)(x + d), (float)(y + h + d), 0, 1};
+            float rt[16] = {(float)(x + w), (float)(y + d), 0, 1, (float)(x + w + d), (float)(y + d), 0, 1,
+                            (float)(x + w + d), (float)(y + h + d), 0, 1, (float)(x + w), (float)(y + h), 0, 1};
+            quad_table(bot, 0x5b3418);
+            quad_table(rt, 0x5b3428);
+        }
+    }
 }
 
 /* ---- the tables (HTable, 0x7b0 bytes, vtable 0x5b3078; 0x42e810): a header of column names, rows of
@@ -2000,7 +2092,7 @@ static void summary_destroy(HudVisual *v)   /* 0x42bfa0 */
     free(s);
 }
 
-static const HudVisualVtbl summary_vt = {summary_destroy, summary_draw, NULL, summary_setstate, bb_setpos, NULL, bb_done};
+static const HudVisualVtbl summary_vt = {summary_destroy, summary_draw, NULL, summary_setstate, bb_setpos, NULL, bb_done, NULL};
 
 static HudVisual *summary_new(const char *title)
 {
@@ -2184,8 +2276,8 @@ static void tach_setpos(HudVisual *v, int x, int y)
     PENDING_NOTE(0x42f4f0, "the tachometer's two texts (+0xa9c4, +0xa9c8; placed, never drawn)");
 }
 
-static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL};
-static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL};
+static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL, NULL};
 
 static HudVisual *speedometer_new(void)
 {
@@ -2295,7 +2387,7 @@ static void wrongway_destroy(HudVisual *v)   /* 0x436e50 */
     free(v);
 }
 
-static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL, NULL};
+static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL, NULL, NULL};
 
 static HudVisual *wrongway;   /* 0x60ca0c */
 
@@ -2375,6 +2467,77 @@ void HUD_LapDone(void)
 
 /* ---- the HUD ---- */
 
+/* ---- the pause menu (HPause, 300 bytes, vtable 0x5b2d54; 0x42a3a0) and the exit's (HExit, 0x130 bytes,
+   vtable 0x5b2b0c; 0x4218c0): billboards with a column of buttons in the middle of the screen ---- */
+
+enum { MENU_MAX = 4 };
+
+typedef struct {
+    HBillBoard bb;
+    HButton *button[MENU_MAX];   /* +0x120 .. */
+    int nbutton;
+    int action[MENU_MAX];        /* each button's action (slot 9) */
+} HMenu;
+
+/* 0x42a5b0 / 0x421b40: the billboard, its buttons once it's open */
+static void menu_draw(HudVisual *v)
+{
+    HMenu *m = (HMenu *)v;
+    bb_draw(&m->bb);
+    if (v->state != 0 && !(v->state == 1 || v->state == 2))
+        for (int i = 0; i < m->nbutton; i++)
+            if (m->button[i]) button_draw(m->button[i]);
+}
+
+/* 0x42a600 / 0x421b90 */
+static int menu_input(HudVisual *v, int x, int y, int click)
+{
+    (void)x, (void)y;
+    HMenu *m = (HMenu *)v;
+    for (int i = 0; i < m->nbutton; i++)
+        if (m->button[i]) button_input(m->button[i], click);
+    if (v->state == 0) return 0;   /* 0x42a310 */
+    for (int i = 0; i < m->nbutton; i++)
+        if (m->button[i] && m->button[i]->clicked) return m->action[i];
+    return 0;
+}
+
+static void menu_destroy(HudVisual *v)   /* 0x42a550 */
+{
+    HMenu *m = (HMenu *)v;
+    for (int i = 0; i < m->nbutton; i++) button_free(m->button[i]);
+    bb_free(&m->bb);
+    free(m);
+}
+
+static const HudVisualVtbl menu_vt = {menu_destroy, menu_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, menu_input};
+
+/* The billboard (w, h) titled by hud.loc's title id, n buttons of (bw, bh) by their ids, 1.6 of their
+   height apart, centred on the screen. */
+static HudVisual *menu_new(uint32_t wsize, uint32_t bsize, int title, int n, const int *ids, const int *actions)
+{
+    HMenu *m = calloc(1, sizeof *m);
+    if (!m) return NULL;
+    const uint8_t *loc = HudConfig_loc();
+    const char *t = LOC_string(loc, title);
+    /* (the left of the title bar is the global 0x5e8e50's text: empty in the port) */
+    bb_init(&m->bb, &menu_vt, exe_i32(wsize), exe_i32(wsize + 4), "", t ? t : "", false, false, false);
+    int bw = exe_i32(bsize), bh = exe_i32(bsize + 4);
+    float step = (float)((double)bh * exe_f64(0x5b2b00));
+    int x = g_display.width / 2 - bw / 2;
+    int y = (int)((float)(g_display.height / 2) - step * (float)n * 0.5f);   /* 0x5b2600 / 0x5b2404 = n */
+    for (int i = 0; i < n && i < MENU_MAX; i++) {
+        const char *s = LOC_string(loc, ids[i]);
+        m->button[i] = button_new(x, y, bw, bh, s ? s : "", true);
+        m->action[i] = actions[i];
+        m->nbutton++;
+        y = (int)((float)y + step);
+    }
+    return &m->bb.base;
+}
+
+static HudVisual *s_pause, *s_exit;   /* 0x60ca44, 0x60ca48 */
+
 void HUD_Init(void)
 {
     HUD_Free();
@@ -2402,6 +2565,12 @@ void HUD_Init(void)
         summary = summary_new(title ? title : "");   /* 0x42bc30 */
         add(summary, false, false);
     }
+    static const int pause_ids[3] = {0x46bc, 0x46bd, 0x46be}, pause_actions[3] = {2, 3, 0x1a};
+    s_pause = menu_new(0x5b2d40, 0x5b2d48, 0x46d0, 3, pause_ids, pause_actions);   /* 0x42a3a0 */
+    add(s_pause, false, false);
+    static const int exit_ids[4] = {0x46b6, 0x46b7, 0x46b8, 0x46b9}, exit_actions[4] = {0x15, 4, 5, 0x18};
+    s_exit = menu_new(0x5b2af0, 0x5b2af8, 0x46ba, 4, exit_ids, exit_actions);      /* 0x4218c0 */
+    add(s_exit, false, false);
     nmodal = 0;
     wrongway = wrongway_new();   /* 0x436dd0 (drawn on its own) */
     Hud2D_Init();   /* 0x419d70 */
@@ -2430,6 +2599,61 @@ static void race_screens(void)
     }
 }
 
+void HUD_Pause(void)
+{
+    if (!s_pause || nmodal == 8) return;
+    modal[nmodal++] = s_pause;
+    s_pause->vt->setstate(s_pause, 1);
+}
+
+/* Every modal visual set to s and the list emptied. */
+static void close_modals(int32_t s)
+{
+    if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], s);
+    nmodal = 0;
+}
+
+int HUD_HandleInput(int x, int y, bool click)
+{
+    MOUSE_state(&s_mouse_x, &s_mouse_y, &s_mouse_b);
+    (void)x, (void)y;
+    x = s_mouse_x, y = s_mouse_y;
+    int c = click ? 1 : 0;
+    if (nmodal == 0 || !modal[0]->vt->input) return 0;
+    int a = modal[0]->vt->input(modal[0], x, y, c);
+    switch (a) {
+    case 2:   /* resume */
+        close_modals(2);
+        break;
+    case 3:   /* restart */
+        if (g_race_mode == 4 || g_race_mode == 10 || g_race_mode == 2) return 0;
+        close_modals(0);
+        PENDING_NOTE(0x426a40, "the restart's HUD reset (0x426a40 with 0)");
+        break;
+    case 4:   /* (the original shows a message and the results first: 0x60c9ac, 0x46fb, then 0x1c's 4) */
+        PENDING_NOTE(0x425eb0, "the exit's message before quitting (0x437370, hud.loc 0x46fb)");
+        close_modals(0);
+        break;
+    case 5:
+        close_modals(0);
+        break;
+    case 0x15:
+        close_modals(0);
+        break;
+    case 0x18:   /* the exit's back: the pause again */
+        s_exit->vt->setstate(s_exit, 2);
+        if (nmodal < 8) modal[nmodal++] = s_pause;
+        break;
+    case 0x1a:   /* the pause's quit: the exit's menu */
+        s_pause->vt->setstate(s_pause, 2);
+        if (nmodal < 8) modal[nmodal++] = s_exit;
+        break;
+    default:
+        break;
+    }
+    return a;
+}
+
 void HUD_HideAll(void)
 {
     for (int i = 0; i < nlist; i++)
@@ -2448,6 +2672,7 @@ void HUD_RaceOver(void)
 void HUD_Free(void)
 {
     nmodal = 0;
+    s_pause = s_exit = NULL;
     summary = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);
     wrongway = NULL;

@@ -1,5 +1,6 @@
 /* The drive mode (see drive_selftest.h). */
 #include "render/drive_selftest.h"
+#include "real/mouse.h"
 #include "eagl/eagl.h"
 #include "render/headlights.h"
 #include "game/ai.h"
@@ -173,6 +174,60 @@ static void read_controls(void)
 }
 
 int g_drive_opponents, g_drive_laps;
+int g_drive_result;
+bool g_drive_paused;
+
+/* The pause key (Input_Action 8: Escape) and the menus' mouse (0x415130, HUD_HandleInput 0x425eb0 in
+   RaceLoop 0x415300). In the race Escape pauses when no modal screen is up; in the race-over (the
+   replay) it ends the race. */
+static void race_menus(void)
+{
+    uint8_t k[16];
+    int nk = plat_key_presses(k, 16);
+    bool esc = false;
+    for (int i = 0; i < nk; i++) esc |= k[i] == 0x01;
+    if (esc && 0x20 < g_sim_tick) {
+        if (g_replay_mode < 2) {
+            if (!HUD_ModalShown()) {
+                PENDING_NOTE(0x4aaf20, "the sounds paused with the race");
+                g_drive_paused = true;   /* 0x606a90 */
+                HUD_Pause();             /* 0x4267c0 */
+            }
+        } else {
+            g_drive_result = 1;          /* Race_End(1) */
+        }
+    }
+    int32_t mx, my;
+    uint32_t b = 0;
+    static uint32_t was;
+    bool click = false;
+    if (MOUSE_state(&mx, &my, &b)) {
+        click = (b & 1) && !(was & 1);
+        was = b;
+    }
+    switch (HUD_HandleInput(0, 0, click)) {
+    case 2:
+        g_drive_paused = false;
+        break;
+    case 3:
+        g_drive_result = 2;
+        break;
+    case 4:   /* exit to windows (the original's confirmation message first: pending, hud.c) */
+        g_drive_result = 3;
+        break;
+    case 5:   /* exit to game menu */
+        g_drive_result = 1;
+        break;
+    case 0x15:
+        /* view replay: the race loop ends and GameMain's second loop replays it (0x60ca10). The port's
+           race-over path replays it the same way, behind the results. */
+        g_drive_paused = false;
+        g_race_over = 1;
+        break;
+    default:
+        break;
+    }
+}
 
 bool DRIVE_selftest(const char *track, const char *car)
 {
@@ -182,8 +237,9 @@ bool DRIVE_selftest(const char *track, const char *car)
         if (!load(track, car && car[0] ? car : "964")) { failed = true; return false; }
     }
     Car *c = g_cars[0];
-    /* The simulation's 64 Hz from the 60 Hz frames. */
-    ticks_due += 64.0 / 60.0;
+    race_menus();
+    /* The simulation's 64 Hz from the 60 Hz frames (none while paused). */
+    ticks_due += g_drive_paused ? 0.0 : 64.0 / 60.0;
     int n = (int)ticks_due;
     ticks_due -= n;
     for (int i = 0; i < n && i < 4; i++) {
@@ -274,4 +330,6 @@ void DRIVE_Shutdown(void)
     g_replay_mode = 0;
     ticks_due = 0;
     ready = failed = false;
+    g_drive_paused = false;
+    g_drive_result = 0;
 }
