@@ -4,6 +4,7 @@
 #include "game/car_damage.h"
 #include "game/hud_config.h"
 #include "game/race_progress.h"
+#include "real/loc.h"
 #include "vfs.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -102,6 +103,8 @@ bool RaceSetup_Opponents(int n)
     uint8_t *per = vfs_read_all("FEData\\Data\\nfs5.per", &size);
     if (!per) return false;
     int nper = (int)(size / 0x2c);
+    size_t nloc = 0;
+    uint8_t *loc = vfs_read_all("FEData\\Locale\\festrings.loc", &nloc);   /* the front end's strings */
     if (CAR_MAX <= n) n = CAR_MAX - 1;
     if (nper < n) n = nper;
     for (int i = 1; i <= n; i++) {
@@ -119,11 +122,16 @@ bool RaceSetup_Opponents(int n)
         float v[8] = {k * sk[0], k * sk[2], k * sk[4], k * sk[6], sk[1], sk[3], sk[5], sk[7]};
         memcpy(d + 0x154, v, sizeof v);                    /* SKILLSLOW .. SKILLRANGEDEFAULT */
         put_i(d, 0x174, n - i);                            /* STARTINGPOS */
-        put_str(d, 0x17c, "");                             /* DRIVERNAME (the record's string) */
+        int32_t name;
+        memcpy(&name, r + 4, 4);
+        const char *s = loc ? LOC_string(loc, name) : NULL;
+        put_str(d, 0x17c, s ? s : "");                     /* DRIVERNAME (the record's string) */
+        put_str(d, 0x1c0, s ? s : "");                     /* LICENSE */
         (void)id;
     }
     put_i(g_cardesc[0], 0x174, n);
     free(per);
+    free(loc);
     g_nracecars = n + 1;
     return true;
 }
