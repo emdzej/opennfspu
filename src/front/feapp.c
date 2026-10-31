@@ -4,6 +4,7 @@
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
 #include "front/fe3d.h"
+#include "front/fesave.h"
 #include "game/audio.h"
 #include "game/music.h"
 #include "game/options.h"
@@ -539,8 +540,38 @@ static void control_rect(FertControl *c, int32_t r[4])
    (0x4ca270) as a bar of two gouraud halves, c0 to c50 and c50 to c100 (no c50: their mean), cut where
    the share ends, with a drop shadow. (Port: the colours blended linearly; the bar's place from its
    control, the .pos override FE_LoadPos 0x4e21c0 pends; growing to the left pends.) */
+/* The account (FEAccountDisplayControl_v15 0x4bd180): its parts, then the player's money (Tournament_Data's
+   "CASH", 0x5058a0) in Univers7b, one character at a time from the rect's right edge leftwards (9 a
+   digit, 3 a comma). */
+static bool account_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    FEControl_Draw(c, ox, oy);   /* 0x4c7e30 */
+    Save *sv = FESave_Current();
+    if (!sv) return true;
+    char path[300];
+    FE_ResolvePath("Univers7b.ffn", path, sizeof path);   /* (0x4db960 "Univers7b") */
+    HudFont *font = FEFont_Get(path);
+    if (!font) return true;
+    int32_t r[4];
+    FertControl_rect(c, r);
+    int32_t pos[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, pos);
+    const char *t = FE_MoneyText(sv->money);
+    float x = (float)(r[2] + ox - 1);
+    for (int i = (int)strlen(t) - 1; 0 <= i; i--) {
+        char *ch = FE2D_Alloc(2);
+        if (!ch) break;
+        ch[0] = t[i], ch[1] = 0;
+        FE2D_Text(font, x, (float)(pos[1] + oy + 3), 2, 0xffffffffu, ch, 1.0f, 1.0f);   /* (0x4d8280: white at the fade) */
+        x += t[i] == ',' ? -3.0f : -9.0f;
+    }
+    return true;
+}
+
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
+    if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
     if (c->feflags & 0x20) return true;
     FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));

@@ -2574,3 +2574,11 @@
 004cf960	FERadioGroup_Select	frontend	high	The chosen item's panel opened, the open one closed
 004bc0e0	FEAccessor_TextArg	frontend	high	SHORT: the item's text; PERCENT: the position in per cent
 00521530	FE_DrawIndicatorBar	frontend	med	Two gouraud halves cut at a share, c0/c50/c100, a drop shadow
+00500bc0	PlayerInfo_Load	frontend	high	The save's PlayerInfo: owned cars, money (0x691d90), names, flags
+004edd30	FECar_Load	frontend	high	A saved car: 0x758 bytes of the car object, then its installed and other parts
+004f6d70	UsedCarMarket_Load	frontend	high	The save's used cars: int n, int, n cars
+00519fe0	Missions_Load	frontend	high	int bytes, the missions (0xf0 each)
+005170f0	PartsMarket_Load	frontend	high	int n, n parts of 0x168 bytes
+00501fa0	Tournament_Load	frontend	high	Seven ints, int bytes, the tournaments (0xd40 each)
+004dba30	FE_MoneyText	frontend	high	Money with the thousands grouped by the strings 0x6a4 .. 0x6a7
+004bd180	FEAccountDisplayControl_Draw	frontend	high	Its parts, then the money right-aligned a character at a time
