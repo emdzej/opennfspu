@@ -16,5 +16,9 @@ void Audio_Shutdown(void);
 bool Audio_LoadEngine(int slot, const char *sound);
 /* The player's engine and the collisions' sounds (0x4a8aa0). */
 void Audio_LoadCollisionSounds(const char *engine);
+/* The streamed one-shots' archives (Audio_LoadTrackSounds 0x4afda0). */
+void Audio_LoadTrackSounds(void);
+/* The start's countdown, step 0 .. 3 ("3", "2", "1", "Go"). 0x4a6010 */
+void Audio_Countdown(int step);
 /* The odd ticks' audio (0x4a7ef0), the listener at the race camera. */
 void Audio_Tick(void);

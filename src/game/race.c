@@ -34,7 +34,7 @@ void Sim_Step(void)
         /* The countdown's steps at the ticks of 0x5cc7c4 (not in the free modes 6, 7, 8). */
         int32_t at = (int32_t)exe_u32(0x5cc7c4 + 4u * (uint32_t)(uint8_t)g_race_countdown);
         if (at <= g_sim_tick && g_race_view < 2 && g_race_mode != 6 && g_race_mode != 7 && g_race_mode != 8) {
-            PENDING_NOTE(0x4a6010, "Audio_Countdown");
+            Audio_Countdown(g_race_countdown);   /* 0x4a6010 */
             g_race_countdown = (uint8_t)(g_race_countdown + 1);
         }
         if (g_sim_tick > 0x1bf) g_race_started = 1;

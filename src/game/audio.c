@@ -30,6 +30,7 @@ static bool s_on;   /* 0x5d1734 */
 /* a / b in 16.16 (0x4a5f30). */
 static int fixdiv(int a, int b) { return (int)((((int64_t)(a % b)) << 16) / b) + (a / b) * 0x10000; }
 static void engines_free(void);
+static void stream_close(void);
 typedef struct {
     int32_t slot;      /* 0x6564a0: the SND bank */
     uint8_t *data;     /* 0x6564a8 */
@@ -53,6 +54,7 @@ bool Audio_Init(void)
 
 void Audio_Shutdown(void)
 {
+    stream_close();
     SND_Shutdown();
     engines_free();
     for (int i = 0; i < 8; i++) {
@@ -323,6 +325,242 @@ static void event_sound(int id, int kind, int surf, int strength, int dist, int 
     s_level = lv >> 4;
     play_slot(0x33, impact_patch(kind, surf), 0x40, 0x10000, vol, angle, lv);
 }
+
+/* ---- the streamed one-shots (0x4afda0, 0x4a8340, 0x4b0370, 0x4b07f0) ----
+   Small banks read from three archives when asked for: 0 the track's (track.viv, by the number in each
+   entry's name), 1 the cars' (zzzwzzz.viv: the rain, then each race car's lden and ldex banks), 2 the
+   speech's (zzzx<language>.viv, as listed in its oneshots.txt; the countdown its first four). Each
+   kept in a cache of 32 (by its type and number, the least recently used given up); the requests in
+   a ring of 64, played one after another. The original reads them on its file thread into a 32 KB
+   buffer and plays them once read; the port's reads finish at once, in the tick they are asked for. */
+
+typedef struct {
+    VfsFile *f;               /* 0x65730c + 0x10 x type */
+    uint32_t (*index)[2];     /* 0x657310: offset, size */
+    int count;                /* 0x657314 */
+} StreamSource;
+static StreamSource s_stream[3];
+
+typedef struct {
+    int32_t type, idx, slot;  /* 0x656528: 32 x 0x18 */
+    int32_t used;             /* the tick it was last asked for */
+    uint8_t *data;
+} StreamBank;
+static StreamBank s_cache[0x20];
+
+typedef struct { int32_t idx; uint8_t loadonly; int8_t type; } StreamReq;   /* 0x656b00: 64 x 0x20 */
+static StreamReq s_req[0x40];
+static int s_req_rd, s_req_wr;   /* 0x656ae4, 0x657300 */
+static int32_t s_pair[2] = {-1, -1};   /* 0x6573a8, 0x6573ac: the one-shot playing (twice) */
+
+static void stream_close(void)
+{
+    for (int t = 0; t < 3; t++) {
+        if (s_stream[t].f) vfs_close(s_stream[t].f);
+        free(s_stream[t].index);
+        s_stream[t].f = NULL;
+        s_stream[t].index = NULL;
+        s_stream[t].count = 0;
+    }
+    for (int i = 0; i < 0x20; i++) {
+        free(s_cache[i].data);
+        s_cache[i] = (StreamBank){-1, -1, -1, 0, NULL};
+    }
+    s_req_rd = s_req_wr = 0;
+    s_pair[0] = s_pair[1] = -1;
+}
+
+/* The archive kept open with an index of count entries. */
+static bool stream_open(int t, const char *path, int count)
+{
+    StreamSource *src = &s_stream[t];
+    src->f = vfs_open(path);
+    if (!src->f) return false;
+    src->count = count;
+    src->index = calloc((size_t)count, sizeof *src->index);
+    return src->index != NULL;
+}
+
+static void stream_set(int t, int i, const uint8_t *viv, size_t size, const char *name)
+{
+    uint32_t off = 0, len = 0;
+    if (!viv || !BIG_locateentry(viv, name, 0, &off, &len) || size < off) off = len = 0;
+    if (0 <= i && i < s_stream[t].count) {
+        s_stream[t].index[i][0] = off;
+        s_stream[t].index[i][1] = len;
+    }
+}
+
+/* The archives' directories (Audio_LoadTrackSounds 0x4afda0). */
+void Audio_LoadTrackSounds(void)
+{
+    stream_close();
+    if (!s_on) return;
+    char path[160];
+    size_t size = 0;
+    /* zzzwzzz.viv: the rain, the race cars' banks (<sound>lden, <sound>ldex, else sd6b's). */
+    snprintf(path, sizeof path, exe_str(0x5d1e1c), sound_dir());
+    uint8_t *viv = vfs_read_all(path, &size);
+    if (viv && stream_open(1, path, g_ncars * 2 + 1)) {
+        stream_set(1, 0, viv, size, exe_str(0x5d1e04));
+        for (int k = 0; k < g_ncars * 2; k++) {
+            const char *suffix = exe_str(k & 1 ? 0x5d1df4 : 0x5d1dfc);
+            char name[64];
+            snprintf(name, sizeof name, exe_str(0x5d1de8), (const char *)CAR_DESCB(g_cars[k / 2]) + 0x2e8, suffix);
+            uint32_t off, len;
+            if (!BIG_locateentry(viv, name, 0, &off, &len)) snprintf(name, sizeof name, exe_str(0x5d1dd8), suffix);
+            stream_set(1, k + 1, viv, size, name);
+        }
+    }
+    free(viv);
+    /* track.viv: each entry by the number before its extension. */
+    snprintf(path, sizeof path, exe_str(0x5d1dcc), sound_dir());
+    viv = vfs_read_all(path, &size);
+    if (viv && stream_open(0, path, 1000)) {
+        uint32_t n = BIG_count(viv);
+        for (uint32_t i = 0; i < n; i++) {
+            uint32_t off = 0, len = 0;
+            const char *name = BIG_locateentry(viv, NULL, (int)i, &off, &len);
+            size_t l = name ? strlen(name) : 0;
+            if (l < 7) continue;
+            int num = atoi(name + l - 7);
+            if (0 <= num && num < 1000) {
+                s_stream[0].index[num][0] = off;
+                s_stream[0].index[num][1] = len;
+            }
+        }
+    }
+    free(viv);
+    /* The speech's: oneshots.txt's quoted names in order. */
+    snprintf(path, sizeof path, exe_str(0x5d1dac), "GameData\\Speech\\", exe_str(0x5d1dbc));   /* 0x65b31c (the install's) */
+    viv = vfs_read_all(path, &size);
+    uint32_t toff = 0, tlen = 0;
+    if (viv && BIG_locateentry(viv, exe_str(0x5d1d9c), 0, &toff, &tlen) && tlen && toff + tlen <= size) {
+        char *txt = malloc(tlen + 1);
+        if (txt) {
+            memcpy(txt, viv + toff, tlen);
+            txt[tlen] = 0;
+            int n = 0;
+            bool in = false;
+            for (uint32_t i = 0; i < tlen; i++)
+                if (txt[i] == '"' && !(in = !in)) n++;
+            if (stream_open(2, path, n)) {
+                int k = 0;
+                char *from = txt;
+                in = false;
+                for (uint32_t i = 0; i < tlen; i++) {
+                    if (txt[i] != '"') continue;
+                    if (in) {
+                        txt[i] = 0;
+                        uint32_t off, len;
+                        if (!BIG_locateentry(viv, from, 0, &off, &len)) printf("can't find \"%s\"\n", from);
+                        stream_set(2, k++, viv, size, from);
+                    } else {
+                        from = txt + i + 1;
+                    }
+                    in = !in;
+                }
+            }
+            free(txt);
+        }
+    }
+    free(viv);
+}
+
+/* The cached bank of (type, idx): its library slot, -1 when it isn't there; asked for (and not just
+   looked at), a missing one is queued to be loaded (0x4a8340). */
+static int stream_bank(int type, int idx, bool look)
+{
+    for (int i = 0; i < 0x20; i++)
+        if (s_cache[i].idx == idx && s_cache[i].type == type) {
+            s_cache[i].used = g_sim_tick;
+            return s_cache[i].slot;
+        }
+    if (look) return -1;
+    PENDING_NOTE(0x4a8340, "the streamed banks' load-only requests (the port loads them when played)");
+    return -1;
+}
+
+/* Reads (type, idx) into the cache, giving up the least recently used past 16 ticks (0x4a81b0). */
+static int stream_load(int type, int idx)
+{
+    int s = stream_bank(type, idx, true);
+    if (s >= 0) return s;
+    StreamSource *src = type >= 0 && type < 3 ? &s_stream[type] : NULL;
+    if (!src || !src->f || idx < 0 || src->count <= idx || src->index[idx][1] == 0) return -1;
+    int e = -1;
+    for (int i = 0; i < 0x20 && e < 0; i++)
+        if (s_cache[i].idx == -1) e = i;
+    if (e < 0) {
+        int32_t oldest = g_sim_tick - 0x10;
+        for (int i = 0; i < 0x20; i++)
+            if (s_cache[i].slot != -1 && s_cache[i].used < oldest) {
+                oldest = s_cache[i].used;
+                e = i;
+            }
+        if (e < 0) return -1;
+        SND_BankRemove(s_cache[e].slot);
+        free(s_cache[e].data);
+    }
+    uint32_t len = src->index[idx][1];
+    uint8_t *d = malloc(len);
+    if (!d || vfs_read_at(src->f, src->index[idx][0], d, len) != (int64_t)len) {
+        free(d);
+        return -1;
+    }
+    s_cache[e] = (StreamBank){type, idx, SND_BankAdd(d), g_sim_tick, d};
+    return s_cache[e].slot;
+}
+
+/* A one-shot request (0x4af6a0's defaults: type 2; 0x4b0370). */
+static void stream_request(int type, int idx, bool loadonly)
+{
+    if (0x20 < ((s_req_wr - s_req_rd) & 0x3f)) return;
+    if (((s_req_wr + 1) & 0x3f) == s_req_rd) return;
+    if (type < 0 || 3 < type) return;
+    s_req[s_req_wr] = (StreamReq){idx, (uint8_t)loadonly, (int8_t)type};
+    s_req_wr = (s_req_wr + 1) & 0x3f;
+}
+
+/* A one-shot's play (0x4b02b0): the bank's patch 0 (type 3: the collisions' bank's patch idx), at the
+   speech's volume (the countdown's four by 0x4a80f0, the rest by 0x4a80d0) or the track's. */
+static int stream_play(const StreamReq *r, int slot)
+{
+    SndParams p;
+    SND_ParamsDefault(&p);
+    int bank = slot, patch = 0;
+    if (r->type == 3) {
+        patch = r->idx;
+        bank = s_banks[3].slot;
+    }
+    if (r->type == 2) p.vol = (int8_t)(r->idx < 4 ? (opt(0x5d174c) * opt(0x5d14c0) * 0x55) >> 0xe : (opt(0x5d174c) * opt(0x5d14b4) * 0x55) >> 0xe);
+    else p.vol = (int8_t)((opt(0x5d174c) * 0x3a74) >> 0xe);
+    p.velocity = 0x40;
+    p.pan = 0x40;
+    return SND_Play(bank, patch, &p);
+}
+
+/* Each odd tick (0x4b07f0, 0x4b06c0, 0x4b0450): the one-shot playing done when both its plays have
+   less than 0.05 s left; then the next request loaded and, unless it only loads, played twice. */
+static void stream_tick(void)
+{
+    if (s_pair[0] != -1 && s_pair[1] != -1) {
+        int a = SND_TimeLeft(s_pair[0]), b = SND_TimeLeft(s_pair[1]);
+        if (a < 5 && b < 5) s_pair[0] = s_pair[1] = -1;
+    }
+    while (s_req_rd != s_req_wr) {
+        StreamReq *r = &s_req[s_req_rd];
+        if (!r->loadonly && s_pair[0] != -1) break;
+        int slot = r->type == 3 ? s_banks[3].slot : stream_load(r->type, r->idx);
+        if (!r->loadonly && (0 <= slot || r->type == 3)) {
+            s_pair[0] = stream_play(r, slot);
+            s_pair[1] = stream_play(r, slot);
+        }
+        s_req_rd = (s_req_rd + 1) & 0x3f;
+    }
+}
+
+void Audio_Countdown(int step) { stream_request(2, step, false); }   /* 0x4a6010 */
 
 /* ---- the engines (0x4ac9e0, 0x4ac550, 0x4ac060) ---- */
 
@@ -936,7 +1174,8 @@ void Audio_Tick(void)
     memcpy(s_listener, cam->eye, sizeof s_listener);
     memcpy(s_lright, cam->orient, sizeof s_lright);
     memcpy(s_lfwd, cam->orient + 6, sizeof s_lfwd);
-    PENDING_NOTE(0x4b07f0, "the streamed sounds (0x4b07f0), 0x4a8150, 0x4a7b90");
+    stream_tick();   /* 0x4b07f0 */
+    PENDING_NOTE(0x4a8150, "the thunder (0x4a8150) and 0x4a7b90");
     if (g_humans.n > 0) player_tick(g_humans.c[0]);
     PENDING_NOTE(0x4a6e50, "the opponents' sounds (0x4a6e50)");
     memcpy(s_lastlistener, s_listener, sizeof s_lastlistener);
