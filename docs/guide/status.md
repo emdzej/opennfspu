@@ -1,6 +1,6 @@
 # Status
 
-**Early: a car can be driven on a track (one car, no race yet).**
+**Early: the game starts in the front end; from the main menu, single player and quick race start a race on the options' track.**
 
 | Part | State |
 |---|---|
@@ -14,13 +14,14 @@
 | Track road and collision: road nodes, the collision tree of polygons, road edges and roadside objects (cylinders, boxes), the ground under a point | in progress (no collisions with animated objects yet) |
 | Cameras | in progress (the race cameras: in the car, on the hood, the near and far chase cameras, the fixed and overhead ones, the crash camera, kept out of walls and under ceilings; no TV or replay cameras, no dashboard yet) |
 | Race HUD: fonts, the HUD's 2D layer and art, its layouts (`SaveData\XXhud1XX.hud`, `XXhud2XX.hud`), localised strings | in progress (the start countdown, the gear, the speedometer and tachometer dials and their digital forms, the race time and lap times, the wrong-way warning, the standings and the place, the damage drawing, the track map with the laps, the race's results when it ends, then its replay (from the recorded controls); no text damage or congratulations yet, no replay cameras, no track records) |
-| Frontend (menus, showroom, Evolution, Factory Driver) | started (FERT: the control templates, layouts and their expressions; the front end's 2D drawing, fonts and strings; `--param screen=<layout>` shows a screen's texts and rectangles, without its images or behaviour yet) |
+| Frontend (menus, showroom, Evolution, Factory Driver) | in progress (FERT: the control templates, layouts and their expressions through the original's interpreter; the front end's 2D drawing, fonts, strings and images; the screens stack, the mouse, the GoTo buttons and the bottom bar; quick race starts the race on fe.txt's track; no car or track choice, data areas, 3D rooms, music, movies or saves yet, and no way back from the race to the menus) |
 | Simulation (handling, damage, AI, police) | in progress (one car drives from its grid slot behind the start line: ground contact, suspension, engine, gearbox, tyres, the road's walls, roadside posts, trees and boxes, the body against the ground when the car is over; body damage in nine zones from hard hits; opponents race the racing line (`opponents=<n>`), the cars collide with each other; no visible dents, police or traffic yet) |
 | Sound, music, speech | in progress (EA's SND library: banks, voices, the software mixer with its EA-XA and PCM decoders and resampler; the player's engine from its layered samples by rpm, throttle and view; the collisions, landings and dents, the tyres' skids and the body's scrapes, the wind, the gearbox's whine and the gear changes, muffled from inside the car; the countdown's voice; the nearest opponents' engines, road noise, impacts and skids, panned and Doppler-shifted; the track's positional sounds (its scene's sound elements); the one-shots the track's triggers set off; the animated objects' (the train's), the music (the race's songs streamed and shuffled); the announcer's lap calls (lap, place, gaps, best and final lap); the cop cars' sirens, the reverb under roofs; no end-of-race speech or the other speech yet) |
 | Multiplayer | out of scope for now |
 
-The viewers, with `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--asset cd=<image>`):
+Without parameters, `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--asset cd=<image>`) starts in the front end, as the game does. The viewers:
 
+- `--param screen=<layout>` shows a front-end screen (`GameSetup.lay`, `QuickRace.lay`, ...), `fe=<screen>` starts the front end there;
 - `--param car=<name>` shows a car (`964`, `959`, `356a`, `boxster`, ...), `colour=<rrggbb>` its body colour;
 - `--param track=<name>` shows a track from its start line (`alps`, `autobahn`, `canyon`, `monaco1`, ...),
   `yaw=<degrees>` turns the camera, `at=<x>,<y>,<z>` puts it elsewhere;
