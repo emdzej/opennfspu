@@ -183,6 +183,27 @@ typedef struct {
 } SkyBasic;
 SkyBasic *SkyBasic_ctor(SkyBasic *s, SkyRecord *rec, SkyTextures *tex, SkyConfig *config, bool water);   /* 0x45acb0 */
 
+/* SkyLevel_MultiSky (0x88 bytes): up to three texture stages over the dome. */
+typedef struct {
+    SkyLevel base;            /* +0x00 */
+    float plane[4];           /* +0x08 (+0x08, +0x10, +0x18, +0x20) */
+    uint8_t pad18[0x10];
+    int32_t mode;             /* +0x28: 0 normal, 1 additive, 2 attenuate, 3 modulate */
+    SkyConfig *config;        /* +0x2c */
+    SkyGrid *grid;            /* +0x30 */
+    SkyMap *map[3];           /* +0x34 */
+    Scroller *scroller;       /* +0x40 */
+    SkyQuads *quads;          /* +0x44 */
+    SkyMapSource *source[3][2];   /* +0x48: per map, regions A and B */
+    RMesh *mesh;              /* +0x60 */
+    Texture *tex[3];          /* +0x64 */
+    SkyBlend *blend[3];       /* +0x70 */
+    int32_t nmaps;            /* +0x7c: region A's maps */
+    int32_t ntex;             /* +0x80: the texture stages */
+    uint8_t water;            /* +0x84 */
+} SkyMulti;
+SkyMulti *SkyMulti_ctor(SkyMulti *s, SkyRecord *rec, SkyTextures *tex, SkyConfig *config, int mode, bool water);   /* 0x45b460 */
+
 /* The sky's lightning (render/sky_draw.c): whether a flash is on (0x627e38 +0), the flash's place on the
    sky's grid and a storm record (0x5cf018, 5 words: strikes, bolts, spread, strength, rate) picked at
    random for its level (0x45cdb0), and the colour grid's cell at offset (a, b) from its middle (7 x 7,

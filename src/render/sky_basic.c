@@ -1,7 +1,7 @@
-/* The sky's dome levels, first part (see sky_levels.h): the dome's grid (0x460d80, 0x460e00), its quads
-   (0x460c30), the sky map and its sources (0x45dc50 .. 0x45e6a0, with the lightning's bolts 0x45e290,
-   0x45e410), the scroller of the cloud texture (Scroller_BasicSky 0x45e7a0 .. 0x45f280) and
-   SkyLevel_BasicSky (0x45acb0, vtable 0x5b3e8c). */
+/* The sky's dome levels (see sky_levels.h): the dome's grid (0x460d80, 0x460e00), its quads (0x460c30),
+   the sky map and its sources (0x45dc50 .. 0x45e6a0, with the lightning's bolts 0x45e290, 0x45e410), the
+   scroller of the cloud textures (Scroller_BasicSky 0x45e7a0 .. 0x45f280), SkyLevel_BasicSky (0x45acb0,
+   vtable 0x5b3e8c) and SkyLevel_MultiSky (0x45b460, vtable 0x5b3ea0). */
 #include "render/sky_levels.h"
 #include "exe.h"
 #include "pending.h"
@@ -563,7 +563,7 @@ void Scroller_dtor(Scroller *s)   /* Scroller_BasicSky_v1 0x45eaa0 */
 
 /* The view's two side planes in the ground plane (0x45a9b0): the half field of view (turns, at least
    0x5b3e80) plus a quarter turn either side of the camera's z row. */
-static void basic_planes(SkyBasic *b)
+static void dome_planes(float plane[4])
 {
     RCamera *c = g_render->camera;
     float a = c->halffov * 0.0027777778f;   /* 0x5b3e84 */
@@ -572,14 +572,14 @@ static void basic_planes(SkyBasic *b)
     double s = sin_turns(a), co = cos_turns(a);
     float fx = c->frame.orient[6], fz = c->frame.orient[8];
     float x1 = (float)(fx * co), z1 = fz * (float)s;
-    b->plane[0] = z1 + x1;
-    b->plane[1] = (float)(co * fz - fx * s);
-    b->plane[2] = x1 - z1;
-    b->plane[3] = (float)(fx * s + co * fz);
+    plane[0] = z1 + x1;
+    plane[1] = (float)(co * fz - fx * s);
+    plane[2] = x1 - z1;
+    plane[3] = (float)(fx * s + co * fz);
 }
 
 /* Whether a block is in view (0x45aa70): any of its corners or its sides' midpoints behind both planes. */
-static bool basic_visible(const SkyBasic *b, const float c[4][4])
+static bool dome_visible(const float plane[4], const float c[4][4])
 {
     float pts[8][2] = {
         {c[0][0], c[0][2]}, {c[1][0], c[1][2]}, {c[2][0], c[2][2]}, {c[3][0], c[3][2]},
@@ -587,7 +587,7 @@ static bool basic_visible(const SkyBasic *b, const float c[4][4])
         {(c[3][0] + c[2][0]) * 0.5f, (c[3][2] + c[2][2]) * 0.5f}, {(c[2][0] + c[0][0]) * 0.5f, (c[2][2] + c[0][2]) * 0.5f},
     };
     for (int i = 0; i < 8; i++)
-        if (pts[i][0] * b->plane[0] + pts[i][1] * b->plane[1] < 0 && pts[i][0] * b->plane[2] + pts[i][1] * b->plane[3] < 0)
+        if (pts[i][0] * plane[0] + pts[i][1] * plane[1] < 0 && pts[i][0] * plane[2] + pts[i][1] * plane[3] < 0)
             return true;
     return false;
 }
@@ -600,30 +600,42 @@ static void basic_update(SkyLevel *l, const float a[3], const float b[3], float 
     if (s->scroller) Scroller_update(s->scroller, s->water ? b : a, blend, ticks);
 }
 
-/* SkyLevel_BasicSky_v1 0x45b240: the nine 5 x 5 blocks, 100 indices each; looking up (the camera's z row
-   y at least 0.5) every block, else those in view, the middle one also above 0.4. */
+/* The nine 5 x 5 blocks of the dome, 100 indices each, those in view (or all, by the level's test of the
+   camera's z row y). */
+static void dome_draw(float plane[4], RMesh *mesh, SkyGrid *grid, Scroller *sc, SkyQuads *quads, bool multi)
+{
+    float up = g_render->camera->frame.orient[7];
+    if (up < 0.5f) dome_planes(plane);
+    for (int k = 0; k <= 8; k++) {
+        const uint8_t *q = sc->quads + k * 100;
+        float c[4][4];
+        memcpy(c[0], grid->verts[q[0]], 16);
+        memcpy(c[1], grid->verts[q[0x11]], 16);
+        memcpy(c[2], grid->verts[q[0x53]], 16);
+        memcpy(c[3], grid->verts[q[0x62]], 16);
+        bool all;
+        if (!multi) all = 0.5f <= up || (k == 4 && exe_f32(0x5b261c) < up);
+        else {
+            float a = up < 0.0f ? -up : up;
+            all = exe_f32(0x5b261c) <= a || (k == 4 && exe_f32(0x5b3eb0) < a);
+        }
+        if (!all && !dome_visible(plane, (const float(*)[4])c)) continue;
+        for (int st = 0; st < mesh->nstages; st++) {
+            RMesh_setIndexUVs(mesh, st, quads->idx + k * 100, 100);         /* 0x468730 */
+            RMesh_setIndexColours(mesh, st, sc->quads + k * 100, 100);      /* 0x468770 */
+        }
+        RMesh_setIndexPositions(mesh, sc->quads + k * 100, 100);            /* 0x468700 */
+        RMesh_draw(mesh, 100);
+    }
+}
+
+/* SkyLevel_BasicSky_v1 0x45b240: looking up (y at least 0.5) every block, the middle one also above 0.4,
+   else those in view. */
 static void basic_draw(SkyLevel *l, float heading)
 {
     (void)heading;
     SkyBasic *s = (SkyBasic *)l;
-    if (!s->mesh || !s->grid || !s->scroller || !s->quads) return;
-    float up = g_render->camera->frame.orient[7];
-    if (up < 0.5f) basic_planes(s);
-    for (int k = 0; k <= 8; k++) {
-        const uint8_t *q = s->scroller->quads + k * 100;
-        float c[4][4];
-        memcpy(c[0], s->grid->verts[q[0]], 16);
-        memcpy(c[1], s->grid->verts[q[0x11]], 16);
-        memcpy(c[2], s->grid->verts[q[0x53]], 16);
-        memcpy(c[3], s->grid->verts[q[0x62]], 16);
-        if (!(0.5f <= up || (k == 4 && exe_f32(0x5b261c) < up)) && !basic_visible(s, (const float(*)[4])c)) continue;
-        for (int st = 0; st < s->mesh->nstages; st++) {
-            RMesh_setIndexUVs(s->mesh, st, s->quads->idx + k * 100, 100);           /* 0x468730 */
-            RMesh_setIndexColours(s->mesh, st, s->scroller->quads + k * 100, 100);  /* 0x468770 */
-        }
-        RMesh_setIndexPositions(s->mesh, s->scroller->quads + k * 100, 100);        /* 0x468700 */
-        RMesh_draw(s->mesh, 100);
-    }
+    if (s->mesh && s->grid && s->scroller && s->quads) dome_draw(s->plane, s->mesh, s->grid, s->scroller, s->quads, false);
 }
 
 static void basic_dtor(SkyLevel *l, int free_self)   /* SkyLevel_BasicSky_v2 0x45b130 -> 0x45b150 */
@@ -749,5 +761,173 @@ SkyBasic *SkyBasic_ctor(SkyBasic *s, SkyRecord *rec, SkyTextures *tex, SkyConfig
         RMesh_stageIndexed(s->mesh, 0, s->tex, s->blend, s->scroller->uv[0], 100, s->quads->idx, s->map->out, 100,
                            s->scroller->quads, 0);
     if (s->map && SkyMap_opaque(s->map) && opaque_tex && s->blend) s->blend->v[1] = 0;
+    return s;
+}
+
+/* ---- SkyLevel_MultiSky (0x88 bytes) ---- */
+
+/* SkyLevel_MultiSky_v0 0x45bba0: each map, then the scroller at region A's position (B's for water). */
+static void multi_update(SkyLevel *l, const float a[3], const float b[3], float blend, int ticks)
+{
+    SkyMulti *s = (SkyMulti *)l;
+    for (int i = 0; i < s->nmaps; i++)
+        if (s->map[i]) SkyMap_update(s->map[i], blend, ticks);
+    if (s->scroller) Scroller_update(s->scroller, s->water ? b : a, blend, ticks);
+}
+
+/* SkyLevel_MultiSky_v1 0x45bc00: every block when |y| is at least 0.4, the middle one above 0.35, else
+   those in view. */
+static void multi_draw(SkyLevel *l, float heading)
+{
+    (void)heading;
+    SkyMulti *s = (SkyMulti *)l;
+    if (s->mesh && s->grid && s->scroller && s->quads) dome_draw(s->plane, s->mesh, s->grid, s->scroller, s->quads, true);
+}
+
+static void multi_dtor(SkyLevel *l, int free_self)   /* SkyLevel_MultiSky_v2 0x45baa0 -> 0x45bac0 */
+{
+    SkyMulti *s = (SkyMulti *)l;
+    if (s->scroller) {
+        Scroller_dtor(s->scroller);
+        free(s->scroller);
+    }
+    if (s->mesh) {
+        RMesh_dtor(s->mesh);
+        free(s->mesh);
+    }
+    if (s->quads) {
+        free(s->quads->idx);
+        free(s->quads);
+    }
+    if (s->grid) {
+        SkyGrid_dtor(s->grid);
+        free(s->grid);
+    }
+    for (int i = 2; i >= 0; i--) {
+        if (s->map[i]) {
+            SkyMap_dtor(s->map[i]);
+            free(s->map[i]);
+        }
+        free(s->blend[i]);
+    }
+    for (int r = 0; r < 2; r++)
+        for (int k = 2; k >= 0; k--)
+            if (s->source[k][r]) s->source[k][r]->vt->dtor(s->source[k][r], 1);
+    if (free_self) free(s);
+}
+
+static void multi_rebuild(SkyLevel *l)   /* SkyLevel_MultiSky_v3 0x45bdc0 */
+{
+    SkyMulti *s = (SkyMulti *)l;
+    const SkyConfig *c = s->config;
+    if (!s->grid) return;
+    if (s->water) SkyGrid_build(s->grid, cfg_f(c, 0xb40), cfg_f(c, 0xb44), cfg_f(c, 0xb48), cfg_f(c, 0xb3c), 1.0f);
+    else SkyGrid_build(s->grid, cfg_f(c, 0x40), cfg_f(c, 0x44), cfg_f(c, 0x48), cfg_f(c, 0x3c), cfg_f(c, 0xce4));
+}
+
+static const SkyLevelVtbl multi_vt = {multi_update, multi_draw, multi_dtor, multi_rebuild};   /* 0x5b3ea0 */
+
+/* 0x45b460: whether it blocks the sun, then for regions A and B three sky maps ("none" for none), three X
+   and three Y scales, the move ratio, three wind speeds and directions, the warp's speed and amount;
+   after both, three cloud textures ("none", "flat" or a shape), one texture stage each. A map per
+   region A's map, its blend in the mode (normal, additive, attenuate, modulate: the blend's third
+   word); blending off for a stage whose texture and map are both opaque. */
+SkyMulti *SkyMulti_ctor(SkyMulti *s, SkyRecord *rec, SkyTextures *tex, SkyConfig *config, int mode, bool water)
+{
+    memset(s, 0, sizeof *s);
+    s->base.vt = &multi_vt;
+    s->base.flags = rec->flags;
+    s->mode = mode;
+    s->config = config;
+    s->water = water;
+    rec->cur = rec->start;
+    if (*rec->cur == '#') SkyRecord_next(rec);
+    const char *sun = rec->cur;
+    const char *maps[3][2], *xs[3][2], *ys[3][2], *speed[3][2], *dir[3][2], *move[2], *wspeed[2], *wamount[2], *clouds[3];
+    for (int r = 0; r < 2; r++) {
+        for (int k = 0; k < 3; k++) SkyRecord_next(rec), maps[k][r] = rec->cur;
+        for (int k = 0; k < 3; k++) SkyRecord_next(rec), xs[k][r] = rec->cur;
+        for (int k = 0; k < 3; k++) SkyRecord_next(rec), ys[k][r] = rec->cur;
+        SkyRecord_next(rec), move[r] = rec->cur;
+        for (int k = 0; k < 3; k++) SkyRecord_next(rec), speed[k][r] = rec->cur;
+        for (int k = 0; k < 3; k++) SkyRecord_next(rec), dir[k][r] = rec->cur;
+        SkyRecord_next(rec), wspeed[r] = rec->cur;
+        SkyRecord_next(rec), wamount[r] = rec->cur;
+    }
+    for (int k = 0; k < 3; k++) SkyRecord_next(rec), clouds[k] = rec->cur;
+    if (!strncmp(sun, exe_str(0x5cefc0), 2)) s->base.flags |= 0x400;
+    for (int r = 0; r < 2; r++)
+        for (int k = 0; k < 3; k++) {
+            if (!strncmp(maps[k][r], exe_str(0x5cefb0), 4)) continue;
+            int slot = SkyTextures_find(tex, maps[k][r]);
+            const uint8_t *shape = slot >= 0 ? SkyTextures_shape(tex, slot) : NULL;
+            s->source[k][r] = shape ? src_texture_new(0x10, shape) : NULL;
+            if (r == 0) s->nmaps++;
+        }
+    bool opaque_map[3] = {true, true, true}, opaque_tex[3] = {true, true, true};
+    for (int i = 0; i < 3; i++) {
+        if (i >= s->nmaps) continue;
+        s->map[i] = malloc(sizeof *s->map[i]);
+        if (s->map[i]) SkyMap_ctor(s->map[i], s->source[i][0], s->source[i][1], NULL, NULL, 0x10);
+        s->blend[i] = malloc(sizeof *s->blend[i]);
+        if (s->blend[i]) {
+            SkyBlend_ctor(s->blend[i]);
+            s->blend[i]->v[2] = mode;   /* 0x5377c0 */
+        }
+        if (s->map[i] && !SkyMap_opaque(s->map[i])) opaque_map[i] = false;
+    }
+    s->grid = malloc(sizeof *s->grid);
+    if (s->grid) {
+        if (!water)
+            SkyGrid_ctor(s->grid, 0xf, cfg_f(config, 0x40), cfg_f(config, 0x44), cfg_f(config, 0x48), cfg_f(config, 0x3c),
+                         cfg_f(config, 0xce4));
+        else
+            SkyGrid_ctor(s->grid, 0xf, cfg_f(config, 0xb40), cfg_f(config, 0xb44), cfg_f(config, 0xb48),
+                         cfg_f(config, 0xb3c), 1.0f);
+    }
+    for (int k = 0; k < 3; k++) {
+        if (!strncmp(clouds[k], exe_str(0x5cefb0), 4)) continue;
+        s->ntex++;
+        if (!strncmp(clouds[k], exe_str(0x5cefa8), 4)) {
+            s->tex[k] = tex->blank;
+            if (s->blend[k]) s->blend[k]->v[1] = 0;   /* 0x5377b0 */
+        } else {
+            int slot = SkyTextures_find(tex, clouds[k]);
+            if (slot < 0 || !SkyTextures_opaque(tex, slot)) opaque_tex[k] = false;
+            s->tex[k] = slot >= 0 ? SkyTextures_texture(tex, slot) : NULL;
+        }
+    }
+    s->quads = malloc(sizeof *s->quads);
+    if (s->quads) SkyQuads_ctor(s->quads, 0xf, 5, 4);
+    float p[30] = {0};
+    for (int r = 0; r < 2; r++) {
+        float *q = p + 15 * r;
+        q[0] = (float)atof(move[r]);
+        q[1] = (float)atof(wspeed[r]);
+        q[2] = (float)atof(wamount[r]);
+        for (int k = 0; k < s->ntex && k < 3; k++) {
+            q[3 + 4 * k] = (float)atof(xs[k][r]);
+            q[4 + 4 * k] = (float)atof(ys[k][r]);
+            q[5 + 4 * k] = (float)atof(speed[k][r]);
+            q[6 + 4 * k] = (float)atof(dir[k][r]);
+        }
+    }
+    s->scroller = malloc(sizeof *s->scroller);
+    if (s->scroller) Scroller_ctor(s->scroller, 0xf, 5, s->ntex, p);
+    s->mesh = malloc(sizeof *s->mesh);
+    if (s->mesh && s->grid && s->grid->verts && s->scroller && s->scroller->quads)
+        RMesh_ctorIndexed(s->mesh, 0x16, 4, s->ntex, s->grid->verts, s->scroller->quads, 0x100, 100);
+    else {
+        free(s->mesh);
+        s->mesh = NULL;
+    }
+    for (int i = 0; i < s->ntex && s->mesh && s->quads && s->quads->idx; i++) {
+        /* (the original reads the map of a stage beyond the maps through a null pointer) */
+        void *colours = s->map[i] ? s->map[i]->out : NULL;
+        RMesh_stageIndexed(s->mesh, i, s->tex[i], s->blend[i], s->scroller->uv[i], 100, s->quads->idx, colours, 100,
+                           s->scroller->quads, 0);
+    }
+    for (int i = 0; i < s->ntex; i++)
+        if (opaque_tex[i] && opaque_map[i] && s->blend[i]) s->blend[i]->v[1] = 0;
     return s;
 }

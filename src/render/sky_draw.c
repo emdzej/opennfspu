@@ -403,7 +403,12 @@ static Sky *Sky_ctor(Sky *s, const char *name)
             SkyBasic *b = malloc(sizeof *b);
             if (b) SkyBasic_ctor(b, SkyText_record(&text, i), g_skytex, s->config, (f & 0x200) == 0x200);
             if (s->nlayers < 9) s->layer[s->nlayers++] = b ? &b->base : NULL;
-        } else if (f & 0x3c) PENDING_NOTE(0x45b460, "SkyLevel_MultiSky");
+        } else if (f & 0x3c) {
+            int mode = f & 4 ? 0 : f & 8 ? 1 : f & 0x10 ? 2 : 3;
+            SkyMulti *m = malloc(sizeof *m);
+            if (m) SkyMulti_ctor(m, SkyText_record(&text, i), g_skytex, s->config, mode, (f & 0x200) == 0x200);
+            if (s->nlayers < 9) s->layer[s->nlayers++] = m ? &m->base : NULL;
+        }
         else if (f & 0x40) PENDING_NOTE(0x45be40, "SkyLevel_FreeClouds");
     }
     SkyHorizon *h = malloc(sizeof *h);
