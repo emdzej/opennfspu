@@ -5,6 +5,7 @@
 #include "game/anim.h"
 #include "game/track_pending.h"
 #include "game/wtree.h"
+#include "game/track.h"
 #include "render/rdraw.h"
 #include <stdlib.h>
 #include <string.h>
@@ -327,6 +328,71 @@ int WSceneBundle_place(WSceneBundle *s, uint32_t type, const float pos[3], const
     memcpy(s->placed[i].pos, pos, sizeof s->placed[i].pos);
     s->used++;
     return (int)i;
+}
+
+/* The world's scene bundle as the scene's geometry fills it (Scene_PlaceGeometry 0x46d120). */
+static WSceneBundle *world_scene(void) { return g_world && g_world->scene ? (WSceneBundle *)g_world->scene : NULL; }
+
+/* 0x482af0: the slots used back to DFLT placeholders far above (0, 9999, 0), none used. */
+void WSceneBundle_Reset(void)
+{
+    WSceneBundle *s = world_scene();
+    if (!s) return;
+    uint32_t n = s->used;
+    s->used = 0;
+    if (0 < s->nproto) {
+        float off[3] = {vzero[0], 9999.0f, vzero[2]};   /* 0x461c3c00 */
+        for (uint32_t i = 0; i < n; i++) WSceneBundle_place(s, 0x544c4644, off, rot_identity);   /* 0x5bb2d0 */
+    }
+    s->used = 0;
+}
+
+void WSceneBundle_Add(uint32_t type, const float pos[3], const float mat[9])   /* 0x482f70 */
+{
+    WSceneBundle *s = world_scene();
+    if (s) WSceneBundle_place(s, type, pos, mat);
+}
+
+/* 0x482fc0: the article caches refilled (slot 10); unless kept, its collision object (0x474b20) and the
+   triggerable objects (+0x34) put 10000 above where they are, out of the way (0x482d80): a type 7
+   trigger brings one back (WSceneBundle_Trigger). (The entries' flags from the draw and collision
+   objects, 0x489220, and the smackable state 0x475e10 at +0x14 aren't ported.) */
+void WSceneBundle_Update(bool keep)
+{
+    WSceneBundle *s = world_scene();
+    if (!s) return;
+    W3DObjectBundle *b = &s->a.base;
+    b->vt->fillcache(b);
+    PENDING_NOTE(0x489220, "the scene bundle's entry flags from its draw and collision objects");
+    if (keep) return;
+    PENDING_NOTE(0x475e10, "the scene objects' smackable state");
+    if (!b->collide) b->collide = PCollideArticleBundle_new(b);   /* 0x474b20 */
+    for (uint32_t i = 0; i < b->count; i++) {
+        WPlaced *p = &s->placed[i];
+        if (!p->flag) continue;
+        if (8000.0f < p->pos[1] && 8000.0f < p->pos[1]) p->pos[1] -= 10000.0f;   /* 0x5b47d8, 0x5b2764 */
+        if (p->pos[1] <= 8000.0f) p->pos[1] += 10000.0f;
+    }
+}
+
+/* A type 7 trigger's geometry (0x482fa0 -> 0x482c80): every triggerable object put back above, then the
+   one of this type at the element's x and z brought down. */
+void WSceneBundle_Trigger(uint32_t type, const float pos[3])
+{
+    WSceneBundle *s = world_scene();
+    if (!s) return;
+    W3DObjectBundle *b = &s->a.base;
+    for (uint32_t i = 0; i < b->count; i++) {
+        WPlaced *p = &s->placed[i];
+        if (!p->flag) continue;
+        if (8000.0f < p->pos[1] && 8000.0f < p->pos[1]) p->pos[1] -= 10000.0f;
+        if (p->pos[1] <= 8000.0f) p->pos[1] += 10000.0f;
+    }
+    for (uint32_t i = 0; i < b->count; i++) {
+        WPlaced *p = &s->placed[i];
+        if (p->pos[0] == pos[0] && p->pos[2] == pos[2] && p->type == type && p->flag && 8000.0f < p->pos[1])
+            p->pos[1] -= 10000.0f;
+    }
 }
 
 /* 0x4785d0: the prototype with this type, -1 if none. */

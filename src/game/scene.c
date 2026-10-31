@@ -814,7 +814,17 @@ void Scene_Tick(void)
                 if (a->kind == SCENE_AUDIO && scene_i16(a, 0x88) == 1 && -1 < scene_i16(a, 0x8a)) a->b[0xa2] = 1;
             }
         } else {
-            PENDING_NOTE(0x482fa0, "the animation triggers (type 7: the linked object's 0x482fa0)");
+            /* the linked geometry (+0xde) when its +0x78 is 1 (0x46ae90): shown (0x482fa0) */
+            int16_t link = scene_i16(t, TRIG_LINK3);
+            SceneList *all = Scene_List();
+            if (-1 < link && all && link < all->n) {
+                SceneElem *g = all->e[link];
+                if (g->kind == SCENE_GEOM && scene_i16(g, 0x78) == 1) {
+                    float p[3];
+                    scene_pos(g, p);
+                    WSceneBundle_Trigger((uint32_t)scene_i32(g, GEOM_OBJTYPE), p);
+                }
+            }
         }
         t->b[0x78] = 1;
     }

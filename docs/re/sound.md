@@ -299,3 +299,13 @@ whole entry into the opaque list; its draw (0x44fee0 → 0x450250) picks the lev
 and draws that level's primitive lists under the entry's matrix, with the material's `Am` colour stream
 overridden to white. The instance bundle's knockable objects (their state at +0x14, 0x475d80) and the
 scene objects' placing (the world's per-frame update, 0x488c30) aren't ported.
+
+The scene bundle's objects are placed when the world is built (0x487940 → Scene_PlaceGeometry
+0x46d120):
+- 0x482af0 resets the used slots to DFLT placeholders at y = 9999.
+- Each geometry element is placed with its type, position and scaled matrix (0x482f70).
+- The update (0x482fc0) refills the caches and makes the collision object. It moves the triggerable
+  objects (+0x34) 10000 up: 0x482d80 lowers an object that is above 8000 and raises one that is not,
+  which leaves a placed object raised.
+- A type 7 trigger whose geometry has +0x78 = 1 (0x482fa0 → 0x482c80) raises every triggerable object
+  back, then lowers the one of the element's type at its x and z.

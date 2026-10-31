@@ -1,5 +1,6 @@
 /* Track loading (see track.h). */
 #include "game/track.h"
+#include "game/scene.h"
 #include "game/track_pending.h"
 #include "game/wtree.h"
 #include "real/real.h"
@@ -108,6 +109,8 @@ void BWorld_BuildBundles(BWorld *w)
     /* Then the line bundle (0x479890 with the 0x10 object), the links, Track_LoadEdges 0x488000, the
        sync tasks, the visibility walls and the two 0x488820 passes (the edges here, the walls below). */
     World_BuildBundles(w);
+    PENDING_NOTE(0x482e80, "0x487940's holder 0x628bd4");
+    Scene_PlaceGeometry();   /* 0x46d120 (0x487940's) */
     Track_LoadEdges(w);                      /* 0x488000 */
     BWorld_LoadVis(w);
 }
