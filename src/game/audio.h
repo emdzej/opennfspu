@@ -3,7 +3,7 @@
    (EngineAudio_Load 0x4ac9e0: a car's <sound>.viv, its bank and four CRDl layer tables; each odd tick a
    snapshot of the engine's volume, pitch, rpm, throttle and view (0x4ac550) that every third one plays
    (0x4ac060)), and the odd ticks' update (Audio_Tick 0x4a7ef0: the listener at the camera, the player's
-   car's sounds 0x4a7430, 0x4a9e20). Collisions, the track's sounds, music and speech are pending. */
+   car's sounds 0x4a7430, 0x4a9e20). The opponents' (0x4a6e50) and the track's sound elements (0x4aed00) follow; music and most speech are pending. */
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -18,6 +18,9 @@ bool Audio_LoadEngine(int slot, const char *sound);
 void Audio_LoadCollisionSounds(const char *engine);
 /* The streamed one-shots' archives (Audio_LoadTrackSounds 0x4afda0). */
 void Audio_LoadTrackSounds(void);
+/* Before the race (0x4a8670): the track's sound elements' voices (0x4ae850), the opponents' engine
+   banks and the track's sounds near the start read (Audio_LoadTrackBanks 0x4af390). */
+void Audio_StartRace(void);
 /* The start's countdown, step 0 .. 3 ("3", "2", "1", "Go"). 0x4a6010 */
 void Audio_Countdown(int step);
 /* The odd ticks' audio (0x4a7ef0), the listener at the race camera. */

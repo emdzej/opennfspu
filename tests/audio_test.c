@@ -98,6 +98,7 @@ int main(void)
     CHECK(Audio_Init());
     Audio_LoadCollisionSounds((const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
     Audio_LoadTrackSounds();
+    Audio_StartRace();
     double idle = run(0x40 + 64 * 3, 64, 0);   /* the start's sound over, a second of idling */
     double zidle = zc;
     double full = run(64 * 4, 64 * 2, 0x7f);

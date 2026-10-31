@@ -93,3 +93,34 @@ A patch played from a streamed bank (-2 track, -3 cars, -4 speech) resolves thro
 (0x4a8340): if the bank isn't cached yet, it reserves an entry and queues a load-only request (at most
 six waiting) and stays silent until a later tick finds it. Eviction takes a free entry, else the least
 recently used one older than 16 ticks, else the last one of a lower type (0x4a81b0).
+
+## The track's sound elements
+
+The scene's `CAudioElem`s carry a record at +0x7c: the position (copied from the element's by 0x4abf40),
++0x88 kind, +0x8a the sound (an entry number of `track.viv`), +0x8c radius, +0x90 inner radius, +0x94
+period and +0x96 its random part (both in units of 8 ticks), +0x98 repeats and +0x9a their random part,
++0x9c volume in percent, +0x9e the time it plays next, +0xa0 its voice, +0xa2 a trigger flag.
+
+Sixteen voices (0x656ac0, 16 bytes each: the element, its play, its sound, plays left) play in slots
+0x39..0x48, which take their banks from the streamed track archive. On each odd tick, for the player's
+car, 0x4aed00 goes through a quarter of the scene's elements, picked by bits 1-2 of the tick:
+- An element with a period gets its next time once the old one has passed, if it has no voice.
+- Elements within their radius + 100 (a rough ground distance: the larger axis difference plus a quarter
+  of the smaller) are passed to 0x4ae890, and so are elements that still have a voice.
+
+0x4ae890 gives a free voice to an element whose time has come; if none is free, it takes the farthest
+finished voice, provided that voice is farther away than the element. It plays the sound over its
+repeats and sets pan and volume by kind:
+- Pan: kinds 3 and 4 sit at the car's left and right, kind 2 in the middle, the others by direction.
+- Volume: kinds 1, 6 and 7 fall with the squared distance over the radius; the others are full inside the
+  inner radius and fall from there to the radius.
+- Kind 1 is a one-shot: it plays when a scene trigger sets its flag (Scene_Tick 0x470b10, 0x4703c0,
+  0x4af210), and until then only asks for its sound.
+
+The elements draw from the game's shared random numbers (0x537db0), so the simulation's later random
+values depend on them, as in the original.
+
+Before the race 0x4a8670 reads the opponents' engine banks and the rain's, then Audio_LoadTrackBanks
+(0x4af390) the sounds of elements near the road's first node, each with a time limit of 0x280 timer
+ticks. The 0x4aed00 loop over the world's animated objects, which have sound lists of their own, is
+pending.

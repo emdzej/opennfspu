@@ -3,6 +3,9 @@
 #include "exe.h"
 #include "game/camera.h"
 #include "game/car_drive.h"
+#include "game/road.h"
+#include "game/scene.h"
+#include "game/track.h"
 #include "game/input.h"
 #include "pending.h"
 #include "render/r3dcar.h"
@@ -1082,7 +1085,6 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     int rpm16 = (int)(*CAR_F(c, 0xdb4) / *SPEC_F(c, 0x94) * 65536.0f);   /* 0x5b3e68 */
     int throttle = *CAR_I(c, 0xdb0) == 0 ? -1 : *CAR_I(c, 0x548) == 0 ? eased >> 1 : 0x7f;
     int engvol = ((opt(0x5d1748) * opt(0x5d14c8) * 0x55 >> 7) * vol) >> 0xe;
-    PENDING_NOTE(0x4aed00, "the scene's sound elements (0x4aed00)");
     engine_snap(0, engvol, rpm16, throttle, view, DESC_I(c, 0x518) ? pitch * 2 : pitch, pan, facing);
 }
 
@@ -1127,6 +1129,282 @@ static int angle(int x, int y)
 
 static float dot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
+/* The track's sound elements (CAudioElem): each keeps at +0x7c a record of its position (copied from
+   the element's, 0x4abf40), +0x88 its kind, +0x8a its sound (an entry of track.viv), +0x8c its radius,
+   +0x90 its inner radius, +0x94 its period and +0x96 its random part (in eighths of ticks), +0x98 and
+   +0x9a its repeats and their random part, +0x9c its volume (percent), +0x9e the time it plays next,
+   +0xa0 its voice (-1 none), +0xa2 its one-shot's trigger (kind 1, set by the scene's triggers). Up to
+   16 play at once, each voice in slot 0x39 + its number (0x656ac0: 16 x 0x10 bytes). */
+enum { AE_POS = 0x7c, AE_KIND = 0x88, AE_SOUND = 0x8a, AE_RADIUS = 0x8c, AE_INNER = 0x90, AE_PERIOD = 0x94,
+       AE_RANDOM = 0x96, AE_REPEAT = 0x98, AE_REPRND = 0x9a, AE_VOLUME = 0x9c, AE_NEXT = 0x9e, AE_VOICE = 0xa0,
+       AE_TRIGGER = 0xa2 };
+typedef struct {
+    SceneElem *e;             /* +0x0 */
+    int32_t h;                /* +0x4: its play, -1 none */
+    int16_t sound;            /* +0xc */
+    int16_t repeats;          /* +0xe: plays left */
+} ElemVoice;
+static ElemVoice s_ev[16];
+static bool s_ev_on;          /* (0x656ac0 allocated) */
+
+static float ae_f(const SceneElem *e, int off) { return scene_f32(e, off); }
+static bool is_audio(const SceneElem *e) { return e && e->kind == SCENE_AUDIO; }
+static float *ae_pos(SceneElem *e)   /* 0x4abf40 */
+{
+    memcpy(e->b + AE_POS, e->b + SCENE_POS, 12);
+    return (float *)(void *)(e->b + AE_POS);
+}
+static float dist3(const float *a, const float *b)   /* 0x532110 */
+{
+    float d[3] = {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+    return sqrtf(dot3(d, d));
+}
+/* The ground-plane distance's estimate: the larger difference plus a quarter of the smaller. */
+static float rough_dist(const float *p, float x, float z)
+{
+    float a = fabsf(p[0] - x), b = fabsf(p[2] - z);
+    return a <= b ? a * 0.25f + b : b * 0.25f + a;   /* 0x5b2468 */
+}
+
+static void voice_free(int v)
+{
+    ElemVoice *ev = &s_ev[v];
+    if (ev->h != -1) {
+        stop_slot(v + 0x39);
+        ev->h = -1;
+    }
+    if (ev->e) scene_set_i16(ev->e, AE_VOICE, -1);
+    ev->e = NULL;
+    ev->sound = -1;
+}
+
+/* The voices stopped, the elements' times and voices cleared (0x4ae7a0). */
+static void elems_reset(void)
+{
+    if (s_ev_on)
+        for (int v = 0; v < 16; v++) {
+            if (s_ev[v].h != -1) {
+                stop_slot(v + 0x39);
+                s_ev[v].h = -1;
+            }
+            s_ev[v].e = NULL;
+            s_ev[v].sound = -1;
+        }
+    SceneList *l = Scene_List();
+    for (int i = 0; l && i < l->n; i++)
+        if (is_audio(l->e[i])) {
+            ae_pos(l->e[i]);
+            scene_set_i16(l->e[i], AE_NEXT, 0);
+            scene_set_i16(l->e[i], AE_VOICE, -1);
+        }
+}
+
+static void voice_take(int v, SceneElem *e)
+{
+    ElemVoice *ev = &s_ev[v];
+    ev->e = e;
+    int r = scene_i16(e, AE_REPRND);
+    ev->repeats = (int16_t)(scene_i16(e, AE_REPEAT) + (0 < r ? (int)(REAL_rand() % (uint32_t)(r + 1)) : 0));
+    scene_set_i16(e, AE_VOICE, (int16_t)v);
+}
+
+/* An element within its radius (+100) of the listener (0x4ae890): a voice for it (a free one, else the
+   farthest one whose sound is over, if farther than it), its sound played over its repeats, its kind's
+   pan (1, 5 .. by its direction; 2 the middle; 3 and 4 the car's left and right) and volume (1, 6, 7:
+   by the squared distance over the radius; the others full inside the inner radius, falling to the
+   radius). Kind 1 plays once its trigger is set, its sound asked for until then. */
+static void elem_play(SceneElem *e, int tick8, const float *vel, int vol, int heading, const float *at)
+{
+    if (!s_ev_on) return;
+    float *rec = ae_pos(e);
+    float d = dist3(rec, at);
+    int kind = scene_i16(e, AE_KIND);
+    if (!(d < ae_f(e, AE_RADIUS) + 100.0f)) {   /* 0x5b4bb0 */
+        int v = scene_i16(e, AE_VOICE);
+        if (-1 < v) voice_free(v);
+        return;
+    }
+    int snd = scene_i16(e, AE_SOUND);
+    if (!(snd < s_stream[0].count && -1 < snd && s_stream[0].index && s_stream[0].index[snd][1] != 0)) {
+        int v = scene_i16(e, AE_VOICE);
+        if (-1 < v) voice_free(v);
+        return;
+    }
+    int v = scene_i16(e, AE_VOICE);
+    if (v < 0) {
+        int next = scene_i16(e, AE_NEXT);
+        if (0 < next && next != tick8) return;
+        for (int k = 0; k < 16 && v < 0; k++)
+            if (!s_ev[k].e) {
+                voice_take(k, e);
+                v = k;
+            }
+        if (v < 0) {
+            int far = 0;
+            float fd = 0;
+            for (int k = 0; k < 16; k++) {
+                float dk = dist3(ae_pos(s_ev[k].e), at);
+                if (s_ev[k].h != -1 && !SND_Playing(s_ev[k].h) && fd < dk) {
+                    far = k;
+                    fd = dk;
+                }
+            }
+            if (!(d < fd)) return;
+            voice_take(far, e);   /* (the element it had keeps its number: 0x4aed00 drops it) */
+            v = far;
+        }
+    }
+    ElemVoice *ev = &s_ev[v];
+    if (ev->sound != snd) {
+        if (ev->h != -1) {
+            stop_slot(v + 0x39);
+            ev->h = -1;
+        }
+        ev->sound = (int16_t)snd;
+    }
+    bool again = false;
+    if (ev->h != -1 && !SND_Playing(ev->h)) {
+        if (ev->repeats != 0) {
+            ev->repeats--;
+            again = true;
+            ev->h = -1;
+        } else if (kind != 1 || ae_f(e, AE_RADIUS) < d) {
+            stop_slot(v + 0x39);
+            ev->h = -1;
+            ev->sound = -1;
+            scene_set_i16(ev->e, AE_VOICE, -1);
+            ev->e = NULL;
+        }
+    }
+    if (!ev->e) return;
+    int pitch = 0x10000, level = 0, pan = 0;
+    if (kind == 1 && !again) {
+        if (ev->h != -1 && !SND_Playing(ev->h)) return;
+        if (!e->b[AE_TRIGGER]) {
+            stream_bank(0, ev->sound, false);
+            return;
+        }
+        e->b[AE_TRIGGER] = 0;
+    }
+    float r = ae_f(e, AE_RADIUS);
+    if (d < r) {
+        if (kind == 3) pan = heading - 0x4000;
+        else if (kind == 4) pan = heading + 0x3fff;
+        else if (kind != 2) {
+            if (opt(0x5d1760)) {   /* 0x4a6db0 */
+                float q[3] = {rec[0] - s_listener[0], rec[1] - s_listener[1], rec[2] - s_listener[2]};
+                int x = (int)(dot3(q, s_lright) * 65536.0f), y = (int)(dot3(q, s_lfwd) * 65536.0f);
+                if (g_r3d_mirror) x = -x;
+                pan = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
+            }
+            /* 0x4a6ce0: the Doppler of the element's speed (the listener's own is pending) */
+            float closing = 0;
+            float q[3] = {rec[0] - s_listener[0], rec[1] - s_listener[1], rec[2] - s_listener[2]};
+            if ((q[0] != 0 || q[1] != 0 || q[2] != 0) && vel) {
+                float l = sqrtf(dot3(q, q)), u[3] = {q[0] / l, q[1] / l, q[2] / l};
+                closing = dot3(u, vel);
+            }
+            pitch = (int)(340.0 / ((double)closing + 340.0) * 65536.0);
+        }
+        if ((6 <= kind && kind <= 7) || kind == 1) {
+            float r2 = r * r;
+            level = (int)((double)((r2 - d * d) / r2 * (float)vol * 127.0f) * 0.0078125);   /* 0x5b4b4c, 0x5b4ba8 */
+        } else {
+            float in = ae_f(e, AE_INNER);
+            if (d < in) level = 0x7f;
+            else {
+                float w = (r - in) * (r - in), x = d - in;
+                level = (int)((w - x * x) / w * 127.0f);
+            }
+        }
+    }
+    if (0xa0000 < pitch) pitch = 0xa0000;
+    if (pitch < 2) pitch = 1;
+    ev->h = play_slot(v + 0x39, ev->sound, 0x40, pitch, scene_i16(e, AE_VOLUME) * level / 100, pan & 0xffff, 0x7f);
+}
+
+/* Each odd tick for the player's car (0x4aed00): a quarter of the scene's elements a tick (by the tick's
+   bits 1-2), each one's next time set from its period once past (with the voice it has, if still its
+   own), those near (the rough distance under the radius + 100) or with a voice played. Not in split
+   screen. */
+static void elems_tick(Car *c, int heading)
+{
+    if (g_race_players == 1 || !s_on || !opt(0x5d1750) || !s_ev_on) return;
+    SceneList *l = Scene_List();
+    if (!l) return;
+    int n = l->n, part = (n >> 2) + 1;
+    int tick8 = g_sim_tick >> 3;
+    int q = (g_sim_tick >> 1) & 3;
+    int from = q * part, to = part + from;
+    if (n < to) to = n;
+    for (int i = from; i < to; i++) {
+        SceneElem *e = l->e[i];
+        if (!is_audio(e)) continue;
+        float *rec = ae_pos(e);
+        int v = scene_i16(e, AE_VOICE);
+        if (v != -1 && s_ev[v].e != e) scene_set_i16(e, AE_VOICE, -1);
+        int period = scene_i16(e, AE_PERIOD), rnd = scene_i16(e, AE_RANDOM);
+        if ((period != 0 || rnd != 0) && scene_i16(e, AE_NEXT) < tick8 && scene_i16(e, AE_VOICE) == -1) {
+            int add = rnd < 2 ? 0 : (int)(REAL_rand() % (uint32_t)rnd);
+            scene_set_i16(e, AE_NEXT, (int16_t)(period + tick8 + add));
+        }
+        if (rough_dist(rec, s_listener[0], s_listener[2]) < ae_f(e, AE_RADIUS) + 100.0f || -1 < scene_i16(e, AE_VOICE))
+            elem_play(e, tick8, NULL, 0x80, heading, s_listener);
+    }
+    (void)c;
+    if (g_world && g_world->anim) PENDING_NOTE(0x4aed00, "the animated objects' sounds (the world's bundle +0x34 lists)");
+}
+
+/* The track's sounds near the start asked for and read before the race (Audio_LoadTrackBanks
+   0x4af390; the original waits up to 0x280 timer ticks, the port's reads are immediate). */
+static void track_banks_load(void)
+{
+    if (!s_on || !opt(0x5d1750) || !g_road || g_road->nnodes < 1) return;
+    float x, z;
+    memcpy(&x, g_road->nodes + 4, 4);
+    memcpy(&z, g_road->nodes + 0xc, 4);
+    printf("Loading track sounds... ");
+    SceneList *l = Scene_List();
+    bool done = false;
+    for (int pass = 0; pass < 0x40 && !done; pass++) {
+        done = true;
+        for (int i = 0; l && i < l->n; i++) {
+            SceneElem *e = l->e[i];
+            if (!is_audio(e)) continue;
+            float *rec = ae_pos(e);
+            int snd = scene_i16(e, AE_SOUND);
+            if (rough_dist(rec, x, z) < ae_f(e, AE_RADIUS) + 100.0f && -1 < snd && snd < s_stream[0].count && s_stream[0].index &&
+                0 < (int)s_stream[0].index[snd][1] && stream_bank(0, snd, false) == -1)
+                done = false;
+        }
+        stream_tick();
+    }
+    printf(done ? "\n" : "FAILED\n");
+}
+
+void Audio_StartRace(void)
+{
+    /* 0x4a8430 -> 0x4ae850: the elements' voices */
+    for (int v = 0; v < 16; v++) s_ev[v] = (ElemVoice){NULL, -1, -1, 0};
+    s_ev_on = true;
+    elems_reset();
+    if (!s_on || opt(0x5d1750) <= 0) return;
+    /* 0x4a8670: the opponents' engine banks (and the rain's) read before the start */
+    PENDING_NOTE(0x657a24, "the rain's bank before the start (the weather)");
+    for (int pass = 0; pass < 0x40; pass++) {
+        stream_tick();
+        bool done = true;
+        for (int i = 0; i < g_ncars; i++) {
+            if (!(*CAR_I(g_cars[i], CAR_FLAGS) & 2)) continue;
+            int idx = *CAR_I(g_cars[i], 0x520);
+            if (stream_bank(1, idx * 2 + 1, false) == -1) done = false;
+            if (stream_bank(1, idx * 2 + 2, false) == -1) done = false;
+        }
+        if (done) break;
+    }
+    track_banks_load();
+}
+
 /* The player's car (0x4a7430): its distance from the listener, the Doppler (340 / (340 + the closing
    speed)), its pan, how it faces the listener, its rpm's volume lift. */
 static void player_tick(Car *c)
@@ -1164,6 +1442,7 @@ static void player_tick(Car *c)
         if (g_r3d_mirror) x = -x;
         heading = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
     }
+    elems_tick(c, heading);   /* 0x4aed00 */
     car_sounds(c, dist, rpmvol, pitch, pan, heading, speedv, facing);
     /* The car's sound events of this tick (the last first): the ends of looped ones, the rest played,
        the impacts from the contact point (+0x440). */

@@ -109,6 +109,7 @@ static bool load(const char *track, const char *carname)
     if (Audio_Init()) {
         Audio_LoadCollisionSounds((const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
         Audio_LoadTrackSounds();   /* 0x4afda0 */
+        Audio_StartRace();         /* 0x4a8670 */
     }
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
