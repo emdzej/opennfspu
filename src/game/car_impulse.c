@@ -1,6 +1,7 @@
 /* The car body's collision impulses (see car_impulse.h). */
 #include "game/car_impulse.h"
 #include "exe.h"
+#include "game/car_damage.h"
 #include "pending.h"
 #include <math.h>
 #include <string.h>
@@ -152,5 +153,5 @@ void CarSim_BodyImpulse(Car *c, const float n[3], const float at[3], float fr)
     scale3(w, bits(0x3e22f987));   /* back to turns */
     CarSim_ClampSpin(c);   /* 0x496440 */
     *CAR_F(c, 0x430) = fabsf(dot3(n, CAR_F(c, 0x33c))) * K(0x5b2404);
-    PENDING_NOTE(0x494d60, "the body's damage from an impact (0x494d60)");
+    CarSim_ImpactDamage(c, n, 0);   /* 0x494d60 */
 }

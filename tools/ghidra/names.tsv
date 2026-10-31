@@ -664,6 +664,8 @@
 00493e80	CarSim_TurnAlong	sim	high	Slow glancing hits turn the car along the wall
 00493f70	CarSim_HitWall	sim	high	The car pushed out of a wall, bounced off its normal; the impact
 004943f0	CarSim_ContactMode	sim	high	Wheel on the polygon's plane (0), no surface (1), far from it (2)
+00494470	CarSim_ZoneDamage	sim	high	Zone dent (half the impact, 1.5x knockout, max 100) spreading to neighbours; spin kick, crash over 80
+00494d60	CarSim_ImpactDamage	sim	high	Impact +0x430 (>10) on the zone facing n (roof when up.n < -0.5) (port: src/game/car_damage.c)
 00494f90	CarSim_Edges	sim	high	The car's eight box probes against the road edges
 00495ea0	CarSim_ContactImpulse	sim	high	Normal (0.3; traffic 0.4 or 0.6/size) and friction impulse at a point
 00496440	CarSim_ClampSpin	sim	high	Angular velocity held to 0.75 (tiny 2.25, light traffic 6.75)
@@ -685,7 +687,7 @@
 0049b000	CarSim_Place	sim	high	The car on the road at a node with an offset in the road's axes: frame from the polygon, trackers, wheels on the ground (port: race_car.c)
 0049b480	CarSim_Init	sim	high	The car's simulation state for the race: id, box, mass, inertia, still, upright
 0049b9a0	CarSim_GroundFrame	sim	high	The car's frame on the ground (+0x490..+0x4b0)
-0049bb10	CarSim_ClampTurn	sim	high	Angular velocity limits after a hard landing
+0049bb10	CarSim_ClampTurn	sim	high	Spin clamp (same as 0x496440)
 0049bbf0	CarSim_ClampSpin	sim	high	The local angular velocity held within 0.75
 0049bcb0	CarSim_Forces	sim	high	The force task: ground contact, gravity, landing, bounce
 0049c310	Parts_Load	sim	high	Loads nfs5.prt (car parts database)

@@ -1,6 +1,7 @@
 /* The cars' collisions (see car_collide.h). */
 #include "game/car_collide.h"
 #include "exe.h"
+#include "game/car_damage.h"
 #include "game/car_impulse.h"
 #include "game/wtree.h"
 #include "pending.h"
@@ -175,7 +176,7 @@ void CarSim_Edges(Car *c)
         if (worst < impact) worst = impact;
         if (K(0x5b2470) < impact) {
             *CAR_F(c, 0x430) = impact;
-            PENDING_NOTE(0x494d60, "the car's damage from a hit (0x494d60)");
+            CarSim_ImpactDamage(c, n, 1);   /* 0x494d60 */
         }
     }
     if (*CAR_F(c, 0x430) <= worst) *CAR_F(c, 0x430) = worst;
@@ -239,8 +240,7 @@ static void contact(Car *c, const float n[3], const float a[3], const float b[3]
         else if (K(0x5b2610) < r) zone = 7;
         else if (K(0x5b23f8) <= f) zone = K(0x5b23f8) <= r ? 4 : 6;
         else zone = K(0x5b23f8) <= r ? 2 : 0;
-        (void)zone;
-        PENDING_NOTE(0x494470, "the damage of a zone (0x494470)");
+        CarSim_ZoneDamage(c, *CAR_F(c, 0x430), zone, 1);   /* 0x494470 */
     }
 }
 

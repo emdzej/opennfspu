@@ -1,6 +1,7 @@
 /* The race's car descriptions (see race_setup.h). */
 #include "game/race_setup.h"
 #include "game/car.h"
+#include "game/car_damage.h"
 #include "vfs.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -72,6 +73,8 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x510, -1);                                  /* RACENUMBER */
     put_i(d, 0x514, 0);                                   /* STRIPEPACKAGE: the colour scheme */
     free(db);
+    /* Damage on (0x657a2c, the front end's damage option; a stand-in until the options are ported). */
+    g_race_damage = 1;
     g_nracecars = 1;
     g_ntrafficcars = 0;
     return true;
