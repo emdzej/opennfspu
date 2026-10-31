@@ -3,6 +3,7 @@
    template; a few templates and a layout checked against their files. Skips (exit 0) without data. */
 #include "exe.h"
 #include "front/fert.h"
+#include "front/fert_expr.h"
 #include "vfs.h"
 #include "vfs_host.h"
 #include <stdio.h>
@@ -34,6 +35,7 @@ int main(void)
     /* Label.ctr: two parts, two states, label a LOCALIZEDTEXT with its font, data's typed attributes. */
     FertControl *c = Fert_MakeControl("REAL.LABEL");
     CHECK(c && c->nparts == 2 && c->nstates == 2);
+    if (c) FertControl_Update(c);
     if (c && c->nparts == 2) {
         FertPart *label = c->parts[FertControl_findPart(c, "label")], *data = c->parts[FertControl_findPart(c, "data")];
         CHECK(label->kind == FPART_LOCALIZEDTEXT);
@@ -49,6 +51,21 @@ int main(void)
     }
     FertControl_free(c);
 
+    /* Expressions: symbols expanded as text (no parentheses added), C operators, errors 0. */
+    FertSyms_Clear();
+    FertSyms_Define("data.align", "1");
+    FertSyms_Define("label.size.width", "40");
+    FertSyms_Define("a.b", "1+2");
+    FertSyms_Define("loop", "loop+1");
+    CHECK(FertExpr_Eval("(0-label.size.width)/2*data.align") == -20);
+    CHECK(FertExpr_Eval("a.b*3") == 7);
+    CHECK(FertExpr_Eval("(data.align&1)?0x30ffffff:0") == 0x30ffffff);
+    CHECK(FertExpr_Eval("unknown.name+1") == 0);
+    CHECK(FertExpr_Eval("loop") == 0);
+    CHECK(FertExpr_Eval("1/0") == 0 && FertExpr_Eval("0 ? 1/0 : 5") == 5);
+    CHECK(FertExpr_Eval("-(8/2),") == 0);
+    FertSyms_Clear();
+
     /* bottombar.lay: its screen, then the controls with their layout values. */
     FertControl *w = FertControl_new(true);
     CHECK(FertWindow_LoadLayout(w, "FEData\\Layouts\\bottombar.lay"));
@@ -62,8 +79,8 @@ int main(void)
         FertAttr_point(FertAttrList_find(&lab->attrs, "pos"), p);
         CHECK(p[0] == 191 && p[1] == 464);
         FertPart *l = lab->parts[FertControl_findPart(lab, "label")];
-        CHECK(!strcmp(FertAttrList_find(&l->attrs, "fontPathName")->value, "univers7b.ffn"));
-        CHECK(!strcmp(FertAttrList_find(&l->attrs, "stringID")->value, "10504"));
+        CHECK(!strcmp(FertAttr_str(FertAttrList_find(&l->attrs, "fontPathName")), "univers7b.ffn"));
+        CHECK(!strcmp(FertAttr_str(FertAttrList_find(&l->attrs, "stringID")), "10504"));
         CHECK(FertAttr_int(FertAttrList_find(&lab->parts[FertControl_findPart(lab, "data")]->attrs, "align")) == 2);
     }
     FertControl_free(w);

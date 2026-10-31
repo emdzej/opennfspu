@@ -32,6 +32,11 @@ typedef struct {
     bool exposed;               /* +0x34: not HIDDEN: layouts may set it */
     int32_t maxlength;          /* string kinds' .maxlength (0x104 for path names) */
     int32_t minvalue, maxvalue; /* +0x3c, +0x40: INT's range (0x80000000, 0x7fffffff) */
+    /* the last update's values (slot 4): a number (+0x38), a point's two (+0x38, +0x3c), a string's text
+       with its %name% replaced */
+    int32_t num;
+    int32_t pt[2];
+    char *str;
 } FertAttr;
 
 typedef struct {
@@ -47,10 +52,22 @@ void FertAttr_set(FertAttr *a, const char *value);
 void FertAttr_parseTemplate(FertAttr *a, IniData *ini);
 /* From a layout's section (0x52be20): the exposed ones take the value under their screen key. */
 void FertAttr_parseLayout(FertAttr *a, IniData *ini);
-/* The value as a number: hexadecimal after 0x, else atoi (0x523aa0); a point's two (x,y); a colour. */
+/* Its text as symbols (slot 3): prefix+name = the text; a point's halves as .x and .y, and as .width
+   and .height (0x527420). */
+void FertAttr_export(const FertAttr *a, const char *prefix);
+/* Its value from its text (slot 4): INT evaluated (0 when empty, 0x526f50); POINT's halves evaluated
+   (0x5277b0; nothing without a comma); COLOR hexadecimal after "0x", else evaluated (0x527990); the
+   string kinds with each %name% replaced by name's expansion (0x526790). */
+void FertAttr_eval(FertAttr *a);
+/* The last update's values. */
 int32_t FertAttr_int(const FertAttr *a);
 void FertAttr_point(const FertAttr *a, int32_t out[2]);
 uint32_t FertAttr_color(const FertAttr *a);
+const char *FertAttr_str(const FertAttr *a);
+/* The text "x,y" and the values (0x527310: what a text part's measured size sets). */
+void FertAttr_setPoint(FertAttr *a, int32_t x, int32_t y);
+/* A number as the original's reader (0x523aa0): hexadecimal after "0x", else atoi. */
+int32_t Fert_ParseInt(const char *s);
 
 void FertAttrList_add(FertAttrList *l, FertAttr *a);
 FertAttr *FertAttrList_find(const FertAttrList *l, const char *name);
@@ -113,8 +130,16 @@ void FertControl_free(FertControl *c);
 /* Its template (FERT_Control_Parse 0x5246a0): [control]'s attributes, then each part of parts= from
    [part.<name>], then each state of states= from [state.<name>]. */
 void FertControl_parseTemplate(FertControl *c, IniData *ini);
-/* Its layout section (0x524a90): name, the attributes' and the parts' layout values, the state named. */
+/* Its layout section (0x524a90): name, the attributes' and the parts' layout values, the state named;
+   then an update. */
 void FertControl_parseLayout(FertControl *c, IniData *ini);
+/* Its attributes' values (FERT_Control_v14 0x524f70): the symbols emptied; the control's attributes
+   defined as control.<name>, each part's as <part>.<name>; then the control's attributes evaluated, then
+   each part's (a text part then measures its text: Fert_MeasureText). */
+void FertControl_Update(FertControl *c);
+/* The front end's text measuring for a text part (FETextPart_v4 0x4e6800): the size of its text in its
+   font; false without a font. */
+extern bool (*Fert_MeasureText)(const FertPart *p, int32_t *w, int32_t *h);
 int FertControl_findPart(const FertControl *c, const char *name);
 int FertControl_findState(const FertControl *c, const char *name);
 

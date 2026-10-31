@@ -1,6 +1,7 @@
 /* FERT's model: attributes, parts, states, controls and windows, the template registry and the layouts
    (fert.h). */
 #include "front/fert.h"
+#include "front/fert_expr.h"
 #include "vfs.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -32,7 +33,10 @@ static const char *get_sub(IniData *ini, const char *name, const char *suffix)
 
 /* A number as 0x523aa0 reads it: "0x" (or "0X") and hexadecimal digits (0x523ae0: at least 3
    characters, sscanf "%x"), else atoi. */
-static int32_t parse_int(const char *s)
+int32_t Fert_ParseInt(const char *s);
+static int32_t parse_int(const char *s) { return Fert_ParseInt(s); }
+
+int32_t Fert_ParseInt(const char *s)
 {
     if (!s) return atoi("");
     unsigned v = 0;
@@ -60,6 +64,7 @@ FertAttr *FertAttr_new(FertAttrType type, const char *name, const char *def)
 void FertAttr_free(FertAttr *a)
 {
     if (!a) return;
+    free(a->str);
     free(a->value);
     free(a->label);
     free(a);
@@ -112,24 +117,99 @@ void FertAttr_parseLayout(FertAttr *a, IniData *ini)
     if (v) FertAttr_set(a, v);
 }
 
-int32_t FertAttr_int(const FertAttr *a) { return parse_int(a->value); }
-
-void FertAttr_point(const FertAttr *a, int32_t out[2])
+void FertAttr_export(const FertAttr *a, const char *prefix)
 {
+    char name[3 * FERT_NAME];
+    if (a->type != FATTR_POINT) {
+        snprintf(name, sizeof name, "%s%s", prefix, a->name);   /* 0x526680 */
+        FertSyms_Define(name, a->value);
+        return;
+    }
     char b[0x200];
     snprintf(b, sizeof b, "%s", a->value ? a->value : "");
     char *c = strchr(b, ',');
-    out[0] = out[1] = 0;
-    if (!c) {
-        out[0] = parse_int(b);
-        return;
-    }
+    if (!c) return;
     *c = 0;
-    out[0] = parse_int(b);
-    out[1] = parse_int(c + 1);
+    static const char *const sub[4] = {".x", ".y", ".width", ".height"};
+    for (int i = 0; i < 4; i++) {
+        snprintf(name, sizeof name, "%s%s%s", prefix, a->name, sub[i]);
+        FertSyms_Define(name, i & 1 ? c + 1 : b);
+    }
 }
 
-uint32_t FertAttr_color(const FertAttr *a) { return (uint32_t)parse_int(a->value); }   /* 0x523b50 */
+/* %name% replaced by the expansion of name, each pair in turn (0x526a20 finds them, 0x526ab0 replaces) */
+static char *substitute(const char *v)
+{
+    char *out = dupstr(v);
+    for (int guard = 0; out && guard < 64; guard++) {
+        char *a = strchr(out, '%'), *b = a ? strchr(a + 1, '%') : NULL;
+        if (!b) break;
+        char name[0x200], exp[0x200];
+        snprintf(name, sizeof name, "%.*s", (int)(b - a - 1), a + 1);
+        FertExpr_Expand(name, exp, sizeof exp);   /* 0x52d9f0 */
+        size_t n = (size_t)(a - out), e = strlen(exp), t = strlen(b + 1);
+        char *r = malloc(n + e + t + 1);
+        if (!r) break;
+        memcpy(r, out, n);
+        memcpy(r + n, exp, e);
+        memcpy(r + n + e, b + 1, t + 1);
+        free(out);
+        out = r;
+    }
+    return out;
+}
+
+void FertAttr_eval(FertAttr *a)
+{
+    const char *v = a->value ? a->value : "";
+    switch (a->type) {
+    case FATTR_INT:
+        a->num = *v ? FertExpr_Eval(v) : 0;
+        break;
+    case FATTR_POINT: {
+        char b[0x200];
+        snprintf(b, sizeof b, "%s", v);
+        char *c = strchr(b, ',');
+        if (!c) break;
+        *c = 0;
+        a->pt[0] = FertExpr_Eval(b);
+        a->pt[1] = FertExpr_Eval(c + 1);
+        break;
+    }
+    case FATTR_COLOR:
+        a->num = strlen(v) > 2 && v[0] == '0' && v[1] == 'x' ? parse_int(v) : FertExpr_Eval(v);
+        break;
+    default: {
+        char *s2 = substitute(v);
+        if (s2) {
+            free(a->str);
+            a->str = s2;
+        }
+        break;
+    }
+    }
+}
+
+int32_t FertAttr_int(const FertAttr *a) { return a->num; }
+
+void FertAttr_point(const FertAttr *a, int32_t out[2])
+{
+    out[0] = a->pt[0];
+    out[1] = a->pt[1];
+}
+
+uint32_t FertAttr_color(const FertAttr *a) { return (uint32_t)a->num; }
+
+const char *FertAttr_str(const FertAttr *a) { return a->str ? a->str : a->value; }
+
+void FertAttr_setPoint(FertAttr *a, int32_t x, int32_t y)
+{
+    char b[32];
+    snprintf(b, sizeof b, "%d,%d", (int)x, (int)y);
+    FertAttr_set(a, b);
+    a->pt[0] = x;
+    a->pt[1] = y;
+}
 
 void FertAttrList_add(FertAttrList *l, FertAttr *a)
 {
@@ -387,6 +467,32 @@ void FertControl_parseLayout(FertControl *c, IniData *ini)
     if (st) {
         int k = FertControl_findState(c, st);
         if (k >= 0) c->state = k;   /* 0x524e00 */
+    }
+    FertControl_Update(c);   /* (slot 14) */
+}
+
+bool (*Fert_MeasureText)(const FertPart *p, int32_t *w, int32_t *h);
+
+void FertControl_Update(FertControl *c)
+{
+    FertSyms_Clear();
+    for (int i = 0; i < c->attrs.n; i++) FertAttr_export(c->attrs.a[i], "control.");
+    for (int k = 0; k < c->nparts; k++) {
+        FertPart *p = c->parts[k];
+        char prefix[FERT_NAME + 2];
+        snprintf(prefix, sizeof prefix, "%s.", p->name);   /* 0x52a200 */
+        for (int i = 0; i < p->attrs.n; i++) FertAttr_export(p->attrs.a[i], prefix);
+    }
+    for (int i = 0; i < c->attrs.n; i++) FertAttr_eval(c->attrs.a[i]);
+    for (int k = 0; k < c->nparts; k++) {
+        FertPart *p = c->parts[k];
+        /* (a text part evaluates twice when the first took over 3 timer ticks: not in the port) */
+        for (int i = 0; i < p->attrs.n; i++) FertAttr_eval(p->attrs.a[i]);
+        int32_t w, h;
+        if ((p->kind == FPART_TEXT || p->kind == FPART_LOCALIZEDTEXT) && Fert_MeasureText && Fert_MeasureText(p, &w, &h)) {
+            FertAttr *sz = FertAttrList_find(&p->attrs, "size");
+            if (sz) FertAttr_setPoint(sz, w, h);   /* 0x527310 */
+        }
     }
 }
 
