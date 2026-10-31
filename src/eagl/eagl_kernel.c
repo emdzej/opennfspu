@@ -346,6 +346,56 @@ void EAGL_DrawQuads(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
     c->flags &= 0xffffff07u;
 }
 
+/* ---- lines (0x548120) ---- */
+
+/* Pairs of vertices: the attributes of the lines not rejected, the positions projected, a line by index
+   pairs through THRASH's line mesh with the draw's texture. The lines crossing a clip plane are left out
+   (the original clips them, not ported). */
+void EAGL_DrawLines(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
+                    int sd, int ss, int su)
+{
+    take_stamps(c, &diffuse, &specular, &uv, sd, ss, su);
+    uint32_t f = c->flags;
+    if (!(f & EAGL_CF_DX7)) {
+        pending_glide_path(c);
+        return;
+    }
+    float *v = (float *)c->verts;
+    int n = c->nverts, nlines = (n + 1) / 2;
+    bool moved = f & EAGL_CF_TRANSFORMED, inside = f & EAGL_CF_INSIDE;
+    bool has_d = f & EAGL_CF_DIFFUSE, has_s = f & EAGL_CF_SPECULAR, has_uv = f & EAGL_CF_UV;
+    for (int i = 0; i < n; i++) {
+        if (!inside && c->primcodes[i / 2][0] != 0) continue;
+        if (diffuse && !has_d) v[i * VSTRIDE + 4] = ufloat(diffuse[i]);
+        if (specular && !has_s) v[i * VSTRIDE + 5] = ufloat(specular[i]);
+        if (uv && !has_uv) {
+            v[i * VSTRIDE + 6] = uv[2 * i];
+            v[i * VSTRIDE + 7] = uv[2 * i + 1];
+        }
+    }
+    static int idx[0x400];
+    int count = 0;
+    for (int q = 0; q < nlines && count < 0x200; q++) {
+        if (!inside && (c->primcodes[q][0] != 0 || c->primcodes[q][1] != 0)) {
+            if (c->primcodes[q][0] == 0) PENDING_NOTE(0x548120, "EAGL_DrawLines: the lines crossing a clip plane");
+            continue;
+        }
+        if (moved) {
+            project(c, v + 2 * q * VSTRIDE);
+            project(c, v + (2 * q + 1) * VSTRIDE);
+        }
+        idx[2 * count] = 2 * q;
+        idx[2 * count + 1] = 2 * q + 1;
+        count++;
+    }
+    if (count) {
+        if (g_texgraphics && g_texgraphics->textures) TEXTURE_select(g_texgraphics->textures, c->texture, NULL);   /* 0x535fb0 */
+        reset_format(c);
+        THRASH.fn.drawlinemesh(count, c->verts, idx);
+    }
+    c->flags &= 0xffffff07u;
+}
+
 /* ---- strips (0x540a40) ---- */
 
 /* Which copy of each strip vertex the triangles use (0x6bd060): the vertex itself when every

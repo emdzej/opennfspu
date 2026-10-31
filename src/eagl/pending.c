@@ -28,12 +28,6 @@ void EAGL_ClipOrtho(int i0, int i1, int i2, uint32_t codes, float guardband, con
     *nout = 0;
 }
 
-void EAGL_DrawLines(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
-                    int stamp_diffuse, int stamp_specular, int stamp_uv)
-{
-    PENDING_NOTE(0x548120, "EAGL_DrawLines");
-    c->flags &= 0xffffff07u;
-}
 
 void EAGL_DrawTwoStage(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, int mode0, int mode1,
                        const int16_t *stamps)
