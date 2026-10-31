@@ -60,10 +60,15 @@ int main(void)
     CHECK(FertExpr_Eval("(0-label.size.width)/2*data.align") == -20);
     CHECK(FertExpr_Eval("a.b*3") == 7);
     CHECK(FertExpr_Eval("(data.align&1)?0x30ffffff:0") == 0x30ffffff);
-    CHECK(FertExpr_Eval("unknown.name+1") == 0);
+    /* The original's interpreter: names it doesn't know are 0, division by 0 keeps the left side, an
+       empty operand is 0; an operator where none can be (',') or unmatched brackets give 0. */
+    CHECK(FertExpr_Eval("unknown.name+1") == 1);
     CHECK(FertExpr_Eval("loop") == 0);
-    CHECK(FertExpr_Eval("1/0") == 0 && FertExpr_Eval("0 ? 1/0 : 5") == 5);
-    CHECK(FertExpr_Eval("-(8/2),") == 0);
+    CHECK(FertExpr_Eval("7/0") == 7 && FertExpr_Eval("0 ? 1/0 : 5") == 5);
+    CHECK(FertExpr_Eval("-(8/2),") == 0 && FertExpr_Eval("(1+2") == 0);
+    CHECK(FertExpr_Eval("(0&1)?330-(0+48+):330") == 330 && FertExpr_Eval("(0+48+)") == 48);
+    CHECK(FertExpr_Eval("1=1") == 1 && FertExpr_Eval("2#3") == 1 && FertExpr_Eval("$ff+%101") == 260);
+    CHECK(FertExpr_Eval("abs(0-5)*2") == 10 && FertExpr_Eval("<0x12345678") == 0x1234);
     FertSyms_Clear();
 
     /* bottombar.lay: its screen, then the controls with their layout values. */

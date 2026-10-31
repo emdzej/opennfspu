@@ -4,8 +4,9 @@
    result run through an embedded C interpreter (0x52f120 .. 0x532000: integer C expressions and the
    functions abs, sqrt, intsin, intcos and the is* / to* character ones; errors give 0).
 
-   The port expands as the original does and evaluates with its own C expression evaluator: the game's
-   templates use + - * / % & | ?: and parentheses on integers and hexadecimal constants. */
+   Both are ported (fert_expr.c): the interpreter is an operator-precedence evaluator that reads what
+   it can (an empty operand is 0) and gives 0 only for an operator where none can be or brackets that
+   don't match. */
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
