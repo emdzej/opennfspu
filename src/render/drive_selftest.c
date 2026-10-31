@@ -106,7 +106,7 @@ static bool load(const char *track, const char *carname)
     }
     /* The race's sounds (GameStartup 0x4b65a0: Audio_Init 0x4a6610, the player's engine 0x4a8aa0 ->
        0x4ac9e0 from its description's SOUNDNAME). */
-    if (Audio_Init()) Audio_LoadEngine(0, (const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
+    if (Audio_Init()) Audio_LoadCollisionSounds((const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
     set_env();

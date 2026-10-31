@@ -93,7 +93,7 @@ int main(void)
     Input_Reset(false);
     Camera_Init(0, g_cars[0], 2);
     CHECK(Audio_Init());
-    CHECK(Audio_LoadEngine(0, (const char *)CAR_DESCB(g_cars[0]) + 0x2e8));
+    Audio_LoadCollisionSounds((const char *)CAR_DESCB(g_cars[0]) + 0x2e8);
     double idle = run(0x40 + 64 * 3, 64, 0);   /* the start's sound over, a second of idling */
     double zidle = zc;
     double full = run(64 * 4, 64 * 2, 0x7f);
@@ -101,6 +101,12 @@ int main(void)
            *CAR_F(g_cars[0], 0xdb4));
     CHECK(idle > 300 && full > 300);
     CHECK(zc > zidle * 1.5);
+    /* A hard landing's impact (an event as 0x49bcb0's) heard over the idling engine. */
+    double before = run(32 + (g_sim_tick & 1 ? 0 : 1), 16, 0);   /* (the even ticks clear the events: add on an odd one) */
+    Car_AddEvent(g_cars[0], 1, -1, 0, 5, 6.0f, 0);
+    double after = run(16, 16, 0);
+    printf("  impact: rms %.0f before, %.0f after\n", before, after);
+    CHECK(after > before * 1.2);
     if (getenv("AUDIO_WAV")) wav(getenv("AUDIO_WAV"));
     Audio_Shutdown();
     printf("audio_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");

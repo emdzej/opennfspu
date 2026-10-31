@@ -112,8 +112,12 @@ int SND_Play(int bank, int patch, SndParams *p);
 int SND_Stop(int handle);                                   /* 0x5651e0 */
 bool SND_Playing(int handle);                               /* 0x565800 (the original returns 1 when not) */
 int SND_SetVolume(int handle, int vol);                     /* 0x5657c0 */
+int SND_Fade(int handle, int ticks, int vol);               /* 0x565250: -1 ends the play */
 int SND_SetPan(int handle, int pan, int spread);            /* 0x565670 */
 int SND_SetPitch(int handle, int pitch);                    /* 0x565400 */
+int SND_SetVelocity(int handle, int vel);                   /* 0x565540 */
+int SND_SetPanByte(int handle, int pan);                    /* 0x565580 */
+int SND_SetLowpass(int handle, int freq);                   /* 0x565380 */
 int SND_TimeLeft(int handle);                               /* 0x5658b0: hundredths of a second */
 /* A function the library's 100 Hz tick calls (0x560e90; at most eight), and its removal (0x560ec0). */
 void SND_AddTick(void (*fn)(void));

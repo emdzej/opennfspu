@@ -51,6 +51,8 @@ void SndMix_SetGain(int i, float gain);
 void SndMix_SetPitch(int i, int pitch);
 /* The source's sample position (0x5997b0), -1 without a decoder. */
 int SndMix_Position(int i);
+/* The one-pole lowpass (0x599690): made below 1, removed from 1 on. */
+void SndMix_SetLowpass(int i, float c);
 /* The voice-end callback (0x6b15e8): a source's decoder ran out. */
 extern void (*g_snd_source_end)(int i);
 

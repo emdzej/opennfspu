@@ -5,6 +5,7 @@
 #include "pending.h"
 #include "render/r3dcar.h"
 #include "real/locatbig.h"
+#include "real/random.h"
 #include "snd/snd.h"
 #include "vfs.h"
 #include <math.h>
@@ -24,6 +25,9 @@ static int fade_out(int i) { return (int8_t)exe_data((uint32_t)(0x5d17e4 - i), 1
 /* ---- the start (0x4a6610, 0x4a6480) and the banks (0x4a6990) ---- */
 
 static bool s_on;   /* 0x5d1734 */
+
+/* a / b in 16.16 (0x4a5f30). */
+static int fixdiv(int a, int b) { return (int)((((int64_t)(a % b)) << 16) / b) + (a / b) * 0x10000; }
 static void engines_free(void);
 typedef struct {
     int32_t slot;      /* 0x6564a0: the SND bank */
@@ -68,6 +72,213 @@ static int add_bank(uint8_t *data, int size, int k)
     s_banks[k].data = data;
     s_banks[k].size = size;
     return size;
+}
+
+/* <name>.bnk into the list at k (AudioCmn_LoadBank 0x4a6a60). */
+static int load_bank(const char *name, int k)
+{
+    char path[160];
+    snprintf(path, sizeof path, "%s%s", name, exe_str(0x5d146c));
+    size_t size = 0;
+    uint8_t *b = vfs_read_all(path, &size);
+    if (!b) {
+        printf("AudioCmn_LoadBank -- DID NOT LOAD %s\n", path);
+        return 0;
+    }
+    return add_bank(b, (int)size, k);
+}
+
+/* ---- one-shots and the sound slots (0x4a96b0, 0x4a99e0, 0x4a8c30) ---- */
+
+static int32_t s_slot[0x50][2];   /* 0x656180: each slot's play and patch */
+static int32_t s_level;           /* 0x656860: the last impact's level, a sixteenth, falling */
+static uint32_t s_lastpick[17];   /* 0x65644c ..: the patch picked last in each set */
+
+/* A pan angle to a byte: the front half's (0x4a96b0, 0x4a99e0). */
+static int pan_byte(int a) { return (a < 0x4000 || 0xbfff < a) ? (int)((uint32_t)(a + 0x4000) >> 8 & 0xff) : (0xbfff - a) >> 8; }
+
+/* The bank's volume for the patch (by the options' volumes and their mixes 0x5d14bc ..). */
+static int category_volume(int bank, int patch, int vol)
+{
+    if (bank == s_banks[2].slot) return (opt(0x5d1748) * opt(0x5d14d8) * vol * 0x55) >> 0x15;
+    if (bank == s_banks[5].slot) return (opt(0x5d1750) * opt(0x5d14bc) * vol * 0x55) >> 0x15;
+    if (patch == 0xc || patch == 0xd) return (opt(0x5d1744) * vol) >> 7;
+    if ((bank == s_banks[0].slot || bank == s_banks[1].slot) && patch == 2) {
+        int v = opt(0x5d1744) * vol;
+        return 0x7e < v ? 0x7f : v;
+    }
+    if (3 <= patch && patch <= 5 && bank == s_banks[0].slot) return (opt(0x5d14d0) * opt(0x5d1744) * vol * 0x55) >> 0x15;
+    if (0x11 <= patch && patch <= 0x1c) return (opt(0x5d14cc) * opt(0x5d1744) * vol * 0x55) >> 0x15;
+    if (patch == 10 || patch == 0xb) return (opt(0x5d14e0) * opt(0x5d1750) * vol * 0x55) >> 0x15;
+    if (patch == 0xf) return (opt(0x5d14e8) * opt(0x5d1748) * vol * 0x55) >> 0x15;
+    return -1;   /* the rest's (below) */
+}
+
+/* A one-shot (0x4a96b0): the bank's patch at the volume by its kind, the pan from the angle, the pitch
+   (16.16), the velocity; outside sounds through a 3000 Hz lowpass from the views in the car. */
+static int play_once(int bank, int patch, int angle, int vol, int bend, int pitch, int vel)
+{
+    SndParams p;
+    SND_ParamsDefault(&p);
+    int v;
+    if (bank == -4) v = (opt(0x5d174c) * opt(0x5d14c0) * 0x55) >> 0xe;
+    else {
+        v = category_volume(bank, patch, vol);
+        if (v < 0) {
+            v = (int8_t)((opt(0x5d14d4) * opt(0x5d1744) * vol * 0x55) >> 0x15);
+            if (0x2f < patch) {
+                p.f0a = (int8_t)(0x7f - vel);
+                PENDING_NOTE(0x656869, "the reverb's level under roofs (0x656869)");
+            }
+        }
+    }
+    p.vol = (int8_t)v;
+    p.pitch = (uint16_t)(pitch >> 4);
+    p.f0b = 0;   /* (0x655d40: no 3D) */
+    p.f09 = (int8_t)bend;
+    p.patch = patch;
+    if (bank != s_banks[0].slot && bank != s_banks[1].slot && g_sound_quality < 2 && (g_racecam[0].flags2 & 8) &&
+        g_racecam[0].mode != 0 && g_racecam[0].mode != 0xf)
+        p.f12 = 3000;   /* (0x443e10, the car's interior, taken as no) */
+    p.pan = opt(0x5d1760) ? (int8_t)pan_byte(angle) : 0x40;
+    p.velocity = (int8_t)vel;
+    if (bank < -1) {
+        PENDING_NOTE(0x4a8340, "the streamed one-shots (speech, the track's)");
+        return -1;
+    }
+    return SND_Play(bank, patch, &p);
+}
+
+/* A sound in a slot (0x4a99e0): its bank by the slot (0x5d14ec) or the patch; the impacts' slot 0x33
+   plays and forgets; another slot's same patch has its volume, pan, velocity, pitch and lowpass set,
+   a new patch ends the last (a quarter second's fade) first. */
+static int play_slot(int slot, int patch, int vel, int pitch, int vol, int angle, int velocity)
+{
+    int b = vel < 0 ? 0 : vel;
+    if (0x7f < b) b = 0x7f;
+    vol = vol < 0 ? 0 : vol;
+    if (0x7f < vol) vol = 0x7f;
+    int bank = s_banks[5].slot;
+    bool streamed = (0x1e <= slot && slot <= 0x21) || (0x34 <= slot && slot <= 0x37) || slot == 0x26 || slot == 0x38 ||
+                    (0x39 <= slot && slot <= 0x48);
+    if (!streamed) {
+        bank = s_banks[2].slot;
+        if (!((10 <= slot && slot <= 0x11) || (0x1c <= slot && slot <= 0x1d))) {
+            if (patch == 6 || (9 < patch && patch < 0xc)) bank = s_banks[3].slot;
+            else bank = s_banks[(int8_t)exe_data(0x5d14ec + 4u * (uint32_t)slot, 1)[0]].slot;
+        }
+    }
+    if (slot == 0x33) return play_once(bank, patch, angle, vol, b, pitch, velocity);
+    int32_t *h = s_slot[slot];
+    if (h[1] == patch && h[0] != -1 && !SND_Playing(h[0])) h[0] = h[1] = -1;
+    if (h[1] == patch && h[0] != -1) {
+        int v = category_volume(bank, patch, vol);
+        if (v < 0) v = (opt(0x5d14d4) * opt(0x5d1744) * vol * 0x55) >> 0x15;
+        if (patch == 0x10) v = (opt(0x5d14dc) * opt(0x5d1750) * vol * 0x55) >> 0x15;
+        SND_SetVolume(h[0], v);
+        if (opt(0x5d1760)) SND_SetPanByte(h[0], pan_byte(angle));
+        SND_SetVelocity(h[0], b);
+        SND_SetPitch(h[0], pitch >> 4);
+        if (bank != s_banks[0].slot && bank != s_banks[1].slot && g_sound_quality < 2) {
+            bool inside = (g_racecam[0].flags2 & 8) && g_racecam[0].mode != 0 && g_racecam[0].mode != 0xf;
+            SND_SetLowpass(h[0], inside ? 3000 : 0xffff);
+        }
+        return h[0];
+    }
+    if (h[0] != -1) SND_Fade(h[0], 0x19, -1);
+    h[0] = play_once(bank, patch, angle, vol, b, pitch, 0x7f);
+    h[1] = h[0] != -1 ? patch : -1;
+    return h[0];
+}
+
+static void stop_slot(int slot)
+{
+    if (s_slot[slot][0] != -1) SND_Fade(s_slot[slot][0], 5, -1);
+    s_slot[slot][0] = s_slot[slot][1] = -1;
+}
+
+/* One of n patches from base, not the one picked last in the set (0x4a9150; the real library's
+   generator). */
+static int pick(int base, uint32_t n, int set)
+{
+    uint32_t r = REAL_rand() % n;
+    if (s_lastpick[set] == r && ++r == n) r = 0;
+    s_lastpick[set] = r;
+    return base + (int)r;
+}
+static int pick3(int base, int set) { return pick(base, 3, set); }
+
+/* The impact's patch by its kind and the surface (0x4a8c30). */
+static int impact_patch(int kind, int surf)
+{
+    if (kind == 0x1e) return 0x13;
+    if (kind == 4) return 0x20;
+    if (kind == 0) {
+        switch (surf) {
+        case 5: case 8: case 9: return pick3(0x40, 0);
+        case 10: return pick3(0x43, 8);
+        case 0xb: return pick3(0x50, 9);
+        case 7: return pick3(0x46, 3);
+        case 0xc: return pick3(0x4c, 10);
+        case 0x12: return pick3(0x73, 5);
+        case 0x11: return pick3(0x76, 13);
+        case 0x14: return pick3(0x79, 15);
+        case 0x10: return pick3(0x56, 14);
+        case 3: return pick3(0x30, 1);
+        case 0: return pick3(0x40, 2);
+        default: return 0;
+        }
+    }
+    if (kind == 3) {
+        switch (surf) {
+        case 0xd: case 5: case 7: return pick3(0x3c, 12);
+        case 10: case 0xb: return pick3(0x36, 8);
+        case 0xc: return (int)(REAL_rand() % 3) + 0x39;
+        case 9: return pick3(0x33, 11);
+        case 8: return pick3(0x30, 1);
+        case 3: return pick(0x30, 3, 1);
+        case 0: return pick(0x40, 3, 2);
+        case 0x17: case 0x18: return pick(0x66, 3, 0x10);
+        case 0x19: return pick(0x69, 3, 0x10);
+        case 0x1a: return pick(0x6c, 3, 0x10);
+        case 0x13: return pick3(0x70, 5);
+        case 0x12: return pick3(0x73, 5);
+        case 0x11: return pick3(0x76, 13);
+        case 0x14: return pick3(0x79, 15);
+        case 0x10: return pick3(0x56, 14);
+        case 0xe: return pick3(0x53, 7);
+        case 0xf: return pick3(0x7c, 6);
+        case 0x15: return pick3(0x60, 16);
+        case 0x16: return pick3(99, 16);
+        default: return 0;
+        }
+    }
+    return surf == 0x1d ? 0xd : 0;
+}
+
+/* A car's sound event (0x4a9190): an impact (id -1) by its strength (2 .. 127, a tenth of the levels
+   faster than the last one's), at the volume of its distance; the looped ids' sounds are pending. */
+static void event_sound(int id, int kind, int surf, int strength, int dist, int angle)
+{
+    int att = fixdiv(g_racecam[0].mode == 0xc ? 0x8000000 : 0x2000000, dist + (g_racecam[0].mode == 0xc ? 0x10000 : 0x20000));
+    if (g_racecam[0].mode == 0xc) att <<= 2;
+    int vol = (att + ((att >> 31) & 0xffff)) >> 0x10;
+    if (-1 < id) {
+        PENDING_NOTE(0x4a9190, "the cars' looped event sounds (scrapes, skids)");
+        return;
+    }
+    int lv;
+    if (0x14 < surf && surf < 0x1b) {
+        lv = (strength * 0x7f) / 0x1aaaa;
+        lv = lv < 0x80 ? (lv < 2 ? 2 : lv) : 0x7f;
+    } else {
+        lv = (strength * 0x3f) / 0xa0000;
+        lv = lv < 0x40 ? (lv < 2 ? 2 : lv) : 0x3f;
+        lv += 0x40;
+    }
+    if (lv >> 4 <= s_level) return;
+    s_level = lv >> 4;
+    play_slot(0x33, impact_patch(kind, surf), 0x40, 0x10000, vol, angle, lv);
 }
 
 /* ---- the engines (0x4ac9e0, 0x4ac550, 0x4ac060) ---- */
@@ -439,12 +650,24 @@ static void engine_snap(int slot, int vol, int rpm16, int throttle, int view, in
     engine_play(e);
 }
 
+/* The player's engine and the collisions' bank, Lil'd at the low qualities (0x4a8aa0); the speech's
+   and the track's banks marked as streamed (-3, -2). */
+void Audio_LoadCollisionSounds(const char *engine)
+{
+    if (!s_on || 2 < g_sound_quality) return;
+    Audio_LoadEngine(0, engine);
+    char name[160];
+    snprintf(name, sizeof name, "%s%s%s", sound_dir(), 1 < g_sound_quality ? exe_str(0x5d1a1c) : "", exe_str(0x5d1a20));
+    load_bank(name, 3);
+    s_banks[5].slot = -2;
+    s_banks[2].slot = -3;
+    for (int i = 0; i < 0x50; i++) s_slot[i][0] = s_slot[i][1] = -1;
+}
+
 /* ---- the cars' sounds (0x4a9e20, 0x4a7430) ---- */
 
 static uint8_t s_throttle[CAR_MAX];   /* 0x6563c8: each car's eased throttle */
 
-/* a / b in 16.16 (0x4a5f30). */
-static int fixdiv(int a, int b) { return (int)((((int64_t)(a % b)) << 16) / b) + (a / b) * 0x10000; }
 
 /* The engine's part of the car's sounds (0x4a9e20): the volume by the distance (2048 / (d + 2)), the
    rpm's lift, the gear changes; the throttle eased (up by half the gap, down by an eighth); the view
@@ -452,6 +675,7 @@ static int fixdiv(int a, int b) { return (int)((((int64_t)(a % b)) << 16) / b) +
 static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int heading, int speedv, int facing)
 {
     (void)heading;
+    if (0 < s_level) s_level--;
     int att = fixdiv(0x8000000, dist + 0x20000);
     int a = (att + ((att >> 31) & 0xffff)) >> 0x10;
     int idx = *CAR_I(c, 0x520);
@@ -578,6 +802,36 @@ static void player_tick(Car *c)
         heading = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
     }
     car_sounds(c, dist, rpmvol, pitch, pan, heading, speedv, facing);
+    /* The car's sound events of this tick (the last first): the ends of looped ones, the rest played,
+       the impacts from the contact point (+0x440). */
+    if (!opt(0x5d1744)) return;
+    for (int k = *CAR_I(c, 0x110c) - 1; 0 <= k; k--) {
+        const uint8_t *r = c->b + 0x1110 + k * 0x18;
+        int32_t type, id, kind, surf;
+        float strength;
+        memcpy(&type, r, 4);
+        memcpy(&id, r + 4, 4);
+        memcpy(&kind, r + 8, 4);
+        memcpy(&surf, r + 0xc, 4);
+        memcpy(&strength, r + 0x10, 4);
+        if ((type == 5 || type == 3) && -1 < id) {
+            stop_slot(id);
+            if (id == 0x12 || id == 0x13) stop_slot(id + 4);
+            continue;
+        }
+        int a = pan;
+        if (id < 0 && kind != 0x1c && kind != 0x1e) {
+            a = 0;
+            if (opt(0x5d1760)) {
+                const float *at = CAR_F(c, 0x440);
+                float e[3] = {at[0] - s_listener[0], at[1] - s_listener[1], at[2] - s_listener[2]};
+                int x = (int)(dot3(e, s_lright) * 65536.0f), y = (int)(dot3(e, s_lfwd) * 65536.0f);
+                if (g_r3d_mirror) x = -x;
+                a = (angle(x >> 8, y >> 8) & 0x3ff) << 6;
+            }
+        }
+        event_sound(id, kind, surf, (int)(strength * 65535.0f), dist, a);   /* 0x5b3ed0 */
+    }
 }
 
 void Audio_Tick(void)

@@ -129,7 +129,23 @@ static void race_part(Car *c)
             for (int w = 0; w < 4; w++) *CAR_I(c, 0x870 + 0xc4 * w) = 0;
             if (*CAR_I(c, 0x1100) < 1) *CAR_I(c, 0x1100) = 0xc0;
         }
-        PENDING_NOTE(0x412250, "the hits' sparks, debris (0x43f3f0) and sounds (the +0x110c events)");
+        PENDING_NOTE(0x412250, "the player's force feedback (0x412250)");
+        if (K(0x5b246c) < *CAR_F(c, 0x430)) {
+            /* The hit's sound event: its kind by the hit's type (0x5cc518), the surface by the type
+               (0x5cc4d8 the walls', 0x5cc534 the objects'), the strength scaled (half for objects). */
+            uint32_t w = (uint32_t)*CAR_I(c, 0x438), t = w & 0xefff0000u;
+            float f = *CAR_F(c, 0x430) * K(0x5b272c);
+            int kind = (int32_t)exe_u32(0x5cc518 + 4u * (uint32_t)((int32_t)t >> 16));
+            int surf = (int)(w & 0xff);
+            if (t == 0x40000 || t == 0x30000)
+                PENDING_NOTE(0x43f3f0, "the hits' sparks and debris");
+            if (t != 0x40000 && (int32_t)t < 0x30001) surf = (int32_t)exe_u32(0x5cc4d8 + 4u * (w & 0xff));
+            else if (t == 0x50000) {
+                if (*CAR_I(c, 0x434) == 0) surf = (int32_t)exe_u32(0x5cc534 + 4u * (w & 0xff));
+                f *= K(0x5b2608);
+            }
+            Car_AddEvent(c, 1, -1, kind, surf, f, 0);
+        }
         *CAR_F(c, 0x430) = 0;
         *CAR_I(c, 0x434) = 0;
         *CAR_I(c, 0x438) = 0;

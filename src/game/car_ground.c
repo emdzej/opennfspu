@@ -1,5 +1,6 @@
 /* The cars' contact with the ground (see car_ground.h). */
 #include "game/car_ground.h"
+#include "game/race_car.h"
 #include "game/car_impulse.h"
 #include "exe.h"
 #include "game/car_physics.h"
@@ -568,7 +569,7 @@ void CarSim_Forces(void *car)
         } else if (lowest < K(0x5b4a18)) {
             /* A hard landing: out of the ground and bounced by the surface. */
             if (flags & 1) PENDING_NOTE(0x493d40, "the human car's landing (0x493d40)");
-            PENDING_NOTE(0x40f080, "the car's impact events (0x40f080: sounds, damage)");
+            Car_AddEvent(c, 1, -1, 0, 5, rel, 0);   /* 0x40f080: the landing's sound */
             float pen = K(0x5b4a18) - lowest;
             uint32_t m = 0xbd4ccccdu;
             memcpy(CAR_F(c, 0x424), &m, 4);
@@ -597,7 +598,7 @@ void CarSim_Forces(void *car)
             for (int j = 0; j < 3; j++) av[j] *= k;
         }
         if (g_race_rollover_events && *CAR_F(c, 0x3a0) < K(0x5b4a1c) && *CAR_F(c, 0x504) < K(0x5b2410) && *CAR_I(c, 0xb50) == 0) {
-            PENDING_NOTE(0x40f080, "the car's impact events (0x40f080: sounds, damage)");
+            Car_AddEvent(c, 1, -1, 4, 3, 40.0f, 0);   /* 0x40f080: the rollover's */
             *CAR_F(c, 0x504) = 40.0f;
         }
     }

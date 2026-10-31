@@ -396,6 +396,65 @@ static int resample(SndNode *nd, int n, float *tmp, float *out, int ch)
     return got;
 }
 
+/* ---- the lowpass (0x599f20, 0x599ea0 with 0x59bf20) ---- */
+
+typedef struct {
+    SndNode n;
+    float y;                  /* +0x0c */
+    float keep;               /* +0x10: 1 - c */
+    float c;                  /* +0x14: the cutoff over half the device's rate */
+} SndLowpass;
+
+static int lowpass(SndNode *nd, int n, float *tmp, float *out, int ch)
+{
+    SndLowpass *l = (SndLowpass *)nd;
+    if (l->n.next) {
+        int got = l->n.next->render(l->n.next, n, out, tmp, ch);
+        if (got < 1) return got;
+    }
+    memcpy(out, tmp, (size_t)n * sizeof *out);
+    float y = l->y;
+    for (int i = 0; i < n; i++) {
+        y = l->c * out[i] + y * l->keep;
+        out[i] = y;
+    }
+    l->y = y;
+    return n;
+}
+
+static void chain_remove(SndNode **head, SndNode *n)   /* 0x596ac0 */
+{
+    for (SndNode **p = head; *p; p = &(*p)->next)
+        if (*p == n) {
+            *p = n->next;
+            return;
+        }
+}
+
+void SndMix_SetLowpass(int i, float c)   /* 0x599690 */
+{
+    SndSource *s = &s_src[i];
+    if (c < 1.0f) {
+        if (!s->lowpass) {
+            SndLowpass *l = calloc(1, sizeof *l);
+            if (!l) return;
+            l->n.render = lowpass;
+            l->n.type = 0;
+            s->lowpass = &l->n;
+            chain_add(&s->chain, &l->n);
+        }
+        SndLowpass *l = (SndLowpass *)s->lowpass;   /* 0x599f00 */
+        l->c = c;
+        l->keep = 1.0f - c;
+        return;
+    }
+    if (s->lowpass) {
+        chain_remove(&s->chain, s->lowpass);
+        free(s->lowpass);
+        s->lowpass = NULL;
+    }
+}
+
 /* ---- the sources ---- */
 
 void SndMix_SetupSource(int i, int codec, bool has_length, const uint8_t *data, const uint8_t *chdata,

@@ -267,6 +267,12 @@ static void dev_pan(SndDev *d, int pan, int vol)
     }
 }
 
+static void dev_lowpass(SndDev *d, int freq)   /* 0x596870 */
+{
+    float f = (float)freq / ((float)s_rate * 0.5f);
+    for (int c = 0; c < d->n; c++) SndMix_SetLowpass(d->src[c], f);
+}
+
 static void voice_apply_volume(int i) { dev_volume(&s_dev[i], s_voice[i].out); }    /* 0x590ac0 */
 static void voice_apply_pitch(int i) { dev_pitch(&s_dev[i], s_voice[i].pitchout); } /* 0x590a10 */
 
@@ -415,6 +421,22 @@ int SND_SetVolume(int handle, int vol)
     return v;
 }
 
+/* The volume ramped to vol (-1: to silence, and the play ends) over ticks of the 100 Hz tick (0x565250). */
+int SND_Fade(int handle, int ticks, int vol)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    if (ticks < 1) ticks = 1;
+    int at = -1;
+    while (next_of_group(v, &at)) {
+        SndVoice *x = &s_voice[at];
+        x->vtarget = vol * 0x10000;
+        x->vstep = (vol * 0x10000 - x->vcur) / ticks;
+    }
+    return v;
+}
+
 /* The pan angle and its spread (clamped to +-0x4000). 0x565670 */
 int SND_SetPan(int handle, int pan, int spread)
 {
@@ -452,6 +474,56 @@ int SND_TimeLeft(int handle)
     return best;
 }
 
+/* The velocity the bend curve reads (0x565540 -> 0x5654a0; nothing without a bend). */
+int SND_SetVelocity(int handle, int vel)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    int at = -1;
+    while (next_of_group(v, &at)) {
+        SndVoice *x = &s_voice[at];
+        if (x->f3f == vel || x->benddepth == 0) return 0;
+        x->f3f = (int8_t)vel;
+        x->pitchmul = 0;
+        voice_pitch(x);
+        voice_apply_pitch(at);
+    }
+    return v;
+}
+
+/* The pan as a byte, 0 .. 127 (0x565580): spread and the layer's pan as at the start, to an angle. */
+int SND_SetPanByte(int handle, int pan)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    int at = -1;
+    while (next_of_group(v, &at) && s_voice[at].panbyte != pan) {
+        SndVoice *x = &s_voice[at];
+        x->panbyte = (int8_t)pan;
+        int pb = pan;
+        if (x->spread != 1) pb = (pan - 0x40) * x->spread + 0x40;
+        pb = pb - 0x40 + x->layerpan;
+        pb = pb < 0x80 ? (pb < 0 ? 0 : pb) : 0x7f;
+        x->pan2 = 0;
+        x->pan = (uint16_t)((pb + 0xc0) * 0x100);
+        dev_pan(&s_dev[at], x->pan, x->out);   /* 0x590a70 */
+    }
+    return v;
+}
+
+/* The lowpass's corner frequency (0x565380; 0xffff none). */
+int SND_SetLowpass(int handle, int freq)
+{
+    if (!s_on) return -10;
+    int v = voice_of(handle);
+    if (v < 0) return v;
+    int at = -1;
+    while (next_of_group(v, &at)) dev_lowpass(&s_dev[at], freq);   /* 0x5909d0 */
+    return v;
+}
+
 /* The play's pitch, 4.12 (0x565400; it stops at the first voice already at it). */
 int SND_SetPitch(int handle, int pitch)
 {
@@ -471,7 +543,7 @@ int SND_SetPitch(int handle, int pitch)
 
 /* The software voice's sources (0x589d90 with 0x596910 and 0x598280): one per channel, then its pitch,
    volume and pan, and they start. */
-static int voice_sources(int i, const SndPatch *s, const uint8_t *bank)
+static int voice_sources(int i, const SndPatch *s, const uint8_t *bank, int lowfreq)
 {
     SndVoice *v = &s_voice[i];
     SndDev *d = &s_dev[i];
@@ -488,6 +560,7 @@ static int voice_sources(int i, const SndPatch *s, const uint8_t *bank)
     dev_pitch(d, v->pitchout);
     dev_volume(d, v->out);
     dev_pan(d, v->pan, v->out);
+    dev_lowpass(d, lowfreq);
     for (int c = 0; c < d->n; c++) SndMix_Start(d->src[c]);   /* 0x596a20 */
     dev_gain(d, v->grp[0]);
     return 0;
@@ -559,10 +632,8 @@ static int play_layer(const uint8_t *bank, const SndParams *p, const SndPatch *s
     }
     v->rate = s->rate;           /* 0x598cd0 */
     v->nsamples = s->nsamples;
-    if (p->f12 != 0xffff && (float)p->f12 / ((float)s_rate * 0.5f) < 1.0f)
-        PENDING_NOTE(0x599690, "the SND voices' lowpass");
     if (p->f14) PENDING_NOTE(0x599720, "the SND voices' filter");
-    voice_sources(i, s, bank);
+    voice_sources(i, s, bank, p->f12);
     return handle;
 }
 

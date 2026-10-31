@@ -456,3 +456,17 @@ void Car_RaceInit(Car *c, uint32_t id)
     set_i(c, 0x35c, 0);
     memset(c->b + 0x11c0, 0, 0x1c);
 }
+
+void Car_AddEvent(Car *c, int type, int id, int kind, int surf, float strength, int extra)
+{
+    int n = *CAR_I(c, 0x110c);
+    if (7 <= n) return;
+    uint8_t *r = c->b + 0x1110 + n * 0x18;
+    memcpy(r, &type, 4);
+    memcpy(r + 4, &id, 4);
+    memcpy(r + 8, &kind, 4);
+    memcpy(r + 0xc, &surf, 4);
+    memcpy(r + 0x10, &strength, 4);
+    memcpy(r + 0x14, &extra, 4);
+    *CAR_I(c, 0x110c) = n + 1;
+}

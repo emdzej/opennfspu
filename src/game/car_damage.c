@@ -55,7 +55,7 @@ void CarSim_ZoneDamage(Car *c, float impact, int z, int kick)
         float d = impact * (g_race_knockout ? K(0x5b246c) : K(0x5b23f0));
         if (K(0x5b242c) < d) d = 100.0f;
         if ((z & 1) == 0 && K(0x5b2408) < d && *zone(c, z) < K(0x5b2408))
-            PENDING_NOTE(0x40f080, "the car's impact events (0x40f080: a dent's sound and message)");
+            Car_AddEvent(c, 1, -1, 4, 3, d, 0);   /* 0x40f080: a dent's sound */
         if (d < *zone(c, z)) d = *zone(c, z);
         *zone(c, z) = d;
         switch (z) {

@@ -34,3 +34,8 @@ void CarSim_Place(Car *c, int n, const float off[3], int dir);
    placement from the start line, the race progress, the controls and the race's counters cleared.
    0x410790 */
 void Car_RaceInit(Car *c, uint32_t id);
+
+/* A sound event of the car's (0x40f080, at most 7 a tick at +0x1110, 0x18 bytes each): its type (1
+   an impact, 3 and 5 an end, 4 a start), its sound (-1 the impacts'), its kind and surface, its
+   strength. */
+void Car_AddEvent(Car *c, int type, int id, int kind, int surf, float strength, int extra);

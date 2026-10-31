@@ -14,5 +14,7 @@ bool Audio_Init(void);
 void Audio_Shutdown(void);
 /* Engine slot 0 or 1 from the car's sound name (its description's SOUNDNAME). 0x4ac9e0 */
 bool Audio_LoadEngine(int slot, const char *sound);
+/* The player's engine and the collisions' sounds (0x4a8aa0). */
+void Audio_LoadCollisionSounds(const char *engine);
 /* The odd ticks' audio (0x4a7ef0), the listener at the race camera. */
 void Audio_Tick(void);
