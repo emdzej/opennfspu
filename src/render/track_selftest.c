@@ -9,6 +9,7 @@
 #include "render/render.h"
 #include "render/rtex.h"
 #include "render/sprite.h"
+#include "render/dynlight.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
 #include "render/noise.h"
@@ -83,6 +84,7 @@ static bool load(const char *name)
     Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sprites_Init();                     /* 0x451360 */
+    DynLights_Init();                   /* 0x455e30 */
     Sky_LoadFsh(g_track_name, false);   /* as Render_RaceInit (0x468ef0) does */
     SpriteBank_Load();                  /* 0x452090 */
     RaceViews_ctor(&views);

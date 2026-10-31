@@ -822,12 +822,14 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
         memcpy(env, car->light.f, sizeof env);
         g_rlayer_lights = env;
         g_rlayer_envtex = car->light.tex;
+        g_rlayer_lighttex = &car->light.lighttex;
     }
     g_rlayer_spectex = car->globaltex;   /* (the light block's +0xdc: 0x440870) */
     car_draw_lods(car, model);
     g_rlayer_lights = saved;
     g_rlayer_envtex = NULL;
     g_rlayer_spectex = NULL;
+    g_rlayer_lighttex = NULL;
     EAGL_StackPop(model);
     Render_SetCull(g_render);
 }

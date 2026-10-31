@@ -1,5 +1,6 @@
 /* The cars' light: see carlight.h. */
 #include "render/carlight.h"
+#include "render/dynlight.h"
 #include "eagl/eagl.h"
 #include "exe.h"
 #include "game/car.h"
@@ -136,10 +137,13 @@ void CarLight_Update(CarLight *l, Car *car)
     set4(l, 0xbc, 1, 1, 1, 1);
     WSurface s = car->body;   /* (the car's tracker, +8, copied) */
     bool covered = (WSurface_FindAbove(&s, pos, NULL) & 0xc000) != 0;   /* 0x473290 */
-    /* the nearest dynamic light (0x456030) when they are on: none here */
-    PENDING_NOTE(0x456030, "the cars' nearest dynamic light (the track's light sources)");
-    memset(at(l, 0x14c), 0, 0x40);
-    *(int32_t *)(void *)at(l, 0x18c) = 0;
+    /* The nearest dynamic light (0x456030) when the cars' lights are on: its record (0x440850) and its
+       texture (0x440840); else no texture, the record left as it was. */
+    Texture *lt = NULL;
+    const DynLightRec *dl = DynLights_Nearest(pos, &lt);
+    if (!dl || !g_render_carlights) lt = NULL;
+    else memcpy(at(l, 0x14c), dl, 0x40);
+    l->lighttex = lt;
     CarEnvMap *m = g_carenv;
     if (m) select_slice(m, (uint32_t)(uint16_t)s.node);
     for (int i = 0; i < 3; i++) l->tex[i] = m && g_render_carenv ? slice_texture(m, covered, i) : NULL;   /* 0x4407f0 */

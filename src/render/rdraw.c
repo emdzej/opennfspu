@@ -1,6 +1,7 @@
 /* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
 #include "render/rdraw.h"
 #include "render/sprite.h"
+#include "render/dynlight.h"
 #include "exe.h"
 #include "game/track.h"
 #include "game/world.h"
@@ -9,6 +10,7 @@
 #include "render/render.h"
 #include "render/rmaterial.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -199,7 +201,13 @@ static void article_special(RDrawObject *o, int index, const RListEntry *e)
     switch (ef ? ef[0] : 0) {
     case 2: Sprite_DrawGlow((const float *)(ef + 2)); break;   /* 0x451810 */
     case 3: PENDING_NOTE(0x455020, "the effect particle emitter (RGenericParticleSystem)"); break;
-    case 4: if (g_render_extras) PENDING_NOTE(0x455f60, "the effect light"); break;
+    case 4:
+        if (g_render_extras) {
+            R3DMaterialSet *ms = ((RDrawBundle *)o)->bundle->world;
+            Texture *t = ms ? RTexBank_find(&ms->bank, ef[6], ef[7]) : NULL;   /* 0x44af40 */
+            DynLights_Add((const DynLightRec *)(ef + 2), t);                   /* 0x455f60 */
+        }
+        break;
     }
 }
 
