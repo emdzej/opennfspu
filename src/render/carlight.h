@@ -8,6 +8,8 @@
 
 #include "game/car.h"
 
+struct R3DCar;
+
 struct Texture;
 
 /* A slice of the road (0x48 bytes): its node range and its reflection textures (three levels, open and
@@ -51,3 +53,7 @@ typedef struct {
    map's colours for its exterior, interior and light decals, the sun's direction (straight down under a
    roof), the slice's reflection textures, the road's axes for their projection. */
 void CarLight_Update(CarLight *l, Car *car);
+
+/* The car's hinge angles from the simulation (R3DCar_Animate 0x438370's race part): wheels, steering wheel,
+   needles, shadows. */
+void CarAnim_Update(struct R3DCar *r, Car *car);

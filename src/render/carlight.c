@@ -213,3 +213,53 @@ void CarLight_Update(CarLight *l, Car *car)
     PENDING_NOTE(0x43a490, "the cars' light in the mirror's view (+0x190: the drawing camera's +0x2c)");
     b[0x190] = 0;
 }
+
+/* ---- the car's hinges (R3DCar_Animate, slot 9, 0x438370: the race's part) ----
+
+   Per wheel (the simulation's wheel records, 0xc4 bytes from +0x7f8): its spin (+0x48, negated) about x,
+   its steering (+0x74, or in a replay the recorded +0xac8 / +0xacc of the front pair) x 1/216 (negated in
+   the mirror) about y, its +0x30 about z. The steering wheel (5) turns by the fronts' sum, within +-4.5/23;
+   the rev counter's needle (0xb) by the description's scale (+0x528) x rpm / 1000 + its zero (+0x524), the
+   speedometer's (0xc) by +0x530 x speed x 0.144 + +0x52c; the four shadows (0x12 .. 0x15) take their
+   wheel's angles without the spin; 0x16 turns with the clock (1/128 a tick). */
+void CarAnim_Update(R3DCar *r, Car *car)
+{
+    float (*h)[3] = r->hinge;
+    if (!h || g_r3d_frontend) {
+        PENDING_NOTE(0x438370, "R3DCar_Animate's showroom part (the timed doors, lids, roof)");
+        return;
+    }
+    float k = g_r3d_mirror ? -0.0046296297f : 0.0046296297f;   /* 1/216 */
+    if (g_race_view < 2) {
+        h[1][1] = k * *CAR_F(car, 0x86c);
+        h[2][1] = k * *CAR_F(car, 0x930);
+    } else {
+        h[1][1] = k * *CAR_F(car, 0xac8);
+        h[2][1] = k * *CAR_F(car, 0xacc);
+    }
+    h[1][2] = *CAR_F(car, 0x828);
+    h[2][2] = *CAR_F(car, 0x8ec);
+    h[3][2] = *CAR_F(car, 0x9b0);
+    h[4][2] = *CAR_F(car, 0xa74);
+    const uint8_t *d = CAR_DESCB(car);
+    float f;
+    memcpy(&f, d + 0x528, 4);
+    float z;
+    memcpy(&z, d + 0x524, 4);
+    h[0xb][2] = f * *CAR_F(car, 0xdb4) * 0.001f + z;   /* 0x5b3060 */
+    memcpy(&f, d + 0x530, 4);
+    memcpy(&z, d + 0x52c, 4);
+    h[0xc][2] = f * *CAR_F(car, 0xec4) * 0.144f + z;   /* 0x5b36a4 */
+    float s = h[2][1] + h[1][1], lo = -4.5f / 23.0f, hi = 4.5f / 23.0f;   /* 0x5b36a0, 0x5b369c, 0x5b3590 */
+    h[5][2] = s < lo ? lo : hi < s ? hi : s;
+    h[1][0] = -*CAR_F(car, 0x840);
+    h[2][0] = -*CAR_F(car, 0x904);
+    h[3][0] = -*CAR_F(car, 0x9c8);
+    h[4][0] = -*CAR_F(car, 0xa8c);
+    for (int w = 0; w < 4; w++) {
+        memcpy(h[0x12 + w], h[1 + w], sizeof h[0]);
+        h[0x12 + w][0] = 0;
+    }
+    h[0x16][1] = (float)g_sim_tick * 0.0078125f;   /* (TIMER_ticks x 0x5b273c; the port's clock is the simulation's) */
+    PENDING_NOTE(0x438370, "R3DCar_Animate's doors, lids, wipers and texture animations (+0x64's timers, 0x490)");
+}
