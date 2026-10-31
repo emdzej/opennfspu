@@ -608,6 +608,36 @@ static void stream_tick(void)
 
 void Audio_Countdown(int step) { stream_request(2, step, false); }   /* 0x4a6010 */
 
+/* The announcer's lines (zzzx<language>.viv's oneshots.txt, played as the countdown's, 0x4a5f70 ..
+   0x4a6450): those the race says. */
+static void say(int idx) { stream_request(2, idx, false); }
+void Audio_SayLap(int lap) { say(lap + 0x84 + (int)(REAL_rand() & 1) * 8); }   /* 0x4a6410: "lap n" */
+void Audio_SayBestLap(void) { say((int)(REAL_rand() & 3) + 0x31); }             /* 0x4a6350 */
+void Audio_SayFinalLap(void) { say((int)(REAL_rand() % 6) + 0x6b); }            /* 0x4a6390 */
+/* The place (0 the first): "1st" .. "last" or "you're in ..." at random; the 8th's two ways. 0x4a6160 */
+void Audio_SayPlace(int place)
+{
+    int i = (int)(REAL_rand() & 1) * 9 + 0x35 + place;
+    if (place == 7) i += (int)(REAL_rand() & 1);
+    say(i);
+}
+/* Seconds behind the one ahead (1 .. 12, "way behind" past that), "behind" or "back" at random. 0x4a61b0 */
+void Audio_SayBehind(int s)
+{
+    if (s < 1) return;
+    if (0xb < s) s = 0xc;
+    say(s + (int)(REAL_rand() & 1) * 0xd + 0x47);
+}
+/* The lead in seconds over the other (two racers; negative behind): way ahead (31 on), a good lead (13),
+   in the lead (7), a small one (6), just ahead (5), barely holding (4), close (3), tight (2), neck and
+   neck (1), just behind (0 .. -4), hurry up. 0x4a5f70 */
+void Audio_SayLead(int s)
+{
+    int i = 0x1f <= s ? 0 : 0xd <= s ? 1 : 7 <= s ? 2 : 6 <= s ? 3 : 5 <= s ? 4 : 4 <= s ? 5 : 3 <= s ? 6 :
+            2 <= s ? 7 : 1 <= s ? 8 : (s < -4) + 9;
+    say(i + 0x26);
+}
+
 /* ---- the engines (0x4ac9e0, 0x4ac550, 0x4ac060) ---- */
 
 typedef struct {

@@ -28,6 +28,8 @@ struct HudVisual {
 
 /* The HUD for the race (the visuals ported so far). 0x424420 */
 void HUD_Init(void);
+/* The local player's lap done: the announcer's lap, gap, place, best and final lap (0x427790). */
+void HUD_LapDone(void);
 void HUD_Free(void);
 /* The race over: the results and the other race-over screens in turn (0x426a40 with 1). */
 void HUD_RaceOver(void);

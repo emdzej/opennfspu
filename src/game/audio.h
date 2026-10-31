@@ -24,6 +24,14 @@ void Audio_LoadTrackSounds(void);
 void Audio_StartRace(void);
 /* The start's countdown, step 0 .. 3 ("3", "2", "1", "Go"). 0x4a6010 */
 void Audio_Countdown(int step);
+/* The announcer (0x4a5f70 .. 0x4a6450): a lap's number, a best lap, the final lap, a place (0 first),
+   seconds behind the one ahead, the lead over the other of two (seconds, negative behind). */
+void Audio_SayLap(int lap);
+void Audio_SayBestLap(void);
+void Audio_SayFinalLap(void);
+void Audio_SayPlace(int place);
+void Audio_SayBehind(int s);
+void Audio_SayLead(int s);
 /* A lightning strike's thunder (0x4a8110): one of track.viv's 991 .. 999 after 0x87 - delay odd ticks,
    from the angle. */
 void Audio_Thunder(int delay, int angle);

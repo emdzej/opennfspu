@@ -3,6 +3,7 @@
 #include "exe.h"
 #include "game/car.h"
 #include "game/car_drive.h"
+#include "game/audio.h"
 #include "game/hud_config.h"
 #include "game/race_car.h"
 #include "game/road.h"
@@ -2309,11 +2310,75 @@ static HudVisual *wrongway_new(void)
     return &w->base;
 }
 
+/* ---- the lap's announcements (0x427790) ---- */
+
+static int32_t s_laps_done, s_bestlap;   /* 0x60ca90, 0x60ca94 */
+
+/* The most seconds any other racer is ahead of the local one (0x4353c0): each one's lead in road nodes
+   (+0xb54) over the faster of the two speeds (the one behind's at least half the other's), as ticks
+   then seconds; 0 while the local car is slower than 13.39 or level. *moving: faster than that. */
+static int lead_ahead(bool *moving)
+{
+    Car *me = g_racers.c[g_race_local];
+    int mine = *CAR_I(me, 0xb54), best = -10000;
+    float sm = *CAR_F(me, 0x35c);
+    for (int i = 0; i < g_racers.n; i++) {
+        Car *o = g_racers.c[i];
+        float so = *CAR_F(o, 0x35c);
+        int d = *CAR_I(o, 0xb54) - mine;
+        float v = d < 1 ? (sm * 0.5f < so ? so : sm * 0.5f) : (so * 0.5f < sm ? sm : so * 0.5f);   /* 0x5b23f0 */
+        int t = 0;
+        if (!(sm <= 13.39f) && d != 0) t = (int)lrintf((float)(d * 0x40) / v);   /* 0x5b2df8 */
+        int sec = (t + ((t >> 31) & 0x3f)) >> 6;
+        if (i != g_race_local && best < sec) best = sec;
+    }
+    *moving = 13.39f < sm;
+    return best;
+}
+
+/* The local player's lap done (0x427790, from the progress 0x416330): its number said, then with
+   others racing the gap (two: the lead; more: the place and the seconds behind), a best lap, the final
+   lap next; not on the last lap, in a knockout's eliminating places, or watching a replay. */
+void HUD_LapDone(void)
+{
+    if (g_race_linear) return;
+    int was = s_laps_done++;
+    Car *me = g_racers.c[g_race_local];
+    int lap = *CAR_I(me, 0xb24 + 4 * s_laps_done);
+    bool best = false;
+    int b = lap;
+    if (s_laps_done != 1) {
+        b = s_bestlap;
+        if (lap < s_bestlap) {
+            best = true;
+            b = lap;
+        }
+    }
+    s_bestlap = b;
+    bool last = s_laps_done == g_race_laps, next_last = s_laps_done == g_race_laps - 1;
+    bool out = g_race_mode == 1 && g_racers.n - s_laps_done < *CAR_I(me, 0xb48);
+    if (g_race_view == 2 || g_race_view == 3 || out || last) return;
+    Audio_SayLap(was);
+    if (1 < g_racers.n) {
+        bool moving;
+        int ahead = lead_ahead(&moving);
+        if (g_racers.n == 2) {
+            if (moving) Audio_SayLead(-ahead);
+        } else {
+            if (*CAR_I(me, 0xb48) <= g_racers.n) Audio_SayPlace(*CAR_I(me, 0xb48) - 1);
+            if (moving) Audio_SayBehind(ahead);
+        }
+    }
+    if (best) Audio_SayBestLap();
+    if (next_last) Audio_SayFinalLap();
+}
+
 /* ---- the HUD ---- */
 
 void HUD_Init(void)
 {
     HUD_Free();
+    s_laps_done = s_bestlap = 0;   /* (0x426c50's reset) */
     /* The player's name (the race description's +0x558 +0x17c), the layout chosen (0x657db8), the
        screen. */
     HudConfig_Load("", 0, g_display.width, g_display.height);

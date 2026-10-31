@@ -3,6 +3,7 @@
 #include "exe.h"
 #include "game/car_drive.h"
 #include "game/race_car.h"
+#include "game/hud.h"
 #include "game/road.h"
 #include "game/sim_rand.h"
 #include "pending.h"
@@ -132,7 +133,7 @@ void Race_CarProgress(Car *c)
                 }
             }
             if ((*CAR_I(c, CAR_FLAGS) & 4) && g_race_local < g_humans.n && g_humans.c[g_race_local] == c)
-                PENDING_NOTE(0x427790, "the HUD's lap message (0x427790)");
+                HUD_LapDone();   /* 0x427790 */
         }
     }
     /* Into the ranking of distances (the latest tick first among equals); the rows after it move down. */

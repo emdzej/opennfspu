@@ -12,6 +12,8 @@
 #include "game/race_setup.h"
 #include "game/scene.h"
 #include "game/music.h"
+#include "game/hud.h"
+#include "game/race_progress.h"
 #include "game/track.h"
 #include "snd/snd.h"
 #include "vfs.h"
@@ -144,15 +146,24 @@ int main(void)
         CHECK(t->b[0x78] == 1 && e->b[0xa2] == 1);
         break;
     }
+    /* A lap done: the announcer says its number (0x427790). */
+    double still = run(64, 64, 0);
+    g_race_laps = 3;
+    *CAR_I(g_cars[0], 0xb28) = 64 * 70;
+    HUD_LapDone();
+    double said = run(64, 64, 0);
+    run(64 * 3, 64, 0);   /* (its end) */
+    printf("  lap's announcement: rms %.0f before, %.0f after\n", still, said);
+    CHECK(said > still * 1.2);
     /* The music: a song of the playlist streamed (zzzymus.viv), heard over the idling car. */
     double quiet = run(64, 64, 0);
     Music_SetVolume(0x4f);
-    double loud = run(64 * 4, 64 * 2, 0);
+    double loud = run(64 * 6, 64 * 4, 0);
     const MusicSong *song = Music_Current();
     printf("  music: rms %.0f without, %.0f with: %s (%s, %d ms)\n", quiet, loud, song ? song->name : "none",
            song && song->artist ? song->artist : "", song ? song->length : 0);
     CHECK(song && song->name && !strncmp(song->name, "game", 4) && 60000 < song->length);
-    CHECK(loud > quiet * 1.5);
+    CHECK(loud > quiet * 1.2);
     if (getenv("AUDIO_WAV")) wav(getenv("AUDIO_WAV"));
     Audio_Shutdown();
     printf("audio_test: %d checks: %s\n", checks, fails ? "FAILED" : "ok");

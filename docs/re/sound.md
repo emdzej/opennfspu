@@ -190,3 +190,23 @@ Entries are named `<kind><n>-<title>-<artist>`, with kinds game, menu, win, lose
 - The race start fades the music out over 1.5 s (0x4a8670), sets the race's playlist, and 0x4aafd0 sets
   the volume (0x5d14b0 times 0x5d1740 over 128) and starts playing. Without the front end, the port's
   playlist is every song of the front end's "game*" list (Music_LoadSongList 0x4adbf0).
+
+## The announcer
+
+The speech archive `GameData\Speech\zzzx<language>.viv` lists its 166 lines in `oneshots.txt`: the
+countdown, eras, places, the gap to the next car (seconds ahead and behind), laps, best laps, records,
+knockout and tournament results. Each line plays as a type-2 streamed one-shot (0x4b0370), through
+small functions that pick an index, some of them at random (0x4a5f70 .. 0x4a6450).
+
+During a race, 0x427790 runs when the local player finishes a lap (called from the progress code,
+0x416330). It does nothing on the last lap, in a knockout's eliminated places, or in a replay.
+Otherwise it says:
+1. The lap's number.
+2. With two racers, the lead (0x4a5f70): the most seconds the other car is ahead (0x4353c0, from the
+   road-node gap over the speeds), passed in negated, so positive means the player leads.
+3. With more racers, the place, then the seconds behind the car ahead (1 to 12, then "way behind").
+4. A best lap, compared with the earlier laps; the first lap sets the reference.
+5. "Final lap" when one lap is left.
+
+The gap lines need the player faster than 13.39. The end-of-race lines belong to the result screens
+(HCongrats, HTrackRecords, HTournamentStandings), which aren't ported yet.
