@@ -153,6 +153,7 @@ static void read_controls(Car *c)
     c->b[0xd7c] = up ? 0xff : 0;
     c->b[0xd7d] = down ? 0xff : 0;
     c->b[0xd85] = hand ? 1 : 0;
+    if ((kb && keys[0x13]) || (pad & PAD_Y)) c->b[0xd89] = 1;   /* the reset key (R; the race's C1_COMMAND2_RESET) */
     int target = left == right ? 0 : left ? -0x7f : 0x7f;
     int32_t *s = CAR_I(c, 0xd90);
     int step = 0x10;   /* the keyboard's steering eases over about an eighth of a second */

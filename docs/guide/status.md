@@ -25,7 +25,7 @@ The viewers, with `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--ass
 - `--param track=<name>` shows a track from its start line (`alps`, `autobahn`, `canyon`, `monaco1`, ...),
   `yaw=<degrees>` turns the camera;
 - `--param drive=<track>` drives a car from the race's grid there (`car=<name>`, default `964`): arrow keys or WASD, space the
-  handbrake; on a pad left/right, A throttle, B brake, X handbrake. `camdist=<metres>` moves the chase camera, `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n.
+  handbrake, R puts the car back on the road; on a pad left/right, A throttle, B brake, X handbrake, Y back on the road. `camdist=<metres>` moves the chase camera, `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n.
 
 Nothing on this page is a promise of dates. Progress is tracked in the
 [repository](https://github.com/emdzej/opennfspu).

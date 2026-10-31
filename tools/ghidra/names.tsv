@@ -44,6 +44,11 @@
 0040ec10	Car_Lanes	race	high	Lanes covered (+0xea8 bits) and centre lane (+0x1020)
 0040f110	Car_ClearRace	race	high	The car's race counters cleared (+0xb24 = 0x1c0)
 0040f1c0	Car_AddToLists	race	high	The race car lists by CLASS: racers 0x5e8e2c, humans 0x5e8c00, opponents 0x5e8aec, ... (port: car.c)
+0040f460	CarSim_Still	sim	med	Spins and hits cleared
+0040f4e0	CarSim_NodeFree	sim	med	Drivable and no car on the node
+0040f5a0	CarSim_Respawn	sim	med	Back on the road at a free node
+0040f7a0	CarSim_RacePart	sim	med	Reset requests and the crash timer
+004102e0	CarSim_HitTask	sim	med	Car task: hits, race car part, sounds
 004105e0	Race_GridSlot	race	high	Grid slot: node ahead of the start by the description's +0x174 position, offset across the road by its parity
 00410790	Car_RaceInit	race	high	The race's per-car set-up: 0x49b480, the carried damage, the grid slot from the start trigger, the placement, the progress, the controls and race fields (port: src/game/race_car.c)
 00410dc0	CarSpecs_Load	sim	low	Car and AI specs records ("carSpecs", "AISpecs")
