@@ -12,6 +12,7 @@
 #include "render/car_selftest.h"
 #include "render/track_selftest.h"
 #include "render/drive_selftest.h"
+#include "front/fe_selftest.h"
 #include "render/render.h"
 #include "render/thrash.h"
 #include "static_init.h"
@@ -22,6 +23,7 @@ static int selftest;   /* --param thrash_test: 1 the THRASH scene, 2 the EAGL sc
 static char car_name[64];     /* --param car=<name>: that car in the viewer (GameData/CarModel/<name>.crp) */
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
+static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
 
 bool app_init(void)
 {
@@ -46,6 +48,7 @@ bool app_init(void)
     if (!plat_param("car", car_name, sizeof car_name)) car_name[0] = 0;
     if (!plat_param("track", track_name, sizeof track_name)) track_name[0] = 0;
     if (!plat_param("drive", drive_name, sizeof drive_name)) drive_name[0] = 0;
+    if (!plat_param("screen", screen_name, sizeof screen_name)) screen_name[0] = 0;
     return true;
 }
 
@@ -53,7 +56,8 @@ bool app_frame(void)
 {
     g_app_frames++;
     if (plat_frame_shown()) {
-        if (drive_name[0]) DRIVE_selftest(drive_name, car_name);
+        if (screen_name[0]) FE_selftest(screen_name);
+        else if (drive_name[0]) DRIVE_selftest(drive_name, car_name);
         else if (track_name[0]) TRACK_selftest(track_name);
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
