@@ -560,7 +560,18 @@ static void setup(void)
 
 static SaveCar *garage_car(void);
 
-void FEData_DefaultSetup(void)   /* DEFAULTSETTINGS: the settings 0x4ee230 gives a new car */
+/* SAVESETTINGS (0x4f10a0 -> 0x4eeb50): the settings kept (+0x714); LOADSETTINGS (0x4f10c0 -> 0x4eeb30):
+   the kept ones back. (The accessors read the car's settings, so they follow.) */
+void FEData_KeepSetup(bool load)
+{
+    SaveCar *car = garage_car();
+    if (!car) return;
+    if (load) memmove(car->rec + 0x6d0, car->rec + 0x714, 17 * 4);
+    else memmove(car->rec + 0x714, car->rec + 0x6d0, 17 * 4);
+    FESave_Write();
+}
+
+void FEData_DefaultSetup(void)   /* DEFAULTSETTINGS (0x4f10e0 -> 0x4eeb70, as 0x4ee230 a new car's) */
 {
     SaveCar *car = garage_car();
     if (!car) return;

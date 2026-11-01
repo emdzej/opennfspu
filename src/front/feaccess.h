@@ -74,5 +74,7 @@ int FEData_OwnedParts(int car, int32_t ids[20]);
 bool FEData_OwnedSetup(int car, float set[17]);
 /* The garage car's settings to a new car's (DEFAULTSETTINGS). */
 void FEData_DefaultSetup(void);
+/* The garage car's settings kept (SAVESETTINGS) or the kept ones back (LOADSETTINGS, load). */
+void FEData_KeepSetup(bool load);
 /* The career's year (0x502870). */
 int FEData_CareerYear(void);

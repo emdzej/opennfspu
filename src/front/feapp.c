@@ -398,6 +398,8 @@ static void callback(const char *cb)
         }
     } else if (!strcmp(cb, "DEFAULTSETTINGS")) {
         FEData_DefaultSetup();
+    } else if (!strcmp(cb, "SAVESETTINGS") || !strcmp(cb, "LOADSETTINGS")) {
+        FEData_KeepSetup(cb[0] == 'L');
     } else if (!strcmp(cb, "QUICKFIX")) {
         int m = FEData_QuickFix();   /* FEQuickFixCallBackList 0x50e9f0 */
         if (m > 0) FEApp_Message(m);
