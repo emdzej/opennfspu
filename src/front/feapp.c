@@ -375,7 +375,7 @@ static void callback(const char *cb)
             const char *t = FEData_TourTrack();
             const char *c = FEAccess_CarFile(FEAccess_Find("OwnedCars.Car"));
             if (!t || !c) return;
-            s_tour_race = FEData_TourRace();
+            s_tour_race = FEData_TourRace();   /* (before the laps: they're its) */
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", c);
             PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
@@ -383,7 +383,7 @@ static void callback(const char *cb)
             snprintf(s_track, sizeof s_track, "%s", FEData_Track());
             snprintf(s_car, sizeof s_car, "%s", FEData_Car());
         }
-        s_laps = fe_int("num_laps", 1);
+        s_laps = s_tour_race >= 0 ? FEData_TourLaps() : fe_int("num_laps", 1);
         s_opponents = s_tour_race >= 0 ? 7 : FEData_Opponents();   /* (the standings' eight racers) */
         s_result = FE_PLAY;
     } else {

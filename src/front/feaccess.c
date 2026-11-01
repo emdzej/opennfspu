@@ -232,6 +232,14 @@ int FEData_TourRace(void)
     return s_remain[a->pos];
 }
 
+int FEData_TourLaps(void)   /* (0x4fb630 for the career: the race's +0x3a2, 1 when 0) */
+{
+    const uint8_t *r = FEData_Tournament();
+    int race = FEData_TourRace();
+    int laps = r && race >= 0 ? rec16(r, 0x3a2 + 0xa4 * race) : 0;
+    return laps ? laps : 1;
+}
+
 const char *FEData_TourTrack(void)
 {
     const uint8_t *r = FEData_Tournament();

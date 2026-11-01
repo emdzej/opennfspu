@@ -51,3 +51,5 @@ int FEData_TourRace(void);
 const char *FEData_TourTrack(void);
 /* That race run: the racers' places (0 not finished) and times, the player first. */
 void FEData_TourResult(int race, const int *places, const int *times, int n);
+/* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
+int FEData_TourLaps(void);
