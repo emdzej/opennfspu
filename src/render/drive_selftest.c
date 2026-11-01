@@ -345,7 +345,10 @@ bool DRIVE_selftest(const char *track, const char *car)
        race view 2, replays the race behind them: the replay isn't ported, the race goes on). */
     {
         char ev[12];   /* --param endrace=<tick>: the race over at that tick (port addition, tests) */
-        if (!g_race_over && plat_param("endrace", ev, sizeof ev) && atoi(ev) <= g_sim_tick) g_race_over = 1;
+        if (!g_race_over && plat_param("endrace", ev, sizeof ev) && atoi(ev) <= g_sim_tick) {
+            g_race_over = 1;
+            Race_End(2);   /* (as Race_TickOdd's end does: the results' copies the screens read) */
+        }
     }
     if (g_race_over && g_race_view < 2) {
         /* GameMain's second race loop: the race again from its start, replaying the packets

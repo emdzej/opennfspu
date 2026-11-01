@@ -622,6 +622,7 @@ void Audio_Countdown(int step) { stream_request(2, step, false); }   /* 0x4a6010
 /* The announcer's lines (zzzx<language>.viv's oneshots.txt, played as the countdown's, 0x4a5f70 ..
    0x4a6450): those the race says. */
 static void say(int idx) { stream_request(2, idx, false); }
+void Audio_Say(int idx) { say(idx); }
 void Audio_SayLap(int lap) { say(lap + 0x84 + (int)(REAL_rand() & 1) * 8); }   /* 0x4a6410: "lap n" */
 void Audio_SayBestLap(void) { say((int)(REAL_rand() & 3) + 0x31); }             /* 0x4a6350 */
 void Audio_SayFinalLap(void) { say((int)(REAL_rand() % 6) + 0x6b); }            /* 0x4a6390 */

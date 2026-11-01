@@ -26,6 +26,8 @@ void Audio_StartRace(void);
 void Audio_Countdown(int step);
 /* The announcer (0x4a5f70 .. 0x4a6450): a lap's number, a best lap, the final lap, a place (0 first),
    seconds behind the one ahead, the lead over the other of two (seconds, negative behind). */
+/* One of the announcer's lines by its number (0x4af6a0 + 0x4b0370 with type 2). */
+void Audio_Say(int idx);
 void Audio_SayLap(int lap);
 void Audio_SayBestLap(void);
 void Audio_SayFinalLap(void);

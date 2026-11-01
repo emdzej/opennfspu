@@ -3,6 +3,7 @@
 #include "real/mouse.h"
 #include "exe.h"
 #include "game/car.h"
+#include "game/camera.h"
 #include "game/car_drive.h"
 #include "game/audio.h"
 #include "game/hud_config.h"
@@ -2673,6 +2674,263 @@ void HUD_LapDone(void)
     if (next_last) Audio_SayFinalLap();
 }
 
+/* ---- the place congratulated (HCongrats, 0xbc bytes, vtable 0x5b2a40; 0x41cb10) ----
+
+   At the race's end, for a podium place (only a win in game type 3): the screen's cross with the ring's
+   gap at the centre, the gold, silver or bronze rings and the place's art fading in over 128 ticks, the
+   announcer's line (and the winning or losing song), gone after 192 ticks. Its other use, the career's
+   standing (0x60ca68, the arts spinning, zooming and sliding to a corner: 0x41da10, 0x41dc90), isn't made
+   by the port's HUD yet. */
+typedef struct {
+    int idx, last, period, count, elapsed;   /* (two cycles: +0x70 .., +0x88 ..) */
+    int pad;
+} CongratsCycle;
+
+typedef struct {
+    HudVisual base;
+    HudArt *full, *ring, *outline;      /* +0x10, +0x14 (congrats1), +0x18 */
+    HudArt *place[3];                   /* +0x1c, +0x20, +0x24: congrats3 1, congrats4 0, congrats4 1 */
+    HudArt *spin[8];                    /* +0x28 .. +0x44 (the career's) */
+    int32_t w, h, x0, y0;               /* +0x4c .. +0x58: the screen and its centre */
+    int32_t x, y;                       /* +0x5c, +0x60 */
+    int32_t sx, sy;                     /* +0x64, +0x68: where the slide starts */
+    int32_t start;                      /* +0x6c: the first tick drawn */
+    CongratsCycle cyc[2];               /* +0x70, +0x88 */
+    float scale;                        /* +0xa0 */
+    float dx, dy;                       /* +0xa4, +0xa8 */
+    int32_t which;                      /* +0xac: the place (1 first; 0 none) */
+    uint8_t raceover, spoken, skip;     /* +0xb0, +0xb1, +0xb2 */
+    int32_t tx, ty;                     /* +0xb4, +0xb8: the slide's end */
+} HCongrats;
+
+static HudVisual *s_congrats;   /* 0x60ca64 */
+
+/* The art's size, placed again at its rectangle's corner (HGraphicVisual_v5 0x423e70: a centred art drifts
+   by half the change until placed again, as every caller here does). */
+static void art_resize(HudArt *a, int w, int h)
+{
+    if (!a) return;
+    a->w = w, a->h = h;
+    HudArt_place(a, a->x, a->y);
+}
+
+static uint32_t congrats_colour(int place) { return exe_u32(0x5b2a0c + 4u * (uint32_t)place); }   /* (0: the table before) */
+
+/* 0x41ddf0: the cycles (five patterns every 8 ticks; eight frames every 4), at the centre; the slide's
+   end a fifth across and down less half the ring (by 0.5), over 32 ticks; the colours. */
+static void congrats_reset(HCongrats *g)
+{
+    g->cyc[0] = (CongratsCycle){0, 0, 8, 5, 0, 0};
+    g->cyc[1] = (CongratsCycle){0, 0, 4, 8, 0, 4};
+    g->x = g->x0, g->y = g->y0;
+    g->tx = (int)((float)g->w * exe_f32(0x5b23f4) - (float)exe_i32(0x5b2a28) * exe_f32(0x5b2a30) * exe_f32(0x5b23f0));
+    g->ty = (int)((float)g->h * exe_f32(0x5b23f4));
+    int n = (int)(exe_f32(0x5b2a34) * exe_f32(0x5b24e4));
+    g->sx = g->x, g->sy = g->y;
+    g->dx = (float)(g->x0 - g->tx) / (float)n;
+    g->dy = (float)(g->y0 - g->ty) / (float)n;
+    HudArt *all[14] = {g->full, g->ring, g->outline, g->place[0], g->place[1], g->place[2]};
+    for (int i = 0; i < 8; i++) all[6 + i] = g->spin[i];
+    for (int i = 0; i < 14; i++)
+        if (all[i]) HudArt_place(all[i], g->x, g->y);
+    uint32_t c = congrats_colour(g->which);
+    if (g->full) HudArt_setcolours(g->full, 0x33ffffff, 0x33ffffff, 0x33ffffff, 0x33ffffff);
+    if (g->ring) HudArt_setcolours(g->ring, c, c, c, c);
+    if (g->outline) HudArt_setcolours(g->outline, 0x66ffffff, 0x66ffffff, 0x66ffffff, 0x66ffffff);
+    for (int i = 0; i < 3; i++)
+        if (g->place[i]) HudArt_setcolours(g->place[i], c, c, c, c);
+    for (int i = 0; i < 8; i++)
+        if (g->spin[i]) HudArt_setcolours(g->spin[i], c, c, c, c);
+}
+
+/* The cross over the screen (0x66ffffff), then its arms about the centre in the place's colour, by the
+   first cycle's pattern: the four gaps' ends out to the edges and the ring's four radii. 0x41d3d0 */
+static void congrats_lines(HCongrats *g)
+{
+    const float x = (float)g->x, y = (float)g->y, W = (float)g->w, H = (float)g->h;
+    uint32_t cw[2] = {0x66ffffff, 0x66ffffff};
+    float h0[8] = {0, y, 0, 1, W, y, 0, 1}, v0[8] = {x, 0, 0, 1, x, H, 0, 1};
+    Hud2D_Line(h0, cw);
+    Hud2D_Line(v0, cw);
+    float r = (float)(int)((float)exe_i32(0x5b2a28) * g->scale * exe_f32(0x5b23f0));
+    uint32_t c = congrats_colour(g->which), cc[2] = {c, c};
+    const float La[8] = {x, 0, 0, 1, x, y - r, 0, 1}, Lb[8] = {x, y + r, 0, 1, x, H, 0, 1},
+                Lc[8] = {0, y, 0, 1, x - r, y, 0, 1}, Ld[8] = {x + r, y, 0, 1, W, y, 0, 1};
+    const float *A[5] = {Lc, Lc, Lc, La, Ld}, *B[5] = {Lb, Lb, La, Ld, Lb};
+    int k = g->cyc[0].idx;
+    Hud2D_Line(A[k], cc);
+    Hud2D_Line(B[k], cc);
+    const float M1[8] = {x, y, 0, 1, x, y - r, 0, 1}, M2[8] = {x, y, 0, 1, x, y + r, 0, 1},
+                M3[8] = {x, y, 0, 1, x + r, y, 0, 1}, M4[8] = {x, y, 0, 1, x - r, y, 0, 1};
+    const float *C[5] = {M1, M1, M3, M4, M1}, *D[5] = {M3, M3, M2, M2, M4};
+    Hud2D_Line(C[k], cc);
+    Hud2D_Line(D[k], cc);
+}
+
+/* The disc, its outline and the place's ring (congrats1, flipped by the first cycle's pattern), 128 by the
+   scale. 0x41d8d0 */
+static void congrats_rings(HCongrats *g)
+{
+    int w = (int)((float)exe_i32(0x5b2a28) * g->scale), h = (int)((float)exe_i32(0x5b2a2c) * g->scale);
+    HudArt *a[2] = {g->full, g->outline};
+    for (int i = 0; i < 2; i++) {
+        if (!a[i]) continue;
+        art_resize(a[i], w, h);
+        HudArt_place(a[i], g->x, g->y);
+        HudArt_draw(a[i]);
+    }
+    if (!g->ring) return;
+    static const uint8_t flips[10] = {1, 1, 0, 1, 0, 0, 1, 0, 1, 1};   /* (the bytes of 0x1000101, 0x10000, 0x101) */
+    int k = g->cyc[0].idx;
+    art_resize(g->ring, w, h);
+    art_mirror(g->ring, flips[k] != 0, 0);   /* 0x423c90 */
+    g->ring->flipx = flips[k + 2];          /* 0x423d80 */
+    HudArt_place(g->ring, g->x, g->y);
+    HudArt_draw(g->ring);
+}
+
+/* The place's art at its size by the scale, in the place's colour (0x5b2a18) at alpha a. 0x41dbc0 */
+static void congrats_place(HCongrats *g, int i, int a)
+{
+    if (0xff < a) a = 0xff;
+    if (i < 0 || 2 < i || !g->place[i]) return;   /* (the original reads past its three; the skip flag keeps it there) */
+    HudArt *art = g->place[i];
+    uint32_t sz = 0x5b29b8 + 8u * (uint32_t)i;
+    art_resize(art, (int)((float)exe_i32(sz) * g->scale), (int)((float)exe_i32(sz + 4) * g->scale));
+    HudArt_place(art, g->x, g->y);
+    uint32_t c = exe_u32(0x5b2a18 + 4u * (uint32_t)g->which) | (uint32_t)a << 24;
+    HudArt_setcolours(art, c, c, c, c);
+    HudArt_draw(art);
+}
+
+static void congrats_setstate(HudVisual *v, int32_t s)   /* HCongrats_v5 0x41dd60 */
+{
+    HCongrats *g = (HCongrats *)v;
+    if (s != 3 && s != 1) {
+        g->start = 0;
+        g->which = 0;
+        g->spoken = 1;
+        v->state = s;
+        return;
+    }
+    if (0 < g->which) {
+        g->skip = g_race_type == 3 ? g->which != 1 : 3 < g->which;
+        g->spoken = 0;
+        congrats_reset(g);
+    }
+    v->state = s;
+}
+
+/* The announcer's race-over lines (0x4a6070 .. 0x4a6200): the place (0 first; 7 last, two ways), a win's,
+   a loss's, the second of two's. */
+static void say_finish_place(int p)
+{
+    int i = p == 0 ? (int)(REAL_rand() & 1) : p == 7 ? (int)(REAL_rand() & 1) + 8 : p + 1;
+    Audio_Say(i + 7);
+}
+
+static void congrats_draw(HudVisual *v)   /* HCongrats_v1 0x41d070 */
+{
+    HCongrats *g = (HCongrats *)v;
+    if (v->state == 0) return;
+    if (g_race_mode == 0xb) {
+        if (g->which == 0) return;
+    } else if (g_race_mode == 5) {
+        return;
+    }
+    if (g->which == 0) return;
+    int32_t now = g_sim_tick;
+    if (g->start == 0) g->start = now;
+    int t = now - g->start;
+    for (int i = 0; i < 2; i++) {
+        CongratsCycle *c = &g->cyc[i];
+        c->elapsed = now - c->last;
+        if (c->period < c->elapsed) {
+            c->last = now;
+            c->idx = c->idx + 1 > c->count - 1 ? 0 : c->idx + 1;
+            c->elapsed = 0;
+        }
+    }
+    if (!g->spoken) {
+        if (!g->raceover) {
+            PENDING_NOTE(0x4a62d0, "the career standing's lines (0x6577d8, 0x6577dc)");
+        } else {
+            int n = g_racers.n;
+            switch (g_race_mode) {
+            case 1:
+                if (g->which == 1) Audio_Say((int)(REAL_rand() & 1) + 0x62);   /* 0x4a60b0 */
+                else Audio_Say((int)(REAL_rand() % 7) + 100);                 /* 0x4a6120 */
+                break;
+            case 2:
+                if (g->which == 1 && n == 2) Audio_Say((int)(REAL_rand() & 1) + 0x62);
+                else if (n <= g->which) Audio_Say((int)(REAL_rand() % 7) + 100);
+                else Audio_Say(0x61);                                          /* 0x4a60f0 */
+                break;
+            case 0: case 3: case 4: case 5: case 6: case 7: case 8: case 9:
+                say_finish_place(g->which - 1);
+                if (g->which == n && 1 < n) Audio_Say((int)(REAL_rand() & 1) + 0x11);   /* 0x4a6070 */
+                break;
+            default: break;
+            }
+        }
+        if (g->raceover && 1 < g_racers.n) Music_Play(g->which == 1 ? exe_str(0x5ccb28) : exe_str(0x5ccb20), 1);   /* "win" / "lose " */
+        g->spoken = 1;
+    }
+    if (g->skip) {
+        v->vt->setstate(v, 0);
+        g->which = 0;
+        return;
+    }
+    congrats_lines(g);
+    congrats_rings(g);
+    if (!g->raceover) {
+        PENDING_NOTE(0x41da10, "the career standing's spinning arts, zoom and slide (0x41da10, 0x41dc90)");
+        return;
+    }
+    congrats_place(g, g->which - 1, t * 0xff / 0x80);
+    if (0xc0 < t) v->vt->setstate(v, 0);
+}
+
+static void congrats_destroy(HudVisual *v)   /* HCongrats_v0 0x41cf70 */
+{
+    HCongrats *g = (HCongrats *)v;
+    HudArt *all[6] = {g->full, g->ring, g->outline, g->place[0], g->place[1], g->place[2]};
+    for (int i = 0; i < 6; i++) HudArt_free(all[i]);
+    for (int i = 0; i < 8; i++) HudArt_free(g->spin[i]);
+    free(g);
+}
+
+static const HudVisualVtbl congrats_vt = {congrats_destroy, congrats_draw, NULL, congrats_setstate, NULL, NULL, NULL, NULL};
+
+/* 0x41cb10: the arts centred (at the place, still 0, the constructor gives them), sized by the tables at
+   0x5b29b8; the text (0x430e50, 0x80fab400) it makes is never drawn. */
+static HudVisual *congrats_new(void)
+{
+    HCongrats *g = calloc(1, sizeof *g);
+    if (!g) return NULL;
+    g->base.vt = &congrats_vt;
+    g->scale = 1.0f;
+    g->raceover = 1;
+    g->w = g_display.width, g->h = g_display.height;
+    g->x0 = g->w / 2, g->y0 = g->h / 2;
+    static const struct { const char *file; int index; uint32_t size; } arts[14] = {
+        {"congrats3", 1, 0x5b29b8}, {"congrats4", 0, 0x5b29c0}, {"congrats4", 1, 0x5b29c8},
+        {"321go2", 1, 0x5b29d0}, {"321go", 3, 0x5b29d8}, {"321go", 2, 0x5b29e0}, {"congrats2", 0, 0x5b29e8},
+        {"congrats2", 1, 0x5b29f0}, {"congrats2", 2, 0x5b29f8}, {"congrats2", 3, 0x5b2a00},
+        {"congrats3", 0, 0x5b2a08}, {"circlefull", 0, 0x5b2a28}, {"congrats1", 0, 0x5b2a28},
+        {"circleoutline", 0, 0x5b2a28}};
+    HudArt *made[14];
+    for (int i = 0; i < 14; i++)
+        made[i] = HudArt_load(arts[i].file, arts[i].index, g->x, g->y, exe_i32(arts[i].size), exe_i32(arts[i].size + 4),
+                              false, true, false);
+    for (int i = 0; i < 3; i++) g->place[i] = made[i];
+    for (int i = 0; i < 8; i++) g->spin[i] = made[3 + i];
+    g->full = made[11], g->ring = made[12], g->outline = made[13];
+    PENDING_NOTE(0x430e50, "HCongrats' text (made, never drawn)");
+    congrats_reset(g);
+    return &g->base;
+}
+
 /* ---- the HUD ---- */
 
 /* ---- the pause menu (HPause, 300 bytes, vtable 0x5b2d54; 0x42a3a0) and the exit's (HExit, 0x130 bytes,
@@ -2770,6 +3028,8 @@ void HUD_Init(void)
     add(map_new(), true, true);   /* 0x431e50 (drawn last) */
     PENDING_NOTE(0x424420, "HUD_Init's other visuals (gauges, lap, position, time, map, messages)");
     add(countdown_new(), false, false);
+    s_congrats = congrats_new();   /* 0x41cb10 (0x60ca64) */
+    add(s_congrats, false, false);
     {
         int id = g_race_mode == 1 ? 0x46ff : g_race_mode == 2 ? 0x46f9 : 0x46d1;
         const char *title = LOC_string(HudConfig_loc(), id);
@@ -2801,7 +3061,19 @@ static void push_modal(HudVisual *v)
 static void race_screens(void)
 {
     if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8) return;
-    if (g_race_mode <= 5) PENDING_NOTE(0x41cb10, "the place's congratulations (HCongrats)");
+    if (g_race_mode <= 5 && s_congrats) {
+        /* The place: a knockout's 1 (8 when the car was knocked out, +0xb50 3), the network race's by its
+           standings (pending: the car's), else the camera's car's (+0xcd4). (0x60ca98 overrides it when
+           set; nothing sets it here.) */
+        Car *c = g_camera_car < g_racers.n ? g_racers.c[g_camera_car] : NULL;
+        int place = 0;
+        if (g_race_knockout == 1) place = c && *CAR_I(c, 0xb50) == 3 ? 8 : 1;
+        else if (c) place = *CAR_I(c, 0xcd4);
+        if (g_race_mode == 3) PENDING_NOTE(0x48d720, "the network race's place");
+        ((HCongrats *)s_congrats)->which = place;   /* 0x41e150 */
+        push_modal(s_congrats);
+        ((HCongrats *)s_congrats)->raceover = 1;     /* 0x41dd40(0) */
+    }
     if (g_race_knockout) return;
     if (g_race_mode == 0 || g_race_mode == 3 || g_race_mode == 1 || g_race_mode == 2 || g_race_mode == 5) {
         push_modal(summary);
@@ -2896,6 +3168,7 @@ void HUD_Free(void)
     nmodal = 0;
     s_pause = s_exit = NULL;
     summary = mission = s_time = NULL;
+    s_congrats = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);
     wrongway = NULL;
     for (int i = 0; i < nlist; i++)
