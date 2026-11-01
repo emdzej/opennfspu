@@ -13,7 +13,6 @@
 #include "render/carpages.h"
 #include "render/render.h"
 #include "support/ufile.h"
-#include "pending.h"
 #include "render/thrash.h"
 #include <math.h>
 #include <stdio.h>
@@ -795,13 +794,6 @@ static void transpose4(const EaglMatrix *a, EaglMatrix *out)   /* 0x53a3c0 */
         for (int c = 0; c < 4; c++) out->m[r * 4 + c] = a->m[c * 4 + r];
 }
 
-/* The light's beam on the road at night (0x43d420, the light's flag +0x57 in a race): pending. */
-static void beam(const float *light, const EaglMatrix *m1, const EaglMatrix *m2)
-{
-    (void)light, (void)m1, (void)m2;
-    PENDING_NOTE(0x43d420, "the car lights' beams at night");
-}
-
 /* For every part whose LOD entry has effects, its 'ef' records of type 5: when the light of the part's
    id (info +0xc) is on, through the part's transform (the one the LOD's number names, not the entry's
    as the draw takes: the original's) and its hinge (info +7); when the record's flag 8 is set and the
@@ -844,7 +836,7 @@ void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m)
                         }
                     }
                     R3DCar_LightHalo(light, car->road, &m1, car->lightlevel[info[0xc] & 15]);   /* 0x4435c0 */
-                    if (!g_r3d_frontend && ef[0x57] && 0 < g_r3d_night) beam(light, &m1, &m2);
+                    if (!g_r3d_frontend && ef[0x57] && 0 < g_r3d_night) R3DCar_LightBeam(light, &m1, &m2);   /* 0x43d420 */
                 }
                 if ((ef[0x50] & 8) && car->lighton[ef[0x56] & 15]) {
                     float twin[0x14];
@@ -875,7 +867,7 @@ void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m)
                         }
                     }
                     R3DCar_LightHalo(twin, car->road, &m1, car->lightlevel[ef[0x56] & 15]);
-                    if (!g_r3d_frontend && ef[0x57] && 0 < g_r3d_night) beam(twin, &m1, &m2);
+                    if (!g_r3d_frontend && ef[0x57] && 0 < g_r3d_night) R3DCar_LightBeam(twin, &m1, &m2);   /* 0x43d420 */
                 }
             }
             /* The next record while it is still an 'ef'. */

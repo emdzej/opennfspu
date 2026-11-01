@@ -6,6 +6,7 @@
 #include "render/rtex.h"
 #include "render/sky.h"
 #include "render/sprite.h"
+#include "render/thrash.h"
 #include <math.h>
 #include <string.h>
 
@@ -154,4 +155,39 @@ void R3DCar_LightHalo(const float *light, float ground, const EaglMatrix *m, flo
     if (g_r3d_frontend) return;
     float g = Sky_GlowLevel();   /* 0x45dc40, 0x45cec0 */
     if (f32(0x5b2604) < g * in) Sprite_DrawCarGlow(c, ground, len1, colours[0], g * in * in);   /* 0x451c30 */
+}
+
+/* The fan's ring (0x5cd918: nine pairs, the last the first again), the near ring's scale on the axes is 1
+   and the far one's 5 (0x5b2400), the forward push 8 (0x5b2608); the drawer's uv a zeroed buffer
+   (0x6af340), its record 0x537760 with 0x5377c0(0) (blended, not additive) and the filter states 2, 1. */
+void R3DCar_LightBeam(const float *light, const EaglMatrix *m1, const EaglMatrix *m2)
+{
+    static float pos[18][4];
+    static uint32_t col[18];
+    static float uv[18 * 2];
+    int32_t rs[6] = {1, 2, 0, 0, 0, -1};   /* 0x5377a0(1), 0x5377b0(2) as the record has them */
+    drawer_init();
+    THRASH.fn.setstate(0x24, 0);
+    float p[4], a[4], b[4], fwd[4];
+    xform(m1, light, p);
+    xform(m1, light + 8, a);
+    xform(m1, light + 4, b);
+    static const float back[4] = {0, 0, -1.0f, 0};
+    xform(m2, back, fwd);
+    float k = f32(0x5b2608), w = f32(0x5b2400);
+    for (int j = 0; j < 3; j++) fwd[j] *= k;
+    uint32_t colour = ((const uint32_t *)light)[0x10] & 0xffffffu;
+    for (int i = 0; i < 9; i++) {
+        float cx = f32(0x5cd918 + 8u * (unsigned)i), cy = f32(0x5cd91c + 8u * (unsigned)i);
+        for (int j = 0; j < 3; j++) {
+            pos[2 * i][j] = a[j] * cx + b[j] * cy + p[j];
+            pos[2 * i + 1][j] = a[j] * w * cx + b[j] * w * cy + p[j] + fwd[j];
+        }
+        pos[2 * i][3] = pos[2 * i + 1][3] = p[3];
+        col[2 * i] = colour | 0x10000000u;
+        col[2 * i + 1] = colour;
+    }
+    EaglStream st[5] = {{18 * 16, pos}, {18 * 4, col}, {18 * 8, uv}, {0x54, NULL}, {0x18, rs}};
+    EAGL_MaterialDraw(&s_mat, st, 1, 18);
+    THRASH.fn.setstate(0x24, 10);
 }

@@ -8,3 +8,9 @@
    +0x4c) under the matrix m (the part's on the car's), at level (0 .. 1) of its light; ground the car's
    road height (the glow's). 0x43cd00 */
 void R3DCar_LightHalo(const float *light, float ground, const EaglMatrix *m, float level);
+
+/* A headlight's beam at night (+0x57 of the record): a fan of nine pairs round the light, near ones 0.3 of
+   its axes out in its colour at alpha 0x10, far ones five times as wide and pushed 8 forward along m2's
+   -z, transparent; one triangle strip, untextured. m1 the light's matrix, m2 the same without the hinge's
+   x turn. 0x43d420 */
+void R3DCar_LightBeam(const float *light, const EaglMatrix *m1, const EaglMatrix *m2);
