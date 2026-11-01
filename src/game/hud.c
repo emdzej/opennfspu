@@ -2224,8 +2224,8 @@ typedef struct {
 } HRaceSummary;
 
 /* Racer i's row at its place: the place's name ("1st" .. hud.loc 0x46c4..), the driver, the car with its
-   colour, the best lap, the race's time ("-------" when none; a point-to-point race only the time).
-   0x42c170 */
+   colour, the best lap, the race's time ("-------" when none; a point-to-point race only the time), in
+   the career the place's points. 0x42c170 */
 static void summary_row(HRaceSummary *s, int i, int time, int best, int row)
 {
     HTable *t = s->table;
@@ -2245,7 +2245,8 @@ static void summary_row(HRaceSummary *s, int i, int time, int best, int row)
     }
     if (time == 0) snprintf(t->cell[row][col], 0x20, "%s", exe_str(0x5cce0c));
     else HTime_Format(time, t->cell[row][col], false);
-    if (s->trial && !s->extra) PENDING_NOTE(0x42c170, "the skill test's scores (0x6576d8)");
+    if (s->trial && !s->extra && col + 1 < TBL_COLS)
+        snprintf(t->cell[row][col + 1], 0x20, "%d", g_race_tour.race_points[row]);   /* (the career's points by place, 0x6576d8) */
 }
 
 /* Opening: the rows from the results, the player's marked. 0x42c070 */
