@@ -36,6 +36,8 @@ int Sky_SlotFor(int weather);
 /* How much the cars' light glows show at the eye's place along the road (the sky colour keys' +0x18).
    0x45cec0 */
 float Sky_GlowLevel(void);                    /* the slot index the above picks (0x4598f0) */
+/* The keys' +0x20 the same way: the snow (the weather's snow volume; +0x18 above is its rain). 0x45ce90 */
+float Sky_SnowLevel(void);
 
 /* Sky\<name>.fsh (else Sky\default.fsh) as a file (global 0x627e50), and the sky objects made from it
    (pending). `reload` frees the previous one first. Sky_LoadFsh 0x45da90 */

@@ -12,6 +12,7 @@
 #include "render/sprite.h"
 #include "render/particles.h"
 #include "render/carparticle.h"
+#include "render/weather.h"
 
 /* RenderState setters (0x5375e0: +0x0c and state 0x39; 0x5375a0: +0x04 and state 0x28). */
 static void rs_set39(RenderState *rs, int v)
@@ -62,5 +63,5 @@ void Render_PendingWorld(RCamera *c)
     Particles_Draw();                                          /* 0x455130 */
     CarParticles_DrawAll();                                    /* 0x43f610 */
     if (c->v12c == 2) Sky_DrawAfter();
-    PENDING_NOTE(0x458ef0, "Render_World: 0x458ef0");
+    Weather_Frame();                                           /* 0x458ef0 */
 }

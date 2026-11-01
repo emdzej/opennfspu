@@ -310,6 +310,14 @@ float Sky_GlowLevel(void)
     return colour_mix(g_sky->colour, w, 0x18);                  /* 0x45a7a0 */
 }
 
+/* 0 without a sky. */
+float Sky_SnowLevel(void)
+{
+    if (!g_sky || !g_sky->colour) return 0;
+    float w = SkyColour_weight(g_sky->colour, g_sky->region);   /* 0x45a420 */
+    return colour_mix(g_sky->colour, w, 0x20);                  /* 0x45a800 */
+}
+
 const int32_t *Sky_ColourCell(int a, int b) { return g_colourgrid[a * 7 + 0x18 + b]; }   /* 0x45cae0 */
 
 bool Sky_LightningActive(void) { return g_lightning && g_lightning->active; }

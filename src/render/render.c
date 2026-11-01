@@ -229,8 +229,9 @@ void Render_DisplayInit(void)
 }
 
 /* 0x44ebe0. The globals other than the method key stay in this module until their readers are ported
-   (shadows 0x6197e5, specials 0x6197ec/0x6197f0/0x6197f4, car detail 0x6197c4). */
-static int specials_level;          /* 0x6197f4 */
+   (shadows 0x6197e5, specials 0x6197ec, car detail 0x6197c4). */
+int32_t g_render_specials;          /* 0x6197f4 */
+int32_t g_render_precip;            /* 0x6197f0: the weather's most drops */
 uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it in this build */
 uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
 static int car_detail;              /* 0x6197c4 */
@@ -248,11 +249,12 @@ void Render_SetupQuality(void)
     g_render_extras = card_type != 0xe;
     g_render_skiplod0 = 0;
     switch (g_renderopts.specialfx) {
-    case 0: specials_level = 0; g_render_extras = 0; g_render_particles = 0; break;
-    case 1: specials_level = 1; g_render_extras = 0; g_render_particles = 100; break;
-    case 2: specials_level = 2; g_render_particles = 200; break;
+    case 0: g_render_specials = 0; g_render_precip = 60; g_render_extras = 0; g_render_particles = 0; break;
+    case 1: g_render_specials = 1; g_render_precip = 140; g_render_extras = 0; g_render_particles = 100; break;
+    case 2: g_render_specials = 2; g_render_precip = 220; g_render_particles = 200; break;
     default:
-        specials_level = 3;
+        g_render_specials = 3;
+        g_render_precip = 300;
         g_render_particles = 0x100;
         PENDING_NOTE(0x6197a6, "the card's trilinear flag (Render_DetectCard)");
         break;
@@ -263,7 +265,6 @@ void Render_SetupQuality(void)
     g_render_carlights = g_render_carenv = g_renderopts.carchrome >= 2;
     car_detail = g_renderopts.cardetail == 0 ? 0 : g_renderopts.cardetail == 1 ? 1 : 2;
     if (RTex_flagsallowed && (g_rmethod_key & 2)) g_rmethod_key = (g_rmethod_key & ~3u) | 4;
-    (void)specials_level;
     (void)car_detail;
 }
 

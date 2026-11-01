@@ -2,6 +2,7 @@
 #include "render/drive_selftest.h"
 #include "render/particles.h"
 #include "render/carparticle.h"
+#include "render/weather.h"
 #include "real/mouse.h"
 #include "eagl/eagl.h"
 #include "render/headlights.h"
@@ -116,6 +117,7 @@ static bool load(const char *track, const char *carname)
     Particles_Init();                   /* 0x455180 */
     DynLights_Init();                   /* 0x455e30 */
     Sky_LoadFsh(g_track_name, false);
+    Weather_Init();                     /* 0x458a50 */
     SpriteBank_Load();                  /* 0x452090 */
     CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
     Headlights_Load();                  /* 0x452460 */
@@ -396,6 +398,7 @@ void DRIVE_Shutdown(void)
     Headlights_Free();      /* 0x452530 */
     CarEnv_Free();          /* 0x440fd0 */
     SpriteBank_Free();      /* 0x4520c0 */
+    Weather_Free();         /* 0x458a80 */
     Sun_Free();             /* 0x4600e0 */
     DynLights_Free();       /* 0x455ec0 */
     Sprites_Free();         /* 0x451480 */
