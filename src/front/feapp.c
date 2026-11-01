@@ -34,7 +34,7 @@ static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
    an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
 enum { DLG_ONE, DLG_TWO, DLG_INPUT };
-enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL };
 static struct {
     bool up;
     int kind, purpose, done;
@@ -417,6 +417,12 @@ static void callback(const char *cb)
         }
     } else if (!strcmp(cb, "SHOWPARTS") || !strcmp(cb, "SHOWDAMAGE")) {
         s_used_parts = cb[4] == 'P';   /* FEUsedCarCallbackList_v57 0x4f6bc0 / _v58 0x4f6c30 (+0x290) */
+    } else if (!strcmp(cb, "CHANGEDECAL")) {
+        /* FEPaintShopCBL_v55 0x510a80: the race number's dialog (0x513b10: string 0xfb, digits, 2 at most) */
+        dialog_open(DLG_INPUT, FEStrings_Get(0xfb), 0x2be, 0x2bf);
+        s_dialog.digits = true;
+        s_dialog.cap = 2;
+        s_dialog.purpose = DLG_FOR_DECAL;
     } else if (!strcmp(cb, "DEFAULTSETTINGS")) {
         FEData_DefaultSetup();
     } else if (!strcmp(cb, "SAVESETTINGS") || !strcmp(cb, "LOADSETTINGS")) {
@@ -1234,6 +1240,17 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     const char *cbl = screen_attr(w, "callbacklist");
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
+    else if (!strcmp(cbl, "ID_PAINTSHOPCBL")) {
+        FEData_PaintShop();
+        if (s_dialog.purpose == DLG_FOR_DECAL && !s_dialog.up) {
+            /* (the race number's dialog closed: OK with a text its number, else none, -1) */
+            if (s_dialog.done == 1) {
+                FEAccessor *dn = FEAccess_Find("OwnedCar.DecalNum");
+                if (dn) FEAccess_SetPos(dn, (s_dialog.input[0] ? atoi(s_dialog.input) : -1) + 1);
+            }
+            s_dialog.purpose = DLG_FOR_NONE;
+        }
+    }
     else if (!strcmp(cbl, "ID_TOURNYSCREEN")) tourny_update(w);
 }
 

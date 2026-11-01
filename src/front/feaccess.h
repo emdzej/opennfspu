@@ -88,3 +88,6 @@ int FEData_BuyUsed(void);
 /* A bar's share of an accessor (FEGouraudIndicatorBar 0x4ca270): for an argument the accessor's (a car's
    condition in per cent), else its position in per cent of its count. */
 int FEAccess_Percent(const FEAccessor *a, const char *arg);
+/* The paint shop's update (FEPaintShopCBL_v1 0x510af0): the garage car's colours, stripes and race number
+   between it and the accessors. */
+void FEData_PaintShop(void);

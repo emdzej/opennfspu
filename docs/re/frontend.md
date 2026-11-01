@@ -166,6 +166,19 @@ A car object has these market fields:
   0x5051a0, 0x5053a0), in a yes/no dialog with string 0x327. Yes takes the money and removes the car
   (0x501740); no clears the offer (0x4f8cc0).
 
+## The paint shop
+
+The paint shop (FEPaintShopCBL 0x510af0) works on the garage car. Its accessors are:
+- four colour accessors (FEColourAccessor 0x4b8dd0) over the car record's palettes: the body (+0x3ec),
+  the stripes (+0x3f0, +0x3f4) and the interior (+0x530). Each holds the colour itself (+0x2c), not
+  just a palette index;
+- the stripe package (list 0x5b7644);
+- the race number (-1 to 99).
+
+When the garage car changes, the accessors take its colours. Every frame, the car takes the accessors'
+colours, package and number (+0x674 to +0x688). CHANGEDECAL asks for the race number in a
+two-digit input dialog (string 0xfb).
+
 ## The port's order
 
 1. FERT's model: templates, layouts, controls, parts, attributes. Check: every template and layout

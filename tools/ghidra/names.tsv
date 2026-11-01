@@ -2629,3 +2629,6 @@
 004f6930	FEUsedCarCallbackList_Update	frontend	high	The used car screen: buttons by count, the damage or parts panel
 004ca270	FEGouraudIndicatorBar_Share	frontend	high	The bar's share: the accessor's slot 0x18 for an argument, else pos x 100 / count
 004e0da0	FE_LoadScreen	frontend	med	A layout by name (".lay" added when missing)
+00510af0	FEPaintShopCBL_Update	frontend	high	The garage car's colours, stripes, race number from and to the accessors
+00510a80	FEPaintShopCBL_ChangeDecal	frontend	high	The race number's input dialog (0xfb, digits, 2)
+004b8dd0	FEColourAccessor_ctor	frontend	high	A colour accessor: palette count and colour functions, its colour at +0x2c

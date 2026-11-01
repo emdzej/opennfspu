@@ -27,6 +27,8 @@ struct FEAccessor {
     uint32_t key;    /* the option it keeps (its key's address), 0 none */
     int owned;       /* ACC_MERGED: the owned cars it counted last */
     float fmin, fstep; int dec, slot;   /* ACC_SETUP: FEFloatAccessor's range, decimals; the car's float */
+    int src;         /* ACC_OWNED: 1 the market's cars; ACC_COLOUR / ACC_INTCOLOUR: 1 the garage car's */
+    uint32_t cval;   /* FEColourAccessor's colour (+0x2c) for the garage car's (src 1) */
 };
 
 enum { NACC = 64 };
@@ -575,7 +577,7 @@ static SaveCar *acc_cars(const FEAccessor *a, int *n)
     Save *sv = FESave_Current();
     *n = 0;
     if (!sv) return NULL;
-    if (a->key == 1) return *n = sv->nused, sv->used;
+    if (a->src == 1) return *n = sv->nused, sv->used;
     return *n = sv->ncars, sv->cars;
 }
 
@@ -655,10 +657,24 @@ void FEData_Init(void)
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
     add("DealerCar.Colour", ACC_COLOUR, 1, 0, 0);        /* 0x4b8dd0 on the car's slots 0xa0 / 0xa8 */
     add("DealerCar.IntColour", ACC_INTCOLOUR, 1, 0, 0);  /* (slots 0xa4 / 0xac) */
+    /* The paint shop's (FEdaGarage 0x4f2xxx): FEColourAccessor 0x4b8dd0 on the garage car's palettes, the
+       stripe package (FEListAccessor of 0x5b7644), the race number (FEIntAccessor -1 .. 99). */
+    {
+        static const struct { const char *name; int kind, slot; } pc[4] = {
+            {"OwnedCar.ExtColour", ACC_COLOUR, 0x3ec}, {"OwnedCar.IntColour", ACC_INTCOLOUR, 0x530},
+            {"OwnedCar.S1Colour", ACC_COLOUR, 0x3f0}, {"OwnedCar.S2Colour", ACC_COLOUR, 0x3f4}};
+        for (int i = 0; i < 4; i++) {
+            FEAccessor *c = add(pc[i].name, (AccKind)pc[i].kind, 1, 0, 0);
+            if (c) c->src = 1, c->slot = pc[i].slot;
+        }
+        FEAccessor *pk = add("OwnedCar.PackageNum", ACC_LIST, list_count(0x5b7644), 0, 0);
+        if (pk) pk->list = 0x5b7644;
+        add("OwnedCar.DecalNum", ACC_INT, 101, -1, 0);
+    }
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     {
         FEAccessor *u = add("UsedCar.Car", ACC_OWNED, 0, 0, 0);   /* (0x4f5080(.., 0x33, 0, 0x4f85b0)) */
-        if (u) u->key = 1;
+        if (u) u->src = 1;
     }
     add("Tournament.Data", ACC_TDATA, 1, 0, 0);          /* FETournamentDataAccessor (0x5b81f0) */
     add_list("Tournament.EventType", 0x5b81a4, 0);          /* FETournamentEventTypeAccessor (0x506140) */
@@ -709,6 +725,10 @@ static void refresh(const FEAccessor *c)
     if (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) {   /* the dealer car's (v40 +0x3e6, v41 +0x528) */
         FEAccessor *d = FEAccess_Find("DealerCar.Car");
         const uint8_t *r = d && d->count ? s_car + CAR_SIZE * s_dealer[d->pos] : NULL;
+        if (a->src == 1) {   /* the garage car's palettes (0x4f0490, 0x4f0350) */
+            SaveCar *gc = garage_car();
+            r = gc ? gc->rec + 4 : NULL;
+        }
         int n = r ? rec16(r, a->kind == ACC_COLOUR ? 0x3e6 : 0x528) : 0;
         a->count = n > 0 ? n : 1;
         if (a->pos >= a->count) a->pos = 0;
@@ -745,6 +765,16 @@ static void refresh(const FEAccessor *c)
 int FEAccess_Count(const FEAccessor *a) { refresh(a); return a->count; }
 int FEAccess_Pos(const FEAccessor *a) { return a->pos; }
 
+/* The garage car's palette colour of a colour accessor (0x4f02d0 the body +0x3ec, 0x4f0410 the first
+   stripe +0x3f0, 0x4f04d0 the second +0x3f4, 0x4f0390 the interior +0x530; 0x10 an entry, swapped). */
+static uint32_t palette_colour(const FEAccessor *a, int i)
+{
+    SaveCar *gc = garage_car();
+    if (!gc) return 0;
+    int base = a->kind == ACC_INTCOLOUR ? 0x530 : a->slot;
+    return swap32((uint32_t)rec32(gc->rec + 4, base + 0x10 * i));
+}
+
 void FEAccess_SetPos(FEAccessor *a, int pos)
 {
     refresh(a);
@@ -761,6 +791,7 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
+    if ((a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) && a->src == 1) a->cval = palette_colour(a, a->pos);
 }
 
 const char *FEAccess_Text(const FEAccessor *a)
@@ -890,6 +921,53 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         return b;
     }
     return arg;
+}
+
+/* The paint shop's update (FEPaintShopCBL_v1 0x510af0): a new garage car's colours, stripes and race
+   number into the accessors (0x4b9160: the colour itself, its palette place the first that has it); the
+   accessors' into the car each frame (its setters 0x94 .. 0xa8: +0x674 .. +0x688), written when they
+   changed. */
+void FEData_PaintShop(void)
+{
+    static int last = -2;
+    SaveCar *gc = garage_car();
+    int idx = FEData_OwnedIndex("OwnedCars.Car");
+    static const char *names[4] = {"OwnedCar.ExtColour", "OwnedCar.IntColour", "OwnedCar.S1Colour", "OwnedCar.S2Colour"};
+    static const int field[4] = {0x674, 0x678, 0x67c, 0x680};
+    FEAccessor *pk = FEAccess_Find("OwnedCar.PackageNum"), *dn = FEAccess_Find("OwnedCar.DecalNum");
+    if (!gc) {
+        last = -2;
+        return;
+    }
+    if (idx != last) {
+        last = idx;
+        for (int i = 0; i < 4; i++) {
+            FEAccessor *c = FEAccess_Find(names[i]);
+            if (!c) continue;
+            refresh(c);
+            c->cval = (uint32_t)rec32(gc->rec, field[i]);
+            c->pos = 0;
+            for (int k = 0; k < c->count; k++)
+                if ((palette_colour(c, k) & 0xffffffu) == (c->cval & 0xffffffu)) {
+                    c->pos = k;
+                    break;
+                }
+        }
+        if (pk && pk->count) pk->pos = rec32(gc->rec, 0x684) % pk->count;
+        if (dn) {
+            int v = rec32(gc->rec, 0x688);
+            dn->pos = (v < -1 ? -1 : v > 99 ? 99 : v) + 1;
+        }
+    }
+    bool changed = false;
+    for (int i = 0; i < 4; i++) {
+        FEAccessor *c = FEAccess_Find(names[i]);
+        if (c && (uint32_t)rec32(gc->rec, field[i]) != c->cval) memcpy(gc->rec + field[i], &c->cval, 4), changed = true;
+    }
+    int32_t pkv = pk ? pk->pos : 0, dv = dn ? dn->min + dn->pos : -1;
+    if (rec32(gc->rec, 0x684) != pkv) memcpy(gc->rec + 0x684, &pkv, 4), changed = true;
+    if (rec32(gc->rec, 0x688) != dv) memcpy(gc->rec + 0x688, &dv, 4), changed = true;
+    if (changed) FESave_Write();
 }
 
 int FEAccess_Percent(const FEAccessor *a, const char *arg)
@@ -1208,8 +1286,6 @@ static void used_parts(SaveCar *c, int year)
     }
 }
 
-static uint32_t bswap(uint32_t v) { return v >> 24 | (v >> 8 & 0xff00u) | (v << 8 & 0xff0000u) | v << 24; }
-
 bool FEData_UsedCar(const uint8_t *r, int year, SaveCar *out)   /* 0x4f7860 */
 {
     Save *sv = FESave_Current();
@@ -1218,11 +1294,11 @@ bool FEData_UsedCar(const uint8_t *r, int year, SaveCar *out)   /* 0x4f7860 */
     int nb = rec16(r, 0x3e6), ni = rec16(r, 0x528);
     if (nb > 0) {
         uint32_t k = REAL_rand() % (uint32_t)nb;
-        body = bswap((uint32_t)rec32(r, 0x3ec + 16 * (int)k));
-        c3 = bswap((uint32_t)rec32(r, 0x3f0 + 16 * (int)k));
-        c4 = bswap((uint32_t)rec32(r, 0x3f4 + 16 * (int)k));
+        body = swap32((uint32_t)rec32(r, 0x3ec + 16 * (int)k));
+        c3 = swap32((uint32_t)rec32(r, 0x3f0 + 16 * (int)k));
+        c4 = swap32((uint32_t)rec32(r, 0x3f4 + 16 * (int)k));
     }
-    if (ni > 0) inside = bswap((uint32_t)rec32(r, 0x530 + 16 * (int)(REAL_rand() % (uint32_t)ni)));
+    if (ni > 0) inside = swap32((uint32_t)rec32(r, 0x530 + 16 * (int)(REAL_rand() % (uint32_t)ni)));
     int32_t stripe = 0, racenum = -1;
     if (CRT_rand() % 100 > 50) stripe = g_carnschemes ? (int32_t)((uint32_t)CRT_rand() % g_carnschemes) : 0;   /* (0x6115f8: the last car's) */
     if (CRT_rand() % 100 > 80) racenum = CRT_rand() % 100 - 1;
