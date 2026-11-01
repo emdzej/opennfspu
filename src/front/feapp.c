@@ -990,6 +990,10 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
 
 /* ---------------------------------------------------------------- the pump's pass and the frame */
 
+static void *s_slider_held;   /* (the list bar pressed: its moves and its release while held) */
+static void slider_held_move(int mx, int my);
+static void slider_held_up(void);
+
 static void poll(void)   /* 0x529530 */
 {
     FertControl *w = FEApp_Top();
@@ -1001,9 +1005,13 @@ static void poll(void)   /* 0x529530 */
         s_mouse[1] = my;
         if (s_bar) window_event(s_bar, 7, mx, my);
         window_event(w, 7, mx, my);
+        if (s_slider_held) slider_held_move(mx, my);
     }
     uint32_t changed = b ^ s_buttons;
     s_buttons = b;
+    if ((changed & 1) && !(b & 1) && s_slider_held) {
+        slider_held_up();
+    }
     if (s_dialog.up) {   /* (the dialog's the only one taking the mouse and the keys) */
         uint8_t k[16];
         int nk = plat_key_presses(k, 16);
@@ -1412,18 +1420,260 @@ static bool setting_draw(FertControl *c, int32_t ox, int32_t oy)
    chosen row on the selected colour, a group's header with its icon (WeeIcons.fsh 3 shut / 0xb open), the
    part's name and its price right of ID_PRICEPOS. The row chosen is kept in view (the scroll bar the
    original keeps, +0x1bc, pends). */
-static struct { FertControl *c; int first; } s_lists[8];
+/* A list's scroll bar (FEEmbossedVerticalSlider_MainFunctionality, 0x154 bytes, vtable 0x5b6a64; 0x4da860),
+   over its value (the list's "<name> Sliderbar", FEPositionableAccessor 0x4bbdd0: a place of a count): the
+   up and down arrows (WeeIcons.fsh ARup/ARov/ARin, A2up/A2ov/A2in: normal, hovered, pressed), the track
+   between them and the knob along it; pressing an arrow steps the value and repeats every 150 ms, the
+   knob drags, the track moves the knob to the mouse and drags it. In screen coordinates. */
+typedef struct {
+    int count, pos;            /* the accessor's +0x14, +0x18 */
+    int step;                  /* +0xdc: the arrow's step (-1, 1, 0 none) */
+    uint32_t repeat;           /* +0xd8: the repeat's next time (the port's clock; 0 none) */
+    int drag_y, drag_pos;      /* +0xe4, +0xe8 */
+    int pressed, hover;        /* +0xec, +0xf0: 1 up, 2 down, 3 the knob, 4 the track */
+    int base, last;            /* +0xf4: the knob's top at 0, +0xf8: the count it was sized for */
+    int knob[4], track[4], down[4], up[4];   /* +0xfc, +0x10c, +0x11c, +0x12c: x y w h */
+} ListSlider;
 
-static int *list_first(FertControl *c)
+static void slider_setpos(ListSlider *s, int v)   /* 0x4bbe20 */
+{
+    if (s->count - 1 < v) v = s->count - 1;
+    s->pos = v < 0 ? 0 : v;
+}
+
+static void slider_setcount(ListSlider *s, int n)   /* 0x4bbef0 (a place past the end back to 0) */
+{
+    s->count = n;
+    if (n <= s->pos) s->pos = 0;
+}
+
+/* The knob's length and place from the value (_v11 0x4dacd0): the track less the arrows, less one pixel
+   a place, at least 16. */
+static void slider_refresh(ListSlider *s)
+{
+    int room = s->track[3] - 2 * s->down[3];
+    if (s->last != s->count) {
+        s->last = s->count;
+        int h = room - s->count;
+        s->knob[2] = 0xe;
+        s->knob[3] = 0xf < h ? h : 0x10;
+    }
+    s->knob[1] = s->base + (s->count ? s->pos * (room - s->knob[3]) / s->count : 0);
+}
+
+static void slider_layout(ListSlider *s, int x, int y, int h)   /* 0x4da9c0 */
+{
+    int knob[4] = {x + 1, y + 0xd, 0xe, 0x1e}, track[4] = {x, y, 0x10, h}, down[4] = {x, y - 0xd + h, 0x10, 0xd},
+        up[4] = {x, y, 0x10, 0xd};
+    memcpy(s->knob, knob, sizeof knob);
+    memcpy(s->track, track, sizeof track);
+    memcpy(s->down, down, sizeof down);
+    memcpy(s->up, up, sizeof up);
+    s->last = 0;
+    if (s->last != s->count) {   /* (the knob sized as the refresh does) */
+        s->last = s->count;
+        int kh = s->track[3] - 2 * s->down[3] - s->count;
+        s->knob[2] = 0xe;
+        s->knob[3] = 0xf < kh ? kh : 0x10;
+    }
+    s->base = s->knob[1];
+    slider_refresh(s);
+}
+
+static bool in_box(const int b[4], int x, int y) { return b[0] <= x && x <= b[0] + b[2] && b[1] <= y && y <= b[1] + b[3]; }
+
+static void slider_hit(ListSlider *s, int x, int y)   /* 0x4dada0 */
+{
+    s->hover = in_box(s->up, x, y) ? 1 : in_box(s->down, x, y) ? 2 : in_box(s->knob, x, y) ? 3 : in_box(s->track, x, y) ? 4 : 0;
+}
+
+/* A press (_v5 0x4daaf0): true when on the bar. */
+static bool slider_down(ListSlider *s, int x, int y)
+{
+    slider_hit(s, x, y);
+    bool on = true;
+    switch (s->hover) {
+    case 0: on = false; break;
+    case 1: s->step = -1; PENDING_NOTE(0x4aab80, "the slider's sound (8)"); break;
+    case 2: s->step = 1; PENDING_NOTE(0x4aab80, "the slider's sound (8)"); break;
+    case 3: s->drag_y = y, s->drag_pos = s->pos; break;
+    case 4:   /* the knob's top to the mouse, then dragged from there */
+        s->drag_y = s->knob[1], s->drag_pos = s->pos;
+        s->knob[1] = y;
+        slider_hit(s, x, y);
+        break;
+    }
+    s->pressed = s->hover;
+    if (s->step != 0) {
+        s->repeat = app_ticks_ms() + 150;   /* 0x529050 (150 ms, repeating) */
+        slider_setpos(s, s->pos + s->step);   /* 0x4bc220 */
+        slider_refresh(s);
+    }
+    return on;
+}
+
+/* A move (_v8 0x4db460): the knob dragged while it or the track is under the mouse. */
+static void slider_move(ListSlider *s, int x, int y)
+{
+    slider_hit(s, x, y);
+    if (s->pressed == 3 && (s->hover == 3 || s->hover == 4)) {
+        int room = s->track[3] - 2 * s->down[3] - s->knob[3];
+        if (room) slider_setpos(s, (y - s->drag_y) * s->count / room + s->drag_pos);
+        slider_refresh(s);
+    }
+}
+
+static void slider_up(ListSlider *s)   /* _v9 0x4dac30 */
+{
+    s->repeat = 0;
+    s->step = 0;
+    s->pressed = 0;
+}
+
+static void slider_held_move(int mx, int my) { slider_move(s_slider_held, mx, my); }
+static void slider_held_up(void)
+{
+    slider_up(s_slider_held);
+    s_slider_held = NULL;
+}
+
+static float exe_f32(uint32_t va)
+{
+    uint32_t u = exe_u32(va);
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
+
+static void slider_tick(ListSlider *s)   /* _v10 0x4dac80: the timer's repeat while still on the arrow */
+{
+    uint32_t now = app_ticks_ms();
+    if (!s->repeat || now < s->repeat) return;
+    s->repeat += 150;
+    if (s->pressed == s->hover) {
+        slider_setpos(s, s->pos + s->step);
+        slider_refresh(s);
+    }
+}
+
+static uint32_t fe_mix(uint32_t a, uint32_t b, int t)   /* 0x4d8300: a to b by t of 255 */
+{
+    uint32_t o = 0;
+    for (int sh = 0; sh < 32; sh += 8) o |= ((((a >> sh) & 0xff) * (uint32_t)(0xff - t) + ((b >> sh) & 0xff) * (uint32_t)t) / 0xff) << sh;
+    return o;
+}
+
+/* A gradient cut to a box, the cut edges' colours mixed to their place (0x4d8f50). */
+static void gouraud_clipped(float x, float y, float w, float h, uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br,
+                            int x0, int y0, int x1, int y1)
+{
+    float k = exe_f32(0x5b3710);
+    if ((float)x1 < x + w) {
+        float nw = (float)x1 - x;
+        int t = (int)(nw * k / w);
+        tr = fe_mix(tl, tr, t), br = fe_mix(bl, br, t);
+        w = nw;
+    }
+    if (x < (float)x0) {
+        int t = (int)(((float)x0 - x) * k / w);
+        tl = fe_mix(tl, tr, t), bl = fe_mix(bl, br, t);
+        w -= (float)x0 - x;
+        x = (float)x0;
+    }
+    if ((float)y1 < y + h) {
+        float nh = (float)y1 - y;
+        int t = (int)(nh * k / h);
+        bl = fe_mix(tl, bl, t), br = fe_mix(tr, br, t);
+        h = nh;
+    }
+    if (y < (float)y0) {
+        int t = (int)(((float)y0 - y) * k / h);
+        tl = fe_mix(tl, bl, t), tr = fe_mix(tr, br, t);
+        h -= (float)y0 - y;
+        y = (float)y0;
+    }
+    if ((float)x0 <= x + w && x <= (float)x1 && y <= (float)y1 && (float)y0 <= y + h) FE2D_Gouraud(x, y, w, h, tl, tr, bl, br);
+}
+
+static uint32_t fade_a(uint32_t c, int a) { return a == 0xff ? c : (uint32_t)(((c >> 24) * (uint32_t)a) / 0xff) << 24 | (c & 0xffffffu); }   /* 0x4d82a0 */
+
+static void slider_draw(ListSlider *s, int ox, int oy, int a)   /* 0x4dafe0 */
+{
+    const int *t = s->track, *k = s->knob;
+    float tx = (float)(t[0] + ox), ty = (float)(t[1] + oy);
+    FE2D_Rect(tx, ty, (float)t[2], (float)t[3], fade_a(0x80fedd81u, a));
+    FEStyle_Inset(tx, ty, (float)t[2], (float)t[3], a, 3);
+    FEStyle_Emboss((float)(k[0] + ox), (float)(k[1] + oy), (float)k[2], (float)k[3], a, 7);
+    int cx0 = t[0] + ox, cy0 = s->up[3] + s->up[1] + oy, cx1 = t[0] + ox + t[2], cy1 = oy + s->down[1];
+    uint32_t w0 = fade_a(0x19ffffffu, a), w1 = fade_a(0xffffffffu, a), d0 = fade_a(0xcc000000u, a), d1 = fade_a(0x19000000u, a);
+    gouraud_clipped((float)(t[0] + 1 + ox), (float)(k[1] - 3 + oy), 14.0f, 3.0f, w0, w0, w1, w1, cx0, cy0, cx1, cy1);
+    gouraud_clipped((float)(t[0] + 1 + ox), (float)(k[3] + k[1] + oy), 14.0f, 3.0f, d0, d0, d1, d1, cx0, cy0, cx1, cy1);
+    char icons[300];
+    FE_ResolvePath("WeeIcons.fsh", icons, sizeof icons);   /* ("%sWeeIcons.fsh" 0x5d976c) */
+    static const char *const names[6] = {"ARup", "ARov", "ARin", "A2up", "A2ov", "A2in"};   /* 0x5d9764 .. 0x5d973c */
+    for (int arrow = 0; arrow < 2; arrow++) {
+        int part = arrow + 1, *b = arrow ? s->down : s->up;
+        int i = s->pressed == part ? 2 : s->hover == part ? 1 : 0;
+        FeImage *im = FEShapes_Named(icons, names[3 * arrow + i]);
+        if (im) FE2D_Image(im, (float)(b[0] + ox), (float)(b[1] + oy), (float)im->w, (float)im->h, (uint32_t)a << 24 | 0xffffffu, 0, false);   /* 0x4d95a0 */
+    }
+    FE2D_Frame(tx, ty, (float)t[2], (float)t[3], (uint32_t)a << 24);   /* 0x4d8cb0 */
+}
+
+/* The list boxes' own state: their scroll bar, whether it's needed (+0x1dc), the rows' height shown
+   (+0x1c4). */
+typedef struct {
+    FertControl *c;
+    ListSlider slider;
+    bool made, scroll;
+    int shown;
+} ListState;
+static ListState s_lists[8];
+
+static ListState *list_state(FertControl *c)
 {
     for (int i = 0; i < 8; i++)
-        if (s_lists[i].c == c) return &s_lists[i].first;
+        if (s_lists[i].c == c) return &s_lists[i];
     for (int i = 0; i < 8; i++)
         if (!s_lists[i].c || i == 7) {
-            s_lists[i].c = c, s_lists[i].first = 0;
-            return &s_lists[i].first;
+            if (s_slider_held == &s_lists[i].slider) s_slider_held = NULL;
+            memset(&s_lists[i], 0, sizeof s_lists[i]);
+            s_lists[i].c = c;
+            return &s_lists[i];
         }
-    return &s_lists[0].first;
+    return &s_lists[0];
+}
+
+/* The rows' height against the box (0x4c4f70: the box's at most, the bar needed then), and the bar's
+   count: the first rows the list can start at, from the rows that fit from the bottom (0x4c5030). */
+static void list_update(ListState *l, FEAccessor *a, int x, int y, int w, int maxh)
+{
+    int n = FEAccess_Count(a);
+    if (!l->made) {
+        l->made = true;
+        slider_layout(&l->slider, x + w - 0x10, y, maxh);   /* (0x4da860: at the box's right, 0x4daae0 wide) */
+    }
+    int total = 0;
+    for (int i = 0; i < n; i++) {
+        FEPartsRow row;
+        if (FEData_PartsRow(a, i, &row)) total += row.height;
+    }
+    int count = 0;
+    if (n) {
+        int left = n, sum = 0;
+        while (0 < l->shown && 0 < left && sum < l->shown) {
+            FEPartsRow row;
+            if (FEData_PartsRow(a, left - 1, &row)) sum += row.height;
+            left--;
+        }
+        count = left + 2;
+    }
+    slider_setcount(&l->slider, count);
+    l->shown = total;
+    l->scroll = maxh <= total;
+    if (l->scroll) l->shown = maxh;
+    else slider_setcount(&l->slider, 0);
+    if (l->scroll) slider_refresh(&l->slider);
 }
 
 static HudFont *list_font(void)
@@ -1452,18 +1702,12 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
     int32_t r[4];
     control_rect(c, r);
     float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)data_int_of(c, "width"), h = (float)data_int_of(c, "selectionboxmaxheight");
-    int n = FEAccess_Count(a), pos = FEAccess_Pos(a), *first = list_first(c);
-    /* the chosen row in view */
-    if (pos < *first) *first = pos;
-    for (;;) {
-        int used = 0;
-        for (int i = *first; i <= pos && i < n; i++) {
-            FEPartsRow row;
-            if (FEData_PartsRow(a, i, &row)) used += row.height;
-        }
-        if (used <= (int)h || *first >= pos) break;
-        (*first)++;
-    }
+    int n = FEAccess_Count(a), pos = FEAccess_Pos(a);
+    ListState *l = list_state(c);
+    list_update(l, a, r[0], r[1], (int)w, (int)h);
+    if (l->scroll) w -= 16.0f;   /* (the bar's room, 0x4e23d0) */
+    slider_tick(&l->slider);
+    if (s_slider_held != &l->slider) slider_hit(&l->slider, s_mouse[0], s_mouse[1]);   /* (_v8's, _v7's on leaving) */
     FertControl *pp = control_named(s_parent ? s_parent : FEApp_Top(), "ID_PRICEPOS");
     if (!pp) pp = control_named(FEApp_Top(), "ID_PRICEPOS");
     int32_t pr[4] = {0, 0, 0, 0};
@@ -1475,7 +1719,7 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
     FEShapes_Load(icons);
     float yy = y;
     FE2D_DepthStep();
-    for (int i = *first; i < n; i++) {
+    for (int i = l->slider.pos; i < n; i++) {
         FEPartsRow row;
         if (!FEData_PartsRow(a, i, &row)) continue;
         if (yy + row.height > y + h + 1) break;
@@ -1511,6 +1755,10 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
             list_text(f, px, yy + 1.0f, pb, fg, 2);
         }
         yy += 14.0f;
+    }
+    if (l->scroll) {
+        FE2D_DepthStep();
+        slider_draw(&l->slider, ox, oy, 0xff);
     }
     return true;
 }
@@ -1567,10 +1815,14 @@ static bool listbox_click(FertControl *c, int32_t mx, int32_t my)
     if (!a) return true;
     int32_t r[4];
     control_rect(c, r);
-    (void)mx;
-    int n = FEAccess_Count(a), *first = list_first(c);
+    ListState *l = list_state(c);
+    if (l->scroll && slider_down(&l->slider, mx, my)) {   /* (0x4c6b30's to the bar first) */
+        s_slider_held = &l->slider;
+        return true;
+    }
+    int n = FEAccess_Count(a);
     int yy = r[1];
-    for (int i = *first; i < n; i++) {
+    for (int i = l->slider.pos; i < n && yy - r[1] <= l->shown; i++) {
         FEPartsRow row;
         if (!FEData_PartsRow(a, i, &row)) continue;
         int top = yy + (row.label ? 13 : 0);

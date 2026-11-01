@@ -257,6 +257,21 @@ FeImage *FEShapes_Image(const char *path, int index)
     return b && 0 <= index && index < b->count ? b->images[index] : NULL;
 }
 
+FeImage *FEShapes_Named(const char *path, const char *name)
+{
+    char key[260];
+    lower(key, sizeof key, path);
+    Bank *b = find_bank(key);
+    if (!b || !b->file) return NULL;
+    /* the directory's entries after the 16-byte header: a 4-character name and an offset */
+    size_t n = strlen(name);
+    for (int i = 0; i < b->count; i++) {
+        const char *e = (const char *)b->file + 0x10 + 8 * i;
+        if (n <= 4 && !strncmp(e, name, n) && (n == 4 || e[n] == 0)) return b->images[i];
+    }
+    return NULL;
+}
+
 void FEShapes_Release(const char *path)
 {
     char key[260];
@@ -527,6 +542,23 @@ void FEStyle_Inset(float x, float y, float w, float h, int a, int b)
     float y4 = ((y + h) - fb) - 1.0f;
     quad4(x3, y2, c13, x7, y6, c14, x3, y4, c13, x7, y9, c14);
     quad4(x5, y4, c13, (xr - fb) + 1.0f, y4, c13, x - 2.0f, y9, c14, xr - 2.0f, y9, c14);
+}
+
+/* An embossed knob (0x520e40): a blue to sand gradient, light top and left edges b pixels wide, dark
+   bottom and right ones. */
+void FEStyle_Emboss(float x, float y, float w, float h, int a, int b)
+{
+    if (plain()) return;
+    uint32_t c6 = fade(0xe5ffffffu, a), c7 = fade(0x80ffffffu, a), c8 = fade(0xffffffu, a), c9 = fade(0, a);
+    uint32_t c10 = fade(0x66000000u, a), c11 = fade(0x80808080u, a), c12 = fade(0x50000000u, a), c13 = fade(0x808080u, a);
+    uint32_t c14 = fade(0x0c000000u, a), c15 = fade(0x800c0c0cu, a), c16 = fade(0xe5000000u, a);
+    uint32_t top = fade(0xff9cd1ffu, a), bot = fade(0xfffedd81u, a);
+    FE2D_Gouraud(x, y, w, h, top, top, bot, bot);
+    float fb = (float)b, y2 = fb + y, xr = x + w, x3 = xr - fb, x4 = fb + x, yb = y + h, y1 = yb - fb;
+    quad4(x, y, c6, xr, y, c11, x4, y2, c8, x3, y2, c8);       /* top */
+    quad4(x4, y1, c13, x3, y1, c14, x, yb, c15, xr, yb, c16);  /* bottom */
+    quad4(x, y, c6, x4, y2, c8, x, yb, c7, x4, y1, c8);        /* left */
+    quad4(x3, y2, c9, xr, y, c10, x3, y1, c9, xr, yb, c12);    /* right */
 }
 
 void FEStyle_Glow(float x, float y, float w, float h, int a, int b)

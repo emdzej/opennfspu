@@ -26,6 +26,7 @@
 #include "render/thrash.h"
 #include "static_init.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int selftest;   /* --param thrash_test: 1 the THRASH scene, 2 the EAGL scene */
@@ -117,6 +118,12 @@ bool app_frame(void)
                         snprintf(one, sizeof one, "%.*s", (int)(len < sizeof one ? len : sizeof one - 1), p);
                         if (one[0] == '=') snprintf(FEData_NameInput(), 9, "%s", one + 1);   /* (a name typed) */
                         else if (one[0] == '^') FEApp_Back();
+                        else if (one[0] == '#') {   /* (#<accessor>:<row>: a list's row chosen) */
+                            char *colon = strrchr(one, ':');
+                            if (colon) *colon = 0;
+                            FEAccessor *acc = FEAccess_Find(one + 1);
+                            if (acc && colon) FEAccess_SetPos(acc, atoi(colon + 1));
+                        }
                         else FEApp_Callback(one);
                     }
                 }

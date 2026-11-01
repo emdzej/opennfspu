@@ -32,6 +32,8 @@ const char *FEStrings_Get(int id);
 void FEShapes_Load(const char *path);
 FeImage *FEShapes_Image(const char *path, int index);
 void FEShapes_Release(const char *path);
+/* A loaded FSH's image by its directory name (0x4d75f0); NULL if none. */
+FeImage *FEShapes_Named(const char *path, const char *name);
 
 /* A path name attribute as a file path (0x52caa0): as it is when absolute ("x:", "\\\\"), else under
    the registry's root (the art folder). */
@@ -54,5 +56,6 @@ extern bool (*FE_ControlDrawHook)(FertControl *c, int32_t ox, int32_t oy);
 void FEStyle_DropShadow(float x, float y, float w, float h, int a, int dx, int dy);
 void FEStyle_Shine(float x, float y, float w, float h, int a);
 void FEStyle_Inset(float x, float y, float w, float h, int a, int b);
+void FEStyle_Emboss(float x, float y, float w, float h, int a, int b);
 /* A glow b pixels out round a box (0x5213e0): white at it, half white at the outside. */
 void FEStyle_Glow(float x, float y, float w, float h, int a, int b);
