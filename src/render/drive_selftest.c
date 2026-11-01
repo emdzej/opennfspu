@@ -95,6 +95,11 @@ static bool load(const char *track, const char *carname)
             g_skill_test = atoi(st);
         }
     }
+    /* GameStartup 0x4b65a0: the texture quality for the machine (0x44de80) before the track's textures.
+       The original measures the machine; the port's is one above every threshold (1 GHz, 256 MB, 64 MB
+       of video memory) on THRASH's 32-bit display: level 3. Until the first race the front end runs at
+       the level's initial 0, as the original's does. */
+    RTex_detectquality(&(RTexMachine){1000000000, 256ll << 20, 64u << 20, 32});
     Track_Load();
     if (!g_world || !g_world->root) return false;
     Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
