@@ -102,6 +102,9 @@ bool app_frame(void)
                     float wear[20];
                     int np = DRIVE_PartsWear(ids, wear);
                     FEApp_RaceWear(ids, wear, np);
+                    char rn[32], rc[32];
+                    int32_t best, time;
+                    if (DRIVE_PlayerResult(rn, rc, &best, &time)) FEApp_RaceRecord(rn, rc, best, time);
                     FEApp_RaceOver(places, times, n);
                 }
                 DRIVE_Shutdown();

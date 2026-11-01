@@ -2192,7 +2192,6 @@ static void records_update(HudVisual *v)
         snprintf(g_record_cars[i], 32, "%s", (const char *)CAR_DESCB(me) + 0x534);
         break;
     }
-    PENDING_NOTE(0x433980, "the new records kept for the front end after the race (its nfs5.trk records)");
     r->race_record = r->lap_record = 0;
     if (!g_race_linear) r->lap_record = t != 0 && t <= g_lap_records[0];
     else r->race_record = t <= g_track_records[0] && t != 0;

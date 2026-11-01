@@ -16,6 +16,7 @@
 #include "game/music.h"
 #include "game/options.h"
 #include "game/mission.h"
+#include "game/race_car.h"
 #include "real/mouse.h"
 #include "real/font.h"
 #include "exe.h"
@@ -347,6 +348,14 @@ void FEApp_RaceWear(const int32_t *ids, const float *wear, int n)
     if (s_owned_race >= 0 && !s_testdrive) FEData_AddWear(s_owned_race, ids, wear, n);
     s_owned_race = -1;
     FESave_Write();
+}
+
+void FEApp_RaceRecord(const char *name, const char *car, int32_t best, int32_t time)
+{
+    /* 0x4ed590: the player's best lap (a point-to-point race's time) among the track's records, but for
+       Factory Driver's and the network's races (and a race quit, which doesn't come here) */
+    if (s_factory_race || s_gametype == 3) return;
+    FEData_TrackRecordEnter(s_track, name, car, g_race_linear ? time : best);
 }
 
 void FEApp_RaceOver(const int *places, const int *times, int n)

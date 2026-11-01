@@ -38,6 +38,7 @@ enum { NACC = 128 };
 static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
+static size_t s_trk_size;
 static size_t s_car_size;
 static int s_tracks[32], s_ntracks;   /* the records with a model (0x691d00) */
 static int s_avail[32], s_navail;     /* 0x691d04: the ones to choose (0x4fb190) */
@@ -1235,7 +1236,23 @@ void FEData_Init(void)
 {
     if (s_nacc) return;
     size_t n = 0;
-    s_trk = vfs_read_all("FEData\\Data\\nfs5.trk", &n);
+    /* FE_LoadTrackRecords 0x4fa3c0: the user's nfs5.trk (the records kept), else the game's (the original
+       copies it there first; the port writes it once a record changes). The empty records ("n/a",
+       0x5db32c) get the longest time, 359999. */
+    s_trk = plat_load_user_file("nfs5.trk", &n);
+    if (s_trk && (n == 0 || n % TRK_SIZE)) free(s_trk), s_trk = NULL;
+    if (!s_trk) s_trk = vfs_read_all("FEData\\Data\\nfs5.trk", &n);
+    s_trk_size = s_trk ? n - n % TRK_SIZE : 0;
+    for (size_t i = 0; i < s_trk_size / TRK_SIZE; i++)
+        for (int k = 0; k < 8; k++) {
+            uint8_t *e = s_trk + TRK_SIZE * i + 0x1b0 + 0x4c * k;
+            int32_t t;
+            memcpy(&t, e + 0x48, 4);
+            if (t != 0) continue;
+            snprintf((char *)e, 0x14, "%s", exe_str(0x5db32c));
+            t = 359999;
+            memcpy(e + 0x48, &t, 4);
+        }
     for (size_t i = 0; s_trk && (i + 1) * TRK_SIZE <= n && s_ntracks < 32; i++) {
         char path[128];
         snprintf(path, sizeof path, "GameData\\Track\\%s.crp", (const char *)s_trk + TRK_SIZE * i + 8);   /* "%s.crp" */
@@ -2291,6 +2308,36 @@ bool FEData_TrackRecords(const char *track, int32_t race[8], int32_t lap[8], cha
         return true;
     }
     return false;
+}
+
+void FEData_TrackRecordEnter(const char *track, const char *name, const char *car, int32_t t)
+{
+    if (!s_trk || !track) return;
+    uint8_t *r = NULL;
+    for (size_t i = 0; i < s_trk_size / TRK_SIZE && !r; i++)
+        if (!strcasecmp((const char *)s_trk + TRK_SIZE * i + 8, track)) r = s_trk + TRK_SIZE * i;
+    if (!r) r = s_trk;   /* (0x4fa560: the first track's without it) */
+    uint8_t *e = r + 0x1b0;
+    int i = 0;
+    for (;; i++) {
+        if (7 < i) return;
+        int32_t v;
+        memcpy(&v, e + 0x4c * i + 0x48, 4);
+        if (t < v) break;
+    }
+    for (int k = 7; k > i; k--) {
+        uint8_t *d = e + 0x4c * k, *from = d - 0x4c;
+        memcpy(d + 0x48, from + 0x48, 4);
+        memcpy(d, from, 0x14);
+        memcpy(d + 0x14, from + 0x14, 0x34);
+    }
+    uint8_t *d = e + 0x4c * i;
+    memcpy(d + 0x48, &t, 4);
+    snprintf((char *)d, 0x14, "%s", name ? name : "");
+    memset(d + 0x14, 0, 0x11);
+    strncpy((char *)d + 0x14, car ? car : "", 0x11);   /* (17 letters at most) */
+    d[0x25] = 0;
+    plat_save_user_file("nfs5.trk", s_trk, s_trk_size);   /* 0x4fa320 */
 }
 
 /* The knockout's state (0x690410, 0x84 bytes; the save's "Knockout" section, which its loader 0x4dd810

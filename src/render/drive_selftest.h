@@ -24,6 +24,8 @@ extern bool g_drive_paused;
 /* The racers' places (0 not finished) and times as the results keep them, the local player first; their
    count (at most 8). */
 int DRIVE_Results(int places[8], int times[8]);
+/* The player's (racer 0's) driver, car, best lap and race time as the race left them. */
+bool DRIVE_PlayerResult(char name[32], char car[32], int32_t *best, int32_t *time);
 /* The local player's car's parts (their ids) and the wear the race gave them (the results' +0xc48);
    their count (20), 0 without a race. */
 int DRIVE_PartsWear(int32_t ids[20], float wear[20]);

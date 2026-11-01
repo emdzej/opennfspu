@@ -222,6 +222,19 @@ int DRIVE_Results(int places[8], int times[8])
     return n;
 }
 
+bool DRIVE_PlayerResult(char name[32], char car[32], int32_t *best, int32_t *time)
+{
+    Car *c = ready && g_racers.n ? g_racers.c[0] : NULL;
+    if (!c) return false;
+    /* (the results' stats of racer 0, 0x5e7644 the driver, 0x5e7684 the car, 0x5e77c8 the best lap,
+       0x5e77a4 the time: the description's and the results' copies) */
+    snprintf(name, 32, "%.31s", (const char *)CAR_DESCB(c) + 0x17c);
+    snprintf(car, 32, "%.31s", (const char *)CAR_DESCB(c) + 0x534);
+    *best = *CAR_I(c, 0xcfc);
+    *time = *CAR_I(c, 0xcd8);
+    return true;
+}
+
 static int32_t s_wear_ids[20];
 static float s_wear[20];
 static bool s_wear_kept;
@@ -349,6 +362,8 @@ bool DRIVE_selftest(const char *track, const char *car)
             g_race_over = 1;
             Race_End(2);   /* (as Race_TickOdd's end does: the results' copies the screens read) */
         }
+        /* --param raceexit=<tick>: the race-over's Escape at that tick of its replay (tests) */
+        if (g_replay_mode == 2 && plat_param("raceexit", ev, sizeof ev) && atoi(ev) <= g_sim_tick) g_drive_result = 1;
     }
     if (g_race_over && g_race_view < 2) {
         /* GameMain's second race loop: the race again from its start, replaying the packets
