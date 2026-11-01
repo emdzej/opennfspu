@@ -14,7 +14,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -23,6 +23,7 @@ struct FEAccessor {
     uint32_t list;   /* ACC_LIST: the exe's zero-ended string ids (FEListAccessor 0x4bb260) */
     uint32_t key;    /* the option it keeps (its key's address), 0 none */
     int owned;       /* ACC_MERGED: the owned cars it counted last */
+    float fmin, fstep; int dec, slot;   /* ACC_SETUP: FEFloatAccessor's range, decimals; the car's float */
 };
 
 enum { NACC = 64 };
@@ -525,6 +526,40 @@ static int32_t car_price(const uint8_t *r)
     return base;
 }
 
+/* The car setup data area (FEdaCarSetup_v0 0x4f2020): FEFloatAccessor (0x4b9620: min, max, step,
+   decimals) on the garage's car's settings, the seventeen floats from +0x6d0 of the car object (their
+   defaults 0x4ee230 sets: the downforces and the brake bias 50, the ride, suspension and toe 0, the shocks
+   1, the tyres 30, the eight gears' offsets 0). */
+static void setup(void)
+{
+    static const struct { const char *name; float min, max, step; int dec, slot; } f[17] = {
+        {"FDownForce", 0, 100, 1, 0, 0},          {"RDownForce", 0, 100, 1, 0, 1},
+        {"BrakeBias", 30, 70, 1, 2, 2},           {"RideHeight", -20, 20, 1, 2, 3},
+        {"Suspension", -30, 30, 1, 2, 4},         {"SteeringToe", -5, 5, 0.1f, 2, 5},
+        {"ShockRate", 0.7f, 1.5f, 0.01f, 2, 6},   {"FTirePressure", 25, 45, 1, 0, 7},
+        {"RTirePressure", 25, 45, 1, 0, 8},       {"Gear0", -0.5f, 0.5f, 0.05f, 2, 9},
+        {"Gear1", -0.5f, 0.5f, 0.05f, 2, 10},     {"Gear2", -0.45f, 0.45f, 0.05f, 2, 11},
+        {"Gear3", -0.4f, 0.405f, 0.05f, 2, 12},   {"Gear4", -0.35f, 0.35f, 0.05f, 2, 13},
+        {"Gear5", -0.3f, 0.3f, 0.05f, 2, 14},     {"Gear6", -0.25f, 0.25f, 0.05f, 2, 15},
+        {"Gear7", -0.5f, 0.5f, 0.05f, 2, 16}};
+    for (int i = 0; i < 17; i++) {
+        FEAccessor *a = add(f[i].name, ACC_SETUP, (int)((f[i].max - f[i].min) / f[i].step + 0.5f) + 1, 0, 0);
+        if (!a) continue;
+        a->fmin = f[i].min, a->fstep = f[i].step, a->dec = f[i].dec, a->slot = f[i].slot;
+    }
+}
+
+static SaveCar *garage_car(void);
+
+void FEData_DefaultSetup(void)   /* DEFAULTSETTINGS: the settings 0x4ee230 gives a new car */
+{
+    SaveCar *car = garage_car();
+    if (!car) return;
+    static const float d[17] = {50, 50, 50, 0, 0, 0, 1.0f, 30, 30, 0, 0, 0, 0, 0, 0, 0, 0};
+    memcpy(car->rec + 0x6d0, d, sizeof d);
+    FESave_Write();
+}
+
 void FEData_Init(void)
 {
     if (s_nacc) return;
@@ -559,6 +594,7 @@ void FEData_Init(void)
        (0x4f3f10: a position below the first list's count is its) */
     add("zMergedList.Car", ACC_MERGED, s_ncars, 0, cp);
     audio();
+    setup();
     display();
     graphics();
     add("OpponentCar.Car", ACC_CAR, s_ncars, 0, cp);
@@ -590,9 +626,29 @@ static int owned_count(void)
     return sv ? sv->ncars : 0;
 }
 
+static float recf(const uint8_t *r, int off);
+
+static SaveCar *garage_car(void)
+{
+    Save *sv = FESave_Current();
+    FEAccessor *o = FEAccess_Find("OwnedCars.Car");
+    if (!sv || !o || !sv->ncars) return NULL;
+    int i = o->pos < sv->ncars ? o->pos : 0;
+    return &sv->cars[i];
+}
+
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_SETUP) {   /* the position from the car's value */
+        SaveCar *car = garage_car();
+        if (car) {
+            float v = recf(car->rec, 0x6d0 + 4 * a->slot);
+            int p = (int)((v - a->fmin) / a->fstep + (v >= a->fmin ? 0.5f : -0.5f));
+            a->pos = p < 0 ? 0 : p >= a->count ? a->count - 1 : p;
+        }
+        return;
+    }
     if (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) {   /* the dealer car's (v40 +0x3e6, v41 +0x528) */
         FEAccessor *d = FEAccess_Find("DealerCar.Car");
         const uint8_t *r = d && d->count ? s_car + CAR_SIZE * s_dealer[d->pos] : NULL;
@@ -636,6 +692,16 @@ int FEAccess_Pos(const FEAccessor *a) { return a->pos; }
 void FEAccess_SetPos(FEAccessor *a, int pos)
 {
     refresh(a);
+    if (a->kind == ACC_SETUP) {   /* (clamped, not round; FEFloatAccessor) */
+        SaveCar *car = garage_car();
+        a->pos = pos < 0 ? 0 : pos >= a->count ? a->count - 1 : pos;
+        if (car) {
+            float v = a->fmin + a->fstep * (float)a->pos;
+            memcpy(car->rec + 0x6d0 + 4 * a->slot, &v, 4);
+            FESave_Write();
+        }
+        return;
+    }
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
@@ -671,6 +737,12 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_OWNED: {
         Save *sv = FESave_Current();
         snprintf(b, sizeof b, "%s", sv ? (const char *)sv->cars[a->pos].rec + 4 + 0x34 : "");
+        return b;
+    }
+    case ACC_SETUP: {
+        SaveCar *car = garage_car();
+        float v = car ? recf(car->rec, 0x6d0 + 4 * a->slot) : a->fmin + a->fstep * (float)a->pos;
+        snprintf(b, sizeof b, "%.*f", a->dec, (double)v);
         return b;
     }
     case ACC_TDATA:

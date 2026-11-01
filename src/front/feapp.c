@@ -358,6 +358,8 @@ static void callback(const char *cb)
             (void)b;
             FEApp_Message(m);   /* 0x512d00 */
         }
+    } else if (!strcmp(cb, "DEFAULTSETTINGS")) {
+        FEData_DefaultSetup();
     } else if (!strcmp(cb, "QUICKFIX")) {
         int m = FEData_QuickFix();   /* FEQuickFixCallBackList 0x50e9f0 */
         if (m > 0) FEApp_Message(m);
@@ -425,6 +427,11 @@ static bool is_colourbox(const FertControl *c) { return !strcmp(c->id, "NFS5.Col
 static void on_up(FertControl *c)
 {
     if (c->feflags & 0x10) return;   /* 0x4c7a10: disabled */
+    if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) {   /* FECarSettingButton: its accessor a step on */
+        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + data_int_of(c, "step"));
+        return;
+    }
     if (is_combo(c) || is_colourbox(c)) {
         /* (FEComboBox opens its selection box, the list to pick from; the port steps to the next item
            for now) */
@@ -799,8 +806,25 @@ static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* A car setting's slider (FECarSettingSlider): a knob along its width at its accessor's place (the port's
+   bar; its shapes, weeicons.fsh, pend). */
+static bool setting_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    if (!a) return true;
+    int32_t pos[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, pos);
+    int w = data_int_of(c, "width"), h = data_int_of(c, "height"), n = FEAccess_Count(a);
+    float f = n > 1 ? (float)FEAccess_Pos(a) / (float)(n - 1) : 0;
+    FE2D_DepthStep();
+    FE2D_Rect((float)(pos[0] + ox) + f * (float)(w - 6), (float)(pos[1] + oy), 6.0f, (float)h, 0xff202020u);
+    return true;
+}
+
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
+    if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
