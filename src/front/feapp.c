@@ -95,6 +95,18 @@ static char s_overlay_id[32];
 static RCamera *s_camera;
 static int32_t s_mouse[2] = {-1, -1}; /* the pump's last poll (+0x14 ..) */
 static uint32_t s_buttons;
+/* The bottom bar's animating buttons (FEAnimatingGoToButton, NFS5.BOTTOMBARBUTTON, 0x284 bytes, vtable
+   0x5b5d80): three frame runs, plain (+0x18c), hovered (+0x1a4) and pressed (+0x1bc, with
+   data.seperatehovermousedown), each its first and last frame, its ticks, a wait (+0x198 ..) of its
+   min .. max delay; the run going (+0x184) since +0x188. */
+typedef struct { int first, last, ticks, wait, min, max; } AnimRun;
+typedef struct {
+    FertControl *c;
+    AnimRun run[3];
+    bool going;
+    uint32_t since;
+} AnimButton;
+static AnimButton s_anims[8];
 static bool s_ready;
 
 /* A key of fe.txt, the options file the original reads with Options_Read 0x4b6450 (not ported yet). */
@@ -287,6 +299,7 @@ bool FEApp_Init(const char *start)
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
         PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, the 3D rooms but the garage, movies");
         s_bar = load_screen("bottombar");
+        memset(s_anims, 0, sizeof s_anims);
         s_ready = true;
     }
     s_result = FE_RUNNING;
@@ -1478,6 +1491,101 @@ static bool on_stack(const FertControl *c)
     return false;
 }
 
+static int anim_wait(const AnimRun *r)   /* min + rand() % (max - min), min without a span */
+{
+    return r->min < r->max ? r->min + CRT_rand() % (r->max - r->min) : r->min;
+}
+
+/* On screen (FEAnimatingGoToButton_v20 0x4c9180): the runs from its data (ticks at least 1), their waits. */
+static AnimButton *anim_of(FertControl *c)
+{
+    AnimButton *free_slot = NULL;
+    for (int i = 0; i < 8; i++) {
+        if (s_anims[i].c == c) return &s_anims[i];
+        if (!s_anims[i].c && !free_slot) free_slot = &s_anims[i];
+    }
+    if (!free_slot) return NULL;
+    AnimButton *b = free_slot;
+    static const char *const pre[3] = {"", "hover", "hovermousedown"};
+    b->c = c;
+    for (int k = 0; k < 3; k++) {
+        char n[48];
+        AnimRun *r = &b->run[k];
+        snprintf(n, sizeof n, "%sstartframe", pre[k]);
+        r->first = data_int_of(c, n);
+        snprintf(n, sizeof n, "%sendframe", pre[k]);
+        r->last = data_int_of(c, n);
+        snprintf(n, sizeof n, "%stotalticks", pre[k]);
+        r->ticks = data_int_of(c, n);
+        snprintf(n, sizeof n, "%smindelay", pre[k]);
+        r->min = data_int_of(c, n);
+        snprintf(n, sizeof n, "%smaxdelay", pre[k]);
+        r->max = data_int_of(c, n);
+        if (!r->ticks) r->ticks = 1;
+    }
+    b->going = false;
+    b->since = timer_ticks();
+    for (int k = 0; k < 3; k++) b->run[k].wait = anim_wait(&b->run[k]);
+    return b;
+}
+
+/* The picture's frame (0x526e20 on picture.shapeIndex, then the part's update). */
+static void anim_frame(FertControl *c, int frame)
+{
+    int i = FertControl_findPart(c, "picture");
+    if (i < 0) return;
+    FertPart *p = c->parts[i];
+    FertAttr *a = FertAttrList_find(&p->attrs, "shapeIndex");
+    if (!a) return;
+    char v[16];
+    snprintf(v, sizeof v, "%d", frame);
+    FertAttr_set(a, v);
+    FertAttr_eval(a);
+    if (Fert_PartEvalHook) Fert_PartEvalHook(p);
+}
+
+/* Its update (FEAnimatingGoToButton_v1 0x4c9460): disabled the plain run's first frame; else the run
+   of its state (pressed with the separate run, hovered, plain): after its wait it plays its frames over
+   its ticks, then waits again (a max delay under 1: it plays on, from the start). */
+static void anim_update(FertControl *c)
+{
+    AnimButton *b = anim_of(c);
+    if (!b) return;
+    if (c->feflags & 0x10) {   /* 0x4c7a10 */
+        anim_frame(c, b->run[0].first);
+        return;
+    }
+    AnimRun *r = &b->run[0];
+    bool hover = c->feflags & 4;   /* 0x4c7860 */
+    if (data_int_of(c, "seperatehovermousedown") && hover && (s_buttons & 1) && !(c->feflags & 0x30)) r = &b->run[2];   /* 0x4c7880 */
+    else if (hover) r = &b->run[1];
+    uint32_t now = timer_ticks();
+    if (!b->going) {
+        if ((int)(b->since + (uint32_t)r->wait) < (int)now) {
+            b->going = true;
+            b->since = now;
+        }
+        anim_frame(c, r->first);
+    }
+    if (b->going) {
+        if ((int)(b->since + (uint32_t)r->ticks) < (int)now) {
+            if (r->max < 1) b->since = now;
+            else {
+                b->going = false;
+                r->wait = anim_wait(r);
+                b->since = now;
+                anim_frame(c, r->first);
+            }
+        }
+        if (b->going) {
+            int f = (int)(now - b->since) * (r->last - r->first) / r->ticks + r->first;
+            if (f < r->first) f = r->first;
+            if (f > r->last) f = r->last;
+            anim_frame(c, f);
+        }
+    }
+}
+
 /* The screens changed: the typing states of controls no longer on the stack dropped (a screen's controls
    are made with it, so a new screen's start afresh: their v21). */
 static void screen_entered(void)
@@ -2659,7 +2767,10 @@ void FEApp_Frame(void)
         draw_combos(w);
     }
     if (s_bar) {
-        for (int i = 0; i < s_bar->nchildren; i++) FertControl_Update(s_bar->children[i]);
+        for (int i = 0; i < s_bar->nchildren; i++) {
+            FertControl_Update(s_bar->children[i]);
+            if (!strcmp(s_bar->children[i]->id, "NFS5.BOTTOMBARBUTTON")) anim_update(s_bar->children[i]);
+        }
         FEWindow_Draw(s_bar);   /* (0x4d2980: the bottom bar over the screens) */
     }
     dialog_draw();
