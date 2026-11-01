@@ -19,7 +19,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_STRING } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -44,6 +44,7 @@ static int s_looped[32], s_nlooped;   /* 0x691d08: those of them looped (+0x6e 1
 static int s_fe_gametype;             /* Game.GameType as the front end set it */
 static int s_cars[160], s_ncars;      /* (0x6919f0) */
 static void pick_opponent_cars(void);
+static char s_nameinput[9];           /* UserList.NameInput's string (+0x14, 8 characters) */
 static int s_dealer[160], s_ndealer;  /* 0x691a00: the cars the dealer sells this year */
 
 static FEAccessor *add(const char *name, AccKind kind, int count, int min, int pos)
@@ -1261,6 +1262,10 @@ void FEData_Init(void)
             if (!strcasecmp(trk_name_of(NULL, i), v)) tp = i;
     add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
     add("Game.NumKOOpponents", ACC_INT, 7, 1, 3);      /* FEIntAccessor 0x4b9ef0(.., 4, 1, 7): 4 of 1 .. 7 */
+    /* FEdaUserList_v0 0x4e5410: the name typed (FEStringAccessor 0x4bc490, 8 characters, a file's) and the
+       players (FESpecialUserListCharVectAccessor 0x4b8b50, Save_ListPlayers' list) */
+    add("UserList.NameInput", ACC_STRING, 1, 0, 0);
+    add("UserList.UserList", ACC_USERS, 0, 0, 0);
     FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
     if (df) df->list = 0x5d9f08;
     /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
@@ -1381,6 +1386,12 @@ static SaveCar *garage_car(void)
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_USERS) {
+        FESave_Current();
+        a->count = FESave_PlayerCount();
+        a->pos = FESave_PlayerChosen() < 0 ? 0 : FESave_PlayerChosen();
+        return;
+    }
     if (a->kind == ACC_SETUP) {   /* the position from the car's value */
         SaveCar *car = garage_car();
         if (car) {
@@ -1485,6 +1496,11 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
         }
         return;
     }
+    if (a->kind == ACC_USERS) {
+        FESave_ChoosePlayer(pos);
+        refresh(a);
+        return;
+    }
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
@@ -1505,6 +1521,11 @@ const char *FEAccess_Text(const FEAccessor *a)
         memcpy(&id, s_trk + TRK_SIZE * track_rec(a, a->pos) + 4, 4);
         return FEStrings_Get(id);
     }
+    case ACC_USERS:   /* (_v15 0x4b8bf0: the stem past its picture's digit) */
+        snprintf(b, sizeof b, "%s", FESave_PlayerStem(a->pos)[0] ? FESave_PlayerStem(a->pos) + 1 : "");
+        return b;
+    case ACC_STRING:
+        return s_nameinput;
     case ACC_OPPCAR: {   /* FEOpponentCarAccessor_v12 0x4f4d40 */
         static const int16_t id[5] = {0x280, 0x282, 0x283, 0x284, 0x281};
         return FEStrings_Get(id[a->pos < 5 ? a->pos : 0]);
@@ -2460,4 +2481,69 @@ bool FEData_OpponentCar(int id, char spec[0x40], uint32_t col[4], int32_t *strip
     opp_colours(r, col, stripe, racenum);
     snprintf(spec, 0x40, "%s", (const char *)r + 0xb1);
     return true;
+}
+
+/* ---------------------------------------------------------------- the string accessor */
+
+char *FEData_NameInput(void) { return s_nameinput; }
+
+/* FEStringAccessor's typing: a character added at the end (_v12 0x4bc530 -> _v11 0x4bc670: a file name's
+   accessor takes no control characters but backspace, nor \ / : * ? " < > |, and no accessor takes %;
+   nothing past its length), the last one taken off (_v14 0x4bc550 -> _v13). */
+bool FEAccess_TypeChar(FEAccessor *a, int ch)
+{
+    if (!a || a->kind != ACC_STRING) return false;
+    size_t n = strlen(s_nameinput);
+    if (ch == 8) {
+        if (n) s_nameinput[n - 1] = 0;
+        return true;
+    }
+    if (ch == '%' || (ch < 0x20 && ch != 8) || strchr("\\/:*?\"<>|", ch)) return true;
+    if (n == sizeof s_nameinput - 1) return false;
+    s_nameinput[n] = (char)ch;
+    s_nameinput[n + 1] = 0;
+    return true;
+}
+
+void FEData_KnockoutStop(void)   /* 0x4ddaf0: the knockout's on byte off */
+{
+    if (ko()[KO_ON]) ko()[KO_ON] = 0;
+}
+
+/* ---------------------------------------------------------------- the cheat codes */
+
+uint32_t g_fe_cheats;   /* 0x65b940 */
+
+bool FE_Cheat(int bit) { return (g_fe_cheats >> (bit & 31) & 1) != 0; }   /* 0x4d8240 */
+
+/* 0x4d8130: a name of up to eight characters (zero filled) turned on its side, the k-th byte of the code
+   the k-th bits of the eight characters, against the seven codes at 0x5d9618 (8 bytes and the cheat's
+   number, 0xc each). A match: its sound (0xc), then the cheat's bit set; number 4 instead takes one off
+   the money (0x500890 of -1). */
+bool FEData_CheatCode(const char *name)
+{
+    uint8_t in[9] = {0}, code[8] = {0};
+    size_t n = strlen(name);
+    if (n < 9) memcpy(in, name, n);
+    else memcpy(in, name, 8);   /* (a longer name runs over the original's buffer) */
+    for (int j = 0; j < 8; j++)
+        for (int i = 0; i < 8; i++) {
+            code[j] |= (uint8_t)((in[i] & 1) << i);
+            in[i] >>= 1;
+        }
+    for (int k = 0; k < 7; k++) {
+        const uint8_t *e = exe_data(0x5d9618 + 0xc * (uint32_t)k, 0xc);
+        if (!e || memcmp(e, code, 8)) continue;
+        PENDING_NOTE(0x4aab80, "the front end's cheat sound (0xc)");
+        int32_t id;
+        memcpy(&id, e + 8, 4);
+        if (id == 4) {
+            Save *sv = FESave_Current();
+            if (sv) sv->money += -1;
+        } else {
+            g_fe_cheats |= 1u << (id & 31);
+        }
+        return true;
+    }
+    return false;
 }

@@ -33,6 +33,7 @@ bool g_race_grid_set;
 
 RaceOpponent g_race_opp[8];
 bool g_race_opp_set;
+char g_race_player[64];
 
 static const uint8_t *find_car(const uint8_t *db, size_t n, const char *name)
 {

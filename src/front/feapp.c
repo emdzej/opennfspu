@@ -42,7 +42,7 @@ static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
    an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
 enum { DLG_ONE, DLG_TWO, DLG_INPUT };
-enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE };
 static struct {
     bool up;
     int kind, purpose, done;
@@ -55,6 +55,12 @@ static struct {
 } s_dialog;
 static int dialog_button_hit(int32_t mx, int32_t my);
 static void dialog_key(uint8_t code);
+static FertControl *focused_input(FertControl *w);
+static int s_driver_pic = 8;          /* 0x5d8f2c: the create player screen's driver */
+static void inputbox_keys(FertControl *c, const uint8_t *k, int nk);
+static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool picture_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool picture_click(FertControl *c);
 static void dialog_open(int kind, const char *text, int b1, int b2);
 static bool s_sound;
 static uint32_t s_colours[4];         /* the race car's colours (the description's +0x218 ..) */
@@ -244,6 +250,7 @@ static FertControl *load_screen(const char *name)
         FertControl *c = w->children[i];
         if (FertControl_findState(c, "hover") >= 0) c->fecaps |= 4;   /* (+0x110 as the template's states) */
         if (FertControl_findState(c, "selected") >= 0) c->fecaps |= 0x100;
+        if (FertControl_findState(c, "focused") >= 0) c->fecaps |= 0x80;
         if (FertControl_findState(c, "disabled") >= 0) c->fecaps |= 0x10;
         if (FertControl_findState(c, "hidden") >= 0) c->fecaps |= 0x20;
     }
@@ -268,7 +275,7 @@ bool FEApp_Init(const char *start)
         FE2D_Init();                                 /* 0x4d88c0 */
         FE_ControlDrawHook = indicator_draw;
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
-        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, saves, the 3D rooms but the garage, movies");
+        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, the 3D rooms but the garage, movies");
         s_bar = load_screen("bottombar");
         s_ready = true;
     }
@@ -303,7 +310,11 @@ bool FEApp_Init(const char *start)
         if (ok) return true;
         while (s_depth) FertControl_free(s_stack[--s_depth]);
     }
-    return FEApp_GotoScreen(start, true);
+    if (!FEApp_GotoScreen(start, true)) return false;
+    /* (0x4d2e70: the players listed and player.lst's loaded, 0x4dee70; without one the player is
+       chosen or made first, GotoScreen("selectname") over the game setup) */
+    if (!strcasecmp(start, "gamesetup") && !FESave_HavePlayer()) FEApp_GotoScreen("selectname", true);
+    return true;
 }
 
 void FEApp_RaceWear(const int32_t *ids, const float *wear, int n)
@@ -546,8 +557,73 @@ static bool can_play(void) { return play_mode() != 0; }
 
 /* The callbacks the bottom bar's buttons and the screens' controls name (0x50cd90 through the screen's
    callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, the screens' own pending. */
+/* 0x4d1e40(-1): the screens of the stack's history popped, back to its first (the player screens over
+   the game setup's, 0x4d2e70's). */
+static void back_to_first(void)
+{
+    while (s_depth > 1) FEApp_Back();
+}
+
+/* The player screens' callbacks (FEMainScreen, vtable 0x5b9d64). Each ends in 0x504b20, the tournament
+   accessor's refresh. */
+static bool player_callback(const char *cb)
+{
+    FEAccessor *users = FEAccess_Find("UserList.UserList"), *in = FEAccess_Find("UserList.NameInput");
+    if (!strcmp(cb, "SETNAMETHENBACK")) {   /* _v55 0x50ffa0: the chosen player's save loaded */
+        if (users && FEAccess_Count(users)) {
+            PENDING_NOTE(0x4f34c0, "the car list's refresh (owned and era)");
+            if (FESave_LoadStem(FESave_PlayerStem(FEAccess_Pos(users)), false)) {
+                FEData_KnockoutStop();   /* (0x4ddaf0) */
+                FEApp_Back();
+            } else {
+                FEApp_Message(0x326);
+            }
+            FESave_ListPlayers();
+        }
+    } else if (!strcmp(cb, "REMOVEPLAYER")) {   /* _v56 0x510050: "Are you sure?" (0x323) first */
+        if (users && FEAccess_Count(users)) {
+            dialog_open(DLG_TWO, FEStrings_Get(0x323), 0x2be, 0x2bf);
+            s_dialog.purpose = DLG_FOR_REMOVE;
+        }
+    } else if (!strcmp(cb, "CREATEPLAYERENTER")) {   /* _v57 0x510060: the name cleared, the default driver */
+        FEData_NameInput()[0] = 0;
+        s_driver_pic = 8;   /* (0x4cf1c0) */
+    } else if (!strcmp(cb, "CREATEPLAYERDONE")) {   /* _v58 0x510080 */
+        char name[100];
+        snprintf(name, sizeof name, "%s", FEData_NameInput());
+        if (!name[0]) return true;
+        if (FEData_CheatCode(name)) {   /* (a cheat's code: the name cleared) */
+            FEData_NameInput()[0] = 0;
+        } else if (FESave_NameTaken(name)) {
+            FEApp_Message(0x321);
+        } else if (!FESave_Create(name, s_driver_pic)) {
+            FEApp_Message(0x325);
+        } else {
+            /* (the name added to the list and chosen, the list made anew from the saves, the one chosen
+               then, player.lst's, loaded) */
+            FESave_ListPlayers();
+            if (FESave_LoadStem(FESave_PlayerStem(FEAccess_Pos(users)), true)) {
+                FEData_KnockoutStop();
+                back_to_first();
+            } else {
+                FEApp_Message(0x326);
+            }
+        }
+    } else if (!strcmp(cb, "CANCELCREATEPLAYER")) {   /* _v66 0x5103c0 */
+        FEApp_Back();
+    } else if (!strcmp(cb, "LOADGAMEBUTTON")) {   /* 0x5103d0: the player's save written */
+        FESave_Write();
+    } else {
+        return false;
+    }
+    (void)in;
+    PENDING_NOTE(0x504b20, "the tournament accessor's refresh after the player screens");
+    return true;
+}
+
 static void callback(const char *cb)
 {
+    if (player_callback(cb)) return;
     if (!strcmp(cb, "GOBACK") || !strcmp(cb, "TESTDRIVECHECK")) {
         /* the car setup's (FECarSetupCallbackList_v45 0x4f1360, 0x4f1100 for TESTDRIVECHECK): only with the
            car's required parts (0x5019d0 -> 0x4ef890, else its message, 0x512e70) */
@@ -905,6 +981,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         s_parent = w;
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
+        if (target && type == 4 && picture_click(target)) break;
         if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
         if (target && type == 8) on_up(target);
         break;
@@ -937,6 +1014,14 @@ static void poll(void)   /* 0x529530 */
             s_dialog.done = hit;
         }
         return;
+    }
+    {
+        FertControl *in = focused_input(w);
+        if (in) {
+            uint8_t k[16];
+            int nk = plat_key_presses(k, 16);
+            inputbox_keys(in, k, nk);
+        }
     }
     if (changed & 1) {
         /* (FEApplication_v3 0x4d22a0: the bottom bar first, then the top screen) */
@@ -1544,6 +1629,8 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH") || !strcmp(c->id, "NFS5.WORDWRAPCONTROL")) return wordwrap_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.INPUTBOX")) return inputbox_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE") || !strcmp(c->id, "NFS5.PLAYERPICTURE")) return picture_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): the bar, then its colour (its slot 0x74,
@@ -1614,6 +1701,167 @@ static bool indicator_click(FertControl *c, int32_t mx)
     return true;
 }
 
+/* An input box's tick (FUN_004cc000): its accessor's string (stars for showstars) into hitext's text;
+   one always focused (data.alwaysfocused, FEInputBox_v20 0x4cbe70) takes the focus (0x4c7940). */
+static void inputbox_sync(FertControl *w, FertControl *c)
+{
+    if (data_int_of(c, "alwaysfocused") && !(c->feflags & 0x40)) {
+        c->feflags |= 0x40;
+        w->focus = c;
+        refresh_state(c);
+    }
+    int k = FertControl_findPart(c, "hitext");
+    if (k < 0) return;
+    FertAttr *t = FertAttrList_find(&c->parts[k]->attrs, "text");
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    char v[64];
+    snprintf(v, sizeof v, "%s", a ? FEAccess_Text(a) : "BAD ACCESSOR!");   /* (0x5d8abc) */
+    if (data_int_of(c, "showstars"))
+        for (char *p = v; *p; p++) *p = '*';
+    if (t && strcmp(FertAttr_str(t), v)) {
+        FertAttr_set(t, v);
+        FertControl_Update(c);
+    }
+}
+
+/* Its draw (0x4cc390): its parts, the cursor blinking while focused (TIMER_ticks & 0x3f under 0x20),
+   then the focused or hovered inset, else the drop shadow (but noshadow) and the shine. */
+static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    FEControl_Draw(c, ox, oy);
+    int32_t r[4];
+    FertControl_rect(c, r);   /* (0x4c8240: autosized, its parts' bounds) */
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
+    bool focused = (c->feflags & 0x40) != 0;
+    uint32_t ticks = (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+    int k = FertControl_findPart(c, "cursor");
+    if (focused && (ticks & 0x3f) < 0x20 && k >= 0) {
+        int32_t pos[2] = {0, 0};
+        FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+        if (pa) FertAttr_point(pa, pos);
+        FE2D_DepthStep();
+        FEPart_Draw(c->parts[k], pos[0] + ox, pos[1] + oy);
+    }
+    if (!focused && !(c->feflags & 4)) {
+        if (!data_int_of(c, "noshadow")) FEStyle_DropShadow(x, y, w, h, 0xff, 4, 4);
+        FEStyle_Shine(x, y, w, h, 0xff);
+        return true;
+    }
+    FEStyle_Inset(x, y, w, h, 0xff, 3);
+    return true;
+}
+
+/* The create player screen's pictures (FEPlayerDriverPicture, vtable 0x5b64b0): the driver chosen
+   (0x5d8f2c, its data.ournumber taken on a press, _v9 0x4cf370) glows 5 out (_v15 0x4cf1f0), a hovered
+   one is inset, the others cast a shadow. The select name screen's (FEPlayerPicture_v15 0x4cf630): the
+   chosen player's driver, its stem's digit (0 .. 8) of ALLdrivr.fsh, at its place when there are players
+   (FE_LoadDriverPictures 0x4db650 converts it, or the player's own picture "<name>.<ext>", into
+   SaveData\pic16.fsh with gimme.dll first). */
+
+static bool picture_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    int32_t r[4];
+    FertControl_rect(c, r);   /* (0x4c8240: autosized, its parts' bounds) */
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
+    if (!strcmp(c->id, "NFS5.PLAYERPICTURE")) {
+        FEAccessor *a = FEAccess_Find("UserList.UserList");
+        if (!a || !FEAccess_Count(a)) return true;
+        const char *stem = FESave_PlayerStem(FEAccess_Pos(a));
+        PENDING_NOTE(0x4db650, "a player's own picture (<name>.<ext> through gimme.dll's ConvertFile)");
+        int n = stem[0] - '0';
+        n = n < 1 ? 0 : n > 8 ? 8 : n;
+        char path[300];
+        FE_ResolvePath("ALLdrivr.fsh", path, sizeof path);   /* ("%sAllDrivr.fsh" 0x5d9824 of 0x65b334) */
+        FEShapes_Load(path);
+        FeImage *img = FEShapes_Image(path, n);
+        if (!img) return true;
+        FE2D_DepthStep();
+        FE2D_Image(img, x, y, (float)img->w, (float)img->h, 0xffffffffu, 0, false);
+        return true;
+    }
+    FEControl_Draw(c, ox, oy);   /* (0x4c7e30) */
+    bool chosen = s_driver_pic == data_int_of(c, "ournumber");
+    FE2D_DepthStep();
+    if (chosen) FEStyle_Glow(x, y, w, h, 0xff, 5);
+    if (c->feflags & 4) FEStyle_Inset(x, y, w, h, 0xff, 3);
+    else if (!chosen) FEStyle_DropShadow(x, y, w, h, 0xff, 4, 4);
+    return true;
+}
+
+static bool picture_click(FertControl *c)
+{
+    if (strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE")) return false;
+    s_driver_pic = data_int_of(c, "ournumber");
+    return true;
+}
+
+/* The keys to the focused input box (FEInputBox_v4 0x4cc660, the characters Windows makes of them): the
+   keypad's digits, backspace, Enter (the focus let go, 0x4c7970, and the accessor's change, slot 3),
+   the characters 0x20 .. 0xfe but %. */
+static FertControl *focused_input(FertControl *w)
+{
+    for (int i = 0; w && i < w->nchildren; i++) {
+        FertControl *c = w->children[i];
+        if (c->sub) {
+            FertControl *f = focused_input(c->sub);
+            if (f) return f;
+        }
+        if (!strcmp(c->id, "NFS5.INPUTBOX") && (c->feflags & 0x40) && !(c->feflags & 0x30)) return c;
+    }
+    return NULL;
+}
+
+static int key_char(uint8_t code, bool shift)
+{
+    static const char row1[] = "1234567890", row1s[] = "!@#$%^&*()", rowq[] = "qwertyuiop", rowa[] = "asdfghjkl", rowz[] = "zxcvbnm";
+    static const uint8_t pad[] = {0x52, 0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, 0x48, 0x49};   /* keypad 0..9 */
+    for (int i = 0; i < 10; i++)
+        if (code == pad[i]) return '0' + i;
+    int ch = 0;
+    if (code >= 0x02 && code <= 0x0b) return shift ? row1s[code - 2] : row1[code - 2];
+    if (code >= 0x10 && code <= 0x19) ch = rowq[code - 0x10];
+    else if (code >= 0x1e && code <= 0x26) ch = rowa[code - 0x1e];
+    else if (code >= 0x2c && code <= 0x32) ch = rowz[code - 0x2c];
+    if (ch) return shift ? ch - 'a' + 'A' : ch;
+    switch (code) {
+    case 0x39: return ' ';
+    case 0x0e: return 8;
+    case 0x1c: case 0x9c: return 13;
+    case 0x0c: return shift ? '_' : '-';
+    case 0x0d: return shift ? '+' : '=';
+    case 0x33: return shift ? '<' : ',';
+    case 0x34: return shift ? '>' : '.';
+    case 0x27: return shift ? ':' : ';';
+    case 0x28: return shift ? '"' : '\'';
+    case 0x1a: return shift ? '{' : '[';
+    case 0x1b: return shift ? '}' : ']';
+    case 0x29: return shift ? '~' : '`';
+    }
+    return 0;
+}
+
+static void inputbox_keys(FertControl *c, const uint8_t *k, int nk)
+{
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    uint8_t held[KEY_COUNT];
+    bool shift = plat_keys(held) && (held[0x2a] || held[0x36]);
+    for (int i = 0; i < nk && a; i++) {
+        int ch = key_char(k[i], shift);
+        if (!ch || (ch != 8 && ch != 13 && (ch < 0x20 || ch > 0xfe || ch == '%'))) continue;
+        if (ch == 13) {
+            if (!data_int_of(c, "alwaysfocused")) {   /* (0x4c7970; an always focused box takes it back) */
+                c->feflags &= ~0x40u;
+                refresh_state(c);
+            }
+        } else {
+            FEAccess_TypeChar(a, ch);
+        }
+        PENDING_NOTE(0x4aab80, "the front end's key sound (9)");
+    }
+}
+
 /* The accessor watches' texts (FEAccessorWatch's tick: the accessor's text for the path's argument into
    its label), in the screen and its panels. */
 static void update_watches(FertControl *w)
@@ -1621,6 +1869,10 @@ static void update_watches(FertControl *w)
     for (int i = 0; w && i < w->nchildren; i++) {
         FertControl *c = w->children[i];
         if (c->sub) update_watches(c->sub);
+        if (!strcmp(c->id, "NFS5.INPUTBOX")) {
+            inputbox_sync(w, c);
+            continue;
+        }
         if (strcmp(c->id, "NFS5.AccessorWatch")) continue;
         const char *path = data_str(c, "accessor");
         FEAccessor *a = FEAccess_Find(path);
@@ -1809,6 +2061,16 @@ static void usedcar_update(FertControl *w)
 static void screen_update(FertControl *w)   /* the screen's callback list's update (its v1) */
 {
     const char *cbl = screen_attr(w, "callbacklist");
+    {
+        /* FEMainScreen_v1 0x50faf0 (the main list's, which every screen's runs too): the create player's
+           OK with a name typed, the select name's remove and continue with players (the latter where the
+           former is). (Its multiplayer buttons and the menu music's turn are elsewhere or pend.) */
+        FEAccessor *users = FEAccess_Find("UserList.UserList");
+        bool any = users && FEAccess_Count(users) > 0;
+        enable(w, "ID_CREATEPLAYEROKBUTTON", FEData_NameInput()[0] != 0);
+        enable(w, "ID_REMOVEBUTTON", any);
+        if (control_named(w, "ID_REMOVEBUTTON")) enable(w, "ID_CONTINUEBUTTON", any);
+    }
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
     else if (!strcmp(cbl, "ID_CARSETUP")) {
@@ -1878,6 +2140,16 @@ static void menu_music(void)
 void FEApp_Frame(void)
 {
     poll();
+    if (s_dialog.purpose == DLG_FOR_REMOVE && !s_dialog.up) {
+        /* FEMainScreen_v1 0x50faf0: yes deletes the chosen player's files (0x4de350; 0x324 when it
+           can't), the list made anew */
+        s_dialog.purpose = DLG_FOR_NONE;
+        FEAccessor *users = FEAccess_Find("UserList.UserList");
+        if (s_dialog.done == 1 && users && FEAccess_Count(users)) {
+            if (!FESave_Delete(FESave_PlayerStem(FEAccess_Pos(users)))) FEApp_Message(0x324);
+            else FESave_ListPlayers();
+        }
+    }
     if (s_dialog.purpose == DLG_FOR_TOUR && !s_dialog.up) {
         /* FEApplication_v1 0x4d25d0: ok goes on with the race (0x4d5200 again) */
         s_dialog.purpose = DLG_FOR_NONE;

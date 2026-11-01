@@ -2,6 +2,7 @@
 #include "game/hud_config.h"
 #include "exe.h"
 #include "pending.h"
+#include "platform.h"
 #include "real/loc.h"
 #include "render/hudart.h"
 #include "vfs.h"
@@ -30,13 +31,23 @@ static int32_t pos[HUDPOS_COUNT][2];   /* 0x60c828 */
 static int32_t rd32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
 static float rdf(const uint8_t *p) { float v; memcpy(&v, p, 4); return v; }
 
+/* A SaveData file: the user's own (the port's user files are flat), else the game's. */
+static uint8_t *read_savedata(const char *file, size_t *n)
+{
+    uint8_t *d = plat_load_user_file(file, n);
+    if (d) return d;
+    char path[300];
+    snprintf(path, sizeof path, "%s%s", save_dir, file);
+    return vfs_read_all(path, n);
+}
+
 /* The player's file, else the default ("%s%s%s" 0x5ccb98, "%s%s" 0x5cc588). */
 static uint8_t *read_file(const char *player, const char *own, const char *fallback, size_t *n)
 {
-    char path[300];
-    snprintf(path, sizeof path, "%s%s%s", save_dir, player, own);
-    if (!vfs_exists(path)) snprintf(path, sizeof path, "%s%s", save_dir, fallback);
-    return vfs_read_all(path, n);
+    char f[200];
+    snprintf(f, sizeof f, "%s%s", player, own);
+    uint8_t *d = read_savedata(f, n);
+    return d ? d : read_savedata(fallback, n);
 }
 
 /* The places in pixels. 0x41fb60 */

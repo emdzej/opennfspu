@@ -6,6 +6,7 @@
 #include "game/car_drive.h"
 #include "game/audio.h"
 #include "game/hud_config.h"
+#include "game/race_setup.h"
 #include "game/race_car.h"
 #include "game/road.h"
 #include "game/race_progress.h"
@@ -2546,7 +2547,7 @@ void HUD_Init(void)
     g_mission_forced = -1;         /* 0x60c9ec */
     /* The player's name (the race description's +0x558 +0x17c), the layout chosen (0x657db8), the
        screen. */
-    HudConfig_Load("", 0, g_display.width, g_display.height);
+    HudConfig_Load(g_race_player, 0, g_display.width, g_display.height);
     always = true;  /* (HUD_LoadStrings 0x41e190 sets 0x60c970) */
     add(gear_new(), true, false);
     add(speed_new(), true, false);

@@ -160,3 +160,14 @@ int FEData_PersonalityIndex(int id);   /* nfs5.per's record (0-based) of a perso
 /* A Factory Driver opponent's car by id (0x4eb830): its SPECNAME, colours (the race description's
    order), stripes package and race number, picked at random as the original does. */
 bool FEData_OpponentCar(int id, char spec[0x40], uint32_t col[4], int32_t *stripe, int32_t *racenum);
+/* UserList.NameInput's string (the create player screen's name) and the string accessors' typing
+   (FEStringAccessor slots 12 and 14: a character added, 8 the last taken off); false when it's full. */
+char *FEData_NameInput(void);
+bool FEAccess_TypeChar(FEAccessor *a, int ch);
+/* The knockout given up (0x4ddaf0: a player chosen or made). */
+void FEData_KnockoutStop(void);
+/* The cheats typed as a player's name (0x65b940) and whether one is on (0x4d8240). */
+extern uint32_t g_fe_cheats;
+bool FE_Cheat(int bit);
+/* A name that is a cheat's code (0x4d8130): the cheat taken, true. */
+bool FEData_CheatCode(const char *name);

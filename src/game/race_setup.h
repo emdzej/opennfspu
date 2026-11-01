@@ -38,3 +38,5 @@ typedef struct {
 } RaceOpponent;
 extern RaceOpponent g_race_opp[8];
 extern bool g_race_opp_set;
+/* The player's name (the race description's +0x558 +0x17c: the front end's player, "" for none). */
+extern char g_race_player[64];

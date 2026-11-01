@@ -16,7 +16,7 @@ static uint8_t *s_last;      /* 0x69c8f0 */
 static SaveCar s_car;        /* 0x69c8c8 */
 static bool s_havecar;
 static bool s_cheated;       /* 0x69c900 */
-static bool s_loaded;
+static unsigned s_loaded;    /* (the save's load it follows, FESave_Serial) */
 
 static int16_t m16(const uint8_t *m, int off) { int16_t v; memcpy(&v, m + off, 2); return v; }
 static int32_t m32(const uint8_t *m, int off) { int32_t v; memcpy(&v, m + off, 4); return v; }
@@ -83,9 +83,13 @@ static void make_car(void)
 
 void FEFactory_Load(void)
 {
-    if (s_loaded) return;
-    s_loaded = true;
     Save *sv = FESave_Current();
+    if (s_loaded == FESave_Serial()) return;
+    s_loaded = FESave_Serial();
+    free(s_own);
+    s_own = NULL;
+    s_ms = NULL;
+    s_n = 0;
     for (int i = 0; sv && i < sv->nsec; i++) {
         SaveSection *x = &sv->sec[i];
         if (strcmp(x->name, "Missions") || x->size < 4) continue;

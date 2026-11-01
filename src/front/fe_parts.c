@@ -529,6 +529,16 @@ void FEStyle_Inset(float x, float y, float w, float h, int a, int b)
     quad4(x5, y4, c13, (xr - fb) + 1.0f, y4, c13, x - 2.0f, y9, c14, xr - 2.0f, y9, c14);
 }
 
+void FEStyle_Glow(float x, float y, float w, float h, int a, int b)
+{
+    uint32_t in = fade(0xffffffffu, a), out = fade(0x80ffffffu, a);
+    float fb = (float)b, xr = fb + x + w, x0 = x - fb, y0 = y - fb, yb = fb + y + h;
+    quad4(x0, y0, out, xr, y0, out, x0 + fb, y, in, xr - fb, y, in);               /* top */
+    quad4(x0 + fb, y + h, in, xr - fb, y + h, in, x0, yb, out, xr, yb, out);       /* bottom */
+    quad4(x0, y0, out, x, y0 + fb, in, x0, yb, out, x, yb - fb, in);               /* left */
+    quad4(x + w, y0 + fb, in, xr, y0, out, x + w, yb - fb, in, xr, yb, out);       /* right */
+}
+
 static int data_int(const FertControl *c, const char *name, int def)
 {
     for (int k = 0; k < c->nparts; k++) {

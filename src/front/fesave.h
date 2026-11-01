@@ -57,10 +57,30 @@ bool Save_Parse(Save *s, const uint8_t *d, size_t n);
 uint8_t *Save_Serialize(const Save *s, size_t *n);
 void Save_Free(Save *s);
 
-/* The current player's save (the front end's): the user's own if it has one, else the game's default
-   player's (SaveData\XXDefXX.sav, 0x5d9a44). */
+/* The current player's save (the front end's): player.lst's player's, read at the first call (the front
+   end's start, 0x4d2e70), else the template's (SaveData\XXDefXX.sav, 0x5d9a44) with no player. */
 Save *FESave_Current(void);
-/* Written back to the user's files. */
+/* Written back to the player's file (Save_Write 0x4de850 of the player and its picture); false without
+   a player. */
 bool FESave_Write(void);
+/* Whether a player's save is the current one, and its file's stem ("<picture><name>"). */
+bool FESave_HavePlayer(void);
+const char *FESave_Stem(void);
+/* A count up at each load (the screens' copies of the save's data follow it). */
+unsigned FESave_Serial(void);
+/* The players' saves (UserList.UserList: Save_ListPlayers 0x4dea10), their stems, player.lst's one. */
+void FESave_ListPlayers(void);
+int FESave_PlayerCount(void);
+const char *FESave_PlayerStem(int i);
+int FESave_PlayerChosen(void);
+void FESave_ChoosePlayer(int i);
+/* A player of the name under any picture (0x4ddfc0). */
+bool FESave_NameTaken(const char *name);
+/* The save of a stem made the current one (0x4de460); false if it can't be read. */
+bool FESave_LoadStem(const char *stem, bool write_first);
+/* A new player (Save_Load 0x4de060), then the current one. */
+bool FESave_Create(const char *name, int pic);
+/* A player's files deleted (0x4de350). */
+bool FESave_Delete(const char *stem);
 /* Money as the front end writes it (0x4dba30: the strings 0x6a4 .. 0x6a7 group the thousands). */
 const char *FE_MoneyText(int32_t v);

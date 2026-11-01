@@ -52,3 +52,7 @@ void FEWindow_Draw(FertControl *w);
 extern bool (*FE_ControlDrawHook)(FertControl *c, int32_t ox, int32_t oy);
 /* The front end's styles (0x520780 ..), for the application's draws. */
 void FEStyle_DropShadow(float x, float y, float w, float h, int a, int dx, int dy);
+void FEStyle_Shine(float x, float y, float w, float h, int a);
+void FEStyle_Inset(float x, float y, float w, float h, int a, int b);
+/* A glow b pixels out round a box (0x5213e0): white at it, half white at the outside. */
+void FEStyle_Glow(float x, float y, float w, float h, int a, int b);

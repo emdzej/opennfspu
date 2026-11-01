@@ -18,13 +18,13 @@ typedef struct {
 
 static MarketEnt s_ent[256];
 static int s_n;
-static Save *s_sv;
+static unsigned s_serial;
 
 static Save *market(void)
 {
     Save *sv = FESave_Current();
-    if (sv != s_sv) {   /* (0x4f6d70: the list the save's section gives) */
-        s_sv = sv;
+    if (FESave_Serial() != s_serial) {   /* (0x4f6d70: the list the save's section gives, each load) */
+        s_serial = FESave_Serial();
         s_n = 0;
         for (int i = 0; sv && i < sv->nused && s_n < 256; i++) s_ent[s_n++] = (MarketEnt){false, i};
     }
@@ -71,8 +71,9 @@ static void drop(int k)   /* the entry out of the list */
 
 static int find_owned(int owned)
 {
-    if (owned < 0 || owned >= s_sv->ncars) return -1;
-    int32_t id = get32(s_sv->cars[owned].rec, 0);
+    Save *sv = FESave_Current();
+    if (!sv || owned < 0 || owned >= sv->ncars) return -1;
+    int32_t id = get32(sv->cars[owned].rec, 0);
     for (int k = 0; k < s_n; k++)
         if (s_ent[k].owned && s_ent[k].idx == id) return k;
     return -1;

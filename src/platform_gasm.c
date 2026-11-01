@@ -135,19 +135,69 @@ int plat_key_presses(uint8_t *codes, int cap)
 
 /* ---- storage ---- */
 
+/* Storage keys are [A-Za-z0-9._-]: a file's name is its key with each other byte, and '-', as '-' and two
+   hex digits (a player's name may hold spaces and more, CHEAT_IsValidChar's filter). */
+static bool user_key(const char *name, char *key, size_t cap)
+{
+    static const char hex[] = "0123456789abcdef";
+    size_t n = 0;
+    for (const unsigned char *p = (const unsigned char *)name; *p; p++) {
+        bool plain = (*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '.' || *p == '_';
+        if (n + (plain ? 1 : 3) >= cap) return false;
+        if (plain) key[n++] = (char)*p;
+        else key[n++] = '-', key[n++] = hex[*p >> 4], key[n++] = hex[*p & 15];
+    }
+    key[n] = 0;
+    return n > 0;
+}
+
+static int hexval(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1; }
+
 uint8_t *plat_load_user_file(const char *name, size_t *size)
 {
-    int32_t n = gasm_storage_get(name, (uint32_t)strlen(name), NULL, 0);
+    char key[160];
+    if (!user_key(name, key, sizeof key)) return NULL;
+    int32_t n = gasm_storage_get(key, (uint32_t)strlen(key), NULL, 0);
     if (n < 0) return NULL;
     uint8_t *b = malloc(n ? (size_t)n : 1);
-    if (gasm_storage_get(name, (uint32_t)strlen(name), b, (uint32_t)n) != n) { free(b); return NULL; }
+    if (gasm_storage_get(key, (uint32_t)strlen(key), b, (uint32_t)n) != n) { free(b); return NULL; }
     *size = (size_t)n;
     return b;
 }
 
 bool plat_save_user_file(const char *name, const void *data, size_t size)
 {
-    return gasm_storage_set(name, (uint32_t)strlen(name), data, (uint32_t)size) == 0;
+    char key[160];
+    if (!user_key(name, key, sizeof key)) return false;
+    return gasm_storage_set(key, (uint32_t)strlen(key), data, (uint32_t)size) == 0;
+}
+
+bool plat_delete_user_file(const char *name)
+{
+    char key[160];
+    if (!user_key(name, key, sizeof key)) return false;
+    return gasm_storage_delete(key, (uint32_t)strlen(key)) == 0;
+}
+
+int plat_user_file_count(void) { return (int)gasm_storage_count(); }
+
+bool plat_user_file_name(int i, char *dst, size_t cap)
+{
+    char key[160];
+    int32_t n = gasm_storage_key((uint32_t)i, key, sizeof key - 1);
+    if (n < 0 || n >= (int32_t)sizeof key) return false;
+    key[n] = 0;
+    size_t o = 0;
+    for (int32_t k = 0; k < n && o + 1 < cap; k++) {
+        if (key[k] == '-' && k + 2 < n && hexval(key[k + 1]) >= 0 && hexval(key[k + 2]) >= 0) {
+            dst[o++] = (char)(hexval(key[k + 1]) << 4 | hexval(key[k + 2]));
+            k += 2;
+        } else {
+            dst[o++] = key[k];
+        }
+    }
+    dst[o] = 0;
+    return o > 0;
 }
 
 /* ---- data: the game's files as assets ---- */

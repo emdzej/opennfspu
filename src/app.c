@@ -20,6 +20,8 @@
 #include "render/drive_selftest.h"
 #include "front/fe_selftest.h"
 #include "front/feapp.h"
+#include "front/fesave.h"
+#include "front/feaccess.h"
 #include "render/render.h"
 #include "render/thrash.h"
 #include "static_init.h"
@@ -31,7 +33,8 @@ static char car_name[64];     /* --param car=<name>: that car in the viewer (Gam
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
-static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests) */
+static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests;
+                                 "=<name>" types the name into UserList.NameInput) */
 static int fe_frames;
 static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (default gamesetup) */
 static bool fe_on;
@@ -112,7 +115,8 @@ bool app_frame(void)
                         char one[64];
                         size_t len = strcspn(p, ",");
                         snprintf(one, sizeof one, "%.*s", (int)(len < sizeof one ? len : sizeof one - 1), p);
-                        FEApp_Callback(one);
+                        if (one[0] == '=') snprintf(FEData_NameInput(), 9, "%s", one + 1);   /* (a name typed) */
+                        else FEApp_Callback(one);
                     }
                 }
                 if (FEApp_Result() == FE_PLAY) {
@@ -135,6 +139,10 @@ bool app_frame(void)
                     g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;
                     g_race_opp_set = FEApp_OpponentCars(g_race_opp) >= 0;
                     g_race_mode = FEApp_GameType();   /* (0x4eab10's option 0x30) */
+                    {
+                        Save *sv = FESave_Current();   /* (the description's player, 0x4eab10) */
+                        snprintf(g_race_player, sizeof g_race_player, "%s", sv ? sv->player : "");
+                    }
                     Mission_Reset();
                     if (g_race_mode == 9) FEFactory_RaceOptions();
                 } else if (FEApp_Result() == FE_QUIT) {
