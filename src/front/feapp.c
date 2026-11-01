@@ -21,10 +21,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 enum { STACK = 16 };
 
 static FertControl *s_stack[STACK];   /* +0xd8: the screens */
+static char s_stack_name[STACK][64];  /* (their layouts' names) */
+static char s_saved[STACK][64];       /* the stack when the race began, to come back to (0x4d2e70's) */
+static int s_nsaved;
 static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu, bottombar.lay) */
 static FEResult s_result;
 static char s_track[64] = "coastal";
@@ -264,6 +268,17 @@ bool FEApp_Init(const char *start)
     if (!s_sound) s_sound = Audio_Init();
     s_music_at = -1;   /* 0x65b928: the application (the car renderer's showroom mode) */
     while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
+    if (s_nsaved) {
+        /* back from a race (0x4d2e70 after it): the screens it began from, the knockout between its races
+           on its race information (knockoutraceinfo 0x5d9354) */
+        int n = s_nsaved;
+        s_nsaved = 0;
+        bool ok = true;
+        for (int i = 0; i < n && ok; i++) ok = FEApp_GotoScreen(s_saved[i], true);
+        if (ok && FEData_KnockoutOn()) FEApp_GotoScreen("knockoutraceinfo", true);
+        if (ok) return true;
+        while (s_depth) FertControl_free(s_stack[--s_depth]);
+    }
     return FEApp_GotoScreen(start, true);
 }
 
@@ -284,6 +299,11 @@ void FEApp_RaceOver(const int *places, const int *times, int n)
 
 void FEApp_End(void)
 {
+    /* the stack to come back to (the knockout's race information off it: it's put back while the
+       knockout runs) */
+    s_nsaved = 0;
+    for (int i = 0; i < s_depth; i++)
+        if (strcasecmp(s_stack_name[i], "knockoutraceinfo")) snprintf(s_saved[s_nsaved++], sizeof s_saved[0], "%s", s_stack_name[i]);
     if (s_sound) {
         Music_FadeOut(0x5dc);   /* (FEApplication_Run's end) */
         Audio_Shutdown();       /* (the port's race opens it again) */
@@ -307,6 +327,7 @@ bool FEApp_GotoScreen(const char *name, bool push)
         FertControl_free(w);
         return false;
     }
+    snprintf(s_stack_name[s_depth], sizeof s_stack_name[0], "%s", name);
     s_stack[s_depth++] = w;
     return true;
 }

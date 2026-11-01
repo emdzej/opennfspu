@@ -2036,6 +2036,9 @@ const char *FEData_Track(void)
     return a && a->count ? trk_name_of(a, a->pos) : "coastal";
 }
 
+static bool s_ko_on;   /* 0x690410: a knockout running (0x4dd9b0) */
+bool FEData_KnockoutOn(void) { return s_ko_on; }
+
 const char *FEData_LoopedTrack(void)
 {
     FEAccessor *a = FEAccess_Find("LoopedTrack.Track");

@@ -128,3 +128,5 @@ bool FEData_CarComplete(char *msg, size_t cap);
 int FEData_TourCheck(void);
 /* The front end's Game.GameType (the track lists depend on it). */
 void FEData_SetGameType(int type);
+/* A knockout between its races (0x4dd9b0). */
+bool FEData_KnockoutOn(void);
