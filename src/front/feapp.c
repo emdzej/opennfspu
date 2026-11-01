@@ -2,6 +2,7 @@
 #include "front/feapp.h"
 #include "front/femovie.h"
 #include "front/fecarlogo.h"
+#include "front/feshowcase.h"
 #include "front/fechronicle.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
@@ -148,6 +149,7 @@ static int fe_int(const char *key, int def)
 }
 
 static int language(void) { return fe_int("language", 0); }
+int FEApp_Language(void) { return language(); }
 
 static FertControl *load_screen(const char *name);
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy);
@@ -380,6 +382,7 @@ void FEApp_End(void)
     }
     FE3D_Free();
     FEChronicle_Free();    /* 0x506920 (0x4d5d40) */
+    FEShowcase_Load(NULL); /* 0x5081e0 (the port's: the race's memory) */
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
     g_r3d_frontend = 0;
 }
@@ -654,6 +657,7 @@ static void callback(const char *cb)
 {
     if (player_callback(cb)) return;
     if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE") && FEChronicle_Callback(cb)) return;
+    if (FEShowcase_Callback(cb)) return;   /* (the base list's SHOWCASE.<car> functors) */
     if (!strcmp(cb, "GOBACK") || !strcmp(cb, "TESTDRIVECHECK")) {
         /* the car setup's (FECarSetupCallbackList_v45 0x4f1360, 0x4f1100 for TESTDRIVECHECK): only with the
            car's required parts (0x5019d0 -> 0x4ef890, else its message, 0x512e70) */
@@ -2157,6 +2161,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (FEMovieBox_Draw(c, ox, oy)) return true;
     if (FEChronicle_Draw(c, ox, oy)) return true;
     if (FECarLogo_Draw(c, ox, oy)) return true;
+    if (FEShowcase_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);

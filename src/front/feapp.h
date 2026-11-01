@@ -29,6 +29,8 @@ FertControl *FEApp_Top(void);
 
 /* The front end's end before a race (FEApplication_Run's return; its 3D rooms let go, 0x65b928 cleared). */
 void FEApp_End(void);
+/* The options' language (the front end's strings and the showcase's texts). */
+int FEApp_Language(void);
 
 /* The race the front end set up is over: the racers' places (0 not finished) and times, the player
    first, for the career's. */

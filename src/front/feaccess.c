@@ -9,6 +9,7 @@
 #include "front/fesave.h"
 #include "front/femarket.h"
 #include "front/fefactory.h"
+#include "front/feshowcase.h"
 #include "vfs.h"
 #include "platform.h"
 #include "app.h"
@@ -19,7 +20,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_STRING } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_STRING, ACC_SHOWCASE } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -135,6 +136,7 @@ static int track_rec(const FEAccessor *a, int i)
 static const char *trk_name_of(const FEAccessor *a, int i) { return (const char *)s_trk + TRK_SIZE * track_rec(a, i) + 8; }
 static const char *car_file(int i) { return (const char *)s_car + CAR_SIZE * s_cars[i] + 0x7f; }
 static const uint8_t *generic_rec(void);
+const uint8_t *FEData_GenericCar(void) { return generic_rec(); }
 
 /* An option's value from fe.txt by its key in the options' table (Options_Parse 0x4b0db0 fills it with
    (id, target, key) triples: the keys' addresses are its instruction operands). */
@@ -1352,8 +1354,10 @@ void FEData_Init(void)
     add("FactoryDriver.Car", ACC_FDCAR, 1, 0, 0);
     add("FDPrizeCars.Car", ACC_FDPRIZE, 1, 0, 0);
     /* FEdaChronicle_v0 0x5080b0: the chronicle's year (FEIntAccessor 0x4b9ef0: 1948 of 1948 .. 1996; its
-       range the era's, 0x4ba0d0). (Its Showcase.Text, vtable 0x5b8d64, the showcase screens': pending.) */
+       range the era's, 0x4ba0d0); its Showcase.Text (FEShowcaseTextAccessor, vtable 0x5b8d64), the
+       showcase's texts by number. */
     add("Chronicle.Year", ACC_INT, 0x7cc - 0x79c + 1, 0x79c, 0);
+    add("Showcase.Text", ACC_SHOWCASE, 1, 0, 0);
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -1580,6 +1584,7 @@ const char *FEAccess_Text(const FEAccessor *a)
     }
     case ACC_FDATA:
     case ACC_TDATA:
+    case ACC_SHOWCASE:
     case ACC_COLOUR:      /* (a colour box shows its swatch, not a text: FEColorBox pending) */
     case ACC_INTCOLOUR:
         return "";
@@ -1613,6 +1618,7 @@ bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
 {
     static char b[16];
+    if (a->kind == ACC_SHOWCASE) return FEShowcase_Text(Fert_ParseInt(arg ? arg : ""));   /* v5 0x508540 */
     if (a->kind == ACC_FDATA) {   /* FEFactoryDriverDataAccessor_v5 0x519620 */
         FEAccessor *p = FEAccess_Find("Factory.ProfileNum");
         return FEFactory_Data(arg, p ? p->pos : 0);

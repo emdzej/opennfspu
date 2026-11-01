@@ -41,6 +41,8 @@ const char *FEAccess_CarFile(const FEAccessor *a);
 const char *FEData_Track(void);
 /* zMergedList.Car's car one of the player's (0x4f4420: its place before the owned cars' count). */
 bool FEData_MergedOwned(void);
+/* GenericCar.Car's nfs5.car record (the merged list's car past the owned ones), NULL on an owned car. */
+const uint8_t *FEData_GenericCar(void);
 /* The track a game type races a circuit (0x4fb4f0: its nfs5.trk record's +0x6e 1): quick race Track1,
    quick knockout LoopedTrack, knockout the slot's Track<n>; others none. */
 bool FEData_TrackLooped(int type);
