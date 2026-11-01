@@ -1,5 +1,6 @@
 /* The world's collision tree, its elements and the surface queries (see wtree.h). */
 #include "game/wtree.h"
+#include "game/smack.h"
 #include "exe.h"
 #include "game/track.h"
 #include "game/track_pending.h"
@@ -801,12 +802,12 @@ static bool obj_crosses(const WTreeElem *e, const float seg[6])   /* 0x486510 */
 static const WTreeElemVtbl obj_vt = {obj_free, obj_centre, obj_bounds, obj_contains, obj_crosses,
                                      NULL, NULL, NULL, NULL, NULL, NULL};
 
-/* Slot 8 (0x486b90): an animated entry answers from its animation (0x489820, 0x476760); else solid, or
-   drive-through with the definition's flag. */
+/* Slot 8 (0x486b90): an entry of a bundle with knockable objects (its +0x14, 0x489820) answers from
+   them (0x476760; the definition's drive-through flag unread there); else solid, or drive-through with
+   the flag. */
 static int obj_hitkind(const WTreeObject *o, const float vel[3])
 {
-    (void)vel;
-    PENDING_NOTE(0x489820, "the animated objects' hit kind (0x489820, 0x476760)");
+    if (o->bundle && o->bundle->smack) return WAnimatable_HitKind(o->bundle->smack, o->entry, vel);
     return (o->drivethru != 0) + 2;
 }
 

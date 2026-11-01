@@ -1,5 +1,6 @@
 /* The race's cars (see car.h). */
 #include "game/car.h"
+#include "game/traffic.h"
 #include "game/skid.h"
 #include "render/carparticle.h"
 #include "game/race_car.h"
@@ -17,7 +18,7 @@
 
 Car *g_cars[CAR_MAX];
 int g_ncars;
-Car *g_traffic[CAR_MAX];
+Car *g_traffic[TRAFFIC_MAX];
 int g_ntraffic;
 uint8_t g_cardesc[CAR_MAX][CARDESC_SIZE];
 int g_nracecars, g_ntrafficcars;
@@ -501,6 +502,11 @@ static void Car_LoadSpecs(Car *c, int i)
         c->p[CARP_AISPECS] = NULL;
     }
     Car_SetTasks(c);
+    if ((*CAR_I(c, CAR_FLAGS) & 0x80) && DESC_I(c, 4) == 1) {
+        /* a knockable object: no renderer (its bundle draws it), no wheels' trails */
+        for (int w = 0; w < 4; w++) c->p[CARP_WHEELS + w] = NULL;
+        return;
+    }
     Car_MakeRenderer(c);
 }
 
@@ -511,7 +517,7 @@ void Car_Construct(void)
     g_created = 0;
     CarList *lists[] = {&g_racers, &g_humans, &g_opponents, &g_viewed, &g_rivals, &g_cops, &g_chasers, &g_ranked, &g_ordered};
     for (size_t k = 0; k < sizeof lists / sizeof *lists; k++) lists[k]->n = 0;
-    for (int i = 0; i < g_nracecars + g_ntrafficcars && i < CAR_MAX; i++) {
+    for (int i = 0; i < g_nracecars + g_ntrafficcars && i < CAR_MAX + TRAFFIC_MAX; i++) {
         Car *c = MEM_alloc(exe_str(0x5cc5b4), (int)sizeof(Car), 0);   /* "Car_tObj" (0x1254) */
         memset(c, 0, sizeof *c);
         WSurface_Init(&c->body);
@@ -523,8 +529,7 @@ void Car_Construct(void)
                 c->p[CARP_PARTS + k] = MEM_alloc(exe_str(0x5cc5a4), CARPART_SIZE, 0);   /* "Parts_tCarParts" */
             Parts_Find(c);
         } else {
-            PENDING_NOTE(0x628fc0, "the traffic cars' descriptions (0x628fc0 + 0x594 i)");
-            c->p[CARP_DESC] = g_cardesc[i];
+            c->p[CARP_DESC] = g_trafficdesc[i - g_nracecars];   /* 0x628fc0 */
         }
         Car_AddToLists(c);
     }

@@ -152,7 +152,7 @@ float CarSim_TyreBump(Car *c)
 
 /* The ride heights: of the four corner points the lowest and the mean (most cars), of all the body
    points the lowest and the mean of the three lowest (upside down, traffic). 0x49a870 */
-static void ride_heights(Car *c, const float n[3], const float at[3])
+void CarSim_RideHeights(Car *c, const float n[3], const float at[3])
 {
     float low[4] = {1000.0f, 1000.0f, 1000.0f, 1000.0f};
     bool upright = K(0x5b4a0c) < *CAR_F(c, 0x3a0) && !(*CAR_I(c, CAR_FLAGS) & 0x80);
@@ -443,7 +443,7 @@ float CarSim_Ground(Car *c, float out[3])
     int16_t lifted = airborne < 2 ? 0 : 1;   /* two or more wheels off the ground */
     memcpy(c->b + 0x418, &lifted, 2);
     CarSim_BodyPoints(c);              /* 0x49ada0 */
-    ride_heights(c, out, mean);        /* 0x49a870 */
+    CarSim_RideHeights(c, out, mean);        /* 0x49a870 */
     return mean[1];
 }
 
@@ -527,11 +527,7 @@ void CarSim_Forces(void *car)
     float n[3];
     float h;
     if (flags & 0x80) {
-        PENDING_NOTE(0x499830, "the traffic cars' ground contact");
-        n[0] = 0;
-        n[1] = 1;
-        n[2] = 0;
-        h = *CAR_F(c, 0x41c);
+        h = CarSim_TrafficGround(c, n);   /* 0x499830 */
     } else {
         h = CarSim_Ground(c, n);   /* 0x4999e0 */
     }
@@ -644,12 +640,74 @@ void WSurface_TrackNode(WSurface *s, const float p[3])
 
 static void track_node(Car *c) { WSurface_TrackNode(&c->body, CAR_F(c, 0x330)); }
 
+/* The tracker's bytes in the car (+0x8 node, +0x11 changed, +0x12 none, +0x2c surface). */
+static void body_bytes(Car *c)
+{
+    memcpy(c->b + 0x8, &c->body.node, 2);
+    c->b[0x11] = c->body.changed;
+    c->b[0x12] = c->body.none;
+    memcpy(c->b + 0x2c, &c->body.surface, 2);
+}
+
+void CarSim_TrackBody(Car *c)   /* 0x499460 */
+{
+    track_node(c);                                       /* 0x4743a0 */
+    WSurface_Update(&c->body, CAR_F(c, 0x330), true);    /* 0x473fc0 */
+    body_bytes(c);
+}
+
+/* The four corner points (the wheels' contacts, +0x3c of the trackers at +0x7bc) of a traffic object:
+   under its centre by its half height, ahead and behind by its half length times fwd, to the sides by its
+   half width times side (0x5b25e8). */
+static void traffic_corners(Car *c, const float *pos, float fwd)
+{
+    float f[3], r[3], u[3], b[3], p[3];
+    float hz = *CAR_F(c, 0x3b0) * fwd, hx = *CAR_F(c, 0x3a8) * K(0x5b25e8), hy = -*CAR_F(c, 0x3ac);
+    for (int k = 0; k < 3; k++) {
+        f[k] = CAR_F(c, 0x37c)[k] * hz;
+        r[k] = CAR_F(c, 0x364)[k] * hx;
+        u[k] = CAR_F(c, 0x370)[k] * hy;
+    }
+    for (int k = 0; k < 3; k++) b[k] = pos[k] + u[k];
+    for (int k = 0; k < 3; k++) p[k] = b[k] + f[k];
+    for (int k = 0; k < 3; k++) {
+        CAR_F(c, 0x7f8)[k] = p[k] - r[k];
+        CAR_F(c, 0x8bc)[k] = p[k] + r[k];
+    }
+    for (int k = 0; k < 3; k++) p[k] = b[k] - f[k];
+    for (int k = 0; k < 3; k++) {
+        CAR_F(c, 0x980)[k] = p[k] - r[k];
+        CAR_F(c, 0xa44)[k] = p[k] + r[k];
+    }
+}
+
+void CarSim_TrafficCorners(Car *c, float fwd) { traffic_corners(c, CAR_F(c, 0x330), fwd); }
+
+float CarSim_TrafficGround(Car *c, float n[3])   /* 0x499830 */
+{
+    float *pos = CAR_F(c, 0x330);
+    WSurface_Update(&c->body, pos, true);   /* 0x473fc0 */
+    body_bytes(c);
+    memcpy(n, WSurface_Normal(&c->body), 12);   /* 0x474380 */
+    float h;
+    if (n[1] <= K(0x5b2604)) {
+        h = -2.097152e9f;
+    } else {
+        const float *at = CAR_F(c, 0x400);
+        float dx = pos[0] - at[0], dz = pos[2] - at[2], ny = n[1], nx = n[0], nz = n[2], y = at[1];
+        CarSim_RideHeights(c, n, at);   /* 0x49a870 */
+        h = (-(dx * nx) - dz * nz) / ny + y;
+    }
+    traffic_corners(c, pos, K(0x5b2618));
+    return h;
+}
+
 static const float *node_vec(int node, int off) { return (const float *)(const void *)(g_road->nodes + node * ROAD_NODE_SIZE + off); }
 
 /* The car's own ground plane from the body's polygon (+0x400 its vertices' mean, +0x3e8 its normal,
    +0x3f4 its slope, +0x3dc their cross) and the road's axes at the node (+0x3b8, +0x3c4, +0x3d0).
    0x499490 */
-static void body_plane(Car *c)
+void CarSim_BodyPlane(Car *c)
 {
     if (!c->b[0x7f]) return;
     float *at = CAR_F(c, 0x400), old[3];
@@ -686,12 +744,8 @@ void CarSim_Track(void *car)
     player_distance(c);                         /* 0x4171b0 */
     track_node(c);                              /* 0x4743a0 */
     WSurface_Update(&c->body, CAR_F(c, 0x330), true);   /* 0x473fc0 (its +9 replaces the node's) */
-    /* The tracker's bytes in the car (+0x8 node, +0x11 changed, +0x12 none, +0x2c surface). */
-    memcpy(c->b + 0x8, &c->body.node, 2);
-    c->b[0x11] = c->body.changed;
-    c->b[0x12] = c->body.none;
-    memcpy(c->b + 0x2c, &c->body.surface, 2);
-    if (c->body.changed) body_plane(c);         /* 0x499490 */
+    body_bytes(c);
+    if (c->body.changed) CarSim_BodyPlane(c);         /* 0x499490 */
     *CAR_I(c, 0x460) = c->body.surface;
     int kind = c->body.surface & 0xf;
     *CAR_I(c, 0x464) = kind;

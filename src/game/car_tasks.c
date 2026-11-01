@@ -9,6 +9,7 @@
 #include "game/car_physics.h"
 #include "game/car_respawn.h"
 #include "game/input.h"
+#include "game/traffic.h"
 #include "pending.h"
 
 #define TASK(addr, what)                                       \
@@ -18,7 +19,6 @@
         PENDING_NOTE(0x##addr, what);                          \
     }
 TASK(414830, "car task: 0x414830 (unregistered)")
-TASK(4a0e10, "car task: 0x4a0e10 (traffic, +0xe1c)")
 TASK(4083c0, "car task: 0x4083c0 (replay)")
 TASK(49b6b0, "car task: 0x49b6b0 (+0xe24 variant)")
 static void task_516210(void *car) { (void)car; }   /* 0x516210: a function that returns at once */
@@ -42,7 +42,7 @@ void Car_SetTasks(Car *c)
     if (f & 0x80) {
         *slot(c, T_E10) = NULL;
         *slot(c, T_E14) = NULL;
-        *slot(c, T_E1C) = task_4a0e10;
+        *slot(c, T_E1C) = Traffic_Drive;   /* 0x4a0e10 */
     }
     if (f & 2) {
         if (f & 1) *slot(c, T_E0C) = task_4083c0;

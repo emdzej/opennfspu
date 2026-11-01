@@ -1,5 +1,6 @@
 /* The cars' collisions (see car_collide.h). */
 #include "game/car_collide.h"
+#include "game/traffic.h"
 #include "game/car_cars.h"
 #include "exe.h"
 #include "game/car_damage.h"
@@ -364,7 +365,7 @@ void CarSim_Objects(Car *c)
     WTreeElems_free(near);   /* (the vector and its array) */
 }
 
-static Car *g_collided[CAR_MAX * 2];
+static Car *g_collided[CAR_MAX + TRAFFIC_MAX];   /* 0x628cdc (room for 138, unchecked) */
 static int g_ncollided;
 
 void CarSim_ClearCollided(void) { g_ncollided = 0; }
@@ -393,5 +394,5 @@ void CarSim_Collide(void *car)
             CarSim_ClampSpin(o);
         }
     }
-    if (g_ncollided < CAR_MAX * 2) g_collided[g_ncollided++] = c;
+    if (g_ncollided < CAR_MAX + TRAFFIC_MAX) g_collided[g_ncollided++] = c;
 }

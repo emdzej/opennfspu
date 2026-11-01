@@ -77,7 +77,7 @@ static inline int32_t DESC_I(Car *c, int off) { int32_t v; memcpy(&v, CAR_DESCB(
 /* The race cars (0x5e8b34, count 0x5e8b58), all cars in creation order, traffic (0x5e8c24, 0x5e8b5c). */
 extern Car *g_cars[CAR_MAX];   /* 0x5e8b34: the race's cars (not traffic), count 0x5e8b58 */
 extern int g_ncars;
-extern Car *g_traffic[CAR_MAX];
+extern Car *g_traffic[];   /* (TRAFFIC_MAX, game/traffic.h) */
 extern int g_ntraffic;
 
 /* The race's car descriptions (0x65808c, 0x580 bytes each) and counts (race cars 0x658080, traffic

@@ -139,10 +139,7 @@ void CarSim_WheelSpin(Car *c)
 
 void CarSim_LoadBodyPoints(Car *c)
 {
-    if (*CAR_I(c, CAR_FLAGS) & 0x80) {
-        PENDING_NOTE(0x49ab30, "the traffic cars' body points");
-        return;
-    }
+    if (*CAR_I(c, CAR_FLAGS) & 0x80) return;   /* (a traffic object's come from its body, 0x4a1060) */
     const R3DCar *r = c->p[CARP_R3D];
     int n = r ? (int)r->nbound : 0;
     if (n > 48) n = 48;

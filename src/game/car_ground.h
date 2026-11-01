@@ -36,3 +36,16 @@ void CarSim_Track(void *car);
 /* The road node nearest p, from the tracker's last (the junction's other segment, the tracker's +0x4,
    isn't ported with the junctions); +0x8 and +0x9 say whether it changed. 0x4743a0 */
 void WSurface_TrackNode(WSurface *s, const float p[3]);
+
+/* The ride heights over the plane through `at` of normal n: +0x424 the lowest, +0x428 the mean (the
+   corners' for an upright car, the body points' otherwise). 0x49a870 */
+void CarSim_RideHeights(Car *c, const float n[3], const float at[3]);
+/* The car's ground plane from the body's polygon and the road's axes at its node. 0x499490 */
+void CarSim_BodyPlane(Car *c);
+/* The body's tracker on its road node and polygon. 0x499460 */
+void CarSim_TrackBody(Car *c);
+/* A traffic object's ground: the body's polygon, its normal into n, the ride heights and the corner
+   points; the ground's height under the car (-2097152000 on a wall). 0x499830 */
+float CarSim_TrafficGround(Car *c, float n[3]);
+/* The corner points of a traffic object, its half length scaled by fwd (0x4a12f0's, 0x5b24e8). */
+void CarSim_TrafficCorners(Car *c, float fwd);

@@ -1,5 +1,6 @@
 /* The track world's bundles and visibility walls (see world.h). */
 #include "game/world.h"
+#include "game/smack.h"
 #include "game/skid.h"
 #include "eagl/eagl.h"
 #include "exe.h"
@@ -91,7 +92,8 @@ static void W3DObjectBundle_ctor(W3DObjectBundle *b, uint32_t kind, void *world)
     b->b5 = 0;
     b->draw = NULL;
     b->collide = NULL;
-    b->f10 = b->f14 = 0;
+    b->f10 = 0;
+    b->smack = NULL;
     b->count = 0;
     b->entries = NULL;
     b->place = NULL;
@@ -318,7 +320,7 @@ static int WSceneBundle_load(W3DObjectBundle *b, UData **arts, int n)
     }
     b->vt->buildcache(b);
     b->draw = RDrawAnimArticleBundle_new(b);      /* 0x44fe30 */
-    b->f14 = 0;
+    b->smack = NULL;
     b->collide = NULL;
     return (int)b->count;
 }
@@ -459,6 +461,7 @@ static int WInstanceBundle_load(W3DObjectBundle *b, UData **arts, int n)
     }
     b->vt->buildcache(b);
     b->draw = RDrawAnimArticleBundle_new(b);      /* 0x44fe30 */
+    b->smack = WAnimatable_new(b);                /* 0x475d80 */
     b->collide = PCollideArticleBundle_new(b);    /* 0x474b20 */
     return (int)b->count;
 }
@@ -483,12 +486,16 @@ static void scene_matrix(W3DObjectBundle *b, int entry, float out[16])
     memcpy(out, m.m, sizeof m.m);
 }
 
-/* WInstanceBundle_v5 0x478050: a smacked object's own matrix (0x476730, 0x476970: pending), else its
-   placing's. */
+/* WInstanceBundle_v5 0x478050: an object with a body's matrix (its first piece's motion over its placing,
+   0x476970), else its placing's. */
 static void instance_matrix(W3DObjectBundle *b, int entry, float out[16])
 {
-    const WPlaced *p = &((WInstanceBundle *)b)->placed[entry];
     EaglMatrix m;
+    if (b->smack && WAnimatable_Matrix(b->smack, entry, 0, &m)) {   /* 0x476730, 0x476970 */
+        memcpy(out, m.m, sizeof m.m);
+        return;
+    }
+    const WPlaced *p = &((WInstanceBundle *)b)->placed[entry];
     EAGL_MatFromRotTrans(&m, p->rot, p->pos);   /* 0x539a40 */
     memcpy(out, m.m, sizeof m.m);
 }
@@ -518,8 +525,7 @@ W3DObjectBundle *WSceneBundle_new(void *world)   /* 0x482550: transformed */
 }
 W3DObjectBundle *WInstanceBundle_new(void *world)
 {
-    /* 0x477fd0: transformed and moving; the smackables' state 0x475d80 at +0x14 is pending */
-    PENDING_NOTE(0x475d80, "the instance bundle's smackable objects (their state and pieces)");
+    /* 0x477fd0: transformed and moving; its load makes the knockable objects' state (+0x14) */
     W3DObjectBundle *b = article_bundle(sizeof(WInstanceBundle), &vt_instance, world);
     if (b) b->transformed = b->b5 = 1;
     return b;
@@ -578,6 +584,7 @@ void W3DObjectBundle_delete(W3DObjectBundle *b)
         WInstanceBundle *in = (WInstanceBundle *)b;
         free(in->protos);
         free(in->proto);
+        WAnimatable_free(b->smack);
         free(in->placed);
     } else if (b->vt == &vt_anim) {
         WAnim_free(((WAnimBundle *)b)->anims, b->count);   /* (WAnimBundle's dtor 0x4776d0) */

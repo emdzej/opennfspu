@@ -91,7 +91,7 @@ struct W3DObjectBundle {
     void *draw;                    /* +0x08: the drawing object (render module) */
     void *collide;                 /* +0x0c: the collision object */
     uint32_t f10;                  /* +0x10 */
-    uint32_t f14;                  /* +0x14 */
+    struct WAnimatable *smack;     /* +0x14: the instance bundle's knockable objects (game/smack.h) */
     uint32_t count;                /* +0x18 */
     WBundleEntry *entries;         /* +0x1c */
     struct WGridPlace *place;      /* +0x20: the moving entries' nodes and positions (0x489460) */

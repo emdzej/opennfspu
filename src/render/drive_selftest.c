@@ -21,6 +21,7 @@
 #include "pending.h"
 #include "render/carpages.h"
 #include "game/race_car.h"
+#include "game/traffic.h"
 #include "game/scene.h"
 #include "game/track.h"
 #include "game/wtree.h"
@@ -136,6 +137,7 @@ static bool load(const char *track, const char *carname)
     if (0 < opponents) RaceSetup_Opponents(opponents);
     if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
     if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
+    Traffic_SmackDescs();   /* 0x4a15d0 (Race_SelectTrackDefaults 0x414dd0) */
     Car_Construct();
     if (g_ncars < 1) return false;
     Headlights_SetCar(g_cars[0]);   /* 0x452550 (the viewed car's) */
@@ -144,6 +146,7 @@ static bool load(const char *track, const char *carname)
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
     Render_SeedRand((uint32_t)g_race_seed);   /* (0x44fbd0) */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
+    for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
     AI_Load();             /* the racing line (0x4031f0) */
     Input_Reset(false);
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */

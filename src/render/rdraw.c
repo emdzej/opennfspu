@@ -274,13 +274,15 @@ static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const E
     part_back(c, &p);
 }
 
-/* Its draw (0x44fee0): the level by the queued distance; without the bundle's smacked state (+0x14) the
-   entry's matrix (the bundle's slot 5) and the article under it. */
+/* Its draw (0x44fee0): the level by the queued distance; the entry's matrix (the bundle's slot 5, with a
+   knockable object's motion) and the article under it. With the bundle's knockable state (+0x14) the
+   original draws each piece under its own matrix, the piece's article lit by the entry's colour: for a
+   body's single piece that is the same article and matrix, white until the tick (0x4767a0) lights it. */
 static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
 {
     RDrawBundle *d = (RDrawBundle *)o;
     g_rdraw_key = e->key;
-    if (d->bundle->f14) PENDING_NOTE(0x476730, "the smacked objects' pieces and their matrices");
+    if (d->bundle->smack) PENDING_NOTE(0x450250, "the knockable objects' pieces: the lit prototypes, the canned pieces, the markers (0x450850)");
     if (!d->bundle->vt->matrix) return;
     EaglMatrix m;
     d->bundle->vt->matrix(d->bundle, index, m.m);
