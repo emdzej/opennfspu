@@ -30,6 +30,8 @@ static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents;
 static char s_car[64] = "964";
 static int s_depth;
+static struct { bool up; int text; float x, y, w, h, tw; } s_dialog;   /* the message up (0x512d00) */
+static bool dialog_button_hit(int32_t mx, int32_t my);
 static bool s_sound;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
@@ -341,8 +343,8 @@ static void callback(const char *cb)
         int m = FEData_BuyCar();   /* (FEDealershipCallbackList_v55 0x50e5f0) */
         if (m > 0) {
             char b[200];
-            snprintf(b, sizeof b, "front end: %s (the message box 0x512d00: pending)", FEStrings_Get(m));
-            plat_log(b);
+            (void)b;
+            FEApp_Message(m);   /* 0x512d00 */
         }
     } else if (!strcmp(cb, "TOURNREMAININC") || !strcmp(cb, "TOURNREMAINDEC")) {
         /* the pre-race screen's arrows (FEPreRaceCallBackList): the tournament's next or last race left */
@@ -494,6 +496,10 @@ static void poll(void)   /* 0x529530 */
     }
     uint32_t changed = b ^ s_buttons;
     s_buttons = b;
+    if (s_dialog.up) {   /* (the dialog's the only one taking the mouse) */
+        if ((changed & 1) && !(b & 1) && dialog_button_hit(mx, my)) s_dialog.up = false;
+        return;
+    }
     if (changed & 1) {
         /* (FEApplication_v3 0x4d22a0: the bottom bar first, then the top screen) */
         if (s_bar && FertWindow_hit(s_bar, mx, my)) window_event(s_bar, (b & 1) ? 4 : 8, mx, my);
@@ -617,6 +623,117 @@ static bool account_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* Text broken into lines of width (0x522900 -> 0x522e80; the port breaks at spaces, greedily), drawn
+   from (x0, y) one font height apart, aligned 0 left, 1 centred, 2 right (0x522b10); its height. */
+static float draw_wrapped(HudFont *font, const char *text, float x0, float y, float width, int align, uint32_t colour, bool draw)
+{
+    float y0 = y, fx, fy, fw, fh;
+    FONT_extent(font->font, "X", &fx, &fy, &fw, &fh);
+    float lh = fh > 0 ? fh : 10.0f;
+    char line[256];
+    const char *p = text;
+    while (*p) {
+        int n = 0, last = -1;
+        while (p[n] && p[n] != '\n') {
+            char t[256];
+            int m = n + 1 < 255 ? n + 1 : 255;
+            memcpy(t, p, (size_t)m);
+            t[m] = 0;
+            FONT_extent(font->font, t, &fx, &fy, &fw, &fh);
+            if (fw > width && last >= 0) break;
+            if (p[n] == ' ') last = n;
+            n++;
+            if (n >= 255) break;
+        }
+        int len = n;
+        if (p[n] && p[n] != '\n' && last >= 0) len = last;
+        memcpy(line, p, (size_t)len);
+        line[len] = 0;
+        FONT_extent(font->font, line, &fx, &fy, &fw, &fh);
+        float x = align == 1 ? x0 + (width - fw) * 0.5f : align == 2 ? x0 + width - fw : x0;
+        char *copy = draw ? FE2D_Alloc(len + 1) : NULL;
+        if (copy) {
+            memcpy(copy, line, (size_t)len + 1);
+            FE2D_Text(font, x, y, 0, colour, copy, 1.0f, 1.0f);
+        }
+        y += lh;
+        p += len;
+        while (*p == ' ' || *p == '\n') p++;
+    }
+    return y - y0;
+}
+
+/* The one-button message (FEDialogOneItemSelfDeleting 0x512d00 on FEDialog 0x511c60): the string's text
+   wrapped at 300 in a box of 320 at x 160, centred on 240 by its height + 0x15 (0x512ea0), an OK button
+   (string 0x2be, 80 x 18 at 120 across, under the text) that closes it. Its draw (0x512310): a gouraud body
+   5 wider each way, four bevel edges, the text centred in black, a drop shadow; over every screen, the
+   only one taking the mouse while it's up. (The button's own look: the port's red bar.) */
+void FEApp_Message(int string_id)
+{
+    s_dialog.up = true;
+    s_dialog.text = string_id;
+    s_dialog.x = 160.0f, s_dialog.w = 320.0f;
+    s_dialog.tw = 300.0f;   /* 0x43960000 */
+    s_dialog.h = 100.0f;
+    s_dialog.y = 240.0f - 50.0f;
+}
+
+static HudFont *dialog_font(void)
+{
+    char fp[300];
+    FE_ResolvePath("Univers11b.ffn", fp, sizeof fp);   /* (0x69a060: the dialogs' font) */
+    return FEFont_Get(fp);
+}
+
+static void dialog_layout(void)
+{
+    HudFont *f = dialog_font();
+    const char *t = FEStrings_Get(s_dialog.text);
+    float th = f && f->font && t ? draw_wrapped(f, t, 0, 0, s_dialog.tw, 1, 0, false) : 20.0f;
+    s_dialog.h = th + 18.0f + 0x15;   /* (the text, the button, 0x15) */
+    s_dialog.y = (float)(0xf0 - (int)(th + 0x15) / 2);
+}
+
+static bool dialog_button_hit(int32_t mx, int32_t my)
+{
+    float bx = s_dialog.x + 120.0f, by = s_dialog.y + s_dialog.h - 18.0f - 4.0f;
+    return bx <= mx && mx < bx + 80.0f && by <= my && my < by + 18.0f;
+}
+
+static void dialog_draw(void)
+{
+    if (!s_dialog.up) return;
+    dialog_layout();
+    float x = s_dialog.x, y = s_dialog.y, w = s_dialog.w, h = s_dialog.h, c = 5.0f, c2 = 10.0f;
+    FE2D_DepthStep();
+    FE2D_Gouraud(x - c, y - c, w + c2, h + c2, 0xff82a2b0u, 0xff82a2b0u, 0xe5fed66bu, 0xe5fed66bu);
+    const float top[8] = {x - c, y - c, x + w + c, y - c, x, y, x + w, y};
+    const uint32_t ct[4] = {0xcccfdce0u, 0xb2dce6e9u, 0xcccfdce0u, 0xb29dbed0u};
+    const float left[8] = {x - c, y - c, x, y, x - c, y + h + c, x, y + h};
+    const uint32_t cl[4] = {0xb29cd1ffu, 0x809cd1ffu, 0xb2ffffffu, 0x80ffffffu};
+    const float right[8] = {x + w, y, x + w + c, y - c, x + w, y + h, x + w + c, y + h + c};
+    const uint32_t cr[4] = {0xb2193b6au, 0xe5193b6au, 0xb22a1711u, 0xe52a1711u};
+    const float bot[8] = {x, y + h, x + w, y + h, x - c, y + h + c, x + w + c, y + h + c};
+    const uint32_t cb[4] = {0xb261492au, 0xb261492au, 0xe561492au, 0xe561492au};
+    FE2D_DepthStep();
+    FE2D_Quad(top, ct);
+    FE2D_Quad(left, cl);
+    FE2D_Quad(right, cr);
+    FE2D_Quad(bot, cb);
+    FEStyle_DropShadow(x - c, y - c, w + c2, h + c2, 0xff, 4, 4);
+    HudFont *f = dialog_font();
+    const char *t = FEStrings_Get(s_dialog.text);
+    FE2D_DepthStep();
+    if (f && f->font && t) draw_wrapped(f, t, x + c2, y + c2, s_dialog.tw, 1, 0xff000000u, true);
+    float bx = x + 120.0f, by = y + h - 18.0f - 4.0f;
+    FE2D_Gouraud(bx, by, 80.0f, 18.0f, 0xffe00c0cu, 0xff820000u, 0xffe00c0cu, 0xff820000u);
+    const char *ok = FEStrings_Get(0x2be);
+    if (f && f->font && ok) {
+        FE2D_DepthStep();
+        draw_wrapped(f, ok, bx, by + 2.0f, 80.0f, 1, 0xffffffffu, true);
+    }
+}
+
 /* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
    lines of the control's width (0x522900 -> 0x522e80; the port breaks at spaces, greedily), each line one
    font height lower, aligned by data.align (0 left, 1 centred, 2 right). (Its typing animation pends.) */
@@ -646,39 +763,7 @@ static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
     control_rect(c, r);
     float width = (float)(r[2] - r[0]);
     int align = data_int_of(c, "align");
-    float x0 = (float)(r[0] + ox), y = (float)(r[1] + oy), fx, fy, fw, fh;
-    FONT_extent(font->font, "X", &fx, &fy, &fw, &fh);
-    float lh = fh > 0 ? fh : 10.0f;
-    char line[256];
-    const char *p = text;
-    while (*p) {
-        int n = 0, last = -1;
-        while (p[n] && p[n] != '\n') {
-            char t[256];
-            int m = n + 1 < 255 ? n + 1 : 255;
-            memcpy(t, p, (size_t)m);
-            t[m] = 0;
-            FONT_extent(font->font, t, &fx, &fy, &fw, &fh);
-            if (fw > width && last >= 0) break;
-            if (p[n] == ' ') last = n;
-            n++;
-            if (n >= 255) break;
-        }
-        int len = n;
-        if (p[n] && p[n] != '\n' && last >= 0) len = last;
-        memcpy(line, p, (size_t)len);
-        line[len] = 0;
-        FONT_extent(font->font, line, &fx, &fy, &fw, &fh);
-        float x = align == 1 ? x0 + (width - fw) * 0.5f : align == 2 ? x0 + width - fw : x0;
-        char *copy = FE2D_Alloc(len + 1);
-        if (copy) {
-            memcpy(copy, line, (size_t)len + 1);
-            FE2D_Text(font, x, y, 0, colour, copy, 1.0f, 1.0f);
-        }
-        y += lh;
-        p += len;
-        while (*p == ' ' || *p == '\n') p++;
-    }
+    draw_wrapped(font, text, (float)(r[0] + ox), (float)(r[1] + oy), width, align, colour, true);
     return true;
 }
 
@@ -844,6 +929,7 @@ void FEApp_Frame(void)
         for (int i = 0; i < s_bar->nchildren; i++) FertControl_Update(s_bar->children[i]);
         FEWindow_Draw(s_bar);   /* (0x4d2980: the bottom bar over the screens) */
     }
+    dialog_draw();
     FE2D_Flush();
     View_End(g_render);
     if (tm) TexManager_end(tm);

@@ -30,6 +30,9 @@ void FEApp_End(void);
    first, for the career's. */
 void FEApp_RaceOver(const int *places, const int *times, int n);
 
+/* A message box of a string id up over the screens, closed by its OK (0x512d00). */
+void FEApp_Message(int string_id);
+
 /* Whether the front end is done: a race to start (PLAYGAME on a screen that can play) or the game to
    end (QUIT); the race it set up. */
 typedef enum { FE_RUNNING, FE_PLAY, FE_QUIT } FEResult;

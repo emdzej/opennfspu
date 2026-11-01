@@ -2592,3 +2592,6 @@
 00503080	Tournament_End	frontend	high	All races run and top three: completed once more; the first time the year advances (0x5b8670), the era when none is left
 00503720	Tournament_SetYear	frontend	high	The year (0x5db75c) and its era: to 1969 0x209, to 1988 0x20a, after 0x20b
 00503a00	Tournament_DebugWinAll	frontend	med	Every race of the era's tournaments won (8 points, the first prize)
+00512d00	FEDialogOneItem_ctor	frontend	high	A one-button message (OK 0x2be) of a string, self-deleting
+00511c60	FEDialog_ctor	frontend	high	A dialog: 320 wide at 160, text wrapped at 300
+00512310	FEDialog_Draw	frontend	high	Gouraud body, four bevel edges, centred black text, drop shadow
