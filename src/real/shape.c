@@ -72,3 +72,14 @@ const uint8_t *SHAPE_clut(const uint8_t *rec)
         rec += (int32_t)h >> 8;   /* signed, as the original shifts it */
     }
 }
+
+const char *SHAPE_name(const uint8_t *rec)
+{
+    while (rec) {
+        uint32_t h = rd32(rec);
+        if ((h & 0xff) == 'o') return (const char *)rec + 8;
+        if (!(h & 0xffffff00u)) return NULL;
+        rec += (int32_t)h >> 8;
+    }
+    return NULL;
+}

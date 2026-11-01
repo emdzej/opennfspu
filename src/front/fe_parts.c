@@ -219,6 +219,10 @@ void FEShapes_Load(const char *path)
                 im->h = shh;
                 im->cx = -rd16(sh + 8);
                 im->cy = -rd16(sh + 10);
+                const char *nm = SHAPE_name(sh);   /* 0x56a6a0 ("" without one) */
+                snprintf(im->name, sizeof im->name, "%s", nm ? nm : "");
+                uint32_t tag = SHAPE_entryname(file, i);   /* 0x537cd0 */
+                memcpy(im->tag, &tag, 4);
                 b->images[i] = im;
             }
             if (w) {

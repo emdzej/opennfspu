@@ -1,6 +1,7 @@
 /* The front end's application (feapp.h). */
 #include "front/feapp.h"
 #include "front/femovie.h"
+#include "front/fechronicle.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
@@ -364,6 +365,7 @@ void FEApp_End(void)
         s_sound = false;
     }
     FE3D_Free();
+    FEChronicle_Free();    /* 0x506920 (0x4d5d40) */
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
     g_r3d_frontend = 0;
 }
@@ -484,6 +486,7 @@ static void on_enter(FertControl *c)   /* 0x4c7760 */
 
 static void on_leave(FertControl *c)   /* 0x4c7820 */
 {
+    FEChronicle_Leave(c);
     if (c->feflags & 4) {
         c->feflags &= ~4u;
         refresh_state(c);
@@ -636,6 +639,7 @@ static bool player_callback(const char *cb)
 static void callback(const char *cb)
 {
     if (player_callback(cb)) return;
+    if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE") && FEChronicle_Callback(cb)) return;
     if (!strcmp(cb, "GOBACK") || !strcmp(cb, "TESTDRIVECHECK")) {
         /* the car setup's (FECarSetupCallbackList_v45 0x4f1360, 0x4f1100 for TESTDRIVECHECK): only with the
            car's required parts (0x5019d0 -> 0x4ef890, else its message, 0x512e70) */
@@ -981,6 +985,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
             w->hover = h;
             if (h) on_enter(h);
         }
+        FEChronicle_Move(h, x, y);
         break;
     }
     case 4:
@@ -991,6 +996,8 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
             break;
         }
         s_parent = w;
+        if (target && type == 4 && FEChronicle_Down(target, w->mouse[0], w->mouse[1])) break;
+        if (target && type == 8 && FEChronicle_Up(target)) break;
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && picture_click(target)) break;
@@ -1024,6 +1031,7 @@ static void poll(void)   /* 0x529530 */
     if ((changed & 1) && !(b & 1) && s_slider_held) {
         slider_held_up();
     }
+    if ((changed & 1) && !(b & 1)) FEChronicle_Up(NULL);   /* (the chronicle's drags end anywhere) */
     if (s_dialog.up) {   /* (the dialog's the only one taking the mouse and the keys) */
         uint8_t k[16];
         int nk = plat_key_presses(k, 16);
@@ -1280,6 +1288,16 @@ static void dialog_open(int kind, const char *text, int b1, int b2)
 
 void FEApp_Callback(const char *cb) { callback(cb); }
 
+void FEApp_Click(int32_t x, int32_t y)
+{
+    FertControl *w = FEApp_Top();
+    if (!w) return;
+    window_event(w, 7, x, y);
+    window_event(w, 4, x, y);
+    FEChronicle_Up(NULL);
+    window_event(w, 8, x, y);
+}
+
 void FEApp_Message(int string_id)
 {
     dialog_open(DLG_ONE, FEStrings_Get(string_id), 0x2be, 0);
@@ -1470,6 +1488,8 @@ static void screen_entered(void)
     }
     lists_drop_stale();
     FEMovieBox_Drop(on_stack);
+    /* (FEChronicleCallBackList 0x506450, made with each of its screens) */
+    if (s_depth && !strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE")) FEChronicle_Open();
 }
 
 /* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
@@ -2025,6 +2045,7 @@ static bool factory_draw(FertControl *c, int32_t ox, int32_t oy)
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (FEMovieBox_Draw(c, ox, oy)) return true;
+    if (FEChronicle_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
@@ -2512,6 +2533,11 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
         }
     }
     else if (!strcmp(cbl, "ID_TOURNYSCREEN")) tourny_update(w);
+    else if (!strcmp(cbl, "ID_CHRONICLE")) {
+        /* FEChronicleCallBackList_v1 0x506e90: the era's button selected, the others not */
+        static const uint32_t ids[5] = {0x5dbb24, 0x5dbb14, 0x5dbb04, 0x5dbaf4, 0x5dbae4};
+        for (int i = 0; i < 5; i++) set_flag(w, exe_str(ids[i]), 8, i == FEChronicle_Era());
+    }
     else if (!strcmp(cbl, "ID_FACTORYCBL")) {
         /* FEFactoryDriverCBL_v1 0x519270: a changed Factory.MissionCheat makes that many missions done
            (0x51aa20) */

@@ -24,3 +24,5 @@ int SHAPE_typevalid(const uint8_t *rec);
 /* The palette record of a shape (types 0x22-0x24, 0x29, 0x2a, 0x2c-0x2e) in its chain, NULL if none; an
    unknown type at the start aborts. SHAPE_clut 0x537d20 */
 const uint8_t *SHAPE_clut(const uint8_t *rec);
+/* The name a shape's 'o' record carries in its chain (its text at +8), NULL if none. 0x56a6a0 */
+const char *SHAPE_name(const uint8_t *rec);

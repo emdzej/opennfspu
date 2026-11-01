@@ -16,7 +16,8 @@ typedef struct {
     float u0, u1, v0, v1;  /* +0x04 */
     int32_t w, h;          /* +0x14 */
     int32_t cx, cy;        /* +0x1c: the shape's centre, negated */
-    char name[0x6c];       /* +0x24 (0x90 bytes in all) */
+    char name[0x65];       /* +0x24: its 'o' record's name (0x56a6a0), "" without one */
+    char tag[7];           /* +0x89: its 4-character entry name (0x537cd0; 0x90 bytes in all) */
 } FeImage;
 
 extern float g_fe_depth;   /* 0x65b954 */
@@ -33,6 +34,10 @@ void FE2D_Quad(const float xy[8], const uint32_t colours[4]);
 /* An image at (x, y) of size (w, h), its corners on whole pixels, flipped by flags (1 across, 2 down);
    opaque draws it without blending. 0x4d95e0 */
 void FE2D_Image(const FeImage *img, float x, float y, float w, float h, uint32_t colour, uint32_t flags, bool opaque);
+/* An image cut to a rectangle (left, top, right, bottom): what lies outside it left off, its texture
+   rectangle with it (no half-texel offsets). 0x4d9920 */
+void FE2D_ImageClip(const FeImage *img, float x, float y, float w, float h, const int32_t clip[4], uint32_t colour,
+                    uint32_t flags, bool opaque);
 /* A text through a font drawer at (x, y), aligned by align (0 as is, 1 centred, 2 right), scaled; none
    without a colour. The string must live until the flush. 0x4d9e00 */
 void FE2D_Text(HudFont *f, float x, float y, int align, uint32_t colour, const char *s, float sx, float sy);

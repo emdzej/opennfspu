@@ -1343,6 +1343,9 @@ void FEData_Init(void)
     add("Factory.MissionCheat", ACC_INT, 0x22, 1, 0);
     add("FactoryDriver.Car", ACC_FDCAR, 1, 0, 0);
     add("FDPrizeCars.Car", ACC_FDPRIZE, 1, 0, 0);
+    /* FEdaChronicle_v0 0x5080b0: the chronicle's year (FEIntAccessor 0x4b9ef0: 1948 of 1948 .. 1996; its
+       range the era's, 0x4ba0d0). (Its Showcase.Text, vtable 0x5b8d64, the showcase screens': pending.) */
+    add("Chronicle.Year", ACC_INT, 0x7cc - 0x79c + 1, 0x79c, 0);
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -1505,6 +1508,16 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
     if ((a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) && a->src == 1) a->cval = palette_colour(a, a->pos);
+}
+
+int FEAccess_Int(const FEAccessor *a) { return a ? a->min + a->pos : 0; }   /* (FEIntAccessor's slot 0x6c) */
+
+void FEAccess_SetRange(FEAccessor *a, int lo, int hi)   /* 0x4ba0d0 */
+{
+    if (!a || (a->min == lo && a->min + a->count - 1 == hi)) return;
+    a->min = lo;
+    a->count = hi - lo + 1;
+    if (a->pos >= a->count) a->pos = 0;   /* (0x4bbef0: a place past the end back to 0) */
 }
 
 const char *FEAccess_Text(const FEAccessor *a)

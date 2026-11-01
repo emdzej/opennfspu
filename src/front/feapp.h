@@ -65,3 +65,5 @@ int FEApp_GameType(void);
 int FEApp_OpponentCars(RaceOpponent out[8]);
 /* A control's callback by name, as a click would run it (port addition: --param fecb=, tests). */
 void FEApp_Callback(const char *cb);
+/* A click at (x, y) on the top screen: a move there, the button down and up (port addition: tests). */
+void FEApp_Click(int32_t x, int32_t y);

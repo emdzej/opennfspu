@@ -1,5 +1,6 @@
 /* The front end's movies in its screens and the movie controls (femovie.h). */
 #include "front/femovie.h"
+#include "front/fechronicle.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
 #include "front/feapp.h"
@@ -379,11 +380,12 @@ static void box_start(Box *b)
         demo_name(b);
     } else {
         if (!strcmp(o, exe_str(0x5d8bb8))) {
-            /* (0x699c98: the chronicle's movie, set by its screens: pending with the chronicle) */
-            PENDING_NOTE(0x506b60, "the chronicle's chosen movie (0x699c98)");
-        } else if (!strcmp(o, exe_str(0x5d8ba8))) {
-            PENDING_NOTE(0x506a50, "the chronicle's era movie");
+            /* (0x699c98, the chronicle's chosen movie, as it is: no path of its own) */
+            snprintf(b->path, sizeof b->path, "%s", FEChronicle_Movie());
+            box_load(b);
+            return;
         }
+        if (!strcmp(o, exe_str(0x5d8ba8))) snprintf(name, sizeof name, "%s", FEChronicle_EraMovie());
         snprintf(b->path, sizeof b->path, "%s%s.mad", FE_DIR_MOVIES, name);
     }
     box_load(b);
@@ -400,7 +402,10 @@ static void box_update(Box *b)
         box_load(b);
     }
     if (!strcmp(b->other, exe_str(0x5d8ba8))) {
-        /* (chroniclemain's: the era's movie changed, v21 again; pending with the chronicle) */
+        /* chroniclemain's: the era's movie changed, the box made again (v21) */
+        char path[100];
+        snprintf(path, sizeof path, "%s%s.mad", FE_DIR_MOVIES, FEChronicle_EraMovie());
+        if (strcmp(path, b->path)) box_start(b);
     } else if (!strcmp(b->other, exe_str(0x5d8bc4))) {
         uint8_t keys[KEY_COUNT] = {0};
         bool esc = plat_keys(keys) && keys[0x01];

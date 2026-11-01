@@ -251,6 +251,35 @@ void FE2D_Image(const FeImage *img, float x, float y, float w, float h, uint32_t
     insert(&it);
 }
 
+void FE2D_ImageClip(const FeImage *img, float x, float y, float w, float h, const int32_t clip[4], uint32_t colour,
+                    uint32_t flags, bool opaque)
+{
+    /* the right and bottom cut by the image's own size at (x, y); the left and top move the corner */
+    float r = w, l = 0, b = h, t = 0;
+    if ((float)clip[2] < (float)img->w + x) r = (float)clip[2] - x;
+    if (x < (float)clip[0]) {
+        l = (float)clip[0] - x;
+        x = (float)clip[0];
+    }
+    if ((float)clip[3] < (float)img->h + y) b = (float)clip[3] - y;
+    if (y < (float)clip[1]) {
+        t = (float)clip[1] - y;
+        y = (float)clip[1];
+    }
+    if (!(0.0f <= r && l <= w && t <= h && 0.0f <= b)) return;   /* (0x5b23f8: 0) */
+    float x0 = (float)(int32_t)x, y0 = (float)(int32_t)y, x1 = edge((r - l) + x), y1 = edge((b - t) + y);
+    const float xy[4][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
+    const uint32_t c[4] = {colour, colour, colour, colour};
+    float ua = (flags & 1) ? img->u1 : img->u0, ub = (flags & 1) ? img->u0 : img->u1;
+    float va = (flags & 2) ? img->v1 : img->v0, vb = (flags & 2) ? img->v0 : img->v1;
+    float u0 = (l / w) * (ub - ua) + ua, u1 = (r / w) * (ub - ua) + ua;
+    float v0 = (t / h) * (vb - va) + va, v1 = (b / h) * (vb - va) + va;
+    const float uv[8] = {u0, v0, u1, v0, u1, v1, u0, v1};
+    Item it;
+    quad(&it, xy, c, uv, opaque, img->tex);
+    insert(&it);
+}
+
 void FE2D_Text(HudFont *f, float x, float y, int align, uint32_t colour, const char *s, float sx, float sy)
 {
     if (!colour) return;

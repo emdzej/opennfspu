@@ -24,6 +24,10 @@ FEAccessor *FEAccess_Find(const char *path);
 int FEAccess_Count(const FEAccessor *a);
 int FEAccess_Pos(const FEAccessor *a);
 void FEAccess_SetPos(FEAccessor *a, int pos);
+/* An int accessor's value (its first plus its place) and its range made lo .. hi (0x4ba0d0: a place past
+   the new end back to 0). */
+int FEAccess_Int(const FEAccessor *a);
+void FEAccess_SetRange(FEAccessor *a, int lo, int hi);
 /* The text of the current item. */
 const char *FEAccess_Text(const FEAccessor *a);
 

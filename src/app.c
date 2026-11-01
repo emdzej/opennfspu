@@ -36,7 +36,8 @@ static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_s
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
 static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests;
-                                 "=<name>" types the name into UserList.NameInput, "^" goes back a screen) */
+                                 "=<name>" types the name into UserList.NameInput, "^" goes back a screen, "@x:y"
+                                 clicks there) */
 static int fe_frames;
 static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (default gamesetup) */
 static bool fe_on;
@@ -130,6 +131,10 @@ bool app_frame(void)
                         snprintf(one, sizeof one, "%.*s", (int)(len < sizeof one ? len : sizeof one - 1), p);
                         if (one[0] == '=') snprintf(FEData_NameInput(), 9, "%s", one + 1);   /* (a name typed) */
                         else if (one[0] == '^') FEApp_Back();
+                        else if (one[0] == '@') {   /* (@<x>:<y>: a click there) */
+                            const char *colon = strchr(one, ':');
+                            if (colon) FEApp_Click(atoi(one + 1), atoi(colon + 1));
+                        }
                         else if (one[0] == '#') {   /* (#<accessor>:<row>: a list's row chosen) */
                             char *colon = strrchr(one, ':');
                             if (colon) *colon = 0;
