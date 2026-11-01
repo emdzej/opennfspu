@@ -13,6 +13,11 @@ bool RaceSetup_SingleCar(const char *name);
    four skills and their ranges, slow, medium, fast and default) scaled by the event's difficulty (1 here),
    its personality i; the player at the back of the grid. */
 bool RaceSetup_Opponents(int n);
+/* n road traffic cars (CLASS 4, 0x4ec590) after the racers, at most nine cars in all: the track's
+   record's seven traffic models (nfs5.trk +0x7c, ids of the car database's kind 1 records) in turn, each
+   in one random colour, named "Traffic". */
+bool RaceSetup_Traffic(int n, const char *track);
+extern int g_race_ntraffic;
 /* The front end's cheats (0x65b940, the bits FE_Cheat reads) the descriptions follow (0x4ee430). */
 extern uint32_t g_race_cheats;
 /* The human car's colours the front end chose (the description's +0x218 order), when set. */

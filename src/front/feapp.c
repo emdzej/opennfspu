@@ -41,7 +41,7 @@ static int s_nsaved;
 static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu, bottombar.lay) */
 static FEResult s_result;
 static char s_track[64] = "coastal";
-static int s_laps = 1, s_opponents;
+static int s_laps = 1, s_opponents, s_traffic;
 static char s_car[64] = "964";
 static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
@@ -561,6 +561,7 @@ const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 int FEApp_Opponents(void) { return s_opponents; }
+int FEApp_Traffic(void) { return s_traffic; }
 
 /* The race's kind for the game type (0x4ec... option 0x10 RACE_TYPE): a quick race 0 (1 with the
    flag 5 of 0x65b940: pending), a quick knockout 3 (the laps knock the last car out), the knockout and
@@ -831,10 +832,12 @@ static void callback(const char *cb)
         s_opponents = 0;
         s_ngrid = -1;
         s_testdrive = true;
+        s_traffic = 0;
         s_testdrive_type = cb[9] == 'U' ? 7 : cb[9] == 'N' ? 6 : 8;
         s_result = FE_PLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
         s_testdrive = false;
+        s_traffic = 0;
         s_ngrid = -1;
         s_nopp = -1;
         s_factory_race = false;
@@ -881,6 +884,7 @@ static void callback(const char *cb)
             s_owned_race = FEData_OwnedIndex("zMergedList.Car");
             s_laps = laps;
             s_opponents = s_ngrid;
+            PENDING_NOTE(0x4fb630, "the knockout slot's traffic (Track<n>.Traffic)");
             s_testdrive = false;
             s_result = FE_PLAY;
             return;
@@ -926,6 +930,12 @@ static void callback(const char *cb)
             s_owned_race = FEData_OwnedIndex("zMergedList.Car");
         }
         s_laps = s_tour_race >= 0 ? FEData_TourLaps() : s_gametype == 1 ? FEData_KOOpponents() : fe_int("num_laps", 1);
+        /* The traffic (0x4fb630's fifth: Track1.Traffic's place, none, light, medium, heavy, for the quick
+           race and the quick knockout) */
+        if (s_tour_race < 0 && (s_gametype == 0 || s_gametype == 1)) {
+            FEAccessor *ta = FEAccess_Find("Track1.Traffic");
+            s_traffic = ta ? FEAccess_Pos(ta) : 0;
+        }
         s_opponents = s_tour_race >= 0 ? 7 : s_gametype == 1 ? FEData_KOOpponents() : FEData_Opponents();   /* (the standings' eight racers) */
         if (s_tour_race < 0) s_nopp = FEData_RaceOpponents(s_opponents, s_opp);   /* (0x4eb230) */
         s_result = FE_PLAY;
