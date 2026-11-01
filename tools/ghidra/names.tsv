@@ -2618,3 +2618,10 @@
 005133a0	FEDialogTwoItem_Layout	frontend	high	Two buttons under the text (text h + 20, 0x15 apart), the box centred on 240
 004a51d0	FloatToFixed16	frontend	high	A float x 65536 (0x5b3e68), truncated
 004ed390	FE_AfterRace	frontend	med	The car lists again; in the career the market's update for the year
+004f7860	UsedCarMarket_MakeCar	frontend	high	A used car of a record: random record colours, stripes (crt rand % 0x6115f8), race number, mileage, parts, +0x69c, its value as price
+004f7b30	UsedCar_Parts	frontend	high	A used car's fitted parts (a share of the ones that fit, picked from the list's first n left), its stock ones that do not clash, ten wear figures
+005175f0	FECar_FitParts	frontend	high	The nfs5.prt parts of a car's list out by a year (not the Body), sorted by 0x49c2c0
+0049c2c0	Part_Before	frontend	high	A part before another: type +0x26, then +0x5c, then id
+004eda40	FECar_ctor	frontend	high	A car object: its part lists, 0x4ee230, +0x6a8 x 10 zero
+004ee230	FECar_Init	frontend	high	A car object of a record: colours, stripes, race number, market fields, stock parts, settings
+005a1579	rand	crt	high	MSVC rand

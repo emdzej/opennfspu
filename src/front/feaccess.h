@@ -78,3 +78,8 @@ void FEData_DefaultSetup(void);
 void FEData_KeepSetup(bool load);
 /* The career's year (0x502870). */
 int FEData_CareerYear(void);
+/* A used car of a record made for the market (0x4f7860): random colours of the record's, stripes and
+   race number, mileage, parts and wear for the year, its value as its price. */
+bool FEData_UsedCar(const uint8_t *r, int year, SaveCar *out);
+/* The records the market's new cars come from (0x6919f0: the racers with a model, in order). */
+int FEData_UsedPool(const uint8_t **out, int cap);

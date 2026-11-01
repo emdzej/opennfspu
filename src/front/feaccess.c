@@ -1,5 +1,7 @@
 /* The front end's data accessors (feaccess.h). */
 #include "front/feaccess.h"
+#include "support/crt.h"
+#include "real/random.h"
 #include "front/fe_parts.h"
 #include "exe.h"
 #include "pending.h"
@@ -147,7 +149,9 @@ static void graphics(void)
 static int16_t rec16(const uint8_t *r, int off) { int16_t v; memcpy(&v, r + off, 2); return v; }
 static int32_t rec32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
 
+extern uint32_t g_carnschemes;   /* 0x6115f8 (render/carpages.h): the last car's stripe packages */
 static int career_year(void);
+static bool car_before(const uint8_t *a, const uint8_t *b);
 int FEData_CareerYear(void) { return career_year(); }
 
 static const uint8_t *part_rec(int32_t id)   /* 0x49c3e0: an nfs5.prt record by its id */
@@ -599,6 +603,13 @@ void FEData_Init(void)
         snprintf(path, sizeof path, "GameData\\CarModel\\%s.crp", (const char *)r + 0x7f);   /* "%s%s.crp" */
         if (kind == 0 && vfs_exists(path)) s_cars[s_ncars++] = (int)i;
     }
+    for (int i = 0; i < s_ncars; i++)   /* (0x4f05c0, as FE_LoadCarList 0x4f30c0 sorts it) */
+        for (int j = i + 1; j < s_ncars; j++)
+            if (car_before(s_car + CAR_SIZE * s_cars[j], s_car + CAR_SIZE * s_cars[i])) {
+                int t = s_cars[i];
+                s_cars[i] = s_cars[j];
+                s_cars[j] = t;
+            }
     char v[64];
     int opp = fe_key("numopponentracecars", v, sizeof v) ? atoi(v) : 4;
     add("Game.NumOpponents", ACC_INT, 8, 0, opp);   /* 0x4b9ef0(name, 0, 4, 0, 7, ...) */
@@ -990,6 +1001,205 @@ void FEData_TourResult(int race, const int *places, const int *times, int n)
     FESave_Write();
 }
 
+/* A new car object of a record (0x4eda40 -> 0x4ee230): its id, the record, the colours (+0x674 ..
+   +0x680), the stripe package (+0x684) and race number (+0x688), the market's fields none, the player's
+   (+0x6a0), the settings a new car's kept at +0x714 too, the record's stock parts (+0x3bc ids from +0x3be)
+   both as its stock (+0x75c) and its fitted ones (+0x758), each with its nfs5.prt value (0x4ee030). The
+   id: the lowest no car has (the original's loop compares the new object's own unset +0 against the
+   count, so its id is what the heap left there: the port takes the intent). */
+static void car_object(Save *sv, SaveCar *c, const uint8_t *r, const int32_t col[4], int32_t stripe, int32_t racenum)
+{
+    memset(c, 0, sizeof *c);
+    int32_t id = 0;
+    for (bool again = true; again;) {
+        again = false;
+        for (int i = 0; i < sv->ncars && !again; i++) if (rec32(sv->cars[i].rec, 0) == id) id++, again = true;
+        for (int i = 0; i < sv->nused && !again; i++) if (rec32(sv->used[i].rec, 0) == id) id++, again = true;
+    }
+    memcpy(c->rec, &id, 4);
+    memcpy(c->rec + 4, r, CAR_SIZE);
+    memcpy(c->rec + 0x674, col, 16);
+    memcpy(c->rec + 0x684, &stripe, 4);
+    memcpy(c->rec + 0x688, &racenum, 4);
+    c->rec[0x6a0] = 1;
+    static const float f50 = 50.0f, f1 = 1.0f, f30 = 30.0f;
+    memcpy(c->rec + 0x6d0, &f50, 4);
+    memcpy(c->rec + 0x6d4, &f50, 4);
+    memcpy(c->rec + 0x6d8, &f50, 4);
+    memcpy(c->rec + 0x6e8, &f1, 4);
+    memcpy(c->rec + 0x6ec, &f30, 4);
+    memcpy(c->rec + 0x6f0, &f30, 4);
+    memcpy(c->rec + 0x714, c->rec + 0x6d0, 0x11 * 4);
+    int np = rec16(r, 0x3bc);
+    if (np < 0 || np > 64) np = 0;
+    c->parts = np ? calloc((size_t)np * 2, sizeof *c->parts) : NULL;
+    if (np && !c->parts) np = 0;
+    for (int i = 0; i < np; i++) {
+        int32_t pid = rec16(r, 0x3be + 2 * i);
+        int32_t v = FEData_PartValue(pid);
+        c->parts[i][0] = c->parts[np + i][0] = pid;
+        c->parts[i][1] = c->parts[np + i][1] = v;
+    }
+    c->ninstalled = c->nother = np;
+}
+
+/* The parts that fit a car in a year (0x5175f0): for each id of its record's list (+0x32e ids from
+   +0x330), the nfs5.prt records of that id (file order) out by then (+0x46), but not the body (type 10
+   named "Body", 0x5da740); in order (a[i], a[j] swapped while 0x49c2c0 has a[j] first: type +0x26, then
+   +0x5c, then the id). */
+static int fit_parts(const uint8_t *r, int year, const uint8_t **out, int cap)
+{
+    static uint8_t *prt;
+    static size_t nprt;
+    if (!prt) prt = vfs_read_all("FEData\\Data\\nfs5.prt", &nprt);
+    int n = 0, nl = rec16(r, 0x32e);
+    const char *body = exe_str(0x5da740);
+    for (int k = 0; k < nl && k < 0x46; k++) {
+        int16_t id = rec16(r, 0x330 + 2 * k);
+        for (size_t i = 0; prt && (i + 1) * 0x168 <= nprt; i++) {
+            const uint8_t *p = prt + 0x168 * i;
+            if (rec16(p, 0) != id || rec16(p, 0x46) > (int16_t)year) continue;
+            if (rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, body)) continue;
+            if (n < cap) out[n++] = p;
+        }
+    }
+    for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++) {
+            const uint8_t *a = out[j], *b = out[i];
+            bool first = rec16(a, 0x26) != rec16(b, 0x26) ? rec16(a, 0x26) < rec16(b, 0x26)
+                       : rec32(a, 0x5c) != rec32(b, 0x5c) ? rec32(a, 0x5c) < rec32(b, 0x5c)
+                       : rec16(a, 0) < rec16(b, 0);
+            if (first) {
+                out[i] = a;
+                out[j] = b;
+            }
+        }
+    return n;
+}
+
+/* A part kept off a car for one it has (0x4f7b30's test): the same name and type, or two engines
+   ("Engine" 0x5d0d1c, "Engine (Standard)" 0x5dafac). */
+static bool part_clash(const uint8_t *p, const uint8_t *q)
+{
+    const char *a = (const char *)p + 0x28, *b = (const char *)q + 0x28;
+    if (!strcmp(a, b) && rec16(p, 0x26) == rec16(q, 0x26)) return true;
+    const char *e = exe_str(0x5d0d1c), *es = exe_str(0x5dafac);
+    return (!strcmp(a, e) || !strcmp(a, es)) && (!strcmp(b, e) || !strcmp(b, es));
+}
+
+/* A number from one of the market's four-row tables (lo, hi, min, max: REAL_rand() % 100 in lo..hi gives
+   min + REAL_rand() % (max - min); the last row that matches; none 0). */
+static int32_t table_roll(uint32_t t)
+{
+    int32_t v = 0;
+    uint32_t r = REAL_rand() % 100;
+    for (int i = 0; i < 4; i++, t += 16) {
+        if ((int32_t)exe_u32(t) <= (int32_t)r && (int32_t)r <= (int32_t)exe_u32(t + 4)) {
+            uint32_t span = exe_u32(t + 12) - exe_u32(t + 8);
+            v = (int32_t)((span ? REAL_rand() % span : 0) + exe_u32(t + 8));
+        }
+    }
+    return v;
+}
+
+static void add_fitted(SaveCar *c, int32_t id, int32_t value)
+{
+    int n = c->ninstalled + c->nother;
+    int32_t (*np)[2] = realloc(c->parts, (size_t)(n + 1) * sizeof *np);
+    if (!np) return;
+    c->parts = np;
+    c->parts[n][0] = id;
+    c->parts[n][1] = value;
+    c->nother++;
+}
+
+static bool clashes(const SaveCar *c, const uint8_t *p)
+{
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+        const uint8_t *q = part_rec(c->parts[i][0]);
+        if (q && part_clash(p, q)) return true;
+    }
+    return false;
+}
+
+/* A used car's parts and wear (0x4f7b30): its fitted parts anew: of the parts that fit it in the
+   market's year, a share (the table 0x5b7b08, x 0.01 of their count) picked at random from the ones
+   left (the original draws from the first "left" of the list itself: the shuffled index it keeps
+   isn't used), each but one that clashes with a part it has; then its stock parts that don't clash.
+   Ten wear figures (+0x6a8, the table 0x5b7b88); the body's wear their average (x 0.1, 0x5b49b4), the
+   other parts' each a figure of their own. */
+static void used_parts(SaveCar *c, int year)
+{
+    c->nother = 0;
+    const uint8_t *list[256];
+    int n = fit_parts(c->rec + 4, year, list, 256);
+    int32_t pct = table_roll(0x5b7b08);
+    int k = (int)((double)(pct * n) * 0.01);   /* (0x5b2bc0) */
+    if (n > 0) {
+        int left = n;
+        for (; k > 0; k--) {
+            uint32_t j = left == 0 ? 0 : REAL_rand() % (uint32_t)left;
+            if (j < (uint32_t)n && !clashes(c, list[j])) add_fitted(c, rec16(list[j], 0), rec32(list[j], 0x164));
+            left--;
+        }
+    }
+    for (int i = 0; i < c->ninstalled; i++) {
+        const uint8_t *p = part_rec(c->parts[i][0]);
+        if (p && !clashes(c, p)) add_fitted(c, c->parts[i][0], c->parts[i][1]);
+    }
+    float sum = 0;
+    for (int i = 0; i < 10; i++) {
+        float w = (float)table_roll(0x5b7b88);
+        memcpy(c->rec + 0x6a8 + 4 * i, &w, 4);
+        sum += w;
+    }
+    float avg = sum * 0.1f;
+    const char *body = exe_str(0x5da740);
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+        const uint8_t *p = part_rec(c->parts[i][0]);
+        float w = p && rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, body) ? avg : (float)table_roll(0x5b7b88);
+        memcpy(&c->parts[i][1], &w, 4);
+    }
+}
+
+static uint32_t bswap(uint32_t v) { return v >> 24 | (v >> 8 & 0xff00u) | (v << 8 & 0xff0000u) | v << 24; }
+
+bool FEData_UsedCar(const uint8_t *r, int year, SaveCar *out)   /* 0x4f7860 */
+{
+    Save *sv = FESave_Current();
+    if (!sv || !r) return false;
+    uint32_t body = 0xffff0000u, c3 = 0xffff0000u, c4 = 0xffff0000u, inside = 0xffffffffu;
+    int nb = rec16(r, 0x3e6), ni = rec16(r, 0x528);
+    if (nb > 0) {
+        uint32_t k = REAL_rand() % (uint32_t)nb;
+        body = bswap((uint32_t)rec32(r, 0x3ec + 16 * (int)k));
+        c3 = bswap((uint32_t)rec32(r, 0x3f0 + 16 * (int)k));
+        c4 = bswap((uint32_t)rec32(r, 0x3f4 + 16 * (int)k));
+    }
+    if (ni > 0) inside = bswap((uint32_t)rec32(r, 0x530 + 16 * (int)(REAL_rand() % (uint32_t)ni)));
+    int32_t stripe = 0, racenum = -1;
+    if (CRT_rand() % 100 > 50) stripe = g_carnschemes ? (int32_t)((uint32_t)CRT_rand() % g_carnschemes) : 0;   /* (0x6115f8: the last car's) */
+    if (CRT_rand() % 100 > 80) racenum = CRT_rand() % 100 - 1;
+    int32_t col[4] = {(int32_t)body, (int32_t)inside, (int32_t)c3, (int32_t)c4};
+    car_object(sv, out, r, col, stripe, racenum);
+    int32_t miles = table_roll(0x5b7b48);
+    memcpy(out->rec + 0x698, &miles, 4);
+    used_parts(out, year);
+    int32_t x = table_roll(0x5b7bc8);
+    memcpy(out->rec + 0x69c, &x, 4);
+    out->rec[0x6a0] = 0;
+    int32_t v = FEData_CarValue(out, year);
+    memcpy(out->rec + 0x68c, &v, 4);
+    return true;
+}
+
+int FEData_UsedPool(const uint8_t **out, int cap)   /* the records 0x4f7660 offers (0x6919f0) */
+{
+    int n = 0;
+    for (int i = 0; i < s_ncars && n < cap; i++) out[n++] = s_car + CAR_SIZE * s_cars[i];
+    return n;
+}
+
 /* Buying the dealer's car (FEDealershipCallbackList_v55 0x50e5f0 -> 0x5012a0): not with too little money
    (the message 0x322) or 80 cars already (0x3d); else a new car of the record (0x4eda40 -> 0x4ee230: the
    lowest id no car has, the record, its colours, its state, its stock parts installed, 0x4ee030), the
@@ -1007,44 +1217,13 @@ int FEData_BuyCar(void)
     if (!nc) return -1;
     sv->cars = nc;
     SaveCar *c = &sv->cars[sv->ncars];
-    memset(c, 0, sizeof *c);
-    int32_t id = 0;   /* the lowest id of no car (the owned and the used ones: 0x69188c) */
-    for (bool again = true; again;) {
-        again = false;
-        for (int i = 0; i < sv->ncars && !again; i++) if (rec32(sv->cars[i].rec, 0) == id) id++, again = true;
-        for (int i = 0; i < sv->nused && !again; i++) if (rec32(sv->used[i].rec, 0) == id) id++, again = true;
-    }
-    memcpy(c->rec, &id, 4);
-    memcpy(c->rec + 4, r, CAR_SIZE);
     {   /* +0x674 .. +0x680: the accessor's colours (slots 0x74 .. 0x80; 0x84, 0x88 pend: 0) */
         uint32_t col[4];
         FEAccess_CarColours(d, col);
         int32_t v[4] = {(int32_t)col[0], (int32_t)col[3], (int32_t)col[1], (int32_t)col[2]};
-        memcpy(c->rec + 0x674, v, sizeof v);
+        car_object(sv, c, r, v, 0, 0);
     }
-    c->rec[0x6a0] = 1;
     memcpy(c->rec + 0x6a4, &price, 4);
-    static const float f50 = 50.0f, f1 = 1.0f, f30 = 30.0f;
-    memcpy(c->rec + 0x6d0, &f50, 4);
-    memcpy(c->rec + 0x6d4, &f50, 4);
-    memcpy(c->rec + 0x6d8, &f50, 4);
-    memcpy(c->rec + 0x6e8, &f1, 4);
-    memcpy(c->rec + 0x6ec, &f30, 4);
-    memcpy(c->rec + 0x6f0, &f30, 4);
-    memcpy(c->rec + 0x714, c->rec + 0x6d0, 0x11 * 4);
-    /* the stock parts (the record's list +0x3bc), each with its nfs5.prt value (+0x164), as both the
-       car's parts and its installed ones */
-    int np = rec16(r, 0x3bc);
-    if (np < 0 || np > 64) np = 0;
-    c->parts = np ? calloc((size_t)np * 2, sizeof *c->parts) : NULL;
-    if (np && !c->parts) np = 0;
-    for (int i = 0; i < np; i++) {
-        int32_t pid = rec16(r, 0x3be + 2 * i);
-        int32_t v = FEData_PartValue(pid);
-        c->parts[i][0] = c->parts[np + i][0] = pid;
-        c->parts[i][1] = c->parts[np + i][1] = v;
-    }
-    c->ninstalled = c->nother = np;
     sv->ncars++;
     for (int i = 0; i < sv->ncars; i++)   /* 0x4f0550 */
         for (int j = i + 1; j < sv->ncars; j++)

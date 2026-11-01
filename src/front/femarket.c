@@ -160,6 +160,38 @@ static void drop_used(Save *sv, int k)   /* a market car of its own deleted (0x4
         if (!s_ent[j].owned && s_ent[j].idx > i) s_ent[j].idx--;
 }
 
+/* The year's new cars (0x4f7660): of the racers with a model (0x6919f0), each out two years before the
+   market's year and for sale (+0x204 not 2 or 3) by the chance of its age (0x5b7a10: its entry at most
+   REAL_rand() % 60), a used car of it (0x4f7860); with more than 24 in the market, the first of the
+   market's own leaves first. */
+static void new_cars(Save *sv, int year)
+{
+    const uint8_t *pool[160];
+    int n = FEData_UsedPool(pool, 160);
+    for (int i = 0; i < n; i++) {
+        int first = get16(pool[i], 0x1f8), kind = get16(pool[i], 0x204);
+        if (!(first < year - 1 && kind != 3 && kind != 2)) continue;
+        if (exe_u32(0x5b7a10 + 4u * (uint32_t)(year - first)) > REAL_rand() % 60) continue;
+        SaveCar nc;
+        if (!FEData_UsedCar(pool[i], year, &nc)) continue;
+        if (s_n > 0x18)
+            for (int k = 0; k < s_n; k++)
+                if (!rec_of(sv, s_ent[k])[0x6a0]) {
+                    drop_used(sv, k);
+                    break;
+                }
+        SaveCar *nu = realloc(sv->used, (size_t)(sv->nused + 1) * sizeof *nu);
+        if (!nu || s_n >= 256) {
+            free(nc.parts);
+            continue;
+        }
+        sv->used = nu;
+        sv->used[sv->nused] = nc;
+        s_ent[s_n++] = (MarketEnt){false, sv->nused};
+        sv->nused++;
+    }
+}
+
 void Market_Update(int year)   /* 0x4f7350 */
 {
     Save *sv = market();
@@ -177,7 +209,7 @@ void Market_Update(int year)   /* 0x4f7350 */
         uint8_t *r = rec_of(sv, s_ent[k]);
         if (!r[0x6a0]) put32(r, 0x68c, FEData_CarValue(car_of(sv, s_ent[k]), year));
     }
-    PENDING_NOTE(0x4f7660, "the market's new cars of the year (0x4f7860 makes one)");
+    new_cars(sv, year);
 }
 
 int Market_FirstOffer(void)   /* 0x4f8b10 */
