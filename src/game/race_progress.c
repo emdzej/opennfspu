@@ -196,8 +196,8 @@ void CarSim_RaceTask(void *car)
     *CAR_F(c, 0xaf8) = c->b[0x7f] ? Race_Progress(car_node(c)) : 0.0f;
 }
 
-/* The car's half extent across the road: its box's half sizes along the road's right (0x4176a0). */
-static float across(Car *c)
+/* 0x4176a0 */
+float Race_CarAcross(Car *c)
 {
     const float *rr = CAR_F(c, 0x3b8);
     float a = fabsf(dot3(rr, CAR_F(c, 0x364))), b = fabsf(dot3(rr, CAR_F(c, 0x370))), f = fabsf(dot3(rr, CAR_F(c, 0x37c)));
@@ -206,7 +206,7 @@ static float across(Car *c)
 
 /* The lane at offset x from the node's centre line: 7 and up to the right by the lane width (the table
    of 1 / width at 0x5e7550, made by 0x406900), 6 and down to the left; 2 .. 11. */
-static int lane_at(int node, float x)
+int Race_LaneAt(int node, float x)
 {
     float w = x >= K(0x5b23f8) ? node_f(node, 0x4c) : node_f(node, 0x48);
     int base = x >= K(0x5b23f8) ? 7 : 6;
@@ -217,14 +217,14 @@ static int lane_at(int node, float x)
 }
 
 /* The lanes the car covers (+0xea8, a bit per lane) and the one its centre is in (+0x1020). 0x40ec10 */
-static void lanes(Car *c)
+void Race_CarLanes(Car *c)
 {
     *CAR_I(c, 0xea8) = 0;
     if (*CAR_I(c, 0xecc) & 4) return;
     int node = car_node(c);
     float lat = *CAR_F(c, 0xed0), ext = *CAR_F(c, 0x538);
-    *CAR_I(c, 0x1020) = lane_at(node, lat);
-    int a = lane_at(node, (lat - ext) + K(0x5b23f0));
+    *CAR_I(c, 0x1020) = Race_LaneAt(node, lat);
+    int a = Race_LaneAt(node, (lat - ext) + K(0x5b23f0));
     /* The far side's lane, clamped the same way except that 12 and 13 pass (and leave no lanes). */
     float x = (lat + ext) - K(0x5b23f0);
     float w = x >= K(0x5b23f8) ? node_f(node, 0x4c) : node_f(node, 0x48);
@@ -237,8 +237,8 @@ static void lanes(Car *c)
         for (int i = a; i <= b; i++) *CAR_I(c, 0xea8) |= 1 << (i & 31);
 }
 
-/* On the ground and under control (0x408870). */
-static bool steady(Car *c)
+/* 0x408870 */
+bool Car_OutOfControl(Car *c)
 {
     uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
     return !(!(f & 0x800) && c->b[0x7e] != 0 && (!(f & 0x20) || 1 < c->b[0x7e]));
@@ -310,13 +310,13 @@ void Race_TickEven(void)
     for (int i = 0; i < g_ncars; i++) {
         Car *c = g_cars[i];
         if (!c->b[0x7f]) continue;
-        *CAR_F(c, 0x538) = across(c);
+        *CAR_F(c, 0x538) = Race_CarAcross(c);
         int node = car_node(c);
         const float *np = node_vec(node, 4), *pos = CAR_F(c, 0x330);
         float d[3] = {pos[0] - np[0], pos[1] - np[1], pos[2] - np[2]};
         *CAR_F(c, 0xed0) = dot3(CAR_F(c, 0x3b8), d);   /* the offset across the road */
-        lanes(c);
-        if (steady(c)) {
+        Race_CarLanes(c);
+        if (Car_OutOfControl(c)) {
             const float *v = CAR_F(c, 0x33c), *rf = CAR_F(c, 0x3d0);
             *CAR_F(c, 0xec0) = rf[2] * v[2] + rf[1] * v[1] + rf[0] * v[0];   /* the speed along the road */
         }

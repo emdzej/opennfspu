@@ -23,5 +23,6 @@ void AI_LoadData(void);
 /* The car's personality record (+0xe38). */
 const AiPersonality *AI_Personality(Car *c);
 float AI_PersF(Car *c, int off);
+uint32_t AI_PersU(Car *c, int off);
 /* The car's squares table (+0x1014: 128 bytes, i * i / k / 4, and k at +0x80), NULL unless an opponent. */
 const uint8_t *AI_SquaresTable(Car *c);

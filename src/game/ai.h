@@ -20,6 +20,8 @@ void AI_Free(void);
 void AI_MakeControllers(void);
 /* Each car's controller. 0x4067c0 */
 void AI_TickAll(void);
+/* The gap along the road from b to a (their nodes' difference round the loop, times 0x5b2460). 0x40e740 */
+float AI_Gap(Car *a, Car *b);
 
 /* The racing line's point at road node n (x, z). 0x403450 */
 void AI_LinePoint(int n, float out[2]);

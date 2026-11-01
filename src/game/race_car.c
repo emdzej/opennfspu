@@ -105,6 +105,8 @@ static void set_frame(Car *c, int at, bool back)
     for (int k = 0; k < 9; k++) m[k] = back && (k < 3 || k >= 6) ? -r[k] : r[k];
 }
 
+void Car_RoadFrame(Car *c, bool back) { set_frame(c, 0x364, back); }   /* 0x417280 */
+
 void CarSim_Place(Car *c, int n, const float off[3], int dir)
 {
     int node = n < 1 ? 1 : n;

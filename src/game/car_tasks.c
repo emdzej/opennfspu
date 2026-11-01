@@ -2,6 +2,7 @@
    Car_Construct 0x411190): the simulation's per-car work. Each is pending until its port lands; the
    registration (lists and priorities) is the original's. */
 #include "game/car.h"
+#include "game/ai_drive.h"
 #include "game/race_progress.h"
 #include "game/car_collide.h"
 #include "game/car_drive.h"
@@ -19,7 +20,6 @@
         PENDING_NOTE(0x##addr, what);                          \
     }
 TASK(414830, "car task: 0x414830 (unregistered)")
-TASK(4083c0, "car task: 0x4083c0 (replay)")
 TASK(49b6b0, "car task: 0x49b6b0 (+0xe24 variant)")
 static void task_516210(void *car) { (void)car; }   /* 0x516210: a function that returns at once */
 
@@ -45,10 +45,10 @@ void Car_SetTasks(Car *c)
         *slot(c, T_E1C) = Traffic_Drive;   /* 0x4a0e10 */
     }
     if (f & 2) {
-        if (f & 1) *slot(c, T_E0C) = task_4083c0;
+        if (f & 1) *slot(c, T_E0C) = AI_DriveTask;   /* 0x4083c0 (a racer returns at once) */
         *slot(c, T_E10) = NULL;
         *slot(c, T_E14) = task_516210;
-        *slot(c, T_E1C) = task_4083c0;
+        *slot(c, T_E1C) = AI_DriveTask;   /* 0x4083c0 */
     }
     /* (f & 4) with 0x657420 set and 0x657404 > 0 takes 0x49b6b0 for +0xe24: those race settings come
        with the race set-up's port. */

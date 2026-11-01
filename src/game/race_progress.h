@@ -46,3 +46,13 @@ void Race_ResetRanking(void);
 /* The race's results into the cars (+0xcc4 .. +0xd00, what the front end reads back): the humans' (kind
    1, quit: not finished) and the opponents' still racing given a time from their progress. 0x416ae0 */
 void Race_End(int kind);
+
+/* The car's half extent across the road: its box's half sizes along the road's right. 0x4176a0 */
+float Race_CarAcross(Car *c);
+/* The lane at offset x from node's centre line: 7 and up to the right by the lane width, 6 and down to
+   the left; 2 .. 11. 0x40eb80 */
+int Race_LaneAt(int node, float x);
+/* The lanes the car covers (+0xea8, a bit per lane) and the one its centre is in (+0x1020). 0x40ec10 */
+void Race_CarLanes(Car *c);
+/* Off the ground or out of control (0x408870): flag 0x800, no wheel down, or a police car with one. */
+bool Car_OutOfControl(Car *c);

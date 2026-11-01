@@ -202,6 +202,13 @@ float AI_PersF(Car *c, int off)
     return f;
 }
 
+uint32_t AI_PersU(Car *c, int off)
+{
+    uint32_t v;
+    memcpy(&v, (const uint8_t *)AI_Personality(c)->v + off, 4);
+    return v;
+}
+
 const uint8_t *AI_SquaresTable(Car *c)
 {
     int idx = *CAR_I(c, CAR_INDEX);

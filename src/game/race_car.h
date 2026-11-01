@@ -3,6 +3,7 @@
    race (0x4162b0), its controls and race state cleared. */
 #pragma once
 #include "game/car.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 extern int32_t g_race_reverse;    /* 0x657430: the track driven backwards */
@@ -39,3 +40,6 @@ void Car_RaceInit(Car *c, uint32_t id);
    an impact, 3 and 5 an end, 4 a start), its sound (-1 the impacts'), its kind and surface, its
    strength. */
 void Car_AddEvent(Car *c, int type, int id, int kind, int surf, float strength, int extra);
+
+/* The car's orientation (+0x364) from the road's axes, turned round for a car going against it. 0x417280 */
+void Car_RoadFrame(Car *c, bool back);

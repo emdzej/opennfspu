@@ -10,12 +10,16 @@
 #include "game/sim_rand.h"
 #include "game/track.h"
 #include "game/wtree.h"
+#include "game/ai_data.h"
+#include "game/race_progress.h"
+#include "render/camera_math.h"
 #include "pending.h"
 #include "vfs.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #define K(va) exe_f32(va)
 
@@ -429,15 +433,56 @@ void AI_Steer(Car *c)
 
 /* ---- the controllers and their states ---- */
 
-/* A state (the pool's 0xa0-byte objects): its car. */
+/* A state (the pool's 0xa0-byte objects, 0x5e6e38: ten, 0x40b590): its car, the idle state's target
+   offset and hold. Its slots: the tick, the deleting destructor's work (when a controller replaces it)
+   and whether it is done (the purgatory's: ready to come back). */
 typedef struct AiState AiState;
 typedef struct {
     void (*tick)(AiState *s);
+    void (*done)(AiState *s);
+    bool (*ready)(AiState *s);
 } AiStateVtbl;
 struct AiState {
     const AiStateVtbl *vt;
-    Car *car;   /* +4 */
+    Car *car;      /* +4 */
+    float target;  /* +8: the idle state's lateral offset */
+    int32_t hold;  /* +0xc: the idle state keeps the car's offset */
 };
+
+static void no_done(AiState *s) { (void)s; }
+static bool not_ready(AiState *s) { (void)s; return false; }   /* 0x403e10 */
+
+/* The cars in the purgatory (0x5e747c, the traffic's). */
+static int s_purgatory;
+
+static Car *car_by_index(int i)
+{
+    if (0 <= i && i < g_ncars) return g_cars[i];
+    if (g_ncars <= i && i < g_ncars + g_ntraffic) return g_traffic[i - g_ncars];
+    return NULL;
+}
+/* The car a traffic car keeps near (+0xed4, as its index + 1). */
+static Car *followed(Car *c) { return car_by_index(*CAR_I(c, 0xed4) - 1); }
+static void follow(Car *c, Car *o) { *CAR_I(c, 0xed4) = o ? *CAR_I(o, CAR_INDEX) + 1 : 0; }
+static float absf(float v) { return v < K(0x5b23f8) ? -v : v; }
+/* The octagonal ground distance (x and z) the AI measures with. */
+static float octo(const float *a, const float *b)
+{
+    float z = absf(a[2] - b[2]), x = absf(a[0] - b[0]);
+    return x <= z ? x * K(0x5b2468) + z : z * K(0x5b2468) + x;
+}
+/* rand () * 1000 / 65536, as the inlined generator's ((r * 125) & 0x1fffe000) * 8 compares it. */
+static uint32_t rand_k(void) { return ((SimRand_Next() * 0x7d) & 0x1fffe000u) * 8; }
+static int dir_of_race(void) { return g_race_reverse ? -1 : 1; }
+
+float AI_Gap(Car *a, Car *b)
+{
+    int len = g_road->nnodes;
+    int d = car_node(a) - car_node(b);
+    if (0 < d && len / 2 < d) return (float)(d - len) * K(0x5b2460);
+    if (d < 0 && d < -(len / 2)) d += len;
+    return (float)d * K(0x5b2460);
+}
 
 /* AIState_Racing (vtable 0x5b26b8): the car on the road, its target and controls, its drive. 0x40ca40 */
 static void racing_tick(AiState *s)
@@ -451,23 +496,174 @@ static void racing_tick(AiState *s)
     *CAR_I(c, 0xd90) = *CAR_I(c, 0xda0);
     CarSim_Drive(c);   /* 0x49fb20 */
 }
-static const AiStateVtbl racing_vt = {racing_tick};
+static const AiStateVtbl racing_vt = {racing_tick, no_done, not_ready};
 
 static void none_tick(AiState *s) { (void)s; }   /* AIState_None (0x5b25a0): slot 0 0x514260 */
-static const AiStateVtbl none_vt = {none_tick};
+static const AiStateVtbl none_vt = {none_tick, no_done, not_ready};
 
-/* A controller (AIHigh_*): its car, its state, the state's kind (0xb racing), ticked always (+0x10) or by
-   the task rate. */
+/* The AI's speed target (+0xeb8, +0xebc) for the traffic (0x40afd0's): 16.5 along the race, or by the
+   followed car's speed when coming the other way (the first band's 22.2 is stored and not taken: the
+   original's slip); by the car's own factor (+0xeec), at least 13.4 under it and 8.9 (both when
+   forward), by +0x1018, at least 8.9; signed by the direction. */
+static void speed_target(Car *c)
+{
+    uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
+    *CAR_F(c, 0xeb8) = 0;
+    if (f & 0x20) {
+        PENDING_NOTE(0x40afd0, "the police's speed target");
+        return;
+    }
+    if (!(f & 0x10)) return;
+    int dir = *CAR_I(c, 0xeb0);
+    float v = K(0x5b2660);
+    Car *t = followed(c);
+    if (dir != dir_of_race() && t) {
+        float a = absf(*CAR_F(t, 0xec0));
+        if (a < K(0x5b2554)) v = K(0x5b2660);
+        else if (a < K(0x5b2650)) v = 13.333333f;   /* (0x41555555) */
+        else if (a < K(0x5b2410)) v = 8.888889f;    /* (0x410e38e4) */
+        else if (a < K(0x5b264c)) v = 4.4444447f;   /* (0x408e38e4) */
+        else v = a < K(0x5b2648) ? 2.2222223f : 2.77f;   /* (0x400e38e4, 0x403147ae) */
+    }
+    float p;
+    if (v > K(0x5b23f8)) {
+        float lo = v - K(0x5b2658);
+        p = v * *CAR_F(c, 0xeec);
+        if (p < lo) p = lo;
+        if (p < K(0x5b2654)) p = K(0x5b2654);
+    } else {
+        p = v * *CAR_F(c, 0xeec);
+    }
+    p *= *CAR_F(c, 0x1018);
+    if (p < K(0x5b2430)) p = 8.888889f;
+    *CAR_F(c, 0xeb8) = p * (float)dir;
+    *CAR_F(c, 0xebc) = *CAR_F(c, 0xeb8);
+}
+
+/* AIState_Normal (vtable 0x5b2668, 0x40b630: the set target cleared, active): the speed target, then the
+   lane driver (0x401000, 0x401060, 0x4012b0). 0x40b600 */
+static void normal_tick(AiState *s)
+{
+    speed_target(s->car);   /* 0x40afd0 */
+    PENDING_NOTE(0x401060, "the lane driver (the lanes' scores, the cars about, the chosen lane 0x4012b0)");
+}
+static const AiStateVtbl normal_vt = {normal_tick, no_done, not_ready};
+static void normal_init(AiState *s, Car *c)   /* 0x40b630 */
+{
+    *s = (AiState){&normal_vt, c, 0, 0};
+    memset(c->b + 0x1064, 0, 16);
+    c->b[0x7f] = 1;
+}
+
+/* AIState_Idle (vtable 0x5b252c): holding the car's offset, or easing toward the target one at the AI's
+   speed target halved. 0x40cad0 */
+static void idle_tick(AiState *s)
+{
+    Car *c = s->car;
+    if (s->hold != 0) {
+        *CAR_F(c, 0xeb8) = 0;
+        *CAR_F(c, 0xeb4) = *CAR_F(c, 0xed0);
+        return;
+    }
+    float d = *CAR_F(c, 0xed0) - s->target;
+    if (K(0x5b2624) < d && d < K(0x5b24a8)) {
+        *CAR_F(c, 0xeb8) = 0;
+        *CAR_F(c, 0xeb4) = s->target;
+        return;
+    }
+    speed_target(c);
+    *CAR_F(c, 0xeb8) = *CAR_F(c, 0xeb8) * K(0x5b2468);
+    *CAR_F(c, 0xeb4) = s->target;
+}
+static void idle_done(AiState *s) { *CAR_I(s->car, CAR_FLAGS) &= ~0x400; }   /* 0x405160 */
+static const AiStateVtbl idle_vt = {idle_tick, idle_done, not_ready};
+
+/* AIState_Purgatory (vtable 0x5b2710): parked away from the road (off the start by the car's index),
+   inactive, following the first car, a countdown (+0xee8) by the traffic's count (0x5cc4a0), five times
+   for a bus. Its tick counts down once the race is a while in; it is ready at the end of it when fewer
+   than the cap (0x5cc480) are about and the followed car is not on the tracks' sections where none may
+   come (canyon's, industrial's: the original's node ranges). 0x40de30, 0x40e160, 0x40e080 */
+static void purgatory_tick(AiState *s)
+{
+    Car *c = s->car;
+    *CAR_I(c, 0x1100) = 0;
+    *CAR_I(c, 0x43c) = 0;
+    if (!(*CAR_I(c, CAR_FLAGS) & 0x20) && 0x3bf < g_sim_tick) *CAR_I(c, 0xee8) -= ai_ticks;
+}
+static bool in_range(int n, int lo, int hi) { return lo <= n && n <= hi; }
+static bool purgatory_ready(AiState *s)
+{
+    Car *c = s->car;
+    if (0 < *CAR_I(c, 0xee8)) return false;
+    /* (0x657418: TRAFFIC_DENSITY, option 0x16, which no front end writes: 0) */
+    int cap = (int)exe_u32(0x5cc480 + 4u * (uint32_t)(0 + (g_race_players == 1) * 4));
+    if (!(g_roadcars.n - s_purgatory < cap)) {
+        *CAR_I(c, 0xee8) = 1;
+        return false;
+    }
+    Car *t = followed(c);
+    int16_t n = 0;
+    if (t) memcpy(&n, t->b + 8, 2);
+    if (!strncasecmp(g_track_name, "cany", 4))
+        return !in_range(n, 0x6b1, 0x6ea) && !in_range(n, 0x732, 0x756);
+    if (!strncasecmp(g_track_name, "indu", 4))
+        return !in_range(n, 0x676, 0x725) && !in_range(n, 0x8df, 0x902) && !in_range(n, 0x938, 0x96b) && !in_range(n, 0x99d, 0x9ce);
+    return true;
+}
+/* Leaving it (0x40dfd0): active, the race's direction, following the last viewed car in the ranking. */
+static void purgatory_done(AiState *s)
+{
+    Car *c = s->car;
+    *CAR_I(c, 0x1100) = 0;
+    *CAR_I(c, 0x43c) = 0;
+    *CAR_I(c, 0xecc) &= ~4;
+    if (*CAR_I(c, CAR_FLAGS) & 0x10) s_purgatory--;
+    *CAR_I(c, 0xeb0) = 1;
+    *CAR_I(c, 0xeac) = 1;
+    for (int i = g_ncars - 1; i >= 0; i--)
+        if (g_ranked.c[i]->b[CAR_FLAGS + 1] & 1) {   /* (flags 0x100) */
+            follow(c, g_ranked.c[i]);
+            break;
+        }
+    c->b[0x7f] = 1;
+}
+static const AiStateVtbl purgatory_vt = {purgatory_tick, purgatory_done, purgatory_ready};
+static void purgatory_init(AiState *s, Car *c)   /* 0x40de30 */
+{
+    *s = (AiState){&none_vt, c, 0, 0};
+    float off[3] = {0, (float)*CAR_I(c, CAR_INDEX) * K(0x5b241c), 0};
+    CarSim_Place(c, 0, off, 1);
+    c->b[0x7f] = 0;
+    s->vt = &purgatory_vt;
+    follow(c, g_cars[0]);
+    int32_t k = (int32_t)exe_u32(0x5cc4a0 + 4u * (uint32_t)g_roadcars.n);
+    *CAR_I(c, 0xee8) = ((int32_t)SimRand_Next() * k >> 16) + 1;
+    const char *name = (const char *)c->b + CAR_NAME;
+    if (!strcmp(name, exe_str(0x5cc450)) || !strcmp(name, exe_str(0x5cc448))) *CAR_I(c, 0xee8) *= 5;   /* "SBUS", "TBUS" */
+    *CAR_I(c, 0xecc) |= 4;
+    if (*CAR_I(c, CAR_FLAGS) & 0x10) s_purgatory++;
+}
+
+/* A controller (AIHigh_*): its car, its state, the state's phase, ticked always (+0x10) or by the task
+   rate; the traffic's flags (+0x18: past the police's first check, +0x1c: sent back). */
 typedef struct {
-    int kind;          /* 0 none, 1 human, 2 opponent */
+    int kind;          /* 0 none, 1 human, 2 opponent, 3 traffic */
     Car *car;          /* +0x04 */
     AiState state;     /* +0x08 (the pool's) */
     int32_t phase;     /* +0x0c */
     int32_t always;    /* +0x10 */
     int32_t node;      /* +0x14: the car's node when made */
+    int32_t seen;      /* +0x18 */
+    int32_t back;      /* +0x1c */
 } AiHigh;
 
 static AiHigh *ctl[CAR_MAX];   /* 0x5e6774 */
+
+static void set_state(AiHigh *h, AiState s)
+{
+    h->state.vt->done(&h->state);
+    h->state = s;
+}
 
 /* The car's low-level driver (+0xe3c: the personality's scripts, 0x40abe0), not ported. Then the state. 0x40b530 */
 static void state_tick(AiState *s)
@@ -487,14 +683,250 @@ static void opponent_tick(AiHigh *h)
         state_tick(&h->state);
         return;
     }
-    h->state = (AiState){&racing_vt, h->car};
+    h->state = (AiState){&racing_vt, h->car, 0, 0};
     *CAR_I(h->car, 0xda8) = 1;
     h->car->b[0x7f] = 1;
     h->phase = 0xb;
 }
 
+/* ---- the traffic's coming back: 0x407880 ---- */
+
+/* Where a traffic car comes back (0x4072f0): near a viewed car at random, or past the viewed cars just
+   ahead of it in the ranking that go the same way, 60 to 65 nodes on in a random direction (the
+   followed car's when it is moving); its own direction at random, the race's on a one-way road. */
+static void come_back_node(Car *c)
+{
+    follow(c, g_viewed.c[(int)(SimRand_Next() * (uint32_t)g_viewed.n) >> 16]);
+    Car *t = followed(c);
+    if (!t) return;
+    int dir = rand_k() > 0x1f3ffff ? 1 : -1;
+    if (K(0x5b2408) < absf(*CAR_F(t, 0xec0))) dir = *CAR_I(t, 0xeb0);
+    int p = *CAR_I(t, 0x528), n = g_ncars;
+    for (int k = 0; k < n; k++) {
+        Car *o = g_ranked.c[(n + p) % n];
+        Car *f = followed(c);
+        if (o != c && o != f && (o->b[CAR_FLAGS + 1] & 1)) {
+            int16_t fn;
+            memcpy(&fn, f->b + 8, 2);
+            int m = Road_Step(g_road, fn, dir * 0x42, -1);
+            const float *np = Road_NodePos(g_road, m);
+            if (K(0x5b25cc) < octo(np, CAR_F(o, 0x330)) || AI_Gap(o, f) * (float)dir <= K(0x5b23f8)) break;
+            follow(c, o);
+            n = g_ncars;
+        }
+        p += dir;
+    }
+    *CAR_I(c, 0xeb0) = rand_k() < 0x1f40000 ? -1 : 1;
+    if (node_i(1, 0x38) == 0) *CAR_I(c, 0xeb0) = dir_of_race();   /* (0x5e7544: no lanes the other way) */
+    *CAR_I(c, 0xeac) = *CAR_I(c, 0xeb0);
+    Car *f = followed(c);
+    int16_t base;
+    memcpy(&base, f->b + 8, 2);
+    int m = Road_Step(g_road, base, (((int)(SimRand_Next() * 6) >> 16) + 0x3c) * dir, -1);
+    if (m == base) m = 2;
+    int16_t m16 = (int16_t)m;
+    memcpy(c->b + 8, &m16, 2);
+}
+
+/* Its lateral place (0x407600): a lane's centre at random on its side, plus its offset (+0xec8). */
+static void come_back_lane(Car *c)
+{
+    int16_t n;
+    memcpy(&n, c->b + 8, 2);
+    if (*CAR_I(c, 0xeb0) == 1) {   /* (0x5e753c) */
+        float w = node_f(n, 0x4c);
+        *CAR_F(c, 0xeb4) = (float)(((int)(SimRand_Next() * (uint32_t)node_i(n, 0x3c)) >> 16) + 1) * w - w * K(0x5b2468);
+    } else {
+        *CAR_F(c, 0xeb4) = (K(0x5b23f0) - (float)(((int)(SimRand_Next() * (uint32_t)node_i(n, 0x38)) >> 16) + 1)) * node_f(n, 0x48);
+    }
+    float v = *CAR_F(c, 0xec8) + *CAR_F(c, 0xeb4);
+    *CAR_F(c, 0xeb4) = v;
+    *CAR_F(c, 0x1074) = v;
+}
+
+/* On the road there (0x4076f0): active, placed at its node and offset, moving along it at its speed,
+   turned by the angle (0 here), the drive's fields reset (0x406d30), its offset, extent and lanes. */
+static void come_back_place(Car *c)
+{
+    c->b[0x7f] = 1;
+    *CAR_F(c, 0x1074) = *CAR_F(c, 0xeb4);
+    *CAR_F(c, 0xeb8) = *CAR_F(c, 0xec0);
+    *CAR_I(c, 0x544) = 0;   /* 0x40a9f0 */
+    *CAR_I(c, 0x540) = 0;
+    float off[3] = {*CAR_F(c, 0xeb4), 1.0f, 0};
+    int16_t n;
+    memcpy(&n, c->b + 8, 2);
+    CarSim_Place(c, n, off, *CAR_I(c, 0xeb0));
+    float *v = CAR_F(c, 0x33c);
+    if (*CAR_F(c, 0xec0) == K(0x5b23f8)) {
+        v[0] = v[1] = v[2] = 0;
+    } else {
+        float s = absf(*CAR_F(c, 0xec0));
+        for (int k = 0; k < 3; k++) v[k] = *CAR_F(c, 0x37c + 4 * k) * s;
+    }
+    if (*CAR_I(c, CAR_FLAGS) & 4) CarSim_ResetDrive(c);   /* 0x49e010 */
+    float m[9], o[9];
+    Mat3_RotY(m, 0);
+    Mat3_Mul(CAR_F(c, 0x364), m, o);
+    memcpy(CAR_F(c, 0x364), o, sizeof o);
+    memcpy(CAR_F(c, 0x490), o, sizeof o);
+    /* 0x406d30 */
+    *CAR_I(c, 0x104c) = 1;
+    memset(c->b + 0x388, 0, 12);
+    memset(c->b + 0x418, 0, 2);
+    *CAR_I(c, 0xee4) = 0;
+    *CAR_I(c, 0xedc) = 0;
+    *CAR_I(c, 0x1050) = 0;
+    *CAR_I(c, 0x1048) = 0;
+    *CAR_I(c, 0x10a4) = 0;
+    *CAR_I(c, 0x10a0) = 0;
+    *CAR_I(c, 0x10b0) = 0;
+    const float *np = Road_NodePos(g_road, n);   /* 0x4173e0 */
+    float d[3] = {CAR_F(c, 0x330)[0] - np[0], CAR_F(c, 0x330)[1] - np[1], CAR_F(c, 0x330)[2] - np[2]};
+    float lat = dot3(CAR_F(c, 0x3b8), d);
+    *CAR_F(c, 0x1074) = lat;
+    *CAR_F(c, 0xeb4) = lat;
+    *CAR_F(c, 0xed0) = lat;
+    *CAR_F(c, 0x538) = Race_CarAcross(c);   /* 0x4176a0 */
+    Race_CarLanes(c);                        /* 0x40ec10 */
+}
+
+static void come_back(Car *c)   /* 0x407880 */
+{
+    SimRand_Next();
+    *CAR_I(c, 0xec8) = (int32_t)AI_PersU(c, 0xc + 4 * (int)(SimRand_Next() & 3));   /* 0x403000 */
+    static const uint32_t pace[4] = {0x3f800000u, 0x3f666666u, 0x3f4ccccdu, 0x3f333333u};   /* 0x40b390 */
+    *CAR_I(c, 0xeec) = (int32_t)pace[SimRand_Next() & 3];
+    come_back_node(c);
+    come_back_lane(c);
+    speed_target(c);
+    *CAR_F(c, 0xec0) = *CAR_F(c, 0xeb8);
+    come_back_place(c);
+    memset(c->b + 0x4e4, 0, 10 * 4);
+}
+
+/* Too far from the car it follows (0x407090): at a linear road's ends, or more than 0x5b25c4 away from
+   it and every viewed car (else it follows the first viewed car near enough). */
+static bool too_far(Car *c)
+{
+    Car *t = followed(c);
+    if (!t || (*CAR_I(c, CAR_FLAGS) & 0x400)) return false;
+    if (g_race_linear) {
+        int16_t n;
+        memcpy(&n, c->b + 8, 2);
+        if (0 <= n && n < 6) return true;
+        int r = g_road->lastnode - n;
+        if (0 <= r && r < 6) return true;
+    }
+    if (!(K(0x5b25c4) < octo(CAR_F(c, 0x330), CAR_F(t, 0x330)))) return false;
+    for (int i = 0; i < g_viewed.n; i++)
+        if (octo(CAR_F(c, 0x330), CAR_F(g_viewed.c[i], 0x330)) <= K(0x5b25c4)) {
+            follow(c, g_viewed.c[i]);
+            return false;
+        }
+    follow(c, NULL);
+    return true;
+}
+
+/* The nearest police car not in the purgatory and its controller when close (0x405f30). */
+static AiHigh *police_near(AiHigh *h, int *close)
+{
+    *close = 0;
+    if (g_chasers.n == 0) return NULL;
+    PENDING_NOTE(0x405f30, "the traffic's reaction to the police");
+    (void)h;
+    return NULL;
+}
+
+/* AIHigh_Traffic (vtable 0x5b2588, 0x4064f0): first to the purgatory (or idle for the 0x400 cars);
+   back on the road when ready (0x407880), back to the purgatory when too far; pulling over for the
+   police near (idle at a lane's edge, or once its first check passed, on). 0x406080 */
+static void traffic_tick(AiHigh *h)
+{
+    Car *c = h->car;
+    *CAR_I(c, 0x534) = 0;
+    *CAR_I(c, 0x530) = 0;
+    AiState s;
+    int close;
+    switch (h->phase) {
+    case 0: {
+        float off[3] = {0, 100.0f, 0};
+        if (!(*CAR_I(c, CAR_FLAGS) & 0x400)) {
+            purgatory_init(&s, c);
+            set_state(h, s);
+            h->phase = 1;
+        } else {
+            set_state(h, (AiState){&idle_vt, c, 0, 1});
+            h->phase = 3;
+        }
+        CarSim_Place(c, 0, off, 1);
+        return;
+    }
+    case 1:
+        if (h->state.vt->ready(&h->state) && h->back == 0) {
+            normal_init(&s, c);
+            set_state(h, s);
+            h->phase = 2;
+            come_back(c);
+            state_tick(&h->state);
+            return;
+        }
+        break;
+    case 2:
+        if (too_far(c) || h->back != 0) {
+            purgatory_init(&s, c);
+            set_state(h, s);
+            h->phase = 1;
+            state_tick(&h->state);
+            return;
+        }
+        if (!police_near(h, &close)) {
+            h->seen = 0;
+            state_tick(&h->state);
+            return;
+        }
+        if (h->seen == 0) {
+            uint32_t r = (SimRand_Next() * 10) >> 16;
+            if (r < 8) {
+                int16_t n;
+                memcpy(&n, c->b + 8, 2);
+                set_state(h, (AiState){&idle_vt, c, 0, 1});
+                h->phase = 3;
+                if (r != 0) {
+                    float t = *CAR_I(c, 0xeb0) == 1 ? node_f(n, 0x4c) * (float)node_i(n, 0x3c) : node_f(n, 0x48) * (float)node_i(n, 0x38);
+                    h->state.hold = 0;   /* 0x40cb60 */
+                    h->state.target = t;
+                }
+            } else {
+                h->seen = 1;
+            }
+            state_tick(&h->state);
+            return;
+        }
+        break;
+    case 3:
+        if (too_far(c)) {
+            purgatory_init(&s, c);
+            set_state(h, s);
+            h->phase = 1;
+            state_tick(&h->state);
+            return;
+        }
+        if (police_near(h, &close) || (*CAR_I(c, CAR_FLAGS) & 0x400)) break;
+        normal_init(&s, c);
+        set_state(h, s);
+        h->phase = 2;
+        break;
+    case 6:
+        PENDING_NOTE(0x406080, "the traffic's phase 6");
+        break;
+    }
+    state_tick(&h->state);
+}
+
 void AI_MakeControllers(void)
 {
+    s_purgatory = 0;   /* (0x40b4f0, 0x40b510: the pool and the count cleared) */
     for (int i = 0; i < g_ncars; i++) {
         free(ctl[i]);
         ctl[i] = NULL;
@@ -503,7 +935,7 @@ void AI_MakeControllers(void)
         AiHigh *h = calloc(1, sizeof *h);
         if (!h) continue;
         h->car = c;
-        h->state = (AiState){&none_vt, c};
+        h->state = (AiState){&none_vt, c, 0, 0};
         h->node = car_node(c);
         if (f & 4) {
             h->kind = 1;   /* AIHigh_Human (0x405740) */
@@ -511,8 +943,10 @@ void AI_MakeControllers(void)
         } else if (f & 8) {
             h->kind = 2;   /* AIHigh_Opponent (0x4059a0) */
             h->always = 1;
-        } else if (f & 0x30) {
-            PENDING_NOTE(0x403e90, "the cops' and traffic's AI controllers");
+        } else if (f & 0x10) {
+            h->kind = 3;   /* AIHigh_Traffic (0x4064f0) */
+        } else if (f & 0x20) {
+            PENDING_NOTE(0x403e90, "the police's AI controller (AIHigh_Cop)");
         }
         ctl[i] = h;
     }
@@ -527,5 +961,6 @@ void AI_TickAll(void)
         if (!h->always && !Sim_TaskRate(1, 0, *CAR_F(c, 0x78), *CAR_I(c, 0), &ai_rate, &ai_ticks, &ai_dt, *CAR_I(c, 0x10b8) != 0))
             continue;
         if (h->kind == 2) opponent_tick(h);
+        else if (h->kind == 3) traffic_tick(h);
     }
 }
