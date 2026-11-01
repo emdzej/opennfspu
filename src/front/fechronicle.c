@@ -136,6 +136,8 @@ static bool load_media(int kind, int yy, int k)
 
 static const char *media(int i) { return 0 <= i && i < s_nmedia ? s_media[i] : NULL; }   /* 0x506b40 */
 
+const char *FEChronicle_Shown(void) { return media(s_shown); }
+
 /* The era's year range and its first year (the eras' callbacks 0x506d50 .. 0x506e50). */
 static void era_year(void)
 {

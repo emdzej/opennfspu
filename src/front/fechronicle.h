@@ -28,6 +28,8 @@ int FEChronicle_Era(void);                 /* 0x5dba3c */
    movie screen (0x699c98: only media of kind 2 set it, which nothing loads: ""). */
 const char *FEChronicle_EraMovie(void);
 const char *FEChronicle_Movie(void);
+/* The media file the picture shows (0x506b40 of 0x699cfc), NULL without one. */
+const char *FEChronicle_Shown(void);
 /* The controls' draws (their slot 15), true when c is one of them. */
 bool FEChronicle_Draw(FertControl *c, int32_t ox, int32_t oy);
 /* The mouse: down on c (slot 5), moved with c under it (slot 8; drags follow it anywhere), left c (slot 7),

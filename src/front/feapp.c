@@ -1,6 +1,7 @@
 /* The front end's application (feapp.h). */
 #include "front/feapp.h"
 #include "front/femovie.h"
+#include "front/fecarlogo.h"
 #include "front/fechronicle.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
@@ -1488,6 +1489,7 @@ static void screen_entered(void)
     }
     lists_drop_stale();
     FEMovieBox_Drop(on_stack);
+    FECarLogo_Drop(on_stack);
     /* (FEChronicleCallBackList 0x506450, made with each of its screens) */
     if (s_depth && !strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE")) FEChronicle_Open();
 }
@@ -2046,6 +2048,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (FEMovieBox_Draw(c, ox, oy)) return true;
     if (FEChronicle_Draw(c, ox, oy)) return true;
+    if (FECarLogo_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
