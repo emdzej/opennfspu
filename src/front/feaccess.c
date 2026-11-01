@@ -2363,6 +2363,13 @@ void FEData_TourRaceInfo(RaceTournament *t)
     int left = 0;
     for (int i = 0; i < n; i++) left += !r[0x3d0 + 0xa4 * i];
     t->last_race = left == 1;                                  /* 0xb9: 0x5038b0 */
+    t->runs = n - left;                                        /* 0xf3: 0x502920 less 0x5038b0 */
+    /* the player's winnings (0xdf ..: 0x503630, +0x424) and safe-driving bonus (0xe9 ..: 0x5036a0,
+       +0x404) by race: the original's eight options, whatever the race count */
+    for (int i = 0; i < 8; i++) {
+        t->won[i] = rec32(r, 0x424 + 0xa4 * i);
+        t->safe_won[i] = rec32(r, 0x404 + 0xa4 * i);
+    }
     /* 0xba: the era's last open tournament (0x503d60 counts the era's not kept out, +0xe4 2, and never
        completed, +0xd3c), this one never completed (0x503020) nor of kind +0xe2 1 (0x5040b0), at its
        last race */
@@ -2375,7 +2382,6 @@ void FEData_TourRaceInfo(RaceTournament *t)
         if (rec32(x, 4) == head[3] && rec16(x, 0xe4) != 2 && rec16(x, 0xd3c) == 0) open++;
     }
     t->end_of_era = rec16(r, 0xd3c) < 1 && rec16(r, 0xe2) != 1 && open == 1 && left == 1;
-    PENDING_NOTE(0x4ebb70, "the winnings by race (0x503630, 0x5036a0)");
 }
 
 int FEData_RaceEra(void)
