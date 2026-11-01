@@ -75,6 +75,12 @@ typedef struct R3DPart {
 
 struct R3DCar;
 
+/* A damage decal (0x447b80): a shape of <car>d.fsh or <car>l.fsh named "OOVZ" (option OO at value V, or any
+   car for none), drawn faded by zone Z's damage (threshold 0 or below) or whole past the threshold (its
+   +0xa), on the page its +8 names. */
+typedef struct { const uint8_t *shape; float threshold; int zone; } CarDecal;
+typedef struct CarDecalPage { int page; uint32_t n; CarDecal *decals; } CarDecalPage;
+
 /* A level of detail (0x24 bytes): the parts of every article that has an entry for this LOD number. */
 typedef struct R3DCarLOD {
     struct R3DCar *car;    /* +0x4 */
@@ -111,6 +117,10 @@ typedef struct R3DCar {
     const void **sf;                /* +0x084: the 'sf' shapes of the .crp by index (a vector) */
     uint32_t nsf;
     void *shape_d, *shape_l;        /* +0x090, +0x094: <car>d.fsh, <car>l.fsh */
+    struct {
+        uint32_t n;                 /* +0x098: the pages with decals */
+        struct CarDecalPage *pages; /* +0x09c */
+    } decals;                       /* (0x447b80) */
     uint8_t hsv[3];                 /* +0x0a8: hue, saturation, value of colour 0 (0x443bd0); a value above
                                        0x50 takes the light decals (<car>l.fsh) */
     R3DMaterialSet *materials;      /* +0x0ac */

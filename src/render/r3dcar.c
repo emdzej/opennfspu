@@ -569,7 +569,7 @@ void R3DCar_Dents(R3DCar *car, bool force)   /* 0x438160 */
     if (!changed) return;
     for (uint32_t l = 0; l < car->nlods; l++) lod_dent(car, car->lods[l]);
     for (int z = 0; z < 10; z++) car->dents[z] = zone_damage(car, z);
-    if (car->textures) PENDING_NOTE(0x447f40, "the damage textures (0x445110: the pages redrawn by the zones)");
+    if (car->textures) R3DCar_DrawDecals(car, car->state->damage);   /* 0x445110 -> 0x447f40 */
 }
 
 /* R3DCar_v20 0x43b040: slot 1 at its last frame when the car's description says so (+0x50c), then the
@@ -800,8 +800,8 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
                 car->shape_l = UTIL_loadshape(fsh, 0);
             }
         }
-        /* The decals and liveries of the chosen options, from those shapes (0x447b80): pending. */
-        R3DCar_PendingDecals(car);
+        /* The damage decals of the chosen options, from those shapes (0x447b80). */
+        R3DCar_BuildDecals(car, 0x50 < car->hsv[2] ? car->shape_l : car->shape_d, car->state->options);
     }
     car_build_lods(car);                     /* slot 18 (nothing for a car), then 0x4424e0 */
     /* R3DObject_LoadHeader 0x4426c0: the texture pages, then the material set (0x44a6b0). */
@@ -815,6 +815,7 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
 void R3DCar_Free(R3DCar *car)
 {
     car_unload(car);
+    R3DCar_FreeDecals(car);
     IniFile_Free(&car->tpg);
     R3DMaterialSet_dtor(car->materials);
     free(car->materials);

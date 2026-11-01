@@ -372,6 +372,192 @@ void R3DCar_LoadDetails(R3DCar *car, int file, Window *w, int bpp)
 
 /* ---- the pages of the .tpg ---- */
 
+/* ---- the damage decals (0x447b80, 0x447f40, 0x448040) ---- */
+
+typedef struct { int page; const uint8_t *shape; float threshold; int zone; } DecalRef;
+
+/* std::sort by the page, as MSVC's (0x448300, 0x4484d0: the parts' sort's template, render/r3dcar.c). */
+static void d_adjust_heap(DecalRef *f, int hole, int len, DecalRef v)
+{
+    int top = hole, child = 2 * hole + 2;
+    for (; child < len; child = 2 * child + 2) {
+        if (f[child].page < f[child - 1].page) child--;
+        f[hole] = f[child];
+        hole = child;
+    }
+    if (child == len) {
+        f[hole] = f[child - 1];
+        hole = child - 1;
+    }
+    for (int parent = (hole - 1) / 2; top < hole && f[parent].page < v.page; parent = (hole - 1) / 2) {
+        f[hole] = f[parent];
+        hole = parent;
+    }
+    f[hole] = v;
+}
+static void d_sort_loop(DecalRef *f, DecalRef *l, int depth)
+{
+    while (l - f >= 17) {
+        if (depth == 0) {
+            int len = (int)(l - f);
+            for (int h = len / 2; h > 0;) {
+                h--;
+                d_adjust_heap(f, h, len, f[h]);
+            }
+            while (l - f > 1) {
+                DecalRef v = l[-1];
+                l[-1] = f[0];
+                l--;
+                d_adjust_heap(f, 0, (int)(l - f), v);
+            }
+            return;
+        }
+        depth--;
+        DecalRef *m = f + (l - f) / 2, *pv = f;
+        int a = f->page, b = m->page, c = l[-1].page;
+        if (a < b) {
+            if (b < c) pv = m;
+            else if (a < c) pv = l - 1;
+        } else if (c <= a) {
+            pv = l - 1;
+            if (c <= b) pv = m;
+        }
+        int pivot = pv->page;
+        DecalRef *i = f, *j = l;
+        for (;;) {
+            while (i->page < pivot) i++;
+            do j--; while (pivot < j->page);
+            if (j <= i) break;
+            DecalRef t = *i;
+            *i = *j;
+            *j = t;
+            i++;
+        }
+        d_sort_loop(i, l, depth);
+        l = i;
+    }
+}
+static void d_insertion(DecalRef *f, DecalRef *l, bool guarded)
+{
+    for (DecalRef *p = guarded ? f + 1 : f; p < l; p++) {
+        DecalRef v = *p;
+        if (guarded && v.page < f->page) {
+            memmove(f + 1, f, (size_t)(p - f) * sizeof *f);
+            *f = v;
+            continue;
+        }
+        DecalRef *q = p;
+        while (v.page < q[-1].page) {
+            *q = q[-1];
+            q--;
+        }
+        *q = v;
+    }
+}
+static void d_sort(DecalRef *f, DecalRef *l)
+{
+    if (f == l) return;
+    int depth = 0;
+    for (int n = (int)(l - f); n != 1; n >>= 1) depth++;
+    d_sort_loop(f, l, depth * 2);
+    if (l - f < 17) d_insertion(f, l, true);
+    else {
+        d_insertion(f, f + 16, true);
+        d_insertion(f + 16, l, false);
+    }
+}
+
+void R3DCar_FreeDecals(R3DCar *car)
+{
+    for (uint32_t i = 0; i < car->decals.n; i++) free(car->decals.pages[i].decals);
+    free(car->decals.pages);
+    car->decals.n = 0;
+    car->decals.pages = NULL;
+}
+
+static int digits(const char *c, int n)   /* (atoi of the name's characters, 0x5a1cfa) */
+{
+    char b[3] = {0};
+    memcpy(b, c, (size_t)n);
+    return atoi(b);
+}
+
+void R3DCar_BuildDecals(R3DCar *car, const uint8_t *fsh, const int *options)   /* 0x447b80 */
+{
+    R3DCar_FreeDecals(car);
+    if (!fsh) return;
+    uint32_t n = SHAPE_count(fsh);   /* 0x537ca0 */
+    DecalRef *r = calloc(n ? n : 1, sizeof *r);
+    if (!r) return;
+    uint32_t nr = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t code = SHAPE_entryname(fsh, (int)i);   /* 0x537cd0 */
+        char c[4];
+        memcpy(c, &code, 4);
+        int opt = digits(c, 2), val = digits(c + 2, 1), zone = digits(c + 3, 1);
+        const uint8_t *shape = SHAPE_entry(fsh, (int)i);
+        /* (the option index is read unchecked: the names' go up to 99) */
+        if (options && !(opt < CAR_NOPTIONS && options[opt] == val)) continue;
+        r[nr++] = (DecalRef){rd16s(shape + 8), shape, (float)rd16s(shape + 10), zone};
+    }
+    d_sort(r, r + nr);
+    uint32_t np = 0;
+    for (uint32_t i = 0; i < nr; i++)
+        if (i == 0 || r[i].page != r[i - 1].page) np++;
+    if (np) {
+        car->decals.pages = calloc(np, sizeof *car->decals.pages);
+        if (car->decals.pages) {
+            car->decals.n = np;
+            for (uint32_t i = 0, k = 0; i < nr; k++) {
+                uint32_t j = i;
+                while (j < nr && r[j].page == r[i].page) j++;
+                CarDecalPage *pg = &car->decals.pages[k];
+                pg->page = r[i].page;
+                pg->n = j - i;
+                pg->decals = calloc(pg->n, sizeof *pg->decals);
+                for (uint32_t m = 0; pg->decals && m < pg->n; m++) pg->decals[m] = (CarDecal){r[i + m].shape, r[i + m].threshold, r[i + m].zone};
+                i = j;
+            }
+        }
+    }
+    free(r);
+}
+
+/* 0x448040: a decal faded by its zone's damage (x 0x5b38ec, at most 255) with no threshold, else whole
+   once the damage passes it, at its place on the page. */
+static void decal_draw(const CarDecal *d, const float *damage)
+{
+    float v = damage ? damage[d->zone] : 0, k255;
+    uint32_t ku = exe_u32(0x5b38ec);
+    memcpy(&k255, &ku, 4);
+    int x = pos_x(d->shape), y = pos_y(d->shape);
+    if (d->threshold <= 0) {
+        if (0 < v) {
+            uint32_t a = (uint32_t)(int64_t)rintf(v * k255);   /* (the x87's rounding) */
+            if (0xff < a) a = 0xff;
+            WINDOW_drawshapealpha(d->shape, x, y, (int)a);   /* 0x53fe10 */
+        }
+    } else if (d->threshold < v) {
+        WINDOW_drawshape(d->shape, x, y);   /* 0x53d2e0 */
+    }
+}
+
+void R3DCar_DrawDecals(R3DCar *car, const float *damage)   /* 0x447f40 */
+{
+    for (uint32_t i = 0; i < car->decals.n; i++) {
+        const CarDecalPage *pg = &car->decals.pages[i];
+        if (pg->page < 0 || (uint32_t)pg->page >= car->npages) continue;   /* (the original indexes unchecked) */
+        CarPage *p = &car->pages[pg->page];
+        Window *w = CarPage_Lock(p);   /* the page's pixels, its undamaged copy over them */
+        if (w) {
+            WINDOW_select(w);
+            for (uint32_t k = 0; k < pg->n; k++) decal_draw(&pg->decals[k], damage);
+            WINDOW_deselect();
+        }
+        CarPage_Unlock(p);
+    }
+}
+
 void R3DCar_FreePages(R3DCar *car)
 {
     for (uint32_t i = 0; i < car->npages; i++) CarPage_free(&car->pages[i]);
@@ -449,8 +635,12 @@ void R3DObject_LoadHeader(R3DCar *car)
         }
         free(map);
     }
-    /* The decals and liveries of the options (0x447b80, with the light or dark decal shapes). */
-    if (car->textures) R3DCar_PendingDecals(car);
+    /* The damage decals of the options (0x447b80 from 0x442c80 and 0x4426c0: the light car's or the dark
+       car's shapes), drawn by the car's damage (0x447f40). */
+    if (car->textures) {
+        R3DCar_BuildDecals(car, 0x50 < car->hsv[2] ? car->shape_l : car->shape_d, car->state->options);
+        R3DCar_DrawDecals(car, car->state->damage);
+    }
     R3DMaterialSet_Build(car->materials, car->root, "");
 }
 
@@ -509,7 +699,7 @@ void R3DCar_SetColours(R3DCar *car, uint32_t scheme)
         }
         uint8_t bgr[3] = {(uint8_t)spec->colours[0], (uint8_t)(spec->colours[0] >> 8), (uint8_t)(spec->colours[0] >> 16)};
         R3DCar_HSV(bgr, car->hsv);
-        if (car->textures) R3DCar_PendingDecals(car);
+        if (car->textures) R3DCar_BuildDecals(car, 0x50 < car->hsv[2] ? car->shape_l : car->shape_d, car->state->options);   /* 0x447b80 */
     }
     if (car->crp && car->tpg.ini) {
         char sec[32];

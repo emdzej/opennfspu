@@ -97,3 +97,10 @@ extern uint8_t *g_carschemes;       /* 0x6115f4: 18 bytes per package */
 extern uint32_t g_carnschemes;      /* 0x6115f8 */
 extern CarPage g_carpages[2];       /* 0x611610 */
 extern void *g_carfiles[5];         /* 0x61160c */
+
+/* The damage decals: the shapes of fsh kept for the car's options (all without), by page. 0x447b80 */
+void R3DCar_BuildDecals(R3DCar *car, const uint8_t *fsh, const int *options);
+void R3DCar_FreeDecals(R3DCar *car);
+/* Each page with decals locked, its undamaged copy back, its decals drawn by the damage zones (NULL:
+   none), unlocked. 0x447f40 */
+void R3DCar_DrawDecals(R3DCar *car, const float *damage);

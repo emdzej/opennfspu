@@ -276,6 +276,140 @@ void WINDOW_drawshape(const uint8_t *shape, int x, int y)
     movdfl(shape, x, y, &MOVDFL_copy);
 }
 
+/* ---- the faded draw (0x53fe10) ---- */
+
+static uint8_t s_fade[256];        /* 0x69ebb8: i * alpha / 256 */
+static int s_fade_alpha = -1;      /* 0x69ecb8 */
+static const uint32_t *s_fade_clut;   /* 0x69ebb4 */
+
+static void fade_table(int alpha)   /* 0x53ffe0 */
+{
+    if (s_fade_alpha == alpha) return;
+    for (int i = 0, v = 0; i < 256; i++, v += alpha) s_fade[i] = (uint8_t)((unsigned)v >> 8);
+    s_fade_alpha = alpha;
+}
+
+static uint32_t faded(const uint8_t *p)   /* 0x53fc50: each byte of an 8888 pixel through the table */
+{
+    return (uint32_t)s_fade[p[0]] | (uint32_t)s_fade[p[1]] << 8 | (uint32_t)s_fade[p[2]] << 16 | (uint32_t)s_fade[p[3]] << 24;
+}
+
+/* An 8888 colour (its channels already times its alpha) over a 565 pixel: none under alpha 0x10, the
+   colour itself from 0xfc, else the pixel's channels times 255 - alpha added in one product (the 565
+   fields spread over a word, so a channel's overflow carries into the next). 0x573cda */
+static void over565(uint16_t *d, uint32_t c)
+{
+    if (c < 0x10000000u) return;
+    if (c < 0xfc000000u) {
+        uint32_t px = *d;
+        uint32_t packed = ((px << 16) & 0xf8000000u) | (px & 0x1f) | ((px & 0x7e0) << 8);
+        uint64_t m = (uint64_t)packed * (~c >> 24 & 0xff);
+        uint32_t lo = (uint32_t)m, hi = (uint32_t)(m >> 32);
+        c += hi << 16;
+        c += lo >> 5 & 0xff;
+        c += lo >> 11 & 0xff00;
+    }
+    *d = (uint16_t)(((c & 0xf80000) >> 8) + (c >> 3 & 0x1f) + ((c & 0xfc00) >> 5));
+}
+
+/* The same over a 1555 pixel, which comes out opaque. 0x573d5f */
+static void over1555(uint16_t *d, uint32_t c)
+{
+    if (c < 0x10000000u) return;
+    if (c < 0xfc000000u) {
+        uint32_t px = *d;
+        uint32_t packed = ((px & 0x7c00) << 17) + ((px & 0x3e0) << 9) + (px & 0x1f);
+        uint64_t m = (uint64_t)packed * ((c >> 24) ^ 0xff);
+        uint32_t lo = (uint32_t)m, hi = (uint32_t)(m >> 32);
+        c += hi << 16;
+        c += lo >> 5 & 0xff;
+        c += lo >> 11 & 0xff00;
+    }
+    *d = (uint16_t)(((c & 0xf80000) >> 9) + (c >> 3 & 0x1f) + ((c & 0xf800) >> 6) + 0x8000);
+}
+
+static void fade8(void *dst, const void *src, int n)   /* 0x53fb80: the nearest palette entry */
+{
+    (void)dst, (void)src, (void)n;
+    PENDING_NOTE(0x53fb80, "the faded draw on an 8-bit window");
+}
+static void fade1555(void *dst, const void *src, int n)   /* 0x53fc90 */
+{
+    uint16_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4) over1555(d++, faded(s));
+}
+static void fade565(void *dst, const void *src, int n)   /* 0x53fcd0 */
+{
+    uint16_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4) over565(d++, faded(s));
+}
+/* 24 and 32 bits: each channel times 255 - alpha (/ 256) plus the faded colour's, byte arithmetic; 32-bit
+   pixels come out opaque. 0x53fd10, 0x53fd90 */
+static void fade_bytes(uint8_t *d, uint32_t c)
+{
+    unsigned k = (unsigned)(uint8_t)(0xff - (c >> 24));
+    d[2] = (uint8_t)((d[2] * k >> 8) + (c >> 16));
+    d[1] = (uint8_t)((d[1] * k >> 8) + (c >> 8));
+    d[0] = (uint8_t)((d[0] * k >> 8) + c);
+}
+static void fade24(void *dst, const void *src, int n)
+{
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4, d += 3) fade_bytes(d, faded(s));
+}
+static void fade32(void *dst, const void *src, int n)
+{
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4, d += 4) {
+        uint32_t c = faded(s);
+        d[3] = 0xff;
+        fade_bytes(d, c);
+    }
+}
+/* An 8-bit shape on a 16-bit window: its palette's 8888 colours (faded below 0xff) over each pixel.
+   0x540060 */
+static void fade_clut(void *dst, const void *src, int n)
+{
+    uint16_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--) over565(d++, s_fade_clut[*s++]);
+}
+
+void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha)
+{
+    if (WINDOW_cur.lock != 0 && WINDOW_cur.lock != -1) {
+        if (!WINDOW_cur.pixels) {
+            /* the driver's path: the shape as a texture on a quad with the alpha in its colour */
+            PENDING_NOTE(0x5728f0, "WINDOW_drawshapealpha (driver window)");
+        }
+        if (WINDOW_cur.lock != -1 && !WINDOW_cur.pixels) return;
+    }
+    BlitTable t = {{fade8, fade1555, fade565, fade24, fade32}, NULL, 3, 0x7d};   /* 0x5ded08 */
+    static uint32_t clut[256];
+    if (SHAPE_typevalid(shape) == 8 && WINDOW_cur.depth == 16) {
+        s_fade_clut = getclutptr(shape, clut);   /* 0x534440 */
+        if (alpha < 0xff) {
+            const uint8_t *c = (const uint8_t *)s_fade_clut;
+            static uint32_t faded_clut[256];
+            for (int i = 0; i < 256; i++) {   /* 0x540010: each byte times alpha / 256 */
+                uint8_t b[4];
+                for (int k = 0; k < 4; k++) b[k] = (uint8_t)((unsigned)c[4 * i + k] * (unsigned)alpha >> 8);
+                memcpy(&faded_clut[i], b, 4);
+            }
+            s_fade_clut = faded_clut;
+        }
+        t.forced = fade_clut;
+        t.target = 0x7b;
+    } else {
+        fade_table(alpha);
+    }
+    movdfl(shape, x, y, &t);
+}
+
 /* A shape scaled to w x h at (x, y) on the current window (negative sizes mirror), sampled at the pixel
    centres; an 8-bit shape on a 15- or 16-bit window through its palette (0x58af95), any other converted
    to the window's type first and copied (0x58ae13). The translucent row drawers of 0x5deb14 aren't

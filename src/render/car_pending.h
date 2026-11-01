@@ -9,8 +9,6 @@ bool R3DCar_PendingTexturesWanted(R3DCar *car);
 void R3DCar_PendingGlobalTextures(R3DCar *car);
 /* LoadCrp's fallback when the .crp can't be read: the stand-in car ("%seden2", 0x5cdc28). */
 void R3DCar_PendingFallback(R3DCar *car, const char *name);
-/* 0x447b80: the decal / livery shapes of the chosen options from <car>d.fsh / <car>l.fsh. */
-void R3DCar_PendingDecals(R3DCar *car);
 /* R3DObject_LoadHeader 0x4426c0: the texture pages ([tpageN.details], [fileN.details]) composed from the
    .fsh files (R3DCar_LoadDetails 0x443e90, TEXTURE 0x5356c0, DTEX). */
 void R3DCar_PendingTexturePages(R3DCar *car);

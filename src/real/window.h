@@ -72,5 +72,8 @@ void WINDOW_clear(uint32_t colour);
 void WINDOW_fillrect(int x, int y, int w, int h, uint32_t colour);
 /* Draws a shape at (x, y) into the current window, converted to its type and clipped. 0x53d2e0 */
 void WINDOW_drawshape(const uint8_t *shape, int x, int y);
+/* The shape faded to alpha (0..255) over the current window: its 8888 colours (each channel times alpha)
+   over the pixels, an 8-bit shape's palette on a 16-bit window. 0x53fe10 */
+void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha);
 /* A shape scaled to w x h at (x, y) on the current window (a negative size mirrors). 0x5628c0 */
 void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h);
