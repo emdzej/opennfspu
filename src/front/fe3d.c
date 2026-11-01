@@ -134,6 +134,11 @@ typedef struct {
     FE3DObject *seg[3];       /* +0x2ec .. +0x2f4: dealer2a, dealer2b, dealer2c */
     float step[2];            /* +0x2d4, +0x2d8: one car's place to the next (x, z) */
     int index;                /* +0x30c: the dealer car shown */
+    /* the track select's (FETrackSelect3DRoom 0x4e9a30) */
+    bool track;
+    FE3DObject *wall;         /* +0x318: trackwall (the model +0x314 is "track") */
+    float from[4], to[4];     /* +0x324, +0x330: the place (x y z) and x turn it zooms between */
+    int32_t zoom_at;          /* +0x320: the tick the zoom started (-1 not yet) */
 } FE3DRoom;
 
 static FE3DRoom *s_room;
@@ -190,9 +195,65 @@ static FE3DRoom *dealer_new(void)
     return r;
 }
 
+static void light(FE3DRoom *r, FE3DObject *o, bool car);
+
+/* The track select (FETrackSelect3DRoom_Load 0x4e9a30): the models "track" and "trackwall", the place
+   zooming in from (0, -4.8, 6.2) to (0, -3.2, 1.9) over 300 ticks once the screen is up (0x4e9d00). */
+static FE3DRoom *track_new(void)
+{
+    FE3DRoom *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    snprintf(r->id, sizeof r->id, "ID_TRACK");
+    r->track = true;
+    r->spin = 20.0f;
+    r->fov = 25.0f;
+    r->ambient[0] = 55.0f, r->ambient[1] = 65.0f, r->ambient[2] = 76.0f;
+    r->diffuse[0] = r->diffuse[1] = r->diffuse[2] = 115.0f;
+    r->dir[0] = -0.29f, r->dir[1] = -1.5f, r->dir[2] = 0.29f;
+    const float from[4] = {0, -4.8f, 6.2f, -0.04f}, to[4] = {0, -3.2f, 1.9f, 0};
+    memcpy(r->from, from, sizeof from);
+    memcpy(r->to, to, sizeof to);
+    memcpy(r->pos, from, 12);
+    r->rot[0] = from[3];
+    r->zoom_at = -1;
+    static const uint32_t none[4] = {0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu};
+    r->model = FE3DObject_New(2, "track", none, 0, -1, 0, NULL);
+    r->wall = FE3DObject_New(2, "trackwall", none, 0, -1, 0, NULL);
+    return r;
+}
+
+/* 0x4e9d00: the zoom in; the track model and the wall four times a quarter turn apart, hinges 13 and 14
+   turning (a 128th of a turn a tick); both lit by the room. */
+static void track_draw(FE3DRoom *r, EaglMatStack *model)
+{
+    int32_t t = ticks();
+    if (r->zoom_at < 0) r->zoom_at = t;   /* (0x4e09c0: the screen up) */
+    int dt = t - r->zoom_at;
+    if (dt > 300) dt = 300;
+    float k = (float)dt * 0.0033333334f, j = 1.0f - k;
+    for (int i = 0; i < 3; i++) r->pos[i] = k * r->to[i] + j * r->from[i];
+    r->rot[0] = k * r->to[3] + j * r->from[3];
+    light(r, r->model, false);
+    light(r, r->wall, false);
+    hinge(r->model, 13, (float)t * 0.0078125f, 0, 0);
+    hinge(r->model, 14, (float)t * 0.0078125f, 0, 0);
+    FE3DObject *objs[5] = {r->model, r->wall, r->wall, r->wall, r->wall};
+    static const float turn[5] = {0, 0, 0.25f, 0.5f, 0.75f};
+    for (int i = 0; i < 5; i++) {
+        FE3DObject *o = objs[i];
+        if (!o) continue;
+        FE3DObject_SetPos(o, r->pos[0], r->pos[1], r->pos[2]);
+        FE3DObject_RotY(o, r->rot[1] + turn[i]);
+        FE3DObject_RotX(o, r->rot[0]);
+        FE3DObject_RotZ(o, r->rot[2]);
+        FE3DObject_Draw(o, model);
+    }
+}
+
 static void room_free(FE3DRoom *r)
 {
     if (!r) return;
+    if (r->track) FE3DObject_Free(r->wall);
     if (r->dealer) {
         FE3DObject_Free(r->seg[1]);
         FE3DObject_Free(r->seg[2]);
@@ -287,6 +348,10 @@ static void dealer_draw(FE3DRoom *r, EaglMatStack *model)
 
 static void room_draw(FE3DRoom *r, EaglMatStack *model)
 {
+    if (r->track) {
+        track_draw(r, model);
+        return;
+    }
     if (r->dealer) {
         dealer_draw(r, model);
         return;
@@ -321,6 +386,7 @@ void FE3D_SetRoom(const char *id)
     s_carfile[0] = 0;
     if (!strcmp(id, "ID_GARAGE")) s_room = garage_new();
     else if (!strcmp(id, "ID_DEALER")) s_room = dealer_new();
+    else if (!strcmp(id, "ID_TRACK")) s_room = track_new();
     else if (*id) PENDING_NOTE(0x4e6f10, "the dealership, factory, track select and victory rooms");
 }
 
