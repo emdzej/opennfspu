@@ -1,6 +1,10 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
 #include "game/skid.h"
+#include "game/track.h"
+#include "render/headlights.h"
+#include "render/sky.h"
+#include "render/weather.h"
 #include "render/particles.h"
 #include "render/carparticle.h"
 #include "game/audio.h"
@@ -82,7 +86,7 @@ void Race_Restart(int32_t start)
     g_sim_tick = start;
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x4a4560 */
     Render_SeedRand((uint32_t)g_race_seed);   /* 0x44fbd0 */
-    PENDING_NOTE(0x414ed0, "the race restart's other parts (the cops' script, the cameras 0x468fe0, 0x412170)");
+    PENDING_NOTE(0x414ed0, "the race restart's other parts (the cops' script, the cameras 0x412170)");
     for (int i = 0; i < g_ncars; i++) {
         g_ranked.c[i] = g_cars[i];   /* 0x411100 */
         g_ordered.c[i] = g_cars[i];
@@ -91,4 +95,10 @@ void Race_Restart(int32_t start)
     for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
     AI_MakeControllers();                  /* 0x406780, 0x406580 */
     Race_ResetRanking();
+    /* 0x468fe0: the render's part: the skid marks cleared (0x479d60), the sky's textures loaded again
+       (0x45dbc0), the weather anew (0x459130), the headlights on the local car (0x452550). */
+    WLineBundle_Clear();
+    if (g_track_name[0]) Sky_LoadFsh(g_track_name, true);
+    Weather_Restart();
+    if (g_race_local < g_ncars) Headlights_SetCar(g_cars[g_race_local]);
 }

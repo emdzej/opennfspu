@@ -779,6 +779,54 @@ void Weather_Init(void)
     s_weather->splats = splats_new(g_rtex_common[0] ? RTexBank_find(g_rtex_common[0], 0, 0x544c5053) : NULL);
 }
 
+/* 0x458070: every splat off, then as many as the levels want (as splats_step counts them), each placed
+   anew. */
+static void splats_restart(Splats *d, float rain, float snow)
+{
+    splats_clear(d);   /* 0x457fb0 */
+    float level = rain + snow;
+    if (1.0f < level) level = 1.0f;
+    float half = f32(0x5b23f0);
+    d->snowing = rain <= half && !(snow < half);
+    if (level != d->level) {
+        d->level = level;
+        float m = level * f32(0x5b248c);
+        d->target = (int32_t)((double)lrintf(m) * (double)d->area);
+    }
+    d->n = d->target;
+    for (int i = 0; i < d->n; i++) {
+        d->active[i] = 1;
+        splat_place(d, i);   /* 0x4582c0 */
+    }
+}
+
+/* 0x459130 (the race's restart): the snow's and the rain's drops all anew for the sky's levels now, as
+   the reset does, then the splats. */
+void Weather_Restart(void)
+{
+    if (!s_weather) return;
+    float snow = Sky_SnowLevel(), rain = Sky_GlowLevel();   /* 0x45ce90, 0x45cec0 */
+    Precip *v[2] = {s_weather->snow, s_weather->rain};
+    float lv[2] = {snow, rain};
+    for (int k = 0; k < 2; k++) {
+        Precip *p = v[k];
+        if (!p) continue;
+        memset(p->active, 0, sizeof p->active);
+        wobble_reset(p);
+        if (p->level != lv[k]) target_of(p, lv[k]);
+        p->speed2 = 0;
+        p->n = p->target;
+        for (int i = 0; i < p->target; i++) {
+            p->active[i] = 1;
+            float *q = p->verts[3 * i];
+            q[0] = rnd(p->c.xr, p->c.x0);
+            q[1] = rnd(p->c.yr, p->c.y0);
+            q[2] = rnd(p->c.zr, p->c.z0);
+        }
+    }
+    if (s_weather->splats) splats_restart(s_weather->splats, rain, snow);
+}
+
 void Weather_Free(void)   /* 0x458a80 */
 {
     if (!s_weather) return;

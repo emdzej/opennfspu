@@ -8,6 +8,8 @@
 /* Made with the race's render (0x458a50 from Render_RaceInit) and gone with it (0x458a80). */
 void Weather_Init(void);
 void Weather_Free(void);
+/* The race's restart: the drops and the splats anew for the sky's levels now. 0x459130 */
+void Weather_Restart(void);
 /* Each frame at the world pass's end (0x458ef0): the steps since the last (one while a race screen is up),
    then the drops drawn about the eye with z writes off. */
 void Weather_Frame(void);
