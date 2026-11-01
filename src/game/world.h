@@ -148,6 +148,7 @@ W3DObjectBundle *WAnimBundle_new(void *world);       /* 0x4776a0 */
 W3DObjectBundle *WMidGroundBundle_new(void *world);  /* 0x47cb40 */
 W3DObjectBundle *WStaticBundle_new(void *world);     /* 0x483350 */
 void W3DObjectBundle_delete(W3DObjectBundle *b);     /* vt->dtor(b, 1) */
+void W3DObjectBundle_init(W3DObjectBundle *b, uint32_t kind, void *world);   /* 0x489090 */
 
 /* An article's Base item (through its cache slot), NULL without one. */
 const WBase *WArticleBundle_base(WArticleBundle *b, int entry);

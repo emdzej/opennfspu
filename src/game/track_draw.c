@@ -21,6 +21,12 @@ void *RDrawAnimArticleBundle_new(struct W3DObjectBundle *b)
     return d ? RDrawAnimArticleBundle_ctor(d, b) : NULL;
 }
 
+void *RDrawLineBundle_new(struct W3DObjectBundle *b)
+{
+    RDrawBundle *d = calloc(1, sizeof *d);
+    return d ? RDrawLineBundle_ctor(d, b) : NULL;
+}
+
 void *R3DTrack_new(void *desc)
 {
     R3DMaterialSet *ms = calloc(1, sizeof *ms);

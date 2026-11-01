@@ -178,6 +178,8 @@ extern uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb (the
 int Render_CardType(void);           /* 0x6197b0: Render_DetectCard's card (0 in the port) */
 extern uint8_t g_render_modalpha;   /* 0x6197aa: the driver modulates alpha (Render_DetectCard) */
 extern uint8_t g_render_extras;     /* 0x6197e6: the extra 'pr' lists (0x40000) and the effects lists */
+extern uint8_t g_render_skidmarks;  /* 0x6197e7: skid marks (special effects 2 and up) */
+extern uint32_t g_render_skidmask;  /* 0x6197ec: 7 with the marks, else 0xf */
 extern RenderState *g_racerstate;   /* 0x62814c: the race's copy of the device's render states */
 
 void Render_Init(void);                                  /* 0x4673b0 */

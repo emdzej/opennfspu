@@ -1,5 +1,6 @@
 /* A race car's set-up at the race's start (see race_car.h). */
 #include "game/race_car.h"
+#include "game/skid.h"
 #include "exe.h"
 #include "game/car_drive.h"
 #include "game/car_ground.h"
@@ -413,7 +414,7 @@ void Car_RaceInit(Car *c, uint32_t id)
             set_i(c, 0xb58, 1);
             Scene_TriggerShow(start);   /* 0x470330: the first arrow */
         }
-        PENDING_NOTE(0x478e90, "the wheels' skid trails reset (the wheel objects' +0)");
+        for (int w = 0; w < 4; w++) SkidTrail_Reset(c->p[CARP_WHEELS + w]);   /* 0x478e90 */
     } else {
         PENDING_NOTE(0x4a1060, "the traffic car's set-up (0x4a1060, 0x4a12f0)");
         CarSim_Init(c, (int32_t)(id | 0x100), *CAR_F(c, 0x354), *CAR_F(c, 0x3a8), *CAR_F(c, 0x3ac), *CAR_F(c, 0x3b0));

@@ -1,5 +1,6 @@
 /* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
 #include "render/rdraw.h"
+#include "game/skid.h"
 #include "render/sprite.h"
 #include "render/particles.h"
 #include "render/dynlight.h"
@@ -307,6 +308,26 @@ RDrawBundle *RDrawArticleBundle_ctor(RDrawBundle *d, W3DObjectBundle *b)
     bundle_ctor(d, b);
     d->bundle2 = b;
     d->base.vt = &article_vtbl;
+    return d;
+}
+
+static void line_draw(RDrawObject *o, int index, const RListEntry *e)
+{
+    RDrawBundle *d = (RDrawBundle *)o;
+    g_rdraw_key = e->key;
+    WLineBundle_DrawCell(d->bundle, index);
+}
+
+static void line_sphere(RDrawObject *o, int index, float out[4]) { WLineBundle_Sphere(((RDrawBundle *)o)->bundle, index, out); }
+static uint32_t line_flags(RDrawObject *o, int index) { (void)o, (void)index; return 0xe; }
+
+static const RDrawVtbl line_vtbl = {bundle_dtor, anim_queue, line_draw, anim_special, bundle_s4, line_sphere, line_flags};   /* 0x5b3d28 */
+
+RDrawBundle *RDrawLineBundle_ctor(RDrawBundle *d, W3DObjectBundle *b)   /* 0x4512a0 */
+{
+    bundle_ctor(d, b);
+    d->bundle2 = b;
+    d->base.vt = &line_vtbl;
     return d;
 }
 

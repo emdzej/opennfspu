@@ -74,6 +74,8 @@ static void *article_tr(UData *article, uint32_t index)
 static int bundle_serial;   /* 0x5d0608 */
 
 /* W3DObjectBundle ctor 0x489090 (kind, world). */
+static void W3DObjectBundle_ctor(W3DObjectBundle *b, uint32_t kind, void *world);
+void W3DObjectBundle_init(W3DObjectBundle *b, uint32_t kind, void *world) { W3DObjectBundle_ctor(b, kind, world); }
 static void W3DObjectBundle_ctor(W3DObjectBundle *b, uint32_t kind, void *world)
 {
     b->transformed = 0;

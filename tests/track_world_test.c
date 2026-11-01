@@ -66,6 +66,7 @@ static void check_start_view(BWorld *w, const char *track)
     for (uint32_t i = 0; i < w->nobjects; i++) {
         WObjectRef *o = &w->objects[i];
         if (o->bundle == w->scene) continue;   /* scene slots are placed later */
+        if (o->bundle->kind != 0x41727469) continue;   /* the line bundle's cells */
         float s[4];
         WArticleBundle_sphere((WArticleBundle *)o->bundle, o->index, s);
         float dx = s[0] - start[0], dz = s[2] - start[2];
@@ -99,6 +100,12 @@ static void check_track(const char *track)
     uint32_t total = 0;
     for (int bi = 1; bi < w->nbundles; bi++) {
         W3DObjectBundle *b = w->bundles[bi];
+        if (b->kind != 0x41727469) {   /* the line bundle (the skid marks' cells): no articles */
+            CHECK(bi == 5 && b->count > 0);
+            for (uint32_t i = 0; i < b->count; i++) CHECK(b->entries[i].article == NULL && (b->entries[i].flags & 0x400000));
+            total += b->count;
+            continue;
+        }
         for (uint32_t i = 0; i < b->count; i++) {
             long k = b->entries[i].article - first;
             CHECK(k >= 0 && k < narts);
@@ -124,7 +131,7 @@ static void check_track(const char *track)
        alps 173195) */
     unsigned long verts = 0;
     for (int bi = 1; bi < w->nbundles; bi++)
-        for (uint32_t i = 0; i < w->bundles[bi]->count; i++) {
+        for (uint32_t i = 0; w->bundles[bi]->kind == 0x41727469 && i < w->bundles[bi]->count; i++) {
             UData *a = w->bundles[bi]->entries[i].article;
             for (UData *it = UData_items(a); it < UData_itemsend(a); it++)
                 if (UData_key(it) == 0x76742020) verts += it->count;   /* 'vt  ' */

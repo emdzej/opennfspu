@@ -1,5 +1,7 @@
 /* Track loading (see track.h). */
 #include "game/track.h"
+#include "game/wgrid.h"
+#include "game/skid.h"
 #include "game/scene.h"
 #include "game/race_car.h"
 #include "game/mission.h"
@@ -113,6 +115,9 @@ void BWorld_BuildBundles(BWorld *w)
     World_BuildBundles(w);
     PENDING_NOTE(0x482e80, "0x487940's holder 0x628bd4");
     Scene_PlaceGeometry();   /* 0x46d120 (0x487940's) */
+    w->f10 = WGrid_Build(w);   /* 0x47b5f0 (after the static bundle; the scene's placings are the original's by then) */
+    W3DObjectBundle *lb = WLineBundle_new(w->r3d, w->f10);   /* 0x479890: the skid marks' cells */
+    if (lb) add_objects(w, lb);
     Track_LoadEdges(w);                      /* 0x488000 */
     BWorld_LoadVis(w);
 }
@@ -133,6 +138,7 @@ void BWorld_free(BWorld *w)
     if (!w) return;
     for (int i = 0; i < w->nbundles; i++) W3DObjectBundle_delete(w->bundles[i]);
     WTree_delete(w->tree);                   /* 0x487850: 0x483780 */
+    WGrid_Free(w->f10);
     free(w->objects);
     free(w->vis);
     free(w->vis_off);

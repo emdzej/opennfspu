@@ -234,6 +234,8 @@ int32_t g_render_specials;          /* 0x6197f4 */
 int32_t g_render_precip;            /* 0x6197f0: the weather's most drops */
 uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it in this build */
 uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
+uint8_t g_render_skidmarks;         /* 0x6197e7: the skid marks (game/skid.h) */
+uint32_t g_render_skidmask = 0xf;   /* 0x6197ec: a pair replaces the last on the steps it masks off */
 static int car_detail;              /* 0x6197c4 */
 uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb: the cars' dynamic lights and reflections */
 
@@ -249,10 +251,12 @@ void Render_SetupQuality(void)
     g_render_extras = card_type != 0xe;
     g_render_skiplod0 = 0;
     switch (g_renderopts.specialfx) {
-    case 0: g_render_specials = 0; g_render_precip = 60; g_render_extras = 0; g_render_particles = 0; break;
-    case 1: g_render_specials = 1; g_render_precip = 140; g_render_extras = 0; g_render_particles = 100; break;
-    case 2: g_render_specials = 2; g_render_precip = 220; g_render_particles = 200; break;
+    case 0: g_render_specials = 0; g_render_precip = 60; g_render_extras = 0; g_render_particles = 0; g_render_skidmarks = 0; g_render_skidmask = 0xf; break;
+    case 1: g_render_specials = 1; g_render_precip = 140; g_render_extras = 0; g_render_particles = 100; g_render_skidmarks = 0; g_render_skidmask = 0xf; break;
+    case 2: g_render_specials = 2; g_render_precip = 220; g_render_particles = 200; g_render_skidmarks = 1; g_render_skidmask = 7; break;
     default:
+        g_render_skidmarks = 1;
+        g_render_skidmask = 7;
         g_render_specials = 3;
         g_render_precip = 300;
         g_render_particles = 0x100;

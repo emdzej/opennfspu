@@ -1,5 +1,6 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "game/skid.h"
 #include "render/particles.h"
 #include "render/carparticle.h"
 #include "game/audio.h"
@@ -64,7 +65,8 @@ void Sim_Step(void)
         Audio_Tick();                         /* 0x4a7ef0 (Race_TickOdd's) */
         Race_UpdatePositions();               /* 0x415fe0 */
         Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
-        PENDING_NOTE(0x417030, "the odd tick's World_Tick and the cars' renderers' ticks (R3DCar_TickAll)");
+        World_Tick();                         /* 0x479e20: the fading skid marks */
+        PENDING_NOTE(0x417030, "the cars' renderers' ticks (R3DCar_TickAll)");
         CarParticles_TickAll();               /* R3DCarParticle_Tick 0x43f590 */
         Scene_Tick();                         /* 0x470b10 */
     }

@@ -419,6 +419,10 @@ void DRIVE_Shutdown(void)
             R3DCar_Free(r);
             g_cars[i]->p[CARP_R3D] = NULL;
         }
+        for (int w = 0; g_cars[i] && w < 4; w++) {   /* (the car's destructor: its wheels' trails) */
+            free(g_cars[i]->p[CARP_WHEELS + w]);
+            g_cars[i]->p[CARP_WHEELS + w] = NULL;
+        }
     }
     g_ncars = 0;
     g_tasks_tick.count = g_tasks_even.count = 0;   /* (the lists are the race's) */

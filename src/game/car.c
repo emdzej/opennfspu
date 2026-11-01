@@ -1,5 +1,6 @@
 /* The race's cars (see car.h). */
 #include "game/car.h"
+#include "game/skid.h"
 #include "render/carparticle.h"
 #include "game/race_car.h"
 #include "exe.h"
@@ -482,7 +483,8 @@ static void Car_MakeRenderer(Car *c)
        box, +0x3b4 the radius): the simulation's collisions read them there. */
     memcpy(CAR_F(c, 0x3a8), r->state.halfsize, 12);
     *CAR_F(c, 0x3b4) = r->state.radius;
-    PENDING_NOTE(0x478e30, "the car's wheel objects (+0x7b8, 0x478e30)");
+    /* the wheels' trails (+0x7b8 + 0xc4 w, 0x478e30), by the tyres' width (the specs' +0x84) */
+    for (int w = 0; w < 4; w++) c->p[CARP_WHEELS + w] = SkidTrail_new(CAR_SPECSB(c) ? *(const float *)(const void *)(CAR_SPECSB(c) + 0x84) : 0);
 }
 
 static void Car_LoadSpecs(Car *c, int i)

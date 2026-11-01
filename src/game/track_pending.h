@@ -11,6 +11,7 @@
 
 struct W3DObjectBundle;
 void *RDrawArticleBundle_new(struct W3DObjectBundle *b);       /* operator new(0x14) + 0x450b10 */
+void *RDrawLineBundle_new(struct W3DObjectBundle *b);          /* operator new(0x14) + 0x4512a0 */
 void *RDrawAnimArticleBundle_new(struct W3DObjectBundle *b);   /* operator new(0x14) + 0x44fe30 */
 void *R3DTrack_new(void *desc);                                /* operator new(0x28) + 0x44a520 (the track renderer) */
 void R3DTrack_load(void *r3d, void *root);                     /* 0x44a6b0 */

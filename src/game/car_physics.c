@@ -1,5 +1,6 @@
 /* The cars' simulation (see car_physics.h). */
 #include "game/car_physics.h"
+#include "game/skid.h"
 #include "exe.h"
 #include "game/sim_math.h"
 #include "pending.h"
@@ -18,12 +19,35 @@ static float exe_f32(uint32_t va)
 }
 #define K(va) exe_f32(va)
 
+static float f32u(uint32_t u)
+{
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
+
 static float dot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
-/* The wheels' skid marks (0x4a2660 -> 0x478ec0 per wheel, with the quality flag 0x6197e7): pending. */
+/* The wheels' skid marks (0x4a2660 -> 0x478ec0 per wheel): the front wheels' over 0.1 by 1.11, the rear's
+   over 0.5 by 2, of their slip (+0x870); on ground kinds 9 and 6 (and 1 with +0x838 set, as 6) 0.7
+   strong from nothing. Each at the wheel's contact point (+0x7f8) along the car's +0x348. */
 static void wheel_marks(Car *c)
 {
-    PENDING_NOTE(0x4a2660, "the wheels' skid marks (0x4a2660, 0x478ec0)");
+    for (int w = 0; w < 4; w++) {
+        int base = 0x844 + 0xc4 * w;
+        float thr = w < 2 ? f32u(0x3dcccccdu) : 0.5f, scale = w < 2 ? f32u(0x3f8e353fu) : 2.0f;
+        int kind = *CAR_I(c, base);
+        float slip;
+        if (kind == 9) {
+            slip = f32u(0x3f333333u), thr = 0, scale = 1.0f;
+        } else if (kind == 6 || (*CAR_I(c, base - 0xc) != 0 && kind == 1)) {
+            kind = 6;
+            slip = f32u(0x3f333333u), thr = 0, scale = 1.0f;
+        } else {
+            slip = *CAR_F(c, base + 0x2c);
+        }
+        SkidTrail_Step(c->p[CARP_WHEELS + w], CAR_F(c, 0x7f8 + 0xc4 * w), slip, kind, CAR_F(c, 0x348), thr, scale);
+    }
 }
 
 void CarSim_Move(void *car)
