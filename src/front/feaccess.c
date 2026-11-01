@@ -36,6 +36,9 @@ static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
 static int s_tracks[32], s_ntracks;   /* the records with a model (0x691d00) */
+static int s_avail[32], s_navail;     /* 0x691d04: the ones to choose (0x4fb190) */
+static int s_looped[32], s_nlooped;   /* 0x691d08: those of them looped (+0x6e 1) */
+static int s_fe_gametype;             /* Game.GameType as the front end set it */
 static int s_cars[160], s_ncars;      /* (0x6919f0) */
 static int s_dealer[160], s_ndealer;  /* 0x691a00: the cars the dealer sells this year */
 
@@ -82,7 +85,49 @@ static bool fe_key(const char *key, char *out, size_t cap)
     return found;
 }
 
-static const char *trk_name(int i) { return (const char *)s_trk + TRK_SIZE * s_tracks[i] + 8; }
+/* An era's year (0x501f40: the classic 1970, the golden 1989, the modern 2000; others 0). */
+static int era_year(int32_t era) { return era == 0x209 ? 1970 : era == 0x20a ? 1989 : era == 0x20b ? 2000 : 0; }
+
+static const uint8_t *tour_section(int32_t *head, int *n);
+static int career_year(void);
+static int16_t rec16(const uint8_t *r, int off);
+static int32_t rec32(const uint8_t *r, int off);
+
+/* The track lists (0x4fb190): of the records with a model, all but the skidpad ("Skidpad" 0x5da6d0,
+   any case); a bonus track (+0x6c 3) only in multiplayer (Game.GameType 3) or once a tournament of an
+   era reached (its year at most the career's) races there (its +0xa ids from +0xc); the looped ones
+   (+0x6e 1) a list of their own. */
+static void track_lists(void)
+{
+    int32_t head[7];
+    int nt = 0, year = career_year();
+    const uint8_t *t = tour_section(head, &nt);
+    s_navail = s_nlooped = 0;
+    for (int i = 0; i < s_ntracks; i++) {
+        const uint8_t *r = s_trk + TRK_SIZE * s_tracks[i];
+        bool ok = rec16(r, 0x6c) != 3;
+        for (int k = 0; !ok && t && k < nt; k++) {
+            const uint8_t *tk = t + 0xd40 * k;
+            if (era_year(rec32(tk, 4)) > year) continue;
+            for (int j = 0; j < rec16(tk, 0xa) && !ok; j++) ok = rec16(tk, 0xc + 2 * j) == rec16(r, 0);
+        }
+        if (!(s_fe_gametype == 3 || ok) || !strcasecmp((const char *)r + 8, exe_str(0x5da6d0))) continue;
+        s_avail[s_navail++] = s_tracks[i];
+        if (rec16(r, 0x6e) == 1) s_looped[s_nlooped++] = s_tracks[i];
+    }
+}
+
+void FEData_SetGameType(int type) { s_fe_gametype = type; }
+
+/* A track accessor's record index: its list's entry (src 1 the looped, else the choosable). */
+static int track_rec(const FEAccessor *a, int i)
+{
+    const int *l = a && a->src == 1 ? s_looped : s_avail;
+    int n = a && a->src == 1 ? s_nlooped : s_navail;
+    return n ? l[i < n ? i : n - 1] : 0;
+}
+
+static const char *trk_name_of(const FEAccessor *a, int i) { return (const char *)s_trk + TRK_SIZE * track_rec(a, i) + 8; }
 static const char *car_file(int i) { return (const char *)s_car + CAR_SIZE * s_cars[i] + 0x7f; }
 
 /* An option's value from fe.txt by its key in the options' table (Options_Parse 0x4b0db0 fills it with
@@ -1157,10 +1202,15 @@ void FEData_Init(void)
     int opp = fe_key("numopponentracecars", v, sizeof v) ? atoi(v) : 4;
     add("Game.NumOpponents", ACC_INT, 8, 0, opp);   /* 0x4b9ef0(name, 0, 4, 0, 7, ...) */
     int tp = 0;
+    track_lists();
     if (fe_key("track_name", v, sizeof v))
-        for (int i = 0; i < s_ntracks; i++)
-            if (!strcasecmp(trk_name(i), v)) tp = i;
-    add("Track1.Track", ACC_TRACK, s_ntracks, 0, tp);
+        for (int i = 0; i < s_navail; i++)
+            if (!strcasecmp(trk_name_of(NULL, i), v)) tp = i;
+    add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
+    {
+        FEAccessor *lt = add("LoopedTrack.Track", ACC_TRACK, s_nlooped, 0, 0);   /* (on 0x4f94a0's) */
+        if (lt) lt->src = 1;
+    }
     int cp = 0;
     for (int i = 0; i < s_ncars; i++)
         if (!strcasecmp(car_file(i), "964")) cp = i;
@@ -1257,6 +1307,12 @@ static void refresh(const FEAccessor *c)
         if (a->pos >= a->count) a->pos = 0;
         return;
     }
+    if (a->kind == ACC_TRACK) {
+        track_lists();
+        a->count = a->src == 1 ? s_nlooped : s_navail;
+        if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
+        return;
+    }
     if (a->kind == ACC_USEDDMG) {   /* (_v2 0x516520: the used car's fitted parts, 0x4efaf0) */
         const SaveCar *uc = acc_car(FEAccess_Find("UsedCar.Car"));
         a->count = uc ? uc->nother : 0;
@@ -1351,7 +1407,7 @@ const char *FEAccess_Text(const FEAccessor *a)
         return b;
     case ACC_TRACK: {
         int32_t id;
-        memcpy(&id, s_trk + TRK_SIZE * s_tracks[a->pos] + 4, 4);
+        memcpy(&id, s_trk + TRK_SIZE * track_rec(a, a->pos) + 4, 4);
         return FEStrings_Get(id);
     }
     case ACC_CAR:
@@ -1976,7 +2032,7 @@ int FEData_BuyCar(void)
 const char *FEData_Track(void)
 {
     FEAccessor *a = FEAccess_Find("Track1.Track");
-    return a && a->count ? trk_name(a->pos) : "coastal";
+    return a && a->count ? trk_name_of(a, a->pos) : "coastal";
 }
 
 const char *FEData_Car(void)

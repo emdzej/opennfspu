@@ -477,8 +477,10 @@ static void callback(const char *cb)
            3 multiplayer, 9 Factory Driver (its screen, factorydriver or factdone once done: pending) */
         s_gametype = !strcmp(cb, "SETTYPEQUICKKNOCKOUT") ? 1 : !strcmp(cb, "SETTYPEKNOCKOUT") ? 2
                    : !strcmp(cb, "SETTYPEMULTIPLAYER") ? 3 : !strcmp(cb, "SETTYPEFACTORYDRIVER") ? 9 : 0;
+        FEData_SetGameType(s_gametype);
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
         s_gametype = 4;
+        FEData_SetGameType(4);
         /* FEMainScreen_v63 0x510430: the career (Game.GameType 4, the car lists again), its tournaments when
            it was started (PlayerInfo's 0x691dd5), else its first screen, which starts it */
         Save *sv = FESave_Current();

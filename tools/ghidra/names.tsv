@@ -2661,3 +2661,5 @@
 005029e0	Tournament_EntryFee	frontend	high	The tournament's entry fee (+0xdc)
 005038b0	Tournament_RacesLeft	frontend	high	The tournament's races not run
 004d5200	FE_PlayGame	frontend	high	The race's checks by mode: restrictions 0x32d, unfinished 0x35a, cars 0x339/0x32e, the fee 0x359; then the race
+004fb190	FE_TrackLists	frontend	high	The choosable tracks (0x691d04: not the skidpad; bonus +0x6c 3 once a reached era's tournament races there, or multiplayer) and the looped (0x691d08, +0x6e 1)
+00501f40	Era_Year	frontend	high	0x209 1970, 0x20a 1989, 0x20b 2000, others 0

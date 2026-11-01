@@ -123,3 +123,5 @@ bool FEData_InstallState(bool *fitted);
 bool FEData_CarComplete(char *msg, size_t cap);
 /* The career race allowed (0, the entry fee paid at a first race) or the message why not (0x32d, 0x359). */
 int FEData_TourCheck(void);
+/* The front end's Game.GameType (the track lists depend on it). */
+void FEData_SetGameType(int type);
