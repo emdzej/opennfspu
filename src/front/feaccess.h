@@ -7,8 +7,8 @@
    - Game.NumOpponents, an int accessor 0..7 (FEdaGameOptions_v0 0x4e4bc0 -> 0x4b9ef0);
    - Track1.Track, the tracks of nfs5.trk with a model (FE_LoadTrackList 0x4facd0), named by their
      strings;
-   - zMergedList.Car and OpponentCar.Car, the racing cars of nfs5.car with a model (FE_LoadCarList
-     0x4f30c0, the list 0x6919f0), named by their short names. (The original's lists also follow the
+   - zMergedList.Car, the racing cars of nfs5.car with a model (FE_LoadCarList 0x4f30c0, the list
+     0x6919f0), named by their short names; OpponentCar.Car, which of them the opponents race. (The original's lists also follow the
      era and the owned cars, and sort them, 0x4f34c0 / 0x4f05c0: pending.)
    Positions start from fe.txt's race description, what the original's options hold. */
 #pragma once
@@ -58,6 +58,7 @@ void FEData_TourResult(int race, const int *places, const int *times, int n);
 /* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
 int FEData_TourLaps(void);
 #include "front/fesave.h"
+#include "game/race_setup.h"
 /* An owned car's value in a year (0x4f83f0). */
 int32_t FEData_CarValue(const SaveCar *c, int year);
 /* A car's damage in per cent (0x4eefd0). */
@@ -134,6 +135,11 @@ bool FEData_KnockoutOn(void);
    in, their personalities and the grid: start[0] the player's, 0 the front); its results (0x4ddb10). */
 void FEData_KnockoutStart(void);
 int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8]);
+/* Knockout racer i's (pers[] above) personality and car (0x4ddc00: OpponentCar.Car's car i - 1). */
+void FEData_KnockoutOpponent(int racer, RaceOpponent *o);
+/* The other race kinds' n opponents (0x4eb230): OpponentCar.Car's cars picked again (0x4f45c0), their
+   personalities picked of Game.Difficutly's difficulty (0x4e2940); their count. */
+int FEData_RaceOpponents(int n, RaceOpponent out[8]);
 void FEData_KnockoutResult(const int *places, int np);
 /* The data areas' lookups other modules share: an nfs5.prt record by its id (0x49c3e0), an nfs5.car
    record by its id (0x4f39e0: the first record when none has it), an nfs5.trk record by its id (0x4fb4b0). */

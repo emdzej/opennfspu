@@ -61,3 +61,5 @@ int FEApp_Grid(int pers[8], int start[9]);
 int FEApp_GameType(void);
 /* Factory Driver's opponents one by one (0x4eb830); -1 when the race has none such. */
 int FEApp_OpponentCars(RaceOpponent out[8]);
+/* A control's callback by name, as a click would run it (port addition: --param fecb=, tests). */
+void FEApp_Callback(const char *cb);

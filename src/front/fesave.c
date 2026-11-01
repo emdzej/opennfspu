@@ -111,7 +111,7 @@ bool Save_Parse(Save *s, const uint8_t *d, size_t n)
         } else if (!strcmp(name, "Personalities")) {
             int32_t k = rd_i32(&r);
             rd_skip(&r, (size_t)(k < 0 ? 0 : k) * 2);
-        } else if (!strcmp(name, "Knockout")) {
+        } else if (!strcmp(name, "Knockout")) {   /* 0x4dd810: the knockout's state raw (front/feaccess.c) */
             rd_skip(&r, 0x84);
         } else if (!strcmp(name, "CDPlayer")) {
             int32_t k = rd_i32(&r);

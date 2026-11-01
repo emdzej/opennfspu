@@ -11,6 +11,7 @@
 #include "front/fefactory.h"
 #include "vfs.h"
 #include "platform.h"
+#include "app.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -42,6 +43,7 @@ static int s_avail[32], s_navail;     /* 0x691d04: the ones to choose (0x4fb190)
 static int s_looped[32], s_nlooped;   /* 0x691d08: those of them looped (+0x6e 1) */
 static int s_fe_gametype;             /* Game.GameType as the front end set it */
 static int s_cars[160], s_ncars;      /* (0x6919f0) */
+static void pick_opponent_cars(void);
 static int s_dealer[160], s_ndealer;  /* 0x691a00: the cars the dealer sells this year */
 
 static FEAccessor *add(const char *name, AccKind kind, int count, int min, int pos)
@@ -1211,6 +1213,8 @@ void FEData_Init(void)
             if (!strcasecmp(trk_name_of(NULL, i), v)) tp = i;
     add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
     add("Game.NumKOOpponents", ACC_INT, 7, 1, 3);      /* FEIntAccessor 0x4b9ef0(.., 4, 1, 7): 4 of 1 .. 7 */
+    FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
+    if (df) df->list = 0x5d9f08;
     /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
        laps (0x5b9650: "1" .. "8"; the first slot's 3, its options 0xc .. 0xf in fe.txt: pending) */
     for (int k = 1; k <= 7; k++) {
@@ -1244,7 +1248,10 @@ void FEData_Init(void)
     setup();
     display();
     graphics();
-    add("OpponentCar.Car", ACC_CAR, s_ncars, 0, cp);
+    /* FEOpponentCarAccessor (0x4f4480, vtable 0x5b77d8): which cars the opponents race, five choices at 0
+       (four when 0x4e2db0 finds less than 33 MB of memory), its seven cars picked at once (0x4f45c0) */
+    add("OpponentCar.Car", ACC_OPPCAR, 5, 0, 0);
+    pick_opponent_cars();
     dealer_list(n);
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
     add("DealerCar.Colour", ACC_COLOUR, 1, 0, 0);        /* 0x4b8dd0 on the car's slots 0xa0 / 0xa8 */
@@ -1450,9 +1457,10 @@ const char *FEAccess_Text(const FEAccessor *a)
         memcpy(&id, s_trk + TRK_SIZE * track_rec(a, a->pos) + 4, 4);
         return FEStrings_Get(id);
     }
-    case ACC_CAR:
-        snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_cars[a->pos] + 0x34);
-        return b;
+    case ACC_OPPCAR: {   /* FEOpponentCarAccessor_v12 0x4f4d40 */
+        static const int16_t id[5] = {0x280, 0x282, 0x283, 0x284, 0x281};
+        return FEStrings_Get(id[a->pos < 5 ? a->pos : 0]);
+    }
     case ACC_LIST:
         return FEStrings_Get((int32_t)exe_u32(a->list + 4u * (unsigned)a->pos));
     case ACC_DEALER:
@@ -1602,6 +1610,7 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "OVERALLDAMAGECOST")) return FE_MoneyText(total);
         if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
     }
+    if (a->kind == ACC_OPPCAR && arg && !strcmp(arg, "SHORT") && a->pos == 3) return FEStrings_Get(0x285);   /* (v13 0x4f4dc0) */
     if (!arg || !*arg || !strcmp(arg, "SHORT")) return FEAccess_Text(a);
     if (!strcmp(arg, "PERCENT")) {   /* 0x4bc0e0 */
         int p = a->count < 2 ? 100 : a->pos * 100 / (a->count - 1);
@@ -1698,7 +1707,6 @@ const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
         if (a->pos < a->owned && sv) return sv->cars[a->pos].rec + 4;
         return s_car + CAR_SIZE * s_cars[a->pos - a->owned];
     }
-    if (a->kind == ACC_CAR) return s_car + CAR_SIZE * s_cars[a->pos];
     if (a->kind == ACC_DEALER) return s_car + CAR_SIZE * s_dealer[a->pos];
     if (a->kind == ACC_OWNED) {
         const SaveCar *c = acc_car(a);
@@ -1725,7 +1733,6 @@ const char *FEAccess_CarFile(const FEAccessor *a)
         const uint8_t *r = FEAccess_CarRecord(a);
         return r ? (const char *)r + 0x7f : NULL;
     }
-    if (a->kind == ACC_CAR) return car_file(a->pos);
     if (a->kind == ACC_DEALER) return (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x7f;
     if (a->kind == ACC_OWNED) {
         const SaveCar *c = acc_car(a);
@@ -2115,59 +2122,208 @@ const char *FEData_Track(void)
     return a && a->count ? trk_name_of(a, a->pos) : "coastal";
 }
 
-/* The knockout (0x690410, the save's Knockout section: pending): running, its race (+4), its opponents
-   (+8), each racer still in (0x69041c, 0 the player), their places (0x690450, the player's 0x69044c),
-   their last places (0x690470). */
-static bool s_ko_on;
-static int s_ko_race, s_ko_n, s_ko_place[8], s_ko_last[8];
-static bool s_ko_in[8];
-bool FEData_KnockoutOn(void) { return s_ko_on; }
+/* The knockout's state (0x690410, 0x84 bytes; the save's "Knockout" section, which its loader 0x4dd810
+   copies raw, so the port works the section in place, else its own):
+     +0x00 running (a byte)   +0x04 the race   +0x08 the opponents
+     +0x0c a byte per racer still in (0 the player; 12 bytes)
+     +0x18 the racers' personality ids (+0x18 + 4i, racers 1 .. n)
+     +0x3c their places (+0x3c the player's)   +0x60 their places in the last race */
+enum { KO_ON = 0, KO_RACE = 4, KO_N = 8, KO_IN = 0xc, KO_PERS = 0x18, KO_PLACE = 0x3c, KO_LAST = 0x60, KO_SIZE = 0x84 };
+static uint8_t s_ko_own[KO_SIZE];
+
+static uint8_t *ko(void)
+{
+    Save *sv = FESave_Current();
+    for (int i = 0; sv && i < sv->nsec; i++)
+        if (!strcmp(sv->sec[i].name, "Knockout") && sv->sec[i].size >= KO_SIZE) return sv->sec[i].data;
+    return s_ko_own;
+}
+
+static int32_t ko_get(int off) { return rec32(ko(), off); }
+static void ko_set(int off, int32_t v) { memcpy(ko() + off, &v, 4); }
+
+bool FEData_KnockoutOn(void) { return ko()[KO_ON] != 0; }
+
+/* The personalities of n opponents (0x4e2940): srand(time(0)) (0x537e80; the port's clock in seconds,
+   so runs repeat), then n picked at random (0x537db0) without repeats from nfs5.per's records of the
+   difficulty (+0x8; all of them for -1); their ids (0x6907d8). (The original divides by zero when it
+   runs out; the port stops.) */
+static int pick_personalities(int n, int difficulty, int16_t ids[8])
+{
+    static uint8_t *per;
+    static size_t nper;
+    if (!per) per = vfs_read_all("FEData\\Data\\nfs5.per", &nper);
+    REAL_srand(app_ticks_ms() / 1000u);
+    int cand[64], nc = 0;
+    for (int i = 0; per && i < (int)(nper / 0x2c) && nc < 64; i++)
+        if (difficulty == -1 || rec16(per, 0x2c * i + 8) == difficulty) cand[nc++] = i;
+    int k = 0;
+    for (; k < n && k < 8 && nc > 0; k++) {
+        int j = (int)(REAL_rand() % (uint32_t)nc);
+        ids[k] = rec16(per, 0x2c * cand[j]);
+        memmove(&cand[j], &cand[j + 1], sizeof cand[0] * (size_t)(nc - j - 1));
+        nc--;
+    }
+    return k;
+}
+
+static int difficulty(void)   /* Game.Difficutly's position (FEListAccessor 0x4bb260 on 0x5d9f08) */
+{
+    FEAccessor *d = FEAccess_Find("Game.Difficutly");
+    return d ? d->pos : 1;
+}
+
+/* A car's colours as an opponent gets them (0x4f45c0, 0x4eb830): one of its colour sets and interiors
+   at random (0x537db0; none: red and white), stripes half the time and a race number a fifth of it
+   (rand), in the race description's order (+0x674 body, +0x678 interior, +0x67c, +0x680). */
+static void opp_colours(const uint8_t *r, uint32_t col[4], int32_t *stripe, int32_t *racenum)
+{
+    uint32_t body = 0xffff0000u, c3 = 0xffff0000u, c4 = 0xffff0000u, inside = 0xffffffffu;
+    int nb = rec16(r, 0x3e6), ni = rec16(r, 0x528);
+    if (nb > 0) {
+        uint32_t k = REAL_rand() % (uint32_t)nb;
+        body = swap32((uint32_t)rec32(r, 0x3ec + 16 * (int)k));
+        c3 = swap32((uint32_t)rec32(r, 0x3f0 + 16 * (int)k));
+        c4 = swap32((uint32_t)rec32(r, 0x3f4 + 16 * (int)k));
+    }
+    if (ni > 0) inside = swap32((uint32_t)rec32(r, 0x530 + 16 * (int)(REAL_rand() % (uint32_t)ni)));
+    *stripe = 0;
+    *racenum = -1;
+    if (CRT_rand() % 100 > 50) *stripe = g_carnschemes ? (int32_t)((uint32_t)CRT_rand() % g_carnschemes) : 0;   /* (0x6115f8) */
+    if (CRT_rand() % 100 > 80) *racenum = CRT_rand() % 100 - 1;
+    col[0] = body | 0xff000000u;
+    col[1] = c3 | 0xff000000u;
+    col[2] = c4 | 0xff000000u;
+    col[3] = inside | 0xff000000u;
+}
+
+/* OpponentCar.Car's seven car objects (FEOpponentCarAccessor +0x24, 0x760 bytes each: 0x4f4e70). */
+static struct { const uint8_t *rec; uint32_t col[4]; int32_t stripe, racenum; } s_oppcar[7];
+
+/* OpponentCar.Car's cars picked (0x4f45c0) by its position: 0 the player's car (zMergedList.Car's),
+   1 .. 3 a car of its era (+0x1b0), its class (+0x1ac) or both: the k-th such walking the list
+   (0x6919f0) round from its start, k random; else (4, or no car) any car of the list. */
+static void pick_opponent_cars(void)
+{
+    FEAccessor *oa = FEAccess_Find("OpponentCar.Car");
+    int mode = oa ? oa->pos : 0;
+    const uint8_t *mine = FEAccess_CarRecord(FEAccess_Find("zMergedList.Car"));
+    for (int k = 0; k < 7; k++) {
+        const uint8_t *r = NULL;
+        if (mine && mode == 0) {
+            r = mine;
+        } else if (mine && mode >= 1 && mode <= 3 && s_ncars > 0) {
+            uint32_t u = REAL_rand() % (uint32_t)s_ncars;
+            int i = 0, hits = 0;
+            do {
+                if (i >= s_ncars) i = 0;
+                const uint8_t *c = s_car + CAR_SIZE * s_cars[i++];
+                bool era = rec32(c, 0x1b0) == rec32(mine, 0x1b0), cls = rec32(c, 0x1ac) == rec32(mine, 0x1ac);
+                if ((mode == 1 && era) || (mode == 2 && cls) || (mode == 3 && era && cls)) hits++;
+                r = c;
+            } while (hits <= (int)u);
+        } else if (s_ncars > 0) {
+            r = s_car + CAR_SIZE * s_cars[REAL_rand() % (uint32_t)s_ncars];
+        }
+        s_oppcar[k].rec = r;
+        if (r) opp_colours(r, s_oppcar[k].col, &s_oppcar[k].stripe, &s_oppcar[k].racenum);
+    }
+}
+
+static void slot_car(int k, RaceOpponent *o)
+{
+    const uint8_t *r = k >= 0 && k < 7 ? s_oppcar[k].rec : NULL;
+    o->spec[0] = 0;
+    if (!r) return;
+    snprintf(o->spec, sizeof o->spec, "%s", (const char *)r + 0xb1);
+    memcpy(o->colours, s_oppcar[k].col, sizeof o->colours);
+    o->stripe = s_oppcar[k].stripe;
+    o->racenum = s_oppcar[k].racenum;
+}
+
+int FEData_RaceOpponents(int n, RaceOpponent out[8])
+{
+    /* 0x4eb230's other race kinds: OpponentCar.Car's cars (0x4f45c0), the personalities of the
+       difficulty (0x4e2940); opponent i in car i */
+    pick_opponent_cars();
+    int16_t ids[8];
+    int m = pick_personalities(n, difficulty(), ids);
+    memset(out, 0, sizeof(RaceOpponent) * 8);
+    for (int i = 0; i < m; i++) {
+        out[i].pers = FEData_PersonalityIndex(ids[i]);
+        slot_car(i, &out[i]);
+    }
+    return m;
+}
 
 void FEData_KnockoutStart(void)   /* 0x4dd9e0 */
 {
-    s_ko_on = true;
-    s_ko_race = 0;
-    s_ko_n = FEData_KOOpponents();
-    for (int i = 0; i < 8; i++) s_ko_in[i] = i <= s_ko_n, s_ko_place[i] = i, s_ko_last[i] = -1;
-    s_ko_place[0] = s_ko_n + 1;   /* (the player behind them) */
-    PENDING_NOTE(0x4dd9e0, "the knockout's opponents' personalities and cars (OpponentCar.Car, 0x4f45c0)");
+    pick_opponent_cars();
+    uint8_t *k = ko();
+    k[KO_ON] = 1;
+    ko_set(KO_RACE, 0);
+    int n = FEData_KOOpponents();
+    ko_set(KO_N, n);
+    memset(k + KO_IN, 0, 12);
+    for (int i = 0; i < 9; i++) ko_set(KO_PLACE + 4 * i, -1 - i), ko_set(KO_LAST + 4 * i, -1);
+    ko_set(KO_PLACE, n + 1);   /* (the player behind them) */
+    k[KO_IN] = 1;
+    for (int i = 1; i <= n && i < 9; i++) k[KO_IN + i] = 1, ko_set(KO_PLACE + 4 * i, i);
+    int16_t ids[8] = {0};
+    pick_personalities(n, difficulty(), ids);
+    for (int i = 1; i <= n && i < 9; i++) ko_set(KO_PERS + 4 * i, ids[i - 1]);
 }
 
 int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8])
 {
     char nm[32];
-    snprintf(nm, sizeof nm, "Track%d.Track", s_ko_race + 1);
+    int race = ko_get(KO_RACE);
+    snprintf(nm, sizeof nm, "Track%d.Track", race + 1);
     FEAccessor *t = FEAccess_Find(nm);
     if (t) refresh(t);
     snprintf(track, (size_t)cap, "%s", t && t->count ? trk_name_of(t, t->pos) : "coastal");
-    snprintf(nm, sizeof nm, "Track%d.Laps", s_ko_race + 1);
+    snprintf(nm, sizeof nm, "Track%d.Laps", race + 1);
     FEAccessor *l = FEAccess_Find(nm);
     *laps = l ? l->pos + 1 : 1;
-    int n = 0;
-    start[0] = s_ko_place[0] - 1;   /* (STARTINGPOS 0x247: the places, 0-based) */
-    for (int i = 1; i <= s_ko_n && i < 8; i++)
-        if (s_ko_in[i]) {
-            pers[n] = i;   /* (the personality of racer i) */
-            start[++n] = s_ko_place[i] - 1;
+    int n = 0, nk = ko_get(KO_N);
+    const uint8_t *k = ko();
+    start[0] = ko_get(KO_PLACE) - 1;   /* (STARTINGPOS 0x247: the places, 0-based) */
+    for (int i = 1; i <= nk && i < 8; i++)
+        if (k[KO_IN + i]) {
+            pers[n] = i;   /* (racer i) */
+            start[++n] = ko_get(KO_PLACE + 4 * i) - 1;
         }
     return n;
 }
 
+void FEData_KnockoutOpponent(int racer, RaceOpponent *o)
+{
+    /* 0x4ddc00: racer i's personality (its id, 0x4e2900) in OpponentCar.Car's car i - 1 */
+    memset(o, 0, sizeof *o);
+    if (racer < 1 || racer > 8) return;
+    o->pers = FEData_PersonalityIndex(ko_get(KO_PERS + 4 * racer));
+    slot_car(racer - 1, o);
+}
+
 void FEData_KnockoutResult(const int *places, int np)   /* 0x4ddb10 */
 {
-    if (!s_ko_on) return;
-    int keep = s_ko_n - s_ko_race;
-    int p0 = np > 0 && places[0] > 0 ? places[0] : 99;
-    if (p0 <= keep) {
-        for (int i = 0, k = 0; i <= s_ko_n && i < 8; i++)
-            if (s_ko_in[i]) s_ko_last[i] = k < np && places[k] > 0 ? places[k] : 99, k++;
-        for (int i = 0; i <= s_ko_n && i < 8; i++) {
-            if (!s_ko_in[i] || keep < s_ko_last[i]) s_ko_in[i] = false;
-            else s_ko_place[i] = s_ko_last[i];
+    uint8_t *k = ko();
+    int keep = ko_get(KO_N) - ko_get(KO_RACE);
+    k[KO_ON] = 1;
+    for (int i = 0; i < 9; i++) ko_set(KO_PLACE + 4 * i, -1 - i);
+    /* (the racers walked to Game.NumKOOpponents' value now, not the knockout's +8) */
+    int last = FEData_KOOpponents();
+    if (np > 0 && places[0] <= keep) {
+        for (int i = 0, j = 0; i <= last && i < 9; i++)
+            if (k[KO_IN + i]) ko_set(KO_LAST + 4 * i, j < np ? places[j] : 99), j++;
+        for (int i = 0; i <= last && i < 9; i++) {
+            if (!k[KO_IN + i] || keep < ko_get(KO_LAST + 4 * i)) k[KO_IN + i] = 0;
+            else ko_set(KO_PLACE + 4 * i, ko_get(KO_LAST + 4 * i));
         }
-        if (++s_ko_race < s_ko_n) return;
+        ko_set(KO_RACE, ko_get(KO_RACE) + 1);
+        if (ko_get(KO_RACE) < ko_get(KO_N)) return;
     }
-    s_ko_on = false;   /* (out, or the last race run) */
+    k[KO_ON] = 0;   /* (out, or the last race run) */
 }
 
 const char *FEData_LoopedTrack(void)
@@ -2249,29 +2405,11 @@ int FEData_PersonalityIndex(int id)   /* 0x4e2900: nfs5.per's record of an id, e
 
 bool FEData_OpponentCar(int id, char spec[0x40], uint32_t col[4], int32_t *stripe, int32_t *racenum)
 {
-    /* 0x4eb830's car for an opponent: its record by id (0x4f39e0), one of its colours and interiors
-       picked (0x537db0), stripes half the time and a race number a fifth of it (rand), its car object
+    /* 0x4eb830's car for an opponent: its record by id (0x4f39e0), its colours picked, its car object
        (0x4eda40) as the description gets it (0x4ee430) */
     const uint8_t *r = FEData_CarById(id);
     if (!r) return false;
-    uint32_t body = 0xffff0000u, c3 = 0xffff0000u, c4 = 0xffff0000u, inside = 0xffffffffu;
-    int nb = rec16(r, 0x3e6), ni = rec16(r, 0x528);
-    if (nb > 0) {
-        uint32_t k = REAL_rand() % (uint32_t)nb;
-        body = swap32((uint32_t)rec32(r, 0x3ec + 16 * (int)k));
-        c3 = swap32((uint32_t)rec32(r, 0x3f0 + 16 * (int)k));
-        c4 = swap32((uint32_t)rec32(r, 0x3f4 + 16 * (int)k));
-    }
-    if (ni > 0) inside = swap32((uint32_t)rec32(r, 0x530 + 16 * (int)(REAL_rand() % (uint32_t)ni)));
-    *stripe = 0;
-    *racenum = -1;
-    if (CRT_rand() % 100 > 50) *stripe = g_carnschemes ? (int32_t)((uint32_t)CRT_rand() % g_carnschemes) : 0;   /* (0x6115f8) */
-    if (CRT_rand() % 100 > 80) *racenum = CRT_rand() % 100 - 1;
-    /* (the car object's +0x674 body, +0x678 interior, +0x67c, +0x680 in the description's order) */
-    col[0] = body | 0xff000000u;
-    col[1] = c3 | 0xff000000u;
-    col[2] = c4 | 0xff000000u;
-    col[3] = inside | 0xff000000u;
+    opp_colours(r, col, stripe, racenum);
     snprintf(spec, 0x40, "%s", (const char *)r + 0xb1);
     return true;
 }

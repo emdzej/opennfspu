@@ -31,6 +31,8 @@ static char car_name[64];     /* --param car=<name>: that car in the viewer (Gam
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
+static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests) */
+static int fe_frames;
 static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (default gamesetup) */
 static bool fe_on;
 static char race_track[64];   /* the race the front end started (GameMain 0x4b6840: FE, then the race) */
@@ -61,6 +63,7 @@ bool app_init(void)
     if (!plat_param("drive", drive_name, sizeof drive_name)) drive_name[0] = 0;
     if (!plat_param("screen", screen_name, sizeof screen_name)) screen_name[0] = 0;
     if (!plat_param("fe", fe_start, sizeof fe_start)) fe_start[0] = 0;
+    if (!plat_param("fecb", fe_cb, sizeof fe_cb)) fe_cb[0] = 0;
     /* Without a viewer parameter the game starts as the original does: in the front end. */
     if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest)
         snprintf(fe_start, sizeof fe_start, "gamesetup");
@@ -102,6 +105,16 @@ bool app_frame(void)
             if (!fe_on) fe_on = FEApp_Init(fe_start);
             if (fe_on) {
                 FEApp_Frame();
+                if (fe_cb[0] && ++fe_frames >= 30 && fe_frames % 10 == 0) {
+                    const char *p = fe_cb;
+                    for (int k = (fe_frames - 30) / 10; k > 0 && p; k--) p = strchr(p, ',') ? strchr(p, ',') + 1 : NULL;
+                    if (p) {
+                        char one[64];
+                        size_t len = strcspn(p, ",");
+                        snprintf(one, sizeof one, "%.*s", (int)(len < sizeof one ? len : sizeof one - 1), p);
+                        FEApp_Callback(one);
+                    }
+                }
                 if (FEApp_Result() == FE_PLAY) {
                     FEApp_End();
                     {

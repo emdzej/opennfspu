@@ -26,6 +26,14 @@ int main(void)
     int n = FEData_KnockoutRace(track, sizeof track, &laps, pers, start);
     printf("race 1: %s, %d laps, %d opponents, the player from %d\n", track, laps, n, start[0]);
     CHECK(n == 4 && laps == 3 && start[0] == 4 && pers[0] == 1 && start[1] == 0);
+    /* Each racer a personality of its own (0x4e2940), in OpponentCar.Car's car (at 0: the player's). */
+    RaceOpponent o[4];
+    for (int i = 0; i < 4; i++) {
+        FEData_KnockoutOpponent(pers[i], &o[i]);
+        CHECK(o[i].spec[0] != 0);
+        for (int j = 0; j < i; j++) CHECK(o[i].pers != o[j].pers);
+    }
+    printf("racer 1: personality %d, car %s\n", o[0].pers, o[0].spec);
     /* The player wins; the opponents 1 .. 4 finish 2nd .. 5th: the last (racer 4) is out. */
     int r1[5] = {1, 2, 3, 4, 5};
     FEData_KnockoutResult(r1, 5);
@@ -41,6 +49,15 @@ int main(void)
     int r3[3] = {3, 1, 2};
     FEData_KnockoutResult(r3, 3);
     CHECK(!FEData_KnockoutOn());
+    /* The other races' opponents (0x4eb230) with OpponentCar.Car at each choice: a car each. */
+    for (int m = 0; m < 5; m++) {
+        FEAccess_SetPos(FEAccess_Find("OpponentCar.Car"), m);
+        RaceOpponent q[8];
+        int k = FEData_RaceOpponents(3, q);
+        CHECK(k == 3);
+        for (int i = 0; i < k; i++) CHECK(q[i].spec[0] != 0);
+        printf("%s: %s %s %s\n", FEAccess_Text(FEAccess_Find("OpponentCar.Car")), q[0].spec, q[1].spec, q[2].spec);
+    }
     printf("knockout_test: %s\n", fails ? "FAILED" : "ok");
     return fails != 0;
 }

@@ -743,6 +743,9 @@ static void callback(const char *cb)
             if (!FEData_KnockoutOn()) FEData_KnockoutStart();
             int laps = 1;
             s_ngrid = FEData_KnockoutRace(s_track, sizeof s_track, &laps, s_grid_pers, s_grid_start);
+            /* (0x4ddc00: each racer still in in its own car, of its personality) */
+            for (int i = 0; i < s_ngrid; i++) FEData_KnockoutOpponent(s_grid_pers[i], &s_opp[i]);
+            s_nopp = s_ngrid;
             snprintf(s_car, sizeof s_car, "%s", FEData_Car());
             s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
             s_owned_race = FEData_OwnedIndex("zMergedList.Car");
@@ -794,6 +797,7 @@ static void callback(const char *cb)
         }
         s_laps = s_tour_race >= 0 ? FEData_TourLaps() : s_gametype == 1 ? FEData_KOOpponents() : fe_int("num_laps", 1);
         s_opponents = s_tour_race >= 0 ? 7 : s_gametype == 1 ? FEData_KOOpponents() : FEData_Opponents();   /* (the standings' eight racers) */
+        if (s_tour_race < 0) s_nopp = FEData_RaceOpponents(s_opponents, s_opp);   /* (0x4eb230) */
         s_result = FE_PLAY;
     } else {
         char m[160];
@@ -1114,6 +1118,8 @@ static void dialog_open(int kind, const char *text, int b1, int b2)
     s_dialog.h = 100.0f;
     s_dialog.y = 240.0f - 50.0f;
 }
+
+void FEApp_Callback(const char *cb) { callback(cb); }
 
 void FEApp_Message(int string_id)
 {
