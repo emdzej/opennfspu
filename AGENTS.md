@@ -54,7 +54,7 @@ cameras, then one car driving (docs/re/port-plan.md step 4).
 | `src/real/`, `src/eagl/`, `src/front/`, `src/game/` | EA real library, EAGL2, front end, game (to come; mirror the original's modules) |
 | `tests/` | Headless tests (`*_test.c`, one executable each, `ctest`) against the real data; skip without it |
 | `tools/` | `nfsfmt.py` (reference decoders, stdlib only), gasm SDK/runner fetchers, bundle packaging (`package-gasm.sh`, `smoke-gasm-bundle.sh`, `gasm-bundle/`), `screenshots.sh`, `web-play-test.mjs`, `ghidra/` scripts |
-| `docs/` | VitePress site -> opennfspu.emdzej.pl: user guide, how-tos, `formats.md`, reverse-engineering notes `docs/re/` |
+| `docs/` | VitePress site -> opennfspu.emdzej.pl: user guide, how-tos, internals. `formats.md` and the reverse-engineering notes `docs/re/` live here too but are internal: excluded from the site (`srcExclude`) |
 | `docs/public/play/` | Browser player (static, served at `/play/`) |
 | `.github/workflows/` | `ci.yml`, `release.yml`, `pages.yml` |
 
@@ -122,7 +122,8 @@ Data: asset `cd` (or `iso`, `rom`) = disc image, else the folder's files as asse
 
 VitePress in `docs/` (pnpm, `cd docs && pnpm install && pnpm build`), published to https://opennfspu.emdzej.pl by
 `.github/workflows/pages.yml` (CNAME in `docs/public/CNAME`). Theme `docs/.vitepress/theme/porsche.css`. **No
-emojis**, no version menu. Don't overstate the state (`docs/guide/status.md`); don't host or link copies of the
+emojis**, no version menu. The reverse-engineering notes (`docs/re/`, `docs/formats.md`) are not published: keep
+them out of the nav, sidebar and site pages. Don't overstate the state (`docs/guide/status.md`); don't host or link copies of the
 game. The "Built for gasm" badge is gasm's official one, hotlinked from
 `https://gasm.emdzej.pl/badge/built-for-gasm-{light,dark,flat}.svg` (rules: https://gasm.emdzej.pl/dev/badge;
 don't recolor, stretch or crop): light/dark by theme on the site, dark on the play page, flat in the README. New

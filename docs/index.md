@@ -37,10 +37,6 @@ features:
     details: The project infrastructure, the file layer and the data format decoders come first. The game is not playable yet.
     link: /guide/status
     linkText: Status
-  - title: Reverse engineered in the open
-    details: The function inventory of the original program and the notes on its formats are published with the code.
-    link: /re/
-    linkText: Reverse-engineering notes
 ---
 
 <div class="vp-doc" style="max-width: 1152px; margin: 48px auto 0; padding: 0 24px;">

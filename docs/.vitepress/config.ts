@@ -53,9 +53,9 @@ export default defineConfig({
     "A faithful reimplementation of Need for Speed: Porsche Unleashed (Electronic Arts, 2000) in C11 for the gasm runtime, using the data from your own copy of the game.",
   cleanUrls: true,
   lastUpdated: true,
-  srcExclude: ["README.md", "AGENTS.md", "CONTEXT.md"],
-  // The reverse-engineering notes keep their README.md (it is also what GitHub shows in docs/re/).
-  rewrites: { "re/README.md": "re/index.md" },
+  // The reverse-engineering notes (re/, formats.md) stay in the repository for the port's work; they
+  // aren't published.
+  srcExclude: ["README.md", "AGENTS.md", "CONTEXT.md", "re/**", "formats.md"],
   sitemap: { hostname: "https://opennfspu.emdzej.pl" },
   // The browser player is a static page in public/play/, not a Markdown page.
   ignoreDeadLinks: [/^\/play\//],
@@ -83,7 +83,6 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/guide/", activeMatch: "/guide/" },
       { text: "How-tos", link: "/howto/build-from-source", activeMatch: "/howto/" },
-      { text: "Reverse engineering", link: "/re/", activeMatch: "/(re|formats)" },
       // A static app in docs/public/play/: target _self makes it a full page load, not a VitePress route.
       { text: "Play", link: "/play/", target: "_self" },
     ],
@@ -114,27 +113,6 @@ export default defineConfig({
         },
       ],
       "/": [
-        {
-          text: "Reverse engineering",
-          items: [
-            { text: "Overview", link: "/re/" },
-            { text: "Architecture", link: "/re/architecture" },
-            { text: "Inventory", link: "/re/inventory" },
-            { text: "Port plan", link: "/re/port-plan" },
-            { text: "THRASH driver", link: "/re/thrash" },
-            { text: "EAGL2", link: "/re/eagl" },
-            { text: "Track and world", link: "/re/track" },
-            { text: "Drawing the track", link: "/re/track-render" },
-            { text: "Scene elements", link: "/re/scene" },
-            { text: "Sky", link: "/re/sky" },
-            { text: "Cars", link: "/re/cars" },
-            { text: "Sound", link: "/re/sound" },
-            { text: "Textures and rendering", link: "/re/render" },
-            { text: "Render system", link: "/re/render-system" },
-            { text: "Front end", link: "/re/frontend" },
-            { text: "File formats", link: "/formats" },
-          ],
-        },
         {
           text: "Internals",
           items: [{ text: "Porting conventions", link: "/internals/porting" }],
