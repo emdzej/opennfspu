@@ -175,6 +175,7 @@ bool app_frame(void)
                     g_race_mode = FEApp_GameType();   /* (0x4eab10's option 0x30) */
                     if (g_race_mode == 4) FEData_TourRaceInfo(&g_race_tour);   /* (0x4ecc60 -> 0x4ebb70) */
                     else memset(&g_race_tour, 0, sizeof g_race_tour);
+                    g_race_tour.era = FEData_RaceEra();   /* (0x4ecc60's 0xbb) */
                     {
                         Save *sv = FESave_Current();   /* (the description's player, 0x4eab10) */
                         snprintf(g_race_player, sizeof g_race_player, "%s", sv ? sv->player : "");

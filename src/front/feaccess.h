@@ -190,3 +190,5 @@ bool FEData_CheatCode(const char *name);
 
 /* The career race's tournament numbers for the race (0x4ebb70). */
 void FEData_TourRaceInfo(RaceTournament *t);
+/* The race's era option (0x4ecc60's 0xbb from 0x503db0): 0 .. 2. */
+int FEData_RaceEra(void);

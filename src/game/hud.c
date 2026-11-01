@@ -3595,8 +3595,20 @@ static void race_screens(void)
         /* Factory Driver: the mission's summary (0x60ca50) up, its opening (HMissionSummary_v5 0x4293b0)
            judging the mission */
         push_modal(mission);
-    } else {
-        PENDING_NOTE(0x426c50, "the race-over screens of the other game types");
+    } else if (g_race_mode == 11) {
+        push_modal(summary);
+    } else if (g_race_mode == 10) {
+        /* a win's message by the era (hud.loc 0x46e9 ..) with the announcer's (0x4a6450, not in a
+           replay's), else the loss's (0x46ec) */
+        push_modal(s_info);
+        Car *me = local_car();
+        if (me && *CAR_I(me, 0xcd4) == 1) {
+            int era = 0 <= g_race_tour.era && g_race_tour.era < 3 ? g_race_tour.era : 0;   /* (the original indexes unchecked) */
+            info_settext(s_info, LOC_string(HudConfig_loc(), 0x46e9 + era));
+            if (g_race_view != 2 && g_race_view != 3) Audio_Say(0xa0);
+        } else {
+            info_settext(s_info, LOC_string(HudConfig_loc(), 0x46ec));
+        }
     }
 }
 

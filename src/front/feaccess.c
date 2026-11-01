@@ -2353,7 +2353,36 @@ void FEData_TourRaceInfo(RaceTournament *t)
     int left = 0;
     for (int i = 0; i < n; i++) left += !r[0x3d0 + 0xa4 * i];
     t->last_race = left == 1;                                  /* 0xb9: 0x5038b0 */
-    PENDING_NOTE(0x4ebb70, "the era's end (0xba: 0x503d60, 0x5040b0, 0x503020), the era (0x503db0), the winnings by race (0x503630, 0x5036a0)");
+    /* 0xba: the era's last open tournament (0x503d60 counts the era's not kept out, +0xe4 2, and never
+       completed, +0xd3c), this one never completed (0x503020) nor of kind +0xe2 1 (0x5040b0), at its
+       last race */
+    int32_t head[7] = {0};
+    int nt = 0;
+    const uint8_t *all = tour_section(head, &nt);
+    int open = 0;
+    for (int i = 0; all && i < nt; i++) {
+        const uint8_t *x = all + 0xd40 * i;
+        if (rec32(x, 4) == head[3] && rec16(x, 0xe4) != 2 && rec16(x, 0xd3c) == 0) open++;
+    }
+    t->end_of_era = rec16(r, 0xd3c) < 1 && rec16(r, 0xe2) != 1 && open == 1 && left == 1;
+    PENDING_NOTE(0x4ebb70, "the winnings by race (0x503630, 0x5036a0)");
+}
+
+int FEData_RaceEra(void)
+{
+    /* 0x503db0: 0x20b when the modern era has no open tournament, else 0x20a when the golden has none,
+       else 0x209 when the classic has none; with all open the original returns a register's leftover
+       (0x4ecc60 then passes that on): the port 0. Its option 0xbb: 0x209 0, 0x20a 1, 0x20b 2. */
+    int32_t head[7] = {0};
+    int nt = 0;
+    const uint8_t *all = tour_section(head, &nt);
+    bool open[3] = {false, false, false};
+    for (int i = 0; all && i < nt; i++) {
+        const uint8_t *x = all + 0xd40 * i;
+        int e = rec32(x, 4) - 0x209;
+        if (0 <= e && e < 3 && rec16(x, 0xe4) != 2 && rec16(x, 0xd3c) == 0) open[e] = true;
+    }
+    return !open[2] ? 2 : !open[1] ? 1 : 0;
 }
 
 void FEData_TrackRecordEnter(const char *track, const char *name, const char *car, int32_t t)
