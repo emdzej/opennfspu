@@ -8,7 +8,7 @@
 extern int32_t g_race_reverse;    /* 0x657430: the track driven backwards */
 extern int32_t g_race_linear;     /* 0x657494: a point-to-point race (no laps) */
 extern int32_t g_race_type;       /* 0x6573ec: the game type (4: the skill test) */
-extern int32_t g_race_knockout;   /* 0x657400 (with g_race_mode 3: the grid spread over the road) */
+extern int32_t g_race_derby;   /* 0x657400, the DERBY option (0x1b; with g_race_mode 3: the grid spread over the road) */
 extern int32_t g_race_side;       /* 0x5e753c: the grid's side flip with the car's direction (1 by 0x40e6d0) */
 
 /* The car's AI figures from its specs (red line, gear ratios). 0x406f50 */

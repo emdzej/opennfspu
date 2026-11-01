@@ -7,12 +7,14 @@
 #include "game/options.h"
 #include "game/car.h"
 #include "game/race_setup.h"
+#include "game/race_car.h"
 #include "game/race_progress.h"
 #include "game/mission.h"
 #include "game/car_drive.h"
 #include "front/fefactory.h"
 #include "snd/snd.h"
 #include "exe.h"
+#include "pending.h"
 #include "platform.h"
 #include "eagl/eagl.h"
 #include "real/set3d.h"
@@ -164,13 +166,21 @@ bool app_frame(void)
                     Options_Apply();
                     snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
+                    g_drive_race_type = FEApp_RaceType();
+                    /* 0x4ecc60: the derby cheat (7) makes the race a lap knockout on the skidpad with
+                       damage, collisions on and the DERBY option set */
+                    g_race_derby = FE_Cheat(7);
+                    if (g_race_derby) {
+                        snprintf(race_track, sizeof race_track, "%s", exe_str(0x5da6d0));   /* "Skidpad" */
+                        g_drive_race_type = 3;
+                        PENDING_NOTE(0x4ecc60, "the derby's LINEAR_TRACK 0, DAMAGE 1, NOCOLLISION 0 (the port's options)");
+                    }
                     if (!FEData_TrackRecords(race_track, g_track_records, g_lap_records, g_record_names, g_record_cars)) {
                         memset(g_track_records, 0, sizeof g_track_records);
                         memset(g_lap_records, 0, sizeof g_lap_records);
                     }
                     g_drive_laps = FEApp_Laps();
                     g_drive_opponents = FEApp_Opponents();
-                    g_drive_race_type = FEApp_RaceType();
                     g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;
                     g_race_opp_set = FEApp_OpponentCars(g_race_opp) >= 0;
                     g_race_mode = FEApp_GameType();   /* (0x4eab10's option 0x30) */

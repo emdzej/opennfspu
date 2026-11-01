@@ -15,7 +15,7 @@
 int32_t g_race_reverse;
 int32_t g_race_linear;
 int32_t g_race_type;
-int32_t g_race_knockout;
+int32_t g_race_derby;
 int32_t g_race_side;
 
 static float ground_normal[3];   /* 0x628f70: the ground's normal under the wheels */
@@ -70,7 +70,7 @@ void Race_GridSlot(Car *c, int start, int *node, float out[3])
     }
     uint32_t slot = (uint32_t)DESC_I(c, 0x174);   /* the grid position (the description's +0x174) */
     int by = dir;
-    if (g_race_mode == 3 && g_race_knockout)
+    if (g_race_mode == 3 && g_race_derby)
         by = (((int)(g_racers.n - slot) - 1) * (0xea / g_nracecars) + 1) * dir;
     else if (g_racers.n > 2)
         by = ((int)(g_racers.n - slot) * 3 + 1) * dir;

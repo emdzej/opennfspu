@@ -924,9 +924,12 @@ static void position_draw(HudVisual *v)
         text_print(p->name[row], p->namebuf[i], 1.0f, 1.0f);
         char *g = p->gapbuf[i];
         const char *s = g;
-        if (g_race_knockout == 1) {
-            PENDING_NOTE(0x42af60, "the knockout's standings (its distances)");
-            s = exe_str(0x5ccde4);
+        if (g_race_derby == 1) {
+            /* the derby's: the car's damage, its ten zones (+0x4e4) summed, cut to a whole number at
+               each step (the x87's __ftol), over ten */
+            int32_t sum = 0;
+            for (int k = 0; k < 10; k++) sum = (int32_t)((double)sum + (double)*CAR_F(c, 0x4e4 + 4 * k));
+            snprintf(g, 12, "%d", sum / 10);
         } else if (g_race_mode == 3) {
             PENDING_NOTE(0x48d720, "the network race's standings");
             s = exe_str(0x5ccde4);
@@ -956,7 +959,7 @@ static void position_draw(HudVisual *v)
     }
     const char *label = LOC_string(HudConfig_loc(), 0x11);
     text_print(p->label, label ? label : "", 1.0f, 1.0f);
-    if (!g_race_knockout && me) {
+    if (!g_race_derby && me) {
         snprintf(p->placebuf, sizeof p->placebuf, "%d%s", *CAR_I(me, 0xb48), exe_str(0x5ccde0));
         text_print(p->place, p->placebuf, 1.0f, 1.0f);
         snprintf(p->ofbuf, sizeof p->ofbuf, "%d", p->count);
@@ -3154,7 +3157,7 @@ static void wrongway_draw(HudVisual *v)
 {
     HWrongWay *w = (HWrongWay *)v;
     int now = g_sim_tick;
-    if (g_race_knockout) return;
+    if (g_race_derby) return;
     w->acc += now - w->last;
     if (w->shown ? 0x41 <= w->acc : 0x21 <= w->acc) {
         w->acc = 0;
@@ -3809,14 +3812,14 @@ static void race_screens(void)
            set; nothing sets it here.) */
         Car *c = g_camera_car < g_racers.n ? g_racers.c[g_camera_car] : NULL;
         int place = 0;
-        if (g_race_knockout == 1) place = c && *CAR_I(c, 0xb50) == 3 ? 8 : 1;
+        if (g_race_derby == 1) place = c && *CAR_I(c, 0xb50) == 3 ? 8 : 1;
         else if (c) place = *CAR_I(c, 0xcd4);
         if (g_race_mode == 3) PENDING_NOTE(0x48d720, "the network race's place");
         ((HCongrats *)s_congrats)->which = place;   /* 0x41e150 */
         push_modal(s_congrats);
         ((HCongrats *)s_congrats)->raceover = 1;     /* 0x41dd40(0) */
     }
-    if (g_race_knockout) return;
+    if (g_race_derby) return;
     if (g_race_mode == 0 || g_race_mode == 3 || g_race_mode == 1 || g_race_mode == 2 || g_race_mode == 5) {
         push_modal(summary);
         if (summary) summary->flag = 1;   /* (slot 11: the second key's hint) */
