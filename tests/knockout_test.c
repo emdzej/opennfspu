@@ -5,6 +5,7 @@
 #include "front/feaccess.h"
 #include "vfs.h"
 #include "vfs_host.h"
+#include <string.h>
 #include <stdio.h>
 
 static int fails;
@@ -57,6 +58,25 @@ int main(void)
         CHECK(k == 3);
         for (int i = 0; i < k; i++) CHECK(q[i].spec[0] != 0);
         printf("%s: %s %s %s\n", FEAccess_Text(FEAccess_Find("OpponentCar.Car")), q[0].spec, q[1].spec, q[2].spec);
+    }
+    /* Another tournament half run asks first (0x504110); ok resets it (0x504180). */
+    Save *sv = FESave_Current();
+    for (int i = 0; sv && i < sv->nsec; i++) {
+        if (strcmp(sv->sec[i].name, "Tournament")) continue;
+        uint8_t *t = sv->sec[i].data + 32;
+        int nt = (int)((sv->sec[i].size - 32) / 0xd40);
+        const uint8_t *cur = FEData_Tournament();
+        int other = cur == t ? 1 : 0;
+        CHECK(nt > 1 && !FEData_TourOtherUnfinished());
+        uint8_t *r = t + 0xd40 * other;
+        int16_t races;
+        memcpy(&races, r + 0x39c, 2);
+        CHECK(races > 1);
+        r[0x3d0] = 1;
+        CHECK(FEData_TourOtherUnfinished());
+        printf("tournament check: %#x\n", FEData_TourCheck());
+        FEData_TourProceed();
+        CHECK(!FEData_TourOtherUnfinished() && r[0x3d0] == 0);
     }
     printf("knockout_test: %s\n", fails ? "FAILED" : "ok");
     return fails != 0;

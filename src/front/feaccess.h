@@ -125,8 +125,12 @@ int FEData_InstallAction(const char *cb);
 bool FEData_InstallState(bool *fitted);
 /* The garage car has its required parts (0x4ef890); else msg says which are missing. */
 bool FEData_CarComplete(char *msg, size_t cap);
-/* The career race allowed (0, the entry fee paid at a first race) or the message why not (0x32d, 0x359). */
+/* The career race allowed (0, the entry fee paid at a first race) or the message why not (0x32d, 0x359),
+   or 0x35a: another tournament is unfinished, the question first. */
 int FEData_TourCheck(void);
+bool FEData_TourOtherUnfinished(void);   /* 0x504110 */
+/* The question answered ok: not asked again, the other unfinished tournaments reset (0x504180). */
+void FEData_TourProceed(void);
 /* The front end's Game.GameType (the track lists depend on it). */
 void FEData_SetGameType(int type);
 /* A knockout between its races (0x4dd9b0). */

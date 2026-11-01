@@ -42,7 +42,7 @@ static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
    an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
 enum { DLG_ONE, DLG_TWO, DLG_INPUT };
-enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR };
 static struct {
     bool up;
     int kind, purpose, done;
@@ -727,6 +727,12 @@ static void callback(const char *cb)
             const char *c = FEAccess_CarFile(FEAccess_Find("OwnedCars.Car"));
             if (!t || !c) return;
             int m = FEData_TourCheck();
+            if (m == 0x35a) {
+                /* (0x4d5200: FEDialogTwoItem 0x5131f0, its buttons ok 0x2be and cancel 0x2bf) */
+                dialog_open(DLG_TWO, FEStrings_Get(0x35a), 0x2be, 0x2bf);
+                s_dialog.purpose = DLG_FOR_TOUR;
+                return;
+            }
             if (m) {
                 FEApp_Message(m);
                 return;
@@ -1872,6 +1878,14 @@ static void menu_music(void)
 void FEApp_Frame(void)
 {
     poll();
+    if (s_dialog.purpose == DLG_FOR_TOUR && !s_dialog.up) {
+        /* FEApplication_v1 0x4d25d0: ok goes on with the race (0x4d5200 again) */
+        s_dialog.purpose = DLG_FOR_NONE;
+        if (s_dialog.done == 1) {
+            FEData_TourProceed();
+            callback("PLAYGAME");
+        }
+    }
     menu_music();
     FertControl *w = FEApp_Top();
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;

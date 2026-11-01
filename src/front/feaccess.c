@@ -476,7 +476,55 @@ static const uint8_t *track_by_id(int id)
 /* The career race's checks (0x4d5200 for Game.GameType 4): the garage car one the tournament allows
    (0x504020: its record's id among the shorts from +0x30, +0xda of them; else 0x32d); at its first race
    (none run, 0x502920 == 0x5038b0) the entry fee (+0xdc, 0x5029e0) paid, 0x359 without the money.
-   (Another tournament unfinished asks first, 0x504110 -> 0x35a: pending.) */
+   Before the fee another tournament left unfinished asks 0x35a (0x504110), once (FEApplication +0x174). */
+static bool s_tour_asked;   /* (FEApplication +0x174) */
+
+/* The save's tournament records and the current one's index (0x691e6c, which 0x5042b0 sets from
+   Tournament.Tournament's position). */
+static uint8_t *tour_records(int *n, int *cur)
+{
+    const uint8_t *t = tour_section(NULL, n);
+    const uint8_t *r = FEData_Tournament();
+    *cur = t && r ? (int)((r - t) / 0xd40) : -1;
+    return (uint8_t *)t;
+}
+
+static bool tour_unfinished(const uint8_t *r)   /* some of its races run, some not */
+{
+    int n = rec16(r, 0x39c), left = 0;
+    for (int i = 0; i < n; i++) left += r[0x3d0 + 0xa4 * i] == 0;
+    return 0 < left && left < n;
+}
+
+bool FEData_TourOtherUnfinished(void)   /* 0x504110 */
+{
+    int n = 0, cur;
+    const uint8_t *t = tour_records(&n, &cur);
+    for (int i = 0; t && i < n; i++)
+        if (i != cur && tour_unfinished(t + 0xd40 * i)) return true;
+    return false;
+}
+
+void FEData_TourProceed(void)
+{
+    /* the question's ok (FEApplication_v1 0x4d25d0): asked, and every other unfinished tournament reset
+       (0x504180: each race (0xa4 bytes from +0x3a0) not run, its +0x32 shorts and three arrays of eight
+       ints from +0x44 cleared) */
+    s_tour_asked = true;
+    int n = 0, cur;
+    uint8_t *t = tour_records(&n, &cur);
+    for (int i = 0; t && i < n; i++) {
+        uint8_t *r = t + 0xd40 * i;
+        if (i == cur || !tour_unfinished(r)) continue;
+        for (int k = 0; k < rec16(r, 0x39c); k++) {
+            uint8_t *race = r + 0x3a0 + 0xa4 * k;
+            race[0x30] = 0;
+            memset(race + 0x32, 0, 0x10);
+            memset(race + 0x44, 0, 0x60);
+        }
+    }
+}
+
 int FEData_TourCheck(void)
 {
     uint8_t *r = (uint8_t *)FEData_Tournament();
@@ -487,6 +535,7 @@ int FEData_TourCheck(void)
     bool ok = false;
     for (int i = 0; i < rec16(r, 0xda) && !ok; i++) ok = rec16(r, 0x30 + 2 * i) == car;
     if (!ok) return 0x32d;
+    if (!s_tour_asked && FEData_TourOtherUnfinished()) return 0x35a;
     int n = rec16(r, 0x39c), left = 0;
     for (int i = 0; i < n; i++) left += r[0x3d0 + 0xa4 * i] == 0;
     if (left == n) {
@@ -495,7 +544,6 @@ int FEData_TourCheck(void)
         sv->money -= fee;   /* (0x500890) */
         FESave_Write();
     }
-    PENDING_NOTE(0x504110, "the unfinished tournament's question (0x35a) and its reset");
     return 0;
 }
 
