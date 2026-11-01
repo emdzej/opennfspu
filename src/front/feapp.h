@@ -51,3 +51,5 @@ int FEApp_Parts(int32_t ids[20]);
 bool FEApp_Setup(float set[17]);
 int FEApp_Laps(void);
 int FEApp_Opponents(void);
+/* The race's kind (RACE_TYPE, 0x6573ec) for the mode chosen. */
+int FEApp_RaceType(void);

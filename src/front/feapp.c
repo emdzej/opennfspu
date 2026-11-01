@@ -381,6 +381,21 @@ const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 int FEApp_Opponents(void) { return s_opponents; }
 
+/* The race's kind for the game type (0x4ec... option 0x10 RACE_TYPE): a quick race 0 (1 with the
+   flag 5 of 0x65b940: pending), a quick knockout 3 (the laps knock the last car out), the knockout and
+   the career 2, multiplayer and the test drives 0, Factory Driver 4 with a mission's conditions (pending:
+   0). */
+int FEApp_RaceType(void)
+{
+    if (s_testdrive) return 0;
+    switch (s_gametype) {
+    case 1: return 3;
+    case 2:
+    case 4: return 2;
+    default: return 0;
+    }
+}
+
 static int play_mode(void)   /* (0x4d5df0: data.canplaygame: 1 a race of the choices, 2 the career's) */
 {
     FertControl *w = FEApp_Top();
@@ -535,14 +550,21 @@ static void callback(const char *cb)
             snprintf(s_car, sizeof s_car, "%s", c);
             s_havecol = FEAccess_CarColours(FEAccess_Find("OwnedCars.Car"), s_colours);
             PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
+        } else if (s_gametype == 1) {
+            /* the quick knockout: LoopedTrack.Track's track, Game.NumKOOpponents opponents and as many
+               laps (0x4ec480's option 0x11) */
+            snprintf(s_track, sizeof s_track, "%s", FEData_LoopedTrack());
+            snprintf(s_car, sizeof s_car, "%s", FEData_Car());
+            s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
+            s_owned_race = FEData_OwnedIndex("zMergedList.Car");
         } else {
             snprintf(s_track, sizeof s_track, "%s", FEData_Track());
             snprintf(s_car, sizeof s_car, "%s", FEData_Car());
             s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
             s_owned_race = FEData_OwnedIndex("zMergedList.Car");
         }
-        s_laps = s_tour_race >= 0 ? FEData_TourLaps() : fe_int("num_laps", 1);
-        s_opponents = s_tour_race >= 0 ? 7 : FEData_Opponents();   /* (the standings' eight racers) */
+        s_laps = s_tour_race >= 0 ? FEData_TourLaps() : s_gametype == 1 ? FEData_KOOpponents() : fe_int("num_laps", 1);
+        s_opponents = s_tour_race >= 0 ? 7 : s_gametype == 1 ? FEData_KOOpponents() : FEData_Opponents();   /* (the standings' eight racers) */
         s_result = FE_PLAY;
     } else {
         char m[160];

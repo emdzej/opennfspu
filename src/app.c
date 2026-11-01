@@ -115,6 +115,7 @@ bool app_frame(void)
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
                     g_drive_laps = FEApp_Laps();
                     g_drive_opponents = FEApp_Opponents();
+                    g_drive_race_type = FEApp_RaceType();
                 } else if (FEApp_Result() == FE_QUIT) {
                     return false;
                 }

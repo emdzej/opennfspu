@@ -36,6 +36,9 @@ const char *FEAccess_CarFile(const FEAccessor *a);
 /* The race the choices describe: the track's name (its .crp), the car's file, the opponents. */
 const char *FEData_Track(void);
 const char *FEData_Car(void);
+/* The quick knockout's track (LoopedTrack.Track) and its opponents (Game.NumKOOpponents). */
+const char *FEData_LoopedTrack(void);
+int FEData_KOOpponents(void);
 int FEData_Opponents(void);
 
 /* The dealer's car bought into the player's save (0x5012a0): 0 done, else the message's string id (too

@@ -1207,6 +1207,7 @@ void FEData_Init(void)
         for (int i = 0; i < s_navail; i++)
             if (!strcasecmp(trk_name_of(NULL, i), v)) tp = i;
     add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
+    add("Game.NumKOOpponents", ACC_INT, 7, 1, 3);      /* FEIntAccessor 0x4b9ef0(.., 4, 1, 7): 4 of 1 .. 7 */
     {
         FEAccessor *lt = add("LoopedTrack.Track", ACC_TRACK, s_nlooped, 0, 0);   /* (on 0x4f94a0's) */
         if (lt) lt->src = 1;
@@ -2033,6 +2034,19 @@ const char *FEData_Track(void)
 {
     FEAccessor *a = FEAccess_Find("Track1.Track");
     return a && a->count ? trk_name_of(a, a->pos) : "coastal";
+}
+
+const char *FEData_LoopedTrack(void)
+{
+    FEAccessor *a = FEAccess_Find("LoopedTrack.Track");
+    if (a) refresh(a);
+    return a && a->count ? trk_name_of(a, a->pos) : "monaco3";
+}
+
+int FEData_KOOpponents(void)
+{
+    FEAccessor *a = FEAccess_Find("Game.NumKOOpponents");
+    return a ? a->min + a->pos : 4;
 }
 
 const char *FEData_Car(void)

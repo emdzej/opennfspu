@@ -102,6 +102,7 @@ static bool load(const char *track, const char *carname)
     g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
     if (0 < opponents) RaceSetup_Opponents(opponents);
     if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
+    g_race_type = g_drive_race_type;                                     /* (its option 0x10, RACE_TYPE) */
     if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
     Car_Construct();
     if (g_ncars < 1) return false;
@@ -174,7 +175,7 @@ static void read_controls(void)
     g_input_packet[3] = down ? 0x7f : 0;
 }
 
-int g_drive_opponents, g_drive_laps;
+int g_drive_opponents, g_drive_laps, g_drive_race_type;
 int g_drive_result;
 
 int DRIVE_Results(int places[8], int times[8])

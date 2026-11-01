@@ -13,6 +13,8 @@ bool DRIVE_selftest(const char *track, const char *car);
 /* The race the front end set up (its race description: fe.txt's numopponentracecars, num_laps), used
    unless the launch parameters say otherwise. */
 extern int g_drive_opponents, g_drive_laps;
+/* The race\'s kind (0x6573ec) the front end chose: 0 a race, 2 a series race, 3 the lap knockout. */
+extern int g_drive_race_type;
 /* What the race loop's menus chose (RaceLoop 0x415300's actions on HUD_HandleInput's): 0 go on, 1 the
    race's end (exit to the game menu, or Escape in the race-over), 2 the race again from its start, 3 the
    game's end (exit to windows). */
