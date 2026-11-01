@@ -152,7 +152,9 @@ int main(void)
         *c = keep;
         break;
     }
-    /* A lap done: the announcer says its number (0x427790). */
+    /* A lap done: the announcer says its number (0x427790). The voice's own level is what it adds to the
+       mix (the root of the difference of the squares): the rest of the mix, the music the race drew at
+       random and the cars, varies with the race. */
     double still = run(64, 64, 0);
     g_race_laps = 3;
     *CAR_I(g_cars[0], 0xb28) = 64 * 70;
@@ -160,7 +162,7 @@ int main(void)
     double said = run(64, 64, 0);
     run(64 * 3, 64, 0);   /* (its end) */
     printf("  lap's announcement: rms %.0f before, %.0f after\n", still, said);
-    CHECK(said > still * 1.2);
+    CHECK(said > still && sqrt(said * said - still * still) > 2000.0);
     /* An opponent made a cop car with its siren on (flag 0x20, +0xecc bit 1: 0x4aac60, 0x4aad80). */
     if (1 < g_ncars) {
         double plain = run(64, 64, 0);

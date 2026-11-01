@@ -61,3 +61,10 @@ int32_t FEData_CarValue(const SaveCar *c, int year);
 bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 /* The repair screen's quick fix of the owned car (0x50e9f0): 0 done, else the message's string id. */
 int FEData_QuickFix(void);
+/* The owned car an accessor's position is (its index in the save), -1 when it isn't one. */
+int FEData_OwnedIndex(const char *accessor);
+/* A race's wear (the race car's parts by id) added to an owned car's installed parts (the race's
+   hand-off of PARTDAMAGE, the description's +0x78, to the front end: the port's). */
+void FEData_AddWear(int car, const int32_t *ids, const float *wear, int n);
+/* An owned car's installed parts' ids (at most 20, the rest 0); their count. */
+int FEData_OwnedParts(int car, int32_t ids[20]);

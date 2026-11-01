@@ -34,6 +34,9 @@ void FEApp_RaceOver(const int *places, const int *times, int n);
 /* A message box of a string id up over the screens, closed by its OK (0x512d00). */
 void FEApp_Message(int string_id);
 
+/* The race's wear on the player's car (its parts' ids and wear) into the owned car raced, if one was. */
+void FEApp_RaceWear(const int32_t *ids, const float *wear, int n);
+
 /* Whether the front end is done: a race to start (PLAYGAME on a screen that can play) or the game to
    end (QUIT); the race it set up. */
 typedef enum { FE_RUNNING, FE_PLAY, FE_QUIT } FEResult;
@@ -42,5 +45,7 @@ const char *FEApp_Track(void);
 const char *FEApp_Car(void);
 /* The race car's colours (the description's +0x218 order), NULL for the port's silver. */
 const uint32_t *FEApp_Colours(void);
+/* The owned car's installed parts for the race (-1 when the car isn't an owned one). */
+int FEApp_Parts(int32_t ids[20]);
 int FEApp_Laps(void);
 int FEApp_Opponents(void);

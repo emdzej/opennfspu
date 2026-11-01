@@ -230,6 +230,48 @@ static int32_t category_cost(const SaveCar *c, int type, int type2, int year)
     return sum;
 }
 
+static void refresh(const FEAccessor *c);
+
+int FEData_OwnedIndex(const char *accessor)
+{
+    FEAccessor *a = FEAccess_Find(accessor);
+    if (!a) return -1;
+    refresh(a);
+    if (a->kind == ACC_OWNED) return a->count ? a->pos : -1;
+    if (a->kind == ACC_MERGED) return a->pos < a->owned ? a->pos : -1;
+    return -1;
+}
+
+int FEData_OwnedParts(int car, int32_t ids[20])
+{
+    Save *sv = FESave_Current();
+    if (!sv || car < 0 || car >= sv->ncars) return 0;
+    const SaveCar *c = &sv->cars[car];
+    int n = 0;
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother && n < 20; i++) ids[n++] = c->parts[i][0];
+    for (int i = n; i < 20; i++) ids[i] = 0;
+    return n;
+}
+
+void FEData_AddWear(int car, const int32_t *ids, const float *wear, int n)
+{
+    Save *sv = FESave_Current();
+    if (!sv || car < 0 || car >= sv->ncars) return;
+    SaveCar *c = &sv->cars[car];
+    for (int k = 0; k < n; k++) {
+        if (!ids[k] || wear[k] <= 0) continue;
+        for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+            if (c->parts[i][0] != ids[k]) continue;
+            float w;
+            memcpy(&w, &c->parts[i][1], 4);
+            w += wear[k];
+            if (w > 100.0f) w = 100.0f;
+            memcpy(&c->parts[i][1], &w, 4);
+            break;
+        }
+    }
+}
+
 /* QUICKFIX (FEQuickFixCallBackList 0x50e9f0): every category's repair (its check box: all here), not with
    too little money (the message 0x329); else the parts' wear to none (0x4efb00 ..), the money less it. */
 int FEData_QuickFix(void)

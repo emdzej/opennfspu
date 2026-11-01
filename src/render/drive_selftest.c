@@ -5,6 +5,7 @@
 #include "render/headlights.h"
 #include "game/ai.h"
 #include "game/car.h"
+#include "game/car_damage.h"
 #include "game/car_drive.h"
 #include "game/car_physics.h"
 #include "game/race_setup.h"
@@ -187,6 +188,31 @@ int DRIVE_Results(int places[8], int times[8])
     return n;
 }
 
+static int32_t s_wear_ids[20];
+static float s_wear[20];
+static bool s_wear_kept;
+
+/* The parts' wear as the race-over's results left it (+0xbf8 the ids, +0xc48 the wear, 0x493c60), kept
+   before the replay starts the race again. */
+static void keep_wear(void)
+{
+    Car *c = g_cars[0];
+    if (!c) return;
+    for (int i = 0; i < 20; i++) {
+        s_wear_ids[i] = *CAR_I(c, 0xbf8 + 4 * i);
+        memcpy(&s_wear[i], c->b + 0xc48 + 4 * i, 4);
+    }
+    s_wear_kept = true;
+}
+
+int DRIVE_PartsWear(int32_t ids[20], float wear[20])
+{
+    if (!ready || !s_wear_kept) return 0;
+    memcpy(ids, s_wear_ids, sizeof s_wear_ids);
+    memcpy(wear, s_wear, sizeof s_wear);
+    return 20;
+}
+
 int DRIVE_PlayerPlace(void)
 {
     Car *c = g_cars[0];
@@ -286,6 +312,7 @@ bool DRIVE_selftest(const char *track, const char *car)
     if (g_race_over && g_race_view < 2) {
         /* GameMain's second race loop: the race again from its start, replaying the packets
            (0x414ed0, 0x413ec0), the HUD's visuals hidden (0x425740), then the race-over screens. */
+        keep_wear();
         g_race_view = 2;
         g_replay_mode = 2;
         Race_Restart(0x1c0 - 0x40);
@@ -351,4 +378,5 @@ void DRIVE_Shutdown(void)
     ready = failed = false;
     g_drive_paused = false;
     g_drive_result = 0;
+    s_wear_kept = false;
 }

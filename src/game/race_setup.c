@@ -22,6 +22,8 @@ static void put_str(uint8_t *desc, int off, const char *s)
 static void put_i(uint8_t *desc, int off, int32_t v) { memcpy(desc + off, &v, 4); }
 
 uint32_t g_race_colours[4];
+int32_t g_race_parts[20];
+bool g_race_parts_set;
 bool g_race_colours_set;
 
 bool RaceSetup_SingleCar(const char *name)
@@ -49,6 +51,22 @@ bool RaceSetup_SingleCar(const char *name)
     put_str(d, 0x534, (const char *)rec + 0x34);          /* FEMULTIPLAYERCARNAME */
     put_str(d, 0x1c0, "");                                /* LICENSE */
     put_str(d, 0x228, (const char *)rec + 0x7f);          /* FILENAME */
+    /* PARTINDEX (+0x28, 20): the car's parts (the front end hands the owned car's installed ones over,
+       0x4ee430; else the record's stock list, +0x3bc ids from +0x3be, as a new car gets them, 0x4ee030) */
+    {
+        int16_t np;
+        memcpy(&np, rec + 0x3bc, 2);
+        for (int i = 0; i < 20; i++) {
+            int32_t id = 0;
+            if (g_race_parts_set) id = g_race_parts[i];
+            else if (i < np) {
+                int16_t v;
+                memcpy(&v, rec + 0x3be + 2 * i, 2);
+                id = v;
+            }
+            put_i(d, 0x28 + 4 * i, id);
+        }
+    }
     put_str(d, 0x268, (const char *)rec + 0xb1);          /* SPECNAME */
     put_str(d, 0x2a8, (const char *)rec + 0x115);         /* AISPECNAME */
     put_str(d, 0x2e8, (const char *)rec + 0x179);         /* SOUNDNAME */
@@ -69,7 +87,6 @@ bool RaceSetup_SingleCar(const char *name)
         float sk[8] = {1, 1, 1, 1, 0, 0, 0, 0};
         memcpy(d + 0x154, sk, sizeof sk);
     }
-    for (int k = 0; k < 20; k++) put_i(d, 0x28 + 4 * k, 0);   /* PARTINDEX: the front end's owned-car parts */
     /* The setup screen's sliders (FECarSetup 0x4f06f0) at their middle, as 1/65536ths (the brake bias
        times 100); the gear and final ratio offsets and the toe at none. A stand-in until the front end's
        defaults are ported. */

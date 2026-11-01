@@ -6,6 +6,7 @@
    the track or car can't be loaded. */
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 bool DRIVE_selftest(const char *track, const char *car);
 
@@ -21,6 +22,9 @@ extern bool g_drive_paused;
 /* The racers' places (0 not finished) and times as the results keep them, the local player first; their
    count (at most 8). */
 int DRIVE_Results(int places[8], int times[8]);
+/* The local player's car's parts (their ids) and the wear the race gave them (the results' +0xc48);
+   their count (20), 0 without a race. */
+int DRIVE_PartsWear(int32_t ids[20], float wear[20]);
 /* The local player's place when it finished, else 0. */
 int DRIVE_PlayerPlace(void);
 /* The race's end, for the front end to take over again. */

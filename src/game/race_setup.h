@@ -16,3 +16,6 @@ bool RaceSetup_Opponents(int n);
 /* The human car's colours the front end chose (the description's +0x218 order), when set. */
 extern uint32_t g_race_colours[4];
 extern bool g_race_colours_set;
+/* The human car's parts (PARTINDEX ids) the front end chose, when set. */
+extern int32_t g_race_parts[20];
+extern bool g_race_parts_set;

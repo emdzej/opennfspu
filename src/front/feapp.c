@@ -36,6 +36,7 @@ static bool s_sound;
 static uint32_t s_colours[4];         /* the race car's colours (the description's +0x218 ..) */
 static bool s_havecol;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
+static int s_owned_race = -1;         /* the owned car raced (its index in the save) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
@@ -208,6 +209,13 @@ bool FEApp_Init(const char *start)
     return FEApp_GotoScreen(start, true);
 }
 
+void FEApp_RaceWear(const int32_t *ids, const float *wear, int n)
+{
+    if (s_owned_race >= 0) FEData_AddWear(s_owned_race, ids, wear, n);
+    s_owned_race = -1;
+    FESave_Write();
+}
+
 void FEApp_RaceOver(const int *places, const int *times, int n)
 {
     if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, n);
@@ -306,6 +314,7 @@ static void on_leave(FertControl *c)   /* 0x4c7820 */
 
 FEResult FEApp_Result(void) { return s_result; }
 const uint32_t *FEApp_Colours(void) { return s_havecol ? s_colours : NULL; }
+int FEApp_Parts(int32_t ids[20]) { return s_owned_race >= 0 ? FEData_OwnedParts(s_owned_race, ids) : -1; }
 const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
@@ -388,6 +397,7 @@ static void callback(const char *cb)
             const char *c = FEAccess_CarFile(FEAccess_Find("OwnedCars.Car"));
             if (!t || !c) return;
             s_tour_race = FEData_TourRace();   /* (before the laps: they're its) */
+            s_owned_race = FEData_OwnedIndex("OwnedCars.Car");
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", c);
             s_havecol = FEAccess_CarColours(FEAccess_Find("OwnedCars.Car"), s_colours);
@@ -396,6 +406,7 @@ static void callback(const char *cb)
             snprintf(s_track, sizeof s_track, "%s", FEData_Track());
             snprintf(s_car, sizeof s_car, "%s", FEData_Car());
             s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
+            s_owned_race = FEData_OwnedIndex("zMergedList.Car");
         }
         s_laps = s_tour_race >= 0 ? FEData_TourLaps() : fe_int("num_laps", 1);
         s_opponents = s_tour_race >= 0 ? 7 : FEData_Opponents();   /* (the standings' eight racers) */

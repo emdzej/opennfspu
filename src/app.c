@@ -5,6 +5,7 @@
    car=<name> shows a car (CAR_selftest). */
 #include "app.h"
 #include "game/options.h"
+#include "game/car.h"
 #include "game/race_setup.h"
 #include "snd/snd.h"
 #include "exe.h"
@@ -80,6 +81,10 @@ bool app_frame(void)
             } else if (g_drive_result == 1) {
                 {
                     int places[8], times[8], n = DRIVE_Results(places, times);
+                    int32_t ids[20];
+                    float wear[20];
+                    int np = DRIVE_PartsWear(ids, wear);
+                    FEApp_RaceWear(ids, wear, np);
                     FEApp_RaceOver(places, times, n);
                 }
                 DRIVE_Shutdown();
@@ -100,6 +105,7 @@ bool app_frame(void)
                         const uint32_t *col = FEApp_Colours();
                         g_race_colours_set = col != NULL;
                         if (col) memcpy(g_race_colours, col, sizeof g_race_colours);
+                        g_race_parts_set = FEApp_Parts(g_race_parts) >= 0;
                     }
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */
