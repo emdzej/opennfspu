@@ -39,6 +39,11 @@ const char *FEAccess_CarFile(const FEAccessor *a);
 
 /* The race the choices describe: the track's name (its .crp), the car's file, the opponents. */
 const char *FEData_Track(void);
+/* zMergedList.Car's car one of the player's (0x4f4420: its place before the owned cars' count). */
+bool FEData_MergedOwned(void);
+/* The track a game type races a circuit (0x4fb4f0: its nfs5.trk record's +0x6e 1): quick race Track1,
+   quick knockout LoopedTrack, knockout the slot's Track<n>; others none. */
+bool FEData_TrackLooped(int type);
 const char *FEData_Car(void);
 /* The quick knockout's track (LoopedTrack.Track) and its opponents (Game.NumKOOpponents). */
 const char *FEData_LoopedTrack(void);

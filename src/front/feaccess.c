@@ -134,6 +134,7 @@ static int track_rec(const FEAccessor *a, int i)
 
 static const char *trk_name_of(const FEAccessor *a, int i) { return (const char *)s_trk + TRK_SIZE * track_rec(a, i) + 8; }
 static const char *car_file(int i) { return (const char *)s_car + CAR_SIZE * s_cars[i] + 0x7f; }
+static const uint8_t *generic_rec(void);
 
 /* An option's value from fe.txt by its key in the options' table (Options_Parse 0x4b0db0 fills it with
    (id, target, key) triples: the keys' addresses are its instruction operands). */
@@ -623,6 +624,9 @@ bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4])
         FEAccessor *c = FEAccess_Find("DealerCar.Colour"), *i = FEAccess_Find("DealerCar.IntColour");
         if (c) ci = c->pos;
         if (i) ii = i->pos;
+    } else if (a->kind == ACC_MERGED) {   /* (a new car: GenericCar.Car's colour, its interior the first) */
+        FEAccessor *c = FEAccess_Find("GenericCar.Colour");
+        if (c) ci = c->pos;
     }
     record_colours(r, ci, ii, out);
     return true;
@@ -1309,6 +1313,10 @@ void FEData_Init(void)
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
     add("DealerCar.Colour", ACC_COLOUR, 1, 0, 0);        /* 0x4b8dd0 on the car's slots 0xa0 / 0xa8 */
     add("DealerCar.IntColour", ACC_INTCOLOUR, 1, 0, 0);  /* (slots 0xa4 / 0xac) */
+    /* GenericCar.Colour (0x4b8dd0 with 0x4f0260 / 0x4f0290 on GenericCar.Car, the merged list's cars past
+       the owned ones: FEMergedCarListAccessor_v11 0x4f4020 hands it the place) */
+    FEAccessor *gcol = add("GenericCar.Colour", ACC_COLOUR, 1, 0, 0);
+    if (gcol) gcol->src = 2;
     /* The paint shop's (FEdaGarage 0x4f2xxx): FEColourAccessor 0x4b8dd0 on the garage car's palettes, the
        stripe package (FEListAccessor of 0x5b7644), the race number (FEIntAccessor -1 .. 99). */
     {
@@ -1410,7 +1418,7 @@ static void refresh(const FEAccessor *c)
         if (a->src == 1) {   /* the garage car's palettes (0x4f0490, 0x4f0350) */
             SaveCar *gc = garage_car();
             r = gc ? gc->rec + 4 : NULL;
-        }
+        } else if (a->src == 2) r = generic_rec();
         int n = r ? rec16(r, a->kind == ACC_COLOUR ? 0x3e6 : 0x528) : 0;
         a->count = n > 0 ? n : 1;
         if (a->pos >= a->count) a->pos = 0;
@@ -1774,6 +1782,7 @@ uint32_t FEAccess_Colour(const FEAccessor *a)
     if (a->src == 1) return a->cval;
     FEAccessor *d = FEAccess_Find("DealerCar.Car");   /* (the dealer car's palette entry) */
     const uint8_t *r = d && d->count ? s_car + CAR_SIZE * s_dealer[d->pos] : NULL;
+    if (a->src == 2) r = generic_rec();
     if (!r) return 0;
     return swap32((uint32_t)rec32(r, (a->kind == ACC_INTCOLOUR ? 0x530 : 0x3ec) + 0x10 * a->pos));
 }
@@ -2216,6 +2225,40 @@ int FEData_BuyCar(void)
     return 0;
 }
 
+bool FEData_MergedOwned(void)   /* 0x4f4420 on zMergedList.Car */
+{
+    FEAccessor *a = FEAccess_Find("zMergedList.Car");
+    if (!a) return false;
+    refresh(a);
+    return a->pos < a->owned;
+}
+
+bool FEData_TrackLooped(int type)   /* 0x4fb4f0 */
+{
+    char nm[32];
+    const char *acc;
+    switch (type) {
+    case 0:
+    case 3:   /* (a multiplayer client's the session's track, 0x691d00: no multiplayer) */
+        acc = "Track1.Track";
+        break;
+    case 1:
+        acc = "LoopedTrack.Track";
+        break;
+    case 2: {
+        FEAccessor *k = FEAccess_Find("Knockout.TrackNumber");
+        snprintf(nm, sizeof nm, "Track%d.Track", (k ? k->pos : 0) + 1);   /* "Track%d.Track" 0x5db4f0 */
+        acc = nm;
+        break;
+    }
+    default:
+        return false;
+    }
+    FEAccessor *a = FEAccess_Find(acc);
+    if (!a || !a->count) return false;
+    return rec16(s_trk + TRK_SIZE * track_rec(a, a->pos), 0x6e) == 1;   /* (0x4f9c30's record) */
+}
+
 const char *FEData_Track(void)
 {
     FEAccessor *a = FEAccess_Find("Track1.Track");
@@ -2577,4 +2620,15 @@ bool FEData_CheatCode(const char *name)
         return true;
     }
     return false;
+}
+
+/* GenericCar.Car's record (0x6919ec's car at the merged list's place past the owned ones), NULL while
+   the merged list is on an owned car. */
+static const uint8_t *generic_rec(void)
+{
+    FEAccessor *m = FEAccess_Find("zMergedList.Car");
+    if (!m) return NULL;
+    refresh(m);
+    if (!m->count || m->pos < m->owned) return NULL;
+    return s_car + CAR_SIZE * s_cars[m->pos - m->owned];
 }

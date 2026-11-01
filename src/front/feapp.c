@@ -2483,6 +2483,20 @@ static void usedcar_update(FertControl *w)
     if (pc && (!pc->sub || (pc->feflags & 0x20))) select_panel(w, want);
 }
 
+/* The callback lists whose update runs FECallBackList's (0x50c2f0): the base list's (ID_NONE, for screens
+   without one, 0x4e6d60), the ones that keep it (knockout, track records, car compare, career first, dealer,
+   Factory Driver's victory: their vtables' slot 1) and the ones that call it first (car setup 0x4f1130,
+   used cars 0x4f6930, end of era 0x4fe730, victory 0x506380, chronicle 0x506e90, credits 0x50e350). */
+static bool base_cbl(const char *cbl)
+{
+    static const char *const names[] = {"", "ID_NONE", "ID_KNOCKOUTSCREEN", "ID_TRACKRECORDSCREEN", "ID_CARCOMPARECBL",
+                                        "ID_CAREERFIRST", "ID_DEALERCBL", "ID_FDVICTORYSCREEN", "ID_CARSETUP", "ID_USEDCARCBL",
+                                        "ID_ENDOFERASCREEN", "ID_VICTORYSCREEN", "ID_CHRONICLE", "ID_CREDITS"};
+    for (size_t i = 0; i < sizeof names / sizeof *names; i++)
+        if (!strcmp(cbl, names[i])) return true;
+    return false;
+}
+
 static void screen_update(FertControl *w)   /* the screen's callback list's update (its v1) */
 {
     const char *cbl = screen_attr(w, "callbacklist");
@@ -2495,6 +2509,20 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
         enable(w, "ID_CREATEPLAYEROKBUTTON", FEData_NameInput()[0] != 0);
         enable(w, "ID_REMOVEBUTTON", any);
         if (control_named(w, "ID_REMOVEBUTTON")) enable(w, "ID_CONTINUEBUTTON", any);
+    }
+    if (base_cbl(cbl)) {
+        /* FECallBackList_v1 0x50c2f0 (the base list's; its derived ones' run it first): the colour box for
+           a new car, the garage for an owned one; the replays' buttons with replays (none yet: the replay
+           list pends); damage but in the career and Factory Driver; the laps on a circuit. (Its dialogs,
+           +0x270 / +0x274, the car settings car's ABS, traction and roof (CARSETTINGS.CAR, +0x27c: not
+           ported) and the multiplayer's collision pend.) */
+        bool owned = FEData_MergedOwned();
+        hide(w, "ID_MERGEDLISTCOLOR", owned);
+        hide(w, "ID_MERGEDLISTCARSETUP", !owned);
+        enable(w, "ID_LOADREPLAYBUTTON", false);
+        enable(w, "ID_REMOVEREPLAYBUTTON", false);
+        enable(w, "ID_DAMAGE", s_gametype != 4 && s_gametype != 9 && s_gametype != 3);   /* (3: 0x48c9d0, no session) */
+        enable(w, "ID_LAPSSELECTOR", FEData_TrackLooped(s_gametype));
     }
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
