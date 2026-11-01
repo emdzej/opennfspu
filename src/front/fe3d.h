@@ -40,6 +40,8 @@ void FE3DObject_Draw(FE3DObject *o, EaglMatStack *model);           /* 0x4d1030 
 void FE3D_SetRoom(const char *id);
 /* The car a screen's 3D car control shows in the room (its car file; NULL: none). */
 void FE3D_SetCar(const char *file);
+/* The dealer car shown (the dealership's segments follow the list's position, +0x30c). */
+void FE3D_SetIndex(int index);
 /* The room's tick and draw in the front end's 3D camera (0x4d2980's first view); whether a room drew. */
 bool FE3D_Draw(void);
 void FE3D_Free(void);

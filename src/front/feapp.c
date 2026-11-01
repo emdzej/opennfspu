@@ -562,7 +562,9 @@ static void sync_room(FertControl *w)
         if (strcmp(c->id, "NFS5.3DCAR")) continue;
         const char *pt = data_str(c, "positiontype");
         if (pt && atoi(pt) != 0) continue;
-        car = FEAccess_CarFile(FEAccess_Find(data_str(c, "accessor")));
+        FEAccessor *acc = FEAccess_Find(data_str(c, "accessor"));
+        car = FEAccess_CarFile(acc);
+        if (acc) FE3D_SetIndex(FEAccess_Pos(acc));
     }
     FE3D_SetCar(car);
 }

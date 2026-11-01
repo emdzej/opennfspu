@@ -129,6 +129,11 @@ typedef struct {
     float diffuse[3];         /* +0x2a0 */
     float dir[3];             /* +0x2b8 */
     float zoom;               /* +0x2e8: towards the close-up place */
+    /* the dealership's (FEDealership3DRoom 0x4e8090) */
+    bool dealer;
+    FE3DObject *seg[3];       /* +0x2ec .. +0x2f4: dealer2a, dealer2b, dealer2c */
+    float step[2];            /* +0x2d4, +0x2d8: one car's place to the next (x, z) */
+    int index;                /* +0x30c: the dealer car shown */
 } FE3DRoom;
 
 static FE3DRoom *s_room;
@@ -160,9 +165,38 @@ static FE3DRoom *garage_new(void)
     return r;
 }
 
+/* The dealership (FEDealership3DRoom_Load 0x4e8090): three segments of showroom, one per car of the
+   dealer's list, side by side a step (10.53, -2.1) apart, the chosen car in the middle one turning. */
+static FE3DRoom *dealer_new(void)
+{
+    FE3DRoom *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    snprintf(r->id, sizeof r->id, "ID_DEALER");
+    r->dealer = true;
+    r->spin = 30.0f;
+    r->pos[1] = -1.1f;
+    r->pos[2] = 4.8f;
+    r->fov = 37.5f;
+    for (int i = 0; i < 3; i++) r->ambient[i] = r->diffuse[i] = 110.0f;
+    r->dir[1] = -0.99f;
+    r->dir[2] = 0.15f;
+    r->step[0] = 10.53f;
+    r->step[1] = -2.1f;
+    static const uint32_t none[4] = {0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu};
+    static const char *const names[3] = {"dealer2a", "dealer2b", "dealer2c"};
+    for (int i = 0; i < 3; i++) r->seg[i] = FE3DObject_New(2, names[i], none, 0, -1, 0, NULL);
+    r->model = r->seg[0];
+    PENDING_NOTE(0x4e8310, "the dealership's slide between cars and its reflection pass");
+    return r;
+}
+
 static void room_free(FE3DRoom *r)
 {
     if (!r) return;
+    if (r->dealer) {
+        FE3DObject_Free(r->seg[1]);
+        FE3DObject_Free(r->seg[2]);
+    }
     FE3DObject_Free(r->model);
     FE3DObject_Free(r->car);
     free(r);
@@ -224,8 +258,39 @@ static void place(FE3DRoom *r, FE3DObject *o)
 
 /* FEGarage3DRoom_v1 0x4e92e0 (the tick) and FEGarage3DRoom_v15 0x4e9380 -> FESpinning3DRoom's draw
    0x4e9690. */
+/* FEDealership3DRoom_v15 0x4e8310: the segments a half turn round, at the car's place and a step to
+   either side (those of a car the list has), lit by the room; the car turning in the middle. */
+static void dealer_draw(FE3DRoom *r, EaglMatStack *model)
+{
+    int32_t t = ticks();
+    if (r->spin != 0) r->rot[1] = (float)t / ((float)TICKS_HZ * r->spin);
+    float x = r->pos[0], y = r->pos[1], z = r->pos[2];
+    for (int i = -1; i <= 1; i++) {
+        if (r->index + i < 0) continue;
+        FE3DObject *o = r->seg[(r->index + i) % 3];
+        if (!o) continue;
+        light(r, o, false);
+        FE3DObject_RotY(o, 0.5f);
+        FE3DObject_RotX(o, r->rot[0]);
+        FE3DObject_SetPos(o, (float)i * r->step[0] + x, y, (float)i * r->step[1] + z);
+        FE3DObject_Draw(o, model);
+    }
+    if (r->car) {
+        light(r, r->car, true);
+        FE3DObject_RotY(r->car, r->rot[1]);
+        FE3DObject_RotX(r->car, r->rot[0]);
+        FE3DObject_SetPos(r->car, x, y, z);
+        hinge(r->car, 1, 0, r->rot[1], 0);
+        FE3DObject_Draw(r->car, model);
+    }
+}
+
 static void room_draw(FE3DRoom *r, EaglMatStack *model)
 {
+    if (r->dealer) {
+        dealer_draw(r, model);
+        return;
+    }
     int32_t t = ticks();
     if (r->car) {
         hinge(r->car, 1, 0, 0, (float)t * 0.0078125f);       /* 0x5b273c */
@@ -255,7 +320,13 @@ void FE3D_SetRoom(const char *id)
     s_room = NULL;
     s_carfile[0] = 0;
     if (!strcmp(id, "ID_GARAGE")) s_room = garage_new();
+    else if (!strcmp(id, "ID_DEALER")) s_room = dealer_new();
     else if (*id) PENDING_NOTE(0x4e6f10, "the dealership, factory, track select and victory rooms");
+}
+
+void FE3D_SetIndex(int index)
+{
+    if (s_room) s_room->index = index;
 }
 
 void FE3D_SetCar(const char *file)
