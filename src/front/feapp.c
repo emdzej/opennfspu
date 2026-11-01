@@ -9,6 +9,7 @@
 #include "game/music.h"
 #include "game/options.h"
 #include "real/mouse.h"
+#include "real/font.h"
 #include "exe.h"
 #include "app.h"
 #include "pending.h"
@@ -334,6 +335,16 @@ static void callback(const char *cb)
             snprintf(b, sizeof b, "front end: %s (the message box 0x512d00: pending)", FEStrings_Get(m));
             plat_log(b);
         }
+    } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
+        /* FEMainScreen_v63 0x510430: the career (Game.GameType 4, the car lists again), its tournaments when
+           it was started (PlayerInfo's 0x691dd5), else its first screen, which starts it */
+        Save *sv = FESave_Current();
+        if (sv && sv->flags[0]) {
+            FEApp_GotoScreen("tournament", true);
+        } else {
+            FEApp_GotoScreen("careerfirst", true);
+            if (sv) sv->flags[0] = 1;
+        }
     } else if (!strcmp(cb, "QUIT")) {
         s_result = FE_QUIT;
     } else if (!strcmp(cb, "PLAYGAME")) {
@@ -580,9 +591,75 @@ static bool account_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
+   lines of the control's width (0x522900 -> 0x522e80; the port breaks at spaces, greedily), each line one
+   font height lower, aligned by data.align (0 left, 1 centred, 2 right). (Its typing animation pends.) */
+static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    const char *path = data_str(c, "accessor");
+    FEAccessor *a = FEAccess_Find(path);
+    int k = FertControl_findPart(c, "label");
+    if (!a || k < 0) return true;
+    char arg[32] = "";
+    const char *pp = path ? strchr(path, '(') : NULL;
+    if (pp) {
+        snprintf(arg, sizeof arg, "%s", pp + 1);
+        char *e = strchr(arg, ')');
+        if (e) *e = 0;
+    }
+    const char *text = FEAccess_TextArg(a, arg);
+    FertAttr *f = FertAttrList_find(&c->parts[k]->attrs, "fontPathName");
+    char fp[300];
+    FE_ResolvePath(f ? FertAttr_str(f) : "", fp, sizeof fp);
+    HudFont *font = FEFont_Get(fp);
+    if (!font || !font->font || !text) return true;
+    FertAttr *fc = FertAttrList_find(&c->parts[k]->attrs, "foreColor");
+    uint32_t colour = fc ? FertAttr_color(fc) : 0xffffffffu;
+    int32_t r[4];
+    control_rect(c, r);
+    float width = (float)(r[2] - r[0]);
+    int align = data_int_of(c, "align");
+    float x0 = (float)(r[0] + ox), y = (float)(r[1] + oy), fx, fy, fw, fh;
+    FONT_extent(font->font, "X", &fx, &fy, &fw, &fh);
+    float lh = fh > 0 ? fh : 10.0f;
+    char line[256];
+    const char *p = text;
+    while (*p) {
+        int n = 0, last = -1;
+        while (p[n] && p[n] != '\n') {
+            char t[256];
+            int m = n + 1 < 255 ? n + 1 : 255;
+            memcpy(t, p, (size_t)m);
+            t[m] = 0;
+            FONT_extent(font->font, t, &fx, &fy, &fw, &fh);
+            if (fw > width && last >= 0) break;
+            if (p[n] == ' ') last = n;
+            n++;
+            if (n >= 255) break;
+        }
+        int len = n;
+        if (p[n] && p[n] != '\n' && last >= 0) len = last;
+        memcpy(line, p, (size_t)len);
+        line[len] = 0;
+        FONT_extent(font->font, line, &fx, &fy, &fw, &fh);
+        float x = align == 1 ? x0 + (width - fw) * 0.5f : align == 2 ? x0 + width - fw : x0;
+        char *copy = FE2D_Alloc(len + 1);
+        if (copy) {
+            memcpy(copy, line, (size_t)len + 1);
+            FE2D_Text(font, x, y, 0, colour, copy, 1.0f, 1.0f);
+        }
+        y += lh;
+        p += len;
+        while (*p == ' ' || *p == '\n') p++;
+    }
+    return true;
+}
+
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
     if (c->feflags & 0x20) return true;
     FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));

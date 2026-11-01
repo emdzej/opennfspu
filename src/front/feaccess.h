@@ -44,3 +44,5 @@ int FEData_BuyCar(void);
 int32_t FEData_PartValue(int32_t id);
 /* A car accessor's current car's nfs5.car record (an owned car's copy), NULL for other kinds. */
 const uint8_t *FEAccess_CarRecord(const FEAccessor *a);
+/* The chosen tournament's record (0xd40 bytes in the save's Tournament section), NULL without one. */
+const uint8_t *FEData_Tournament(void);

@@ -13,7 +13,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -155,6 +155,60 @@ int32_t FEData_PartValue(int32_t id)   /* (0x49c3e0's record) */
     return 0;
 }
 
+/* The save's tournaments (its Tournament section: seven ints, then 0xd40 bytes a tournament). */
+static const uint8_t *tour_section(int32_t *head, int *n)
+{
+    Save *sv = FESave_Current();
+    for (int i = 0; sv && i < sv->nsec; i++)
+        if (!strcmp(sv->sec[i].name, "Tournament") && sv->sec[i].size >= 32) {
+            if (head) memcpy(head, sv->sec[i].data, 28);
+            int32_t bytes;
+            memcpy(&bytes, sv->sec[i].data + 28, 4);
+            if (bytes < 0 || (size_t)bytes > sv->sec[i].size - 32) bytes = 0;
+            *n = bytes / 0xd40;
+            return sv->sec[i].data + 32;
+        }
+    *n = 0;
+    return NULL;
+}
+
+static int s_tourny[64], s_ntourny;   /* the list shown (0x504970's choice of the lists 0x502150 makes) */
+
+/* The tournaments of the event type (0x504970; the lists by +4, 0x502150): type 0 the era's (0x691e50:
+   0x209 .. 0x20b), else the special events (1 0x20c, 2 0x20d, 3 0x20e; when 0x691e54 is set, 0 .. 2);
+   +0xe4 2 kept out. */
+static void tourny_list(int type)
+{
+    int32_t head[7] = {0};
+    int n = 0;
+    const uint8_t *t = tour_section(head, &n);
+    int32_t want = head[3];   /* 0x691e50 */
+    if (head[6] == 0) {
+        if (type == 1) want = 0x20c;
+        else if (type == 2) want = 0x20d;
+        else if (type == 3) want = 0x20e;
+    } else {
+        if (type == 0) want = 0x20c;
+        else if (type == 1) want = 0x20d;
+        else if (type == 2) want = 0x20e;
+    }
+    s_ntourny = 0;
+    for (int i = 0; t && i < n && s_ntourny < 64; i++) {
+        const uint8_t *r = t + 0xd40 * i;
+        if (rec16(r, 0xe4) == 2) continue;
+        if (rec32(r, 4) == want) s_tourny[s_ntourny++] = i;
+    }
+}
+
+const uint8_t *FEData_Tournament(void)
+{
+    FEAccessor *a = FEAccess_Find("Tournament.Tournament");
+    int n = 0;
+    const uint8_t *t = tour_section(NULL, &n);
+    if (!a || !t || a->pos >= s_ntourny) return NULL;
+    return t + 0xd40 * s_tourny[a->pos];
+}
+
 /* The career's year (0x502870: the save's Tournament section's first int, 0x5db75c). */
 static int career_year(void)
 {
@@ -253,6 +307,8 @@ void FEData_Init(void)
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     add("Tournament.Data", ACC_TDATA, 1, 0, 0);          /* FETournamentDataAccessor (0x5b81f0) */
+    add_list("Tournament.EventType", 0x5b81a4, 0);          /* FETournamentEventTypeAccessor (0x506140) */
+    add("Tournament.Tournament", ACC_TOURNY, 0, 0, 0);    /* FETournyAccessor (0x505bc0, vtable 0x5b88f0) */
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -275,6 +331,13 @@ static int owned_count(void)
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_TOURNY) {
+        FEAccessor *e = FEAccess_Find("Tournament.EventType");
+        tourny_list(e ? e->pos : 0);
+        a->count = s_ntourny;
+        if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
+        return;
+    }
     if (a->kind == ACC_MERGED) {
         int o = owned_count();
         if (o != a->owned) {   /* (the same car kept chosen when the owned list changes) */
@@ -336,6 +399,11 @@ const char *FEAccess_Text(const FEAccessor *a)
     }
     case ACC_TDATA:
         return "";
+    case ACC_TOURNY: {   /* SHORT: the name (+0x20) */
+        const uint8_t *r = FEData_Tournament();
+        const char *n = r ? FEStrings_Get(rec32(r, 0x20)) : NULL;
+        return n ? n : "";
+    }
     }
     return "";
 }
@@ -361,6 +429,18 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         const char *c1 = FEStrings_Get(rec32(r, 0x1b0) - 10), *c2 = FEStrings_Get(rec32(r, 0x1ac) + 0xd);
         snprintf(cb, sizeof cb, "%s %s", c1 ? c1 : "", c2 ? c2 : "");
         return cb;
+    }
+    if (a->kind == ACC_TOURNY && arg && *arg && strcmp(arg, "SHORT")) {   /* FETournyAccessor_v5 0x505cd0 */
+        const uint8_t *r = FEData_Tournament();
+        static char tb[32];
+        if (!r) return "";
+        if (!strcmp(arg, "DESCRIPTION")) return FEStrings_Get(rec32(r, 0x28)) ? FEStrings_Get(rec32(r, 0x28)) : "";
+        if (!strcmp(arg, "CARRESTRICTION")) return FEStrings_Get(rec32(r, 0x2c)) ? FEStrings_Get(rec32(r, 0x2c)) : "";
+        if (!strcmp(arg, "ENTRYFEE")) return FE_MoneyText(rec32(r, 0xdc));
+        if (!strcmp(arg, "PRIZEMONEY")) return FE_MoneyText(rec32(r, 0xec));
+        if (!strcmp(arg, "TIMESCOMPLETED")) { snprintf(tb, sizeof tb, "%d", rec16(r, 0xd3c)); return tb; }
+        PENDING_NOTE(0x505cd0, "the tournament's difficulty and record time (the remaining tracks)");
+        return "";
     }
     if (a->kind == ACC_OWNED && arg) {   /* FEOwnedCarAccessor's (0x4f8xxx) */
         refresh(a);
