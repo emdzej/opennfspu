@@ -135,3 +135,18 @@ bool FEData_KnockoutOn(void);
 void FEData_KnockoutStart(void);
 int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8]);
 void FEData_KnockoutResult(const int *places, int np);
+/* The data areas' lookups other modules share: an nfs5.prt record by its id (0x49c3e0), an nfs5.car
+   record by its id (0x4f39e0: the first record when none has it), an nfs5.trk record by its id (0x4fb4b0). */
+const uint8_t *FEData_PartRecord(int32_t id);
+const uint8_t *FEData_CarById(int id);
+const uint8_t *FEData_TrackById(int id);
+/* A new car object of an nfs5.car record (0x4eda40): its colours in the object's order (+0x674 ..),
+   its stripe package and race number, its stock parts fitted. */
+void FEData_NewCar(SaveCar *c, const uint8_t *r, const int32_t col[4], int32_t stripe, int32_t racenum);
+/* A car of a record by id with those colours into the player's owned cars (0x501820): paid nothing
+   (+0x6a4), the list kept in order (0x501080). False without a save or room. */
+bool FEData_AddOwned(int id, const int32_t col[4], int32_t stripe, int32_t racenum);
+int FEData_PersonalityIndex(int id);   /* nfs5.per's record (0-based) of a personality id (0x4e2900) */
+/* A Factory Driver opponent's car by id (0x4eb830): its SPECNAME, colours (the race description's
+   order), stripes package and race number, picked at random as the original does. */
+bool FEData_OpponentCar(int id, char spec[0x40], uint32_t col[4], int32_t *stripe, int32_t *racenum);

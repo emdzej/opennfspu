@@ -187,6 +187,45 @@ void CarSim_Place(Car *c, int n, const float off[3], int dir)
     set_i(c, 0x464, s & 0xf);
 }
 
+/* The car at the skill test's start gate (0x410490): at the gate's place (its slot 0x38), the road's
+   trackers reset, facing the gate's way (+0xc8, 0x46f050) on the ground's normal, the frame made
+   orthonormal (0x4a45f0) and copied to the ground frame; the wheels at the body's points (0x49aad0),
+   then down by the suspension's settling and the wheels at rest. */
+static void skill_start(Car *c, const SceneElem *gate)
+{
+    float dir[3], n[3];
+    memcpy(dir, gate->b + 0xc8, 12);
+    float *pos = CAR_F(c, 0x330);
+    scene_pos(gate, pos);
+    WSurface_Reset(&c->body, 1);   /* 0x473170 */
+    for (int w = 0; w < 4; w++) WSurface_Reset(&c->surf[w], 1);
+    mirror_body(c);
+    CarSim_Track(c);   /* 0x49aee0 */
+    float *right = CAR_F(c, 0x364), *up = CAR_F(c, 0x370), *fwd = CAR_F(c, 0x37c);
+    memcpy(fwd, dir, 12);
+    memcpy(up, CAR_F(c, 0x3e8), 12);
+    Vec3_Cross(up, fwd, right);
+    Vec3_Cross(right, up, fwd);
+    Mat3_Orthonormalize(right);
+    memcpy(CAR_F(c, 0x3b8), right, 36);
+    c->b[0x80] = 0x20;
+    memcpy(CAR_F(c, 0x490), right, 36);
+    CarSim_BodyPoints(c);   /* 0x49aad0: 0x49ada0, then the wheels' points */
+    for (int w = 0; w < 4; w++) {
+        memcpy(CAR_F(c, 0x7f8 + 0xc4 * w), CAR_F(c, 0x1dc + 12 * w), 12);
+        memcpy(CAR_F(c, 0x7ec + 0xc4 * w), CAR_F(c, 0x1dc + 12 * w), 12);
+    }
+    set_f(c, 0x41c, CarSim_Ground(c, n));   /* 0x4999e0 */
+    float settle = *CAR_F(c, 0x424);
+    set_f(c, 0x424, 0);
+    pos[1] = pos[1] - settle;
+    for (int w = 0; w < 4; w++) {
+        set_f(c, 0x83c + 0xc4 * w, 0);
+        set_f(c, 0x820 + 0xc4 * w, 0);
+        set_f(c, 0x828 + 0xc4 * w, 0);
+    }
+}
+
 /* The race's per-car counters and checkpoints cleared (+0xb24 the countdown's end tick). 0x40f110 */
 static void clear_race(Car *c)
 {
@@ -370,8 +409,9 @@ void Car_RaceInit(Car *c, uint32_t id)
                 set_f(c, 0xb04, Race_Progress(t.node));
             }
         } else {
-            PENDING_NOTE(0x410490, "the skill test's start (0x410490, 0x470330)");
+            skill_start(c, start);
             set_i(c, 0xb58, 1);
+            Scene_TriggerShow(start);   /* 0x470330: the first arrow */
         }
         PENDING_NOTE(0x478e90, "the wheels' skid trails reset (the wheel objects' +0)");
     } else {

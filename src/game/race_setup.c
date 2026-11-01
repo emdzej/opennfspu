@@ -31,19 +31,52 @@ bool g_race_setup_set;
 int g_race_grid_pers[8], g_race_grid_start[9];
 bool g_race_grid_set;
 
+RaceOpponent g_race_opp[8];
+bool g_race_opp_set;
+
+static const uint8_t *find_car(const uint8_t *db, size_t n, const char *name)
+{
+    for (size_t i = 0; i + FECAR_SIZE <= n; i += FECAR_SIZE) {
+        const char *file = (const char *)db + i + 0x7f, *spec = (const char *)db + i + 0xb1;
+        if (!strcasecmp(file, name) || !strcasecmp(spec, name)) return db + i;
+    }
+    return NULL;
+}
+
+/* The fields of a description 0x4ee430 takes from the car's record: its names, its body style. */
+static void car_fields(uint8_t *d, const uint8_t *rec)
+{
+    put_str(d, 0x534, (const char *)rec + 0x34);          /* FEMULTIPLAYERCARNAME */
+    put_str(d, 0x228, (const char *)rec + 0x7f);          /* FILENAME */
+    put_str(d, 0x268, (const char *)rec + 0xb1);          /* SPECNAME */
+    put_str(d, 0x2a8, (const char *)rec + 0x115);         /* AISPECNAME */
+    put_str(d, 0x2e8, (const char *)rec + 0x179);         /* SOUNDNAME */
+    int16_t body;
+    memcpy(&body, rec + 0x1c0, 2);
+    put_i(d, 0x328, body);                                /* BODYSTYLE */
+}
+
+static void stock_parts(uint8_t *d, const uint8_t *rec)
+{
+    int16_t np;
+    memcpy(&np, rec + 0x3bc, 2);
+    for (int i = 0; i < 20; i++) {
+        int32_t id = 0;
+        if (i < np) {
+            int16_t v;
+            memcpy(&v, rec + 0x3be + 2 * i, 2);
+            id = v;
+        }
+        put_i(d, 0x28 + 4 * i, id);
+    }
+}
+
 bool RaceSetup_SingleCar(const char *name)
 {
     size_t n = 0;
     uint8_t *db = vfs_read_all("FEData\\Data\\nfs5.car", &n);
     if (!db) return false;
-    const uint8_t *rec = NULL;
-    for (size_t i = 0; i + FECAR_SIZE <= n; i += FECAR_SIZE) {
-        const char *file = (const char *)db + i + 0x7f, *spec = (const char *)db + i + 0xb1;
-        if (!strcasecmp(file, name) || !strcasecmp(spec, name)) {
-            rec = db + i;
-            break;
-        }
-    }
+    const uint8_t *rec = find_car(db, n, name);
     if (!rec) {
         free(db);
         return false;
@@ -53,31 +86,13 @@ bool RaceSetup_SingleCar(const char *name)
     /* As 0x4ee430 writes them (the front end's choices it takes from its screens are their defaults). */
     put_i(d, 0x150, 0);                                   /* DRIVER: rand() & 7 in the original */
     put_str(d, 0x17c, "");                                /* DRIVERNAME */
-    put_str(d, 0x534, (const char *)rec + 0x34);          /* FEMULTIPLAYERCARNAME */
     put_str(d, 0x1c0, "");                                /* LICENSE */
-    put_str(d, 0x228, (const char *)rec + 0x7f);          /* FILENAME */
+    car_fields(d, rec);
     /* PARTINDEX (+0x28, 20): the car's parts (the front end hands the owned car's installed ones over,
        0x4ee430; else the record's stock list, +0x3bc ids from +0x3be, as a new car gets them, 0x4ee030) */
-    {
-        int16_t np;
-        memcpy(&np, rec + 0x3bc, 2);
-        for (int i = 0; i < 20; i++) {
-            int32_t id = 0;
-            if (g_race_parts_set) id = g_race_parts[i];
-            else if (i < np) {
-                int16_t v;
-                memcpy(&v, rec + 0x3be + 2 * i, 2);
-                id = v;
-            }
-            put_i(d, 0x28 + 4 * i, id);
-        }
-    }
-    put_str(d, 0x268, (const char *)rec + 0xb1);          /* SPECNAME */
-    put_str(d, 0x2a8, (const char *)rec + 0x115);         /* AISPECNAME */
-    put_str(d, 0x2e8, (const char *)rec + 0x179);         /* SOUNDNAME */
-    int16_t body;
-    memcpy(&body, rec + 0x1c0, 2);
-    put_i(d, 0x328, body);                                /* BODYSTYLE */
+    stock_parts(d, rec);
+    if (g_race_parts_set)
+        for (int i = 0; i < 20; i++) put_i(d, 0x28 + 4 * i, g_race_parts[i]);
     put_i(d, 0x0, 0xb);                                   /* TYPE */
     put_i(d, 0x8, 1);                                     /* CLASS: the human player */
     put_i(d, 0x200, 0xe);                                 /* SPEECHCOLOUR */
@@ -139,12 +154,24 @@ bool RaceSetup_Opponents(int n)
     int nper = (int)(size / 0x2c);
     size_t nloc = 0;
     uint8_t *loc = vfs_read_all("FEData\\Locale\\festrings.loc", &nloc);   /* the front end's strings */
+    size_t ncar = 0;
+    uint8_t *cars = g_race_opp_set ? vfs_read_all("FEData\\Data\\nfs5.car", &ncar) : NULL;
     if (CAR_MAX <= n) n = CAR_MAX - 1;
     if (nper < n) n = nper;
     for (int i = 1; i <= n; i++) {
         uint8_t *d = g_cardesc[i];
         memcpy(d, g_cardesc[0], CARDESC_SIZE);
-        int pi = g_race_grid_set ? g_race_grid_pers[i - 1] - 1 : i - 1;   /* (the knockout's racers) */
+        int pi = g_race_opp_set ? g_race_opp[i - 1].pers : g_race_grid_set ? g_race_grid_pers[i - 1] - 1 : i - 1;   /* (the knockout's racers) */
+        const uint8_t *cr = g_race_opp_set && cars ? find_car(cars, ncar, g_race_opp[i - 1].spec) : NULL;
+        if (cr) {
+            /* Factory Driver's opponents in their own cars (0x4eb830): the record's fields, its stock
+               parts, the colours and the race number the front end picked */
+            car_fields(d, cr);
+            stock_parts(d, cr);
+            memcpy(d + 0x218, g_race_opp[i - 1].colours, 16);
+            put_i(d, 0x510, g_race_opp[i - 1].racenum);
+            put_i(d, 0x514, g_race_opp[i - 1].stripe);
+        }
         if (pi < 0 || pi >= nper) pi = i - 1;
         const uint8_t *r = per + 0x2c * pi;
         int16_t id;
@@ -168,6 +195,7 @@ bool RaceSetup_Opponents(int n)
     put_i(g_cardesc[0], 0x174, g_race_grid_set ? g_race_grid_start[0] : n);
     free(per);
     free(loc);
+    free(cars);
     g_nracecars = n + 1;
     return true;
 }

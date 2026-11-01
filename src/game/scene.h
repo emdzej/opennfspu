@@ -104,3 +104,10 @@ void Scene_PlaceGeometry(void);
 /* Port addition: the start line (the type-2 trigger, Scene_FindTriggerByType(2), as the race code finds
    it): its centre and orientation. False if the scene has none. */
 bool Scene_StartLine(float pos[3], float mat[9]);
+/* The car takes the trigger: it hits it (0x470620), faces its way, moves its direction, within its
+   speeds. 0x470440 */
+bool Scene_TriggerTakes(const SceneElem *t, void *car);
+/* The trigger's sound: a gate's (+0xe0 1, type 0 or 1) or its linked sound element's. 0x4703c0 */
+void Scene_TriggerSound(const SceneElem *t);
+/* The trigger's linked geometry (+0xde) shown: the skill test's next arrow, a pop-up. 0x470330 */
+void Scene_TriggerShow(const SceneElem *t);

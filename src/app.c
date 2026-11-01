@@ -7,6 +7,9 @@
 #include "game/options.h"
 #include "game/car.h"
 #include "game/race_setup.h"
+#include "game/mission.h"
+#include "game/car_drive.h"
+#include "front/fefactory.h"
 #include "snd/snd.h"
 #include "exe.h"
 #include "platform.h"
@@ -117,6 +120,10 @@ bool app_frame(void)
                     g_drive_opponents = FEApp_Opponents();
                     g_drive_race_type = FEApp_RaceType();
                     g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;
+                    g_race_opp_set = FEApp_OpponentCars(g_race_opp) >= 0;
+                    g_race_mode = FEApp_GameType();   /* (0x4eab10's option 0x30) */
+                    Mission_Reset();
+                    if (g_race_mode == 9) FEFactory_RaceOptions();
                 } else if (FEApp_Result() == FE_QUIT) {
                     return false;
                 }

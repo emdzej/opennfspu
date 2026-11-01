@@ -27,3 +27,14 @@ extern bool g_race_setup_set;
    the starting places (start[0] the player's), when g_race_grid_set. */
 extern int g_race_grid_pers[8], g_race_grid_start[9];
 extern bool g_race_grid_set;
+/* Opponents the front end set up one by one (Factory Driver's, 0x4eb830), when g_race_opp_set: the
+   nfs5.per record (0-based), the car (a SPECNAME or FILENAME; none: car 0's) and its colours (+0x218
+   order), stripes package and race number. */
+typedef struct {
+    int pers;
+    char spec[0x40];
+    uint32_t colours[4];
+    int32_t stripe, racenum;
+} RaceOpponent;
+extern RaceOpponent g_race_opp[8];
+extern bool g_race_opp_set;

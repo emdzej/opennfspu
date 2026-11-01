@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 #include "front/fert.h"
+#include "game/race_setup.h"
 
 /* The front end's start: its templates, strings, fonts, the 2D queue; then the start screen. */
 bool FEApp_Init(const char *start);
@@ -55,3 +56,8 @@ int FEApp_Opponents(void);
 int FEApp_RaceType(void);
 /* The knockout's grid (its racers' personalities, the starting places, start[0] the player's); -1 for none. */
 int FEApp_Grid(int pers[8], int start[9]);
+/* The game type the race was set up for (Game.GameType 0x690aac, the race's mode option 0x30): the test
+   drives 6 new, 7 used, 8 the car setup's (0x5dc1b8). */
+int FEApp_GameType(void);
+/* Factory Driver's opponents one by one (0x4eb830); -1 when the race has none such. */
+int FEApp_OpponentCars(RaceOpponent out[8]);

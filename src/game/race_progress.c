@@ -5,10 +5,13 @@
 #include "game/race_car.h"
 #include "game/hud.h"
 #include "game/road.h"
+#include "game/scene.h"
+#include "game/track.h"
 #include "game/sim_rand.h"
 #include "pending.h"
 #include <math.h>
 #include <string.h>
+#include <strings.h>
 
 int32_t g_race_laps;
 int32_t g_race_over;
@@ -148,6 +151,34 @@ void Race_CarProgress(Car *c)
     g_race_rank[i] = (RaceRank){*CAR_I(c, CAR_INDEX), d, *CAR_I(c, 0xb14), *CAR_I(c, CAR_FLAGS) & 4};
 }
 
+/* The skill test's progress (0x416190). On the skidpad a car that has stopped (+0xdb0 0) below fourth
+   gear (+0x1100) is done (+0xb50 3) with no time (+0xb14 0, +0xb24 99999). Else, while it runs (+0xb50
+   below 2), the gate it heads for (+0xb58, by id) taken: the last one (type 1) finishes it (its sound,
+   +0xb50 2, the tick, the tick less the countdown's 0x1c0), a checkpoint (type 0) moves it on to the
+   next gate (its sound, its arrow). (A network game's message, 0x606850, isn't ported.) */
+static void SkillTest_Progress(Car *c)
+{
+    if (*CAR_I(c, 0xdb0) == 0 && *CAR_I(c, 0x1100) < 4 && !strcasecmp(g_track_name, "skidpad")) {   /* 0x5cc54c */
+        *CAR_I(c, 0xb50) = 3;
+        *CAR_I(c, 0xb14) = 0;
+        *CAR_I(c, 0xb24) = 99999;
+    }
+    if (*CAR_I(c, 0xb50) >= 2) return;
+    SceneElem *gate = Scene_FindTriggerById(*CAR_I(c, 0xb58));
+    if (!gate || !Scene_TriggerTakes(gate, c)) return;
+    int type = SceneElem_type(gate);
+    if (type == 1) {
+        Scene_TriggerSound(gate);
+        *CAR_I(c, 0xb50) = 2;
+        *CAR_I(c, 0xb14) = g_sim_tick;
+        *CAR_I(c, 0xb24) = g_sim_tick - 0x1c0;
+    } else if (type == 0) {
+        *CAR_I(c, 0xb58) += 1;
+        Scene_TriggerSound(gate);
+        Scene_TriggerShow(gate);
+    }
+}
+
 void CarSim_RaceTask(void *car)
 {
     Car *c = car;
@@ -155,7 +186,7 @@ void CarSim_RaceTask(void *car)
     if (*CAR_I(c, CAR_FLAGS) & 1) {
         *CAR_F(c, 0xd00) = fabsf(*CAR_F(c, 0xd60)) * K(0x5b27ac) + *CAR_F(c, 0xd00);   /* the odometer */
         if (g_race_type == 4) {
-            PENDING_NOTE(0x416190, "the skill test's progress (0x416190)");
+            SkillTest_Progress(c);   /* 0x416190 */
             return;
         }
         Race_CarProgress(c);   /* 0x416330 */

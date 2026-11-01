@@ -6,10 +6,12 @@
 #include "front/fe3d.h"
 #include "front/fesave.h"
 #include "front/femarket.h"
+#include "front/fefactory.h"
 #include "support/crt.h"
 #include "game/audio.h"
 #include "game/music.h"
 #include "game/options.h"
+#include "game/mission.h"
 #include "real/mouse.h"
 #include "real/font.h"
 #include "exe.h"
@@ -65,6 +67,11 @@ static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owne
 static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
 static int s_grid_pers[8], s_grid_start[8], s_ngrid = -1;   /* the knockout's grid for the race */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
+static int s_testdrive_type;          /* 0x5dc1b8 */
+static bool s_factory_race;           /* the race Factory Driver's mission */
+static RaceOpponent s_opp[8];         /* its opponents (0x4eb830) */
+static int s_nopp = -1;
+static int s_fd_cheat;                /* FEFactoryDriverCBL +0x150: Factory.MissionCheat when last seen */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
@@ -278,6 +285,19 @@ bool FEApp_Init(const char *start)
         int n = s_nsaved;
         s_nsaved = 0;
         bool ok = true;
+        if (s_gametype == 9 && n > 0) {
+            /* (0x4d2e70's Factory Driver stack: the first screen, factorydriver unless all missions are
+               done, a level's end on the victory screen with its message popped up) */
+            ok = FEApp_GotoScreen(s_saved[0], true);
+            if (ok && !FEFactory_AllDone()) ok = FEApp_GotoScreen("factorydriver", true);
+            if (ok && FEFactory_LevelDone()) {
+                ok = FEApp_GotoScreen("FactoryVictory", true);
+                if (ok) ok = FEApp_GotoScreen("levelvictory", true);
+            }
+            if (ok) return true;
+            while (s_depth) FertControl_free(s_stack[--s_depth]);
+            return FEApp_GotoScreen(start, true);
+        }
         for (int i = 0; i < n && ok; i++) ok = FEApp_GotoScreen(s_saved[i], true);
         if (ok && FEData_KnockoutOn()) FEApp_GotoScreen("knockoutraceinfo", true);
         if (ok) return true;
@@ -299,6 +319,16 @@ void FEApp_RaceOver(const int *places, const int *times, int n)
     s_tour_race = -1;
     if (s_gametype == 2) FEData_KnockoutResult(places, n);   /* (0x4ddb10) */
     if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */
+    if (s_factory_race) {
+        /* 0x4ed590's type 9: the verdict (0x657834) and the results into the mission (0x51a770: the
+           place, the time over ten), or the cheat's skip (0x657e2c, 0x51a8e0) */
+        PENDING_NOTE(0x4ed590, "the mission result's time from the stats (0x5e77a4) and its value (0x5e762c)");
+        if (g_mission_skip) FEFactory_Skip(g_mission_pass);
+        else FEFactory_Result(n > 0 ? places[0] : 0, n > 0 ? times[0] / 10 : 0, 0, g_mission_pass);
+        FESave_Write();
+    }
+    s_factory_race = false;
+    s_nopp = -1;
     s_testdrive = false;
 }
 
@@ -319,6 +349,43 @@ void FEApp_End(void)
     g_r3d_frontend = 0;
 }
 
+/* A popup (the screens with a popup circle: the original keeps them in their screen's list, +0x8 ..,
+   drawn over it; the port stacks them). */
+static bool is_popup(const FertControl *w)
+{
+    for (int i = 0; w && i < w->nchildren; i++)
+        if (!strcmp(w->children[i]->id, "NFS5.POPUPCIRCLE")) return true;
+    return false;
+}
+
+/* Back to the screen under the popups (0x4d1e40(-1): the top screen's popups closed). */
+static void close_popups(void)
+{
+    while (s_depth > 1 && is_popup(s_stack[s_depth - 1])) FertControl_free(s_stack[--s_depth]);
+}
+
+/* FEFactoryDriverCBL's constructor (0x519180): the welcome the first time, the first mission's words
+   before it (its brief 0xbc7), else the mission's brief, popped up; Factory.MissionCheat remembered. */
+static void factory_open(void)
+{
+    Save *sv = FESave_Current();
+    const uint8_t *m = FEFactory_Mission();
+    int32_t desc = 0;
+    if (m) memcpy(&desc, m, 4);
+    PENDING_NOTE(0x519180, "the screen's CHEATFACTORY registration (0x519300)");
+    if (sv && !sv->flags[1]) {
+        sv->flags[1] = 1;
+        FEApp_GotoScreen("factwelcome", true);
+    } else if (sv && desc == 0xbc7 && !sv->flags[2]) {
+        sv->flags[2] = 1;
+        FEApp_GotoScreen("factfirst", true);
+    } else {
+        FEApp_GotoScreen("missionbrief", true);
+    }
+    FEAccessor *a = FEAccess_Find("Factory.MissionCheat");
+    s_fd_cheat = a ? FEAccess_Pos(a) : 0;
+}
+
 bool FEApp_GotoScreen(const char *name, bool push)
 {
     FertControl *w = load_screen(name);
@@ -335,6 +402,7 @@ bool FEApp_GotoScreen(const char *name, bool push)
     }
     snprintf(s_stack_name[s_depth], sizeof s_stack_name[0], "%s", name);
     s_stack[s_depth++] = w;
+    if (!strcasecmp(name, "factorydriver")) factory_open();
     return true;
 }
 
@@ -401,8 +469,38 @@ static void on_leave(FertControl *c)   /* 0x4c7820 */
 
 FEResult FEApp_Result(void) { return s_result; }
 const uint32_t *FEApp_Colours(void) { return s_havecol ? s_colours : NULL; }
-int FEApp_Parts(int32_t ids[20]) { return s_owned_race >= 0 ? FEData_OwnedParts(s_owned_race, ids) : -1; }
-bool FEApp_Setup(float set[17]) { return s_owned_race >= 0 && FEData_OwnedSetup(s_owned_race, set); }
+
+int FEApp_Parts(int32_t ids[20])
+{
+    if (s_factory_race) {   /* the mission's car object (0x69c8c8) and its parts */
+        const SaveCar *c = FEFactory_Car();
+        if (!c) return -1;
+        int n = 0;
+        for (int i = c->ninstalled; i < c->ninstalled + c->nother && n < 20; i++) ids[n++] = c->parts[i][0];
+        for (int i = n; i < 20; i++) ids[i] = 0;
+        return n;
+    }
+    return s_owned_race >= 0 ? FEData_OwnedParts(s_owned_race, ids) : -1;
+}
+
+bool FEApp_Setup(float set[17])
+{
+    if (s_factory_race) {
+        const SaveCar *c = FEFactory_Car();
+        if (c) memcpy(set, c->rec + 0x6d0, 17 * sizeof(float));
+        return c != NULL;
+    }
+    return s_owned_race >= 0 && FEData_OwnedSetup(s_owned_race, set);
+}
+
+int FEApp_GameType(void) { return s_testdrive ? s_testdrive_type : s_gametype; }
+
+int FEApp_OpponentCars(RaceOpponent out[8])
+{
+    if (s_nopp < 0) return -1;
+    memcpy(out, s_opp, sizeof s_opp);
+    return s_nopp;
+}
 const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
@@ -425,6 +523,7 @@ int FEApp_RaceType(void)
 {
     if (s_testdrive) return 0;
     switch (s_gametype) {
+    case 9: return s_opponents ? 0 : 4;   /* (0x4eab10: a skill test without opponents) */
     case 1: return 3;
     case 2:
     case 4: return 2;
@@ -545,6 +644,37 @@ static void callback(const char *cb)
         s_gametype = !strcmp(cb, "SETTYPEQUICKKNOCKOUT") ? 1 : !strcmp(cb, "SETTYPEKNOCKOUT") ? 2
                    : !strcmp(cb, "SETTYPEMULTIPLAYER") ? 3 : !strcmp(cb, "SETTYPEFACTORYDRIVER") ? 9 : 0;
         FEData_SetGameType(s_gametype);
+        if (s_gametype == 9) {
+            /* FEMainScreen_v64 0x510600: its missions (0x4f34c0), then their screen, factdone once all
+               are done */
+            FEFactory_Load();
+            FEApp_GotoScreen(FEFactory_AllDone() ? "factdone" : "factorydriver", true);
+        }
+    } else if (!strcmp(cb, "GOBACKMINUSONE") || !strcmp(cb, "FDMSGGOBACK")) {
+        /* the application's GOBACKMINUSONE (0x50de70, its slot 0xb4) and FEFactoryDriverCBL's message's
+           (0x4d1e40(-1)): the popups closed */
+        close_popups();
+    } else if (!strcmp(cb, "FACTORYDRIVERDONECONFIRM")) {
+        FEApp_Back();   /* (0x4d1e40(0)) */
+    } else if (!strcmp(cb, "PROFILEINC") || !strcmp(cb, "PROFILEDEC")) {
+        /* FEFactoryDriverCBL's (0x519360 / 0x519330): Factory.ProfileNum's next or last (slots 0x54, 0x50) */
+        FEAccessor *a = FEAccess_Find("Factory.ProfileNum");
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[7] == 'I' ? 1 : -1));
+    } else if (!strcmp(cb, "ACCEPTPRIZECAR")) {
+        /* FEFDVictoryScreenCBL 0x519f50: the last mission's prize car owned (0x501820: white, the
+           interior black, no stripes, no number; its +0x6a4 price 0), its level's words shown, back */
+        const uint8_t *m = FEFactory_Last();
+        if (m) {
+            int16_t id;
+            memcpy(&id, m + 0x10, 2);
+            const int32_t col[4] = {-1, (int32_t)0xff000000u, 0, 0};
+            FEData_AddOwned(id, col, 0, -1);
+        }
+        FEFactory_ClearEndOfLevel();
+        FESave_Write();
+        FEApp_Back();
+    } else if (!strcmp(cb, "CHEATFACTORY")) {
+        PENDING_NOTE(0x519300, "FEFactoryDriverCBL's CHEATFACTORY");
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
         s_gametype = 4;
         FEData_SetGameType(4);
@@ -577,10 +707,13 @@ static void callback(const char *cb)
         s_opponents = 0;
         s_ngrid = -1;
         s_testdrive = true;
+        s_testdrive_type = cb[9] == 'U' ? 7 : cb[9] == 'N' ? 6 : 8;
         s_result = FE_PLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
         s_testdrive = false;
         s_ngrid = -1;
+        s_nopp = -1;
+        s_factory_race = false;
         if (!can_play()) return;
         /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
            accessors pending: fe.txt's as the original's defaults). */
@@ -616,6 +749,34 @@ static void callback(const char *cb)
             s_laps = laps;
             s_opponents = s_ngrid;
             s_testdrive = false;
+            s_result = FE_PLAY;
+            return;
+        } else if (s_gametype == 9) {
+            /* Factory Driver (0x4eab10's type 9): the mission's track and laps (0x4fb630), its car
+               (FactoryDriver.Car, 0x51aab0) with its colours and parts, its opponents one by one in their
+               own cars (0x4eb830; their personalities by id, 0x4e2900) */
+            int laps = 1;
+            const char *t = FEFactory_Track(&laps);
+            const SaveCar *fc = FEFactory_Car();
+            const uint8_t *m = FEFactory_Mission();
+            if (!t || !fc || !m) return;
+            PENDING_NOTE(0x4fb630, "the mission's reverse direction (+0x28 == 2), traffic (0x5db440[+0x54])");
+            snprintf(s_track, sizeof s_track, "%s", t);
+            snprintf(s_car, sizeof s_car, "%s", (const char *)fc->rec + 4 + 0x7f);
+            s_havecol = FEAccess_CarColours(FEAccess_Find("FactoryDriver.Car"), s_colours);
+            s_owned_race = -1;
+            s_factory_race = true;
+            int pers[5], cars[5];
+            int n = FEFactory_Opponents(pers, cars);
+            memset(s_opp, 0, sizeof s_opp);
+            for (int i = 0; i < n; i++) {
+                s_opp[i].pers = FEData_PersonalityIndex(pers[i]);
+                if (!FEData_OpponentCar(cars[i], s_opp[i].spec, s_opp[i].colours, &s_opp[i].stripe, &s_opp[i].racenum))
+                    s_opp[i].spec[0] = 0;
+            }
+            s_nopp = n;
+            s_laps = laps;
+            s_opponents = n;
             s_result = FE_PLAY;
             return;
         } else if (s_gametype == 1) {
@@ -1095,18 +1256,27 @@ static void dialog_draw(void)
 static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (c->feflags & 0x20) return true;
-    const char *path = data_str(c, "accessor");
-    FEAccessor *a = FEAccess_Find(path);
     int k = FertControl_findPart(c, "label");
-    if (!a || k < 0) return true;
-    char arg[32] = "";
-    const char *pp = path ? strchr(path, '(') : NULL;
-    if (pp) {
-        snprintf(arg, sizeof arg, "%s", pp + 1);
-        char *e = strchr(arg, ')');
-        if (e) *e = 0;
+    if (k < 0) return true;
+    const char *text;
+    if (!strcmp(c->id, "NFS5.WORDWRAPCONTROL")) {
+        /* FEWordWrapControl (v15 0x522270): its label's own string, wrapped the same way */
+        FertAttr *sid = FertAttrList_find(&c->parts[k]->attrs, "stringID");
+        FertAttr *tx = FertAttrList_find(&c->parts[k]->attrs, "text");
+        text = sid && c->parts[k]->kind == FPART_LOCALIZEDTEXT ? FEStrings_Get(atoi(FertAttr_str(sid))) : tx ? FertAttr_str(tx) : NULL;
+    } else {
+        const char *path = data_str(c, "accessor");
+        FEAccessor *a = FEAccess_Find(path);
+        if (!a) return true;
+        char arg[32] = "";
+        const char *pp = path ? strchr(path, '(') : NULL;
+        if (pp) {
+            snprintf(arg, sizeof arg, "%s", pp + 1);
+            char *e = strchr(arg, ')');
+            if (e) *e = 0;
+        }
+        text = FEAccess_TextArg(a, arg);
     }
-    const char *text = FEAccess_TextArg(a, arg);
     FertAttr *f = FertAttrList_find(&c->parts[k]->attrs, "fontPathName");
     char fp[300];
     FE_ResolvePath(f ? FertAttr_str(f) : "", fp, sizeof fp);
@@ -1317,11 +1487,50 @@ static bool listbox_click(FertControl *c, int32_t mx, int32_t my)
     return true;
 }
 
+/* Factory Driver's pictures: FEFactoryDriverPictureControl (v21 0x5199a0, v15 0x519b10), the narrator's
+   face of FactoryPeople.fsh (data_source "profile": the team profile's person), and
+   FEFactoryDriverMapControl (v21 0x519c10), the mission's map (FEData\Factory\<+0x3f>.fsh, its first
+   shape), each at its control's place in white (0x4d8280 at the fade). */
+static bool factory_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    const uint8_t *m = FEFactory_Mission();
+    char path[300];
+    int k = 0;
+    if (!strcmp(c->id, "NFS5.FACTORYPIC")) {
+        FE_ResolvePath("FactoryPeople.fsh", path, sizeof path);   /* ("%sFactoryPeople.fsh" 0x5dd29c) */
+        const char *src = data_str(c, "data_source");
+        if (src && !strcmp(src, "profile")) {
+            FEAccessor *a = FEAccess_Find("Factory.ProfileNum");
+            static const int8_t face[6] = {2, 0, 3, 1, 4, 5};
+            int p = a ? FEAccess_Pos(a) : 0;
+            k = p >= 0 && p < 6 ? face[p] : 0;
+        } else {
+            int16_t n = 0;
+            if (m) memcpy(&n, m + 0x1e, 2);
+            k = n;
+        }
+    } else {
+        if (!m) return true;
+        snprintf(path, sizeof path, "FEData\\Factory\\%s.fsh", (const char *)m + 0x3f);   /* ("%s%s.fsh" 0x5cccc8) */
+    }
+    FEShapes_Load(path);
+    FeImage *img = FEShapes_Image(path, k);
+    if (!img) return true;
+    int32_t pos[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, pos);
+    FE2D_DepthStep();
+    FE2D_Image(img, (float)(pos[0] + ox), (float)(pos[1] + oy), (float)img->w, (float)img->h, 0xffffffffu, 0, false);
+    return true;
+}
+
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
+    if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
-    if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH") || !strcmp(c->id, "NFS5.WORDWRAPCONTROL")) return wordwrap_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
@@ -1628,6 +1837,16 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
         }
     }
     else if (!strcmp(cbl, "ID_TOURNYSCREEN")) tourny_update(w);
+    else if (!strcmp(cbl, "ID_FACTORYCBL")) {
+        /* FEFactoryDriverCBL_v1 0x519270: a changed Factory.MissionCheat makes that many missions done
+           (0x51aa20) */
+        FEAccessor *a = FEAccess_Find("Factory.MissionCheat");
+        int v = a ? FEAccess_Pos(a) : 0;
+        if (v != s_fd_cheat) {
+            s_fd_cheat = v;
+            FEFactory_Cheat(v + 1, false);
+        }
+    }
 }
 
 /* The menus' music (FEMainScreen_v1 0x50faf0): a song of "Menu*" (0x5dca14) every 0x1e00 ticks (a minute),
@@ -1674,6 +1893,14 @@ void FEApp_Frame(void)
         FEWindow_Draw(s_overlay);
     }
     if (w) {
+        /* (a popup over its screen: the screens under the popups drawn first) */
+        int base = s_depth - 1;
+        while (base > 0 && is_popup(s_stack[base])) base--;
+        for (int i = base; i < s_depth - 1; i++) {
+            update_watches(s_stack[i]);
+            update_all(s_stack[i]);
+            FEWindow_Draw(s_stack[i]);
+        }
         screen_update(w);
         update_watches(w);
         update_all(w);   /* (the controls' ticks) */

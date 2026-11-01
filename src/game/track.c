@@ -1,6 +1,8 @@
 /* Track loading (see track.h). */
 #include "game/track.h"
 #include "game/scene.h"
+#include "game/race_car.h"
+#include "game/mission.h"
 #include "game/track_pending.h"
 #include "game/wtree.h"
 #include "real/real.h"
@@ -161,7 +163,9 @@ bool Track_LoadWorld(BWorld *w, const char *path)
     R3DTrack_load(w->r3d, w->root);
     const char *base = strrchr(path, '\\');
     base = base ? base + 1 : path;
-    Track_LoadScenes(base, 0, 0);            /* Scene_LoadStarts, then the skill test or start scenes */
+    /* Scene_LoadStarts, then the skill test (0x657c80) for a race type 4, else the start scenes of the
+       direction (0x657430) */
+    Track_LoadScenes(base, g_race_type, g_race_type == 4 ? (uint32_t)g_skill_test : (uint32_t)g_race_reverse);
     char defs[256];
     snprintf(defs, sizeof defs, "%s%s", g_track_dir, "animdefs.txt");
     WMidGround_LoadObjectDefs(defs);

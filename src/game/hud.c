@@ -9,6 +9,7 @@
 #include "game/race_car.h"
 #include "game/road.h"
 #include "game/race_progress.h"
+#include "game/mission.h"
 #include "eagl/eagl.h"
 #include "pending.h"
 #include "render/hud2d.h"
@@ -2542,6 +2543,7 @@ void HUD_Init(void)
 {
     HUD_Free();
     s_laps_done = s_bestlap = 0;   /* (0x426c50's reset) */
+    g_mission_forced = -1;         /* 0x60c9ec */
     /* The player's name (the race description's +0x558 +0x17c), the layout chosen (0x657db8), the
        screen. */
     HudConfig_Load("", 0, g_display.width, g_display.height);
@@ -2594,6 +2596,18 @@ static void race_screens(void)
         push_modal(summary);
         if (summary) summary->flag = 1;   /* (slot 11: the second key's hint) */
         if (g_race_mode != 3) PENDING_NOTE(0x433790, "the track's records (HTrackRecords)");
+    } else if (g_race_mode == 4) {
+        /* the career: the results first, then its boards */
+        push_modal(summary);
+        if (summary) summary->flag = 1;
+        PENDING_NOTE(0x426c50, "the career's race-over boards (0x60ca68 the standing, 0x60ca54, 0x60c9fc 0x46f0, 0x60ca5c)");
+    } else if (g_race_mode == 9) {
+        /* Factory Driver: the mission's summary (0x60ca50) up, its opening (HMissionSummary_v5 0x4293b0)
+           judging the mission */
+        Mission_Judge();
+        PENDING_NOTE(0x428dc0, "HMissionSummary's board (the narrator's name, the verdict's words typed out, speech)");
+        push_modal(summary);   /* (the port: the results' board in its place) */
+        if (summary) summary->flag = 1;
     } else {
         PENDING_NOTE(0x426c50, "the race-over screens of the other game types");
     }

@@ -9,6 +9,7 @@
 #include "game/car_drive.h"
 #include "game/car_physics.h"
 #include "game/race_setup.h"
+#include "game/mission.h"
 #include "game/race.h"
 #include "game/hud.h"
 #include "game/input.h"
@@ -86,6 +87,14 @@ static void draw_cars(RCamera *c)
 static bool load(const char *track, const char *carname)
 {
     snprintf(g_track_name, sizeof g_track_name, "%s", track);
+    g_race_type = g_drive_race_type;    /* (its option 0x10, RACE_TYPE: the world's scenes follow it) */
+    {
+        char st[8];
+        if (plat_param("skilltest", st, sizeof st)) {   /* --param skilltest=<n>: <track>_st<n>.scn as a race type 4 */
+            g_race_type = 4;
+            g_skill_test = atoi(st);
+        }
+    }
     Track_Load();
     if (!g_world || !g_world->root) return false;
     Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
@@ -103,7 +112,6 @@ static bool load(const char *track, const char *carname)
     g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
     if (0 < opponents) RaceSetup_Opponents(opponents);
     if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
-    g_race_type = g_drive_race_type;                                     /* (its option 0x10, RACE_TYPE) */
     if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
     Car_Construct();
     if (g_ncars < 1) return false;

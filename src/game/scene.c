@@ -6,6 +6,7 @@
 #include "game/car.h"
 #include "game/world.h"
 #include "game/track_pending.h"
+#include "pending.h"
 #include "platform.h"
 #include "render/camera_math.h"
 #include "vfs.h"
@@ -793,6 +794,39 @@ static bool trigger_takes(const SceneElem *t, Car *c)
     return scene_f32(t, 0x90) < speed + 0.1f && speed < scene_f32(t, 0x94) + 0.1f;   /* 0x5b2604 */
 }
 
+bool Scene_TriggerTakes(const SceneElem *t, void *car) { return trigger_takes(t, car); }
+
+void Scene_TriggerSound(const SceneElem *t)
+{
+    if (scene_i32(t, 0xe0) == 1 && (scene_i32(t, TRIG_TYPE) == 0 || scene_i32(t, TRIG_TYPE) == 1)) {
+        PENDING_NOTE(0x4aac00, "the gate's sound (0x4a96b0 of bank 0x6564d0, sound 2)");
+        return;
+    }
+    /* the linked sound element (+0xd8): a one-shot (kind 1) with a sound has its trigger set (0x4abea0,
+       0x4abeb0) */
+    int16_t link = scene_i16(t, TRIG_LINK1);
+    SceneList *all = Scene_List();
+    if (-1 < link && all && link < all->n) {
+        SceneElem *a = all->e[link];
+        if (a->kind == SCENE_AUDIO && scene_i16(a, 0x88) == 1 && -1 < scene_i16(a, 0x8a)) a->b[0xa2] = 1;
+    }
+}
+
+void Scene_TriggerShow(const SceneElem *t)
+{
+    /* the linked geometry (+0xde) when its +0x78 is 1 (0x46ae90): shown (0x482fa0) */
+    int16_t link = scene_i16(t, TRIG_LINK3);
+    SceneList *all = Scene_List();
+    if (-1 < link && all && link < all->n) {
+        SceneElem *g = all->e[link];
+        if (g->kind == SCENE_GEOM && scene_i16(g, 0x78) == 1) {
+            float p[3];
+            scene_pos(g, p);
+            WSceneBundle_Trigger((uint32_t)scene_i32(g, GEOM_OBJTYPE), p);
+        }
+    }
+}
+
 void Scene_Tick(void)
 {
     SceneList *l = Scene_EventTriggers();
@@ -804,28 +838,8 @@ void Scene_Tick(void)
         /* the first race car's (the original passes it to all four tests) */
         if (!trigger_takes(t, g_cars[0])) continue;
         if (t->b[0x78] && scene_i32(t, 0x9c) != 0) continue;   /* fired, and once only */
-        if (type == 4) {
-            /* the linked sound element (+0xd8): a one-shot (kind 1) with a sound has its trigger set
-               (0x4abea0, 0x4abeb0). (+0xe0 1 with type 0 or 1 calls 0x4aac00: never here.) */
-            int16_t link = scene_i16(t, TRIG_LINK1);
-            SceneList *all = Scene_List();
-            if (-1 < link && all && link < all->n) {
-                SceneElem *a = all->e[link];
-                if (a->kind == SCENE_AUDIO && scene_i16(a, 0x88) == 1 && -1 < scene_i16(a, 0x8a)) a->b[0xa2] = 1;
-            }
-        } else {
-            /* the linked geometry (+0xde) when its +0x78 is 1 (0x46ae90): shown (0x482fa0) */
-            int16_t link = scene_i16(t, TRIG_LINK3);
-            SceneList *all = Scene_List();
-            if (-1 < link && all && link < all->n) {
-                SceneElem *g = all->e[link];
-                if (g->kind == SCENE_GEOM && scene_i16(g, 0x78) == 1) {
-                    float p[3];
-                    scene_pos(g, p);
-                    WSceneBundle_Trigger((uint32_t)scene_i32(g, GEOM_OBJTYPE), p);
-                }
-            }
-        }
+        if (type == 4) Scene_TriggerSound(t);   /* (0x4703c0; +0xe0 1 with type 0 or 1 never here) */
+        else Scene_TriggerShow(t);              /* 0x470330 */
         t->b[0x78] = 1;
     }
 }

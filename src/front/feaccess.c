@@ -8,6 +8,7 @@
 #include "game/options.h"
 #include "front/fesave.h"
 #include "front/femarket.h"
+#include "front/fefactory.h"
 #include "vfs.h"
 #include "platform.h"
 #include <stdio.h>
@@ -17,7 +18,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -35,6 +36,7 @@ enum { NACC = 128 };
 static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
+static size_t s_car_size;
 static int s_tracks[32], s_ntracks;   /* the records with a model (0x691d00) */
 static int s_avail[32], s_navail;     /* 0x691d04: the ones to choose (0x4fb190) */
 static int s_looped[32], s_nlooped;   /* 0x691d08: those of them looped (+0x6e 1) */
@@ -553,8 +555,8 @@ bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4])
     refresh(a);
     if (!a->count) return false;
     Save *sv = FESave_Current();
-    if ((a->kind == ACC_OWNED || (a->kind == ACC_MERGED && a->pos < a->owned)) && sv) {
-        const SaveCar *oc = a->kind == ACC_OWNED ? acc_car(a) : &sv->cars[a->pos];
+    if (a->kind == ACC_FDCAR || ((a->kind == ACC_OWNED || (a->kind == ACC_MERGED && a->pos < a->owned)) && sv)) {
+        const SaveCar *oc = a->kind == ACC_FDCAR ? FEFactory_Car() : a->kind == ACC_OWNED ? acc_car(a) : &sv->cars[a->pos];
         if (!oc) return false;
         const uint8_t *o = oc->rec;   /* the car object's +0x674 .. (0x4ee230) */
         out[0] = (uint32_t)rec32(o, 0x674) | 0xff000000u;
@@ -1183,6 +1185,7 @@ void FEData_Init(void)
         if (vfs_exists(path)) s_tracks[s_ntracks++] = (int)i;
     }
     s_car = vfs_read_all("FEData\\Data\\nfs5.car", &n);
+    s_car_size = s_car ? n : 0;
     for (size_t i = 0; s_car && (i + 1) * CAR_SIZE <= n && s_ncars < 160; i++) {
         const uint8_t *r = s_car + CAR_SIZE * i;
         int16_t kind;
@@ -1273,6 +1276,13 @@ void FEData_Init(void)
     add_list("Tournament.EventType", 0x5b81a4, 0);          /* FETournamentEventTypeAccessor (0x506140) */
     add("Tournament.Tournament", ACC_TOURNY, 0, 0, 0);    /* FETournyAccessor (0x505bc0, vtable 0x5b88f0) */
     add("Tournament.RemainingTracks", ACC_RTRACK, 0, 0, 0);   /* FETrackAccessor (0x4f9a90 with 0x504720) */
+    /* FEdaFactoryDriver_v0 0x518f50: the mission's texts, the team's profile (FEPositionableAccessor
+       0x4bbdd0 of 6), the missions cheat (FEIntAccessor 0x4b9ef0: 1 of 1 .. 0x22); the cars' (FEdaCar) */
+    add("Factory.Data", ACC_FDATA, 1, 0, 0);
+    add("Factory.ProfileNum", ACC_INT, 6, 0, 0);
+    add("Factory.MissionCheat", ACC_INT, 0x22, 1, 0);
+    add("FactoryDriver.Car", ACC_FDCAR, 1, 0, 0);
+    add("FDPrizeCars.Car", ACC_FDPRIZE, 1, 0, 0);
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -1464,6 +1474,13 @@ const char *FEAccess_Text(const FEAccessor *a)
         snprintf(b, sizeof b, "%.*f", a->dec, (double)v);
         return b;
     }
+    case ACC_FDCAR:
+    case ACC_FDPRIZE: {
+        const uint8_t *r = FEAccess_CarRecord(a);
+        snprintf(b, sizeof b, "%s", r ? (const char *)r + 0x34 : "");
+        return b;
+    }
+    case ACC_FDATA:
     case ACC_TDATA:
     case ACC_COLOUR:      /* (a colour box shows its swatch, not a text: FEColorBox pending) */
     case ACC_INTCOLOUR:
@@ -1498,6 +1515,10 @@ bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
 {
     static char b[16];
+    if (a->kind == ACC_FDATA) {   /* FEFactoryDriverDataAccessor_v5 0x519620 */
+        FEAccessor *p = FEAccess_Find("Factory.ProfileNum");
+        return FEFactory_Data(arg, p ? p->pos : 0);
+    }
     if (a->kind == ACC_TDATA) {   /* 0x5058a0 */
         Save *sv = FESave_Current();
         if (arg && !strcmp(arg, "CASH")) return FE_MoneyText(sv ? sv->money : 0);
@@ -1683,6 +1704,15 @@ const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
         const SaveCar *c = acc_car(a);
         return c ? c->rec + 4 : NULL;
     }
+    if (a->kind == ACC_FDCAR) {   /* FEFactoryDriverCarAccessor (0x519370): the mission's car object */
+        const SaveCar *c = FEFactory_Car();
+        return c ? c->rec + 4 : NULL;
+    }
+    if (a->kind == ACC_FDPRIZE) {   /* FEFactoryDriverPrizeCarAccessor_v36 0x519e10: the last mission's prize */
+        const uint8_t *m = FEFactory_Last();
+        if (!m) m = FEFactory_Mission();   /* (the original reads 0x69c8f0 unchecked) */
+        return m ? FEData_CarById(rec16(m, 0x10)) : NULL;
+    }
     return NULL;
 }
 
@@ -1691,7 +1721,7 @@ const char *FEAccess_CarFile(const FEAccessor *a)
     if (!a) return NULL;
     refresh(a);
     if (!a->count) return NULL;
-    if (a->kind == ACC_MERGED) {
+    if (a->kind == ACC_MERGED || a->kind == ACC_FDCAR || a->kind == ACC_FDPRIZE) {
         const uint8_t *r = FEAccess_CarRecord(a);
         return r ? (const char *)r + 0x7f : NULL;
     }
@@ -2163,4 +2193,85 @@ int FEData_Opponents(void)
 {
     FEAccessor *a = FEAccess_Find("Game.NumOpponents");
     return a ? a->min + a->pos : 0;
+}
+
+/* ---------------------------------------------------------------- shared lookups */
+
+const uint8_t *FEData_PartRecord(int32_t id) { return part_rec(id); }
+
+const uint8_t *FEData_CarById(int id)   /* 0x4f39e0 over the whole list (0x6919e8) */
+{
+    if (!s_car) return NULL;
+    for (size_t i = 0; (i + 1) * CAR_SIZE <= s_car_size; i++)
+        if (rec16(s_car + CAR_SIZE * i, 0) == id) return s_car + CAR_SIZE * i;
+    return s_car_size >= CAR_SIZE ? s_car : NULL;
+}
+
+const uint8_t *FEData_TrackById(int id) { return track_by_id(id); }
+
+void FEData_NewCar(SaveCar *c, const uint8_t *r, const int32_t col[4], int32_t stripe, int32_t racenum)
+{
+    Save none = {0}, *sv = FESave_Current();
+    car_object(sv ? sv : &none, c, r, col, stripe, racenum);
+}
+
+bool FEData_AddOwned(int id, const int32_t col[4], int32_t stripe, int32_t racenum)
+{
+    Save *sv = FESave_Current();
+    const uint8_t *r = FEData_CarById(id);
+    if (!sv || !r) return false;
+    SaveCar *nc = realloc(sv->cars, sizeof *nc * (size_t)(sv->ncars + 1));
+    if (!nc) return false;
+    sv->cars = nc;
+    SaveCar *c = &sv->cars[sv->ncars];
+    car_object(sv, c, r, col, stripe, racenum);
+    memset(c->rec + 0x6a4, 0, 4);
+    sv->ncars++;
+    for (int i = 0; i < sv->ncars; i++)   /* 0x501080 */
+        for (int j = i + 1; j < sv->ncars; j++)
+            if (car_before(sv->cars[j].rec + 4, sv->cars[i].rec + 4)) {
+                SaveCar t = sv->cars[i];
+                sv->cars[i] = sv->cars[j];
+                sv->cars[j] = t;
+            }
+    return true;
+}
+
+int FEData_PersonalityIndex(int id)   /* 0x4e2900: nfs5.per's record of an id, else the first */
+{
+    static uint8_t *per;
+    static size_t nper;
+    if (!per) per = vfs_read_all("FEData\\Data\\nfs5.per", &nper);
+    for (int i = 0; per && i < (int)(nper / 0x2c); i++)
+        if (rec16(per, 0x2c * i) == id) return i;
+    return 0;
+}
+
+bool FEData_OpponentCar(int id, char spec[0x40], uint32_t col[4], int32_t *stripe, int32_t *racenum)
+{
+    /* 0x4eb830's car for an opponent: its record by id (0x4f39e0), one of its colours and interiors
+       picked (0x537db0), stripes half the time and a race number a fifth of it (rand), its car object
+       (0x4eda40) as the description gets it (0x4ee430) */
+    const uint8_t *r = FEData_CarById(id);
+    if (!r) return false;
+    uint32_t body = 0xffff0000u, c3 = 0xffff0000u, c4 = 0xffff0000u, inside = 0xffffffffu;
+    int nb = rec16(r, 0x3e6), ni = rec16(r, 0x528);
+    if (nb > 0) {
+        uint32_t k = REAL_rand() % (uint32_t)nb;
+        body = swap32((uint32_t)rec32(r, 0x3ec + 16 * (int)k));
+        c3 = swap32((uint32_t)rec32(r, 0x3f0 + 16 * (int)k));
+        c4 = swap32((uint32_t)rec32(r, 0x3f4 + 16 * (int)k));
+    }
+    if (ni > 0) inside = swap32((uint32_t)rec32(r, 0x530 + 16 * (int)(REAL_rand() % (uint32_t)ni)));
+    *stripe = 0;
+    *racenum = -1;
+    if (CRT_rand() % 100 > 50) *stripe = g_carnschemes ? (int32_t)((uint32_t)CRT_rand() % g_carnschemes) : 0;   /* (0x6115f8) */
+    if (CRT_rand() % 100 > 80) *racenum = CRT_rand() % 100 - 1;
+    /* (the car object's +0x674 body, +0x678 interior, +0x67c, +0x680 in the description's order) */
+    col[0] = body | 0xff000000u;
+    col[1] = c3 | 0xff000000u;
+    col[2] = c4 | 0xff000000u;
+    col[3] = inside | 0xff000000u;
+    snprintf(spec, 0x40, "%s", (const char *)r + 0xb1);
+    return true;
 }
