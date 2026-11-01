@@ -1989,6 +1989,16 @@ void FEData_TourResult(int race, const int *places, const int *times, const bool
     FESave_Write();
 }
 
+/* A quit career race (0x4ed590 with 0x657e34 set): nothing recorded, only the tournament's end
+   (0x503080; 0x503000's resets are the port's s_tour_race). */
+void FEData_TourEnd(void)
+{
+    uint8_t *r = (uint8_t *)FEData_Tournament();
+    if (!FESave_Current() || !r) return;
+    tour_end(r);
+    FESave_Write();
+}
+
 /* A new car object of a record (0x4eda40 -> 0x4ee230): its id, the record, the colours (+0x674 ..
    +0x680), the stripe package (+0x684) and race number (+0x688), the market's fields none, the player's
    (+0x6a0), the settings a new car's kept at +0x714 too, the record's stock parts (+0x3bc ids from +0x3be)

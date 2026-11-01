@@ -108,7 +108,7 @@ bool app_frame(void)
                     char rn[32], rc[32];
                     int32_t best, time;
                     if (!g_race_quit && DRIVE_PlayerResult(rn, rc, &best, &time)) FEApp_RaceRecord(rn, rc, best, time);   /* (0x4ed590 skips a quit race, 0x657e34) */
-                    FEApp_RaceOver(places, times, clean, n);
+                    FEApp_RaceOver(places, times, clean, n, g_race_quit != 0);
                 }
                 DRIVE_Shutdown();
                 if (fe_start[0]) {
