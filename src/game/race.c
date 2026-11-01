@@ -86,14 +86,23 @@ void Race_Restart(int32_t start)
     g_sim_tick = start;
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x4a4560 */
     Render_SeedRand((uint32_t)g_race_seed);   /* 0x44fbd0 */
-    PENDING_NOTE(0x414ed0, "the race restart's other parts (the cops' script, the cameras 0x412170)");
+    PENDING_NOTE(0x4030b0, "the cops' script read again (0x40e410 on the pursuit's .cop)");
+    g_race_demo = 0;                       /* 0x406a30 */
     for (int i = 0; i < g_ncars; i++) {
         g_ranked.c[i] = g_cars[i];   /* 0x411100 */
         g_ordered.c[i] = g_cars[i];
     }
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], (uint32_t)i);   /* 0x410790 */
     for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
-    AI_MakeControllers();                  /* 0x406780, 0x406580 */
+    /* 0x406780 frees the controllers, 0x406770 clears the cops' chase slots (0x40b510) and makes them
+       again (0x406580). */
+    AI_MakeControllers();
+    /* 0x406a40: the drivers' moods reset (0x40ab60 on each race car's +0xe3c, not ported), the leaders
+       the first human and the first rival until the ranking's first tick (the lists' first slots, as
+       they are), the cops' targets (0x5e6658 ..) cleared. */
+    PENDING_NOTE(0x406a40, "the AI drivers' moods (+0xe3c) and the cops' targets");
+    g_lead_human = g_first_human = g_humans.c[0];
+    g_first_rival = g_last_rival = g_rivals.c[0];
     Race_ResetRanking();
     /* 0x468fe0: the render's part: the skid marks cleared (0x479d60), the sky's textures loaded again
        (0x45dbc0), the weather anew (0x459130), the headlights on the local car (0x452550). */
@@ -101,4 +110,5 @@ void Race_Restart(int32_t start)
     if (g_track_name[0]) Sky_LoadFsh(g_track_name, true);
     Weather_Restart();
     if (g_race_local < g_ncars) Headlights_SetCar(g_cars[g_race_local]);
+    PENDING_NOTE(0x412170, "the force feedback's car (0x533090)");
 }
