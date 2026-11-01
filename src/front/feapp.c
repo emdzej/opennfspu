@@ -349,6 +349,9 @@ static void callback(const char *cb)
             (void)b;
             FEApp_Message(m);   /* 0x512d00 */
         }
+    } else if (!strcmp(cb, "QUICKFIX")) {
+        int m = FEData_QuickFix();   /* FEQuickFixCallBackList 0x50e9f0 */
+        if (m > 0) FEApp_Message(m);
     } else if (!strcmp(cb, "SELLCAR")) {
         /* FEGarageCallBackList_v57 0x50f590: not the only car (the message 0x3c); else its confirmation
            panel (+0x2d8 slot 0x50) and the sale at the car's value: pending (0x4f83f0) */

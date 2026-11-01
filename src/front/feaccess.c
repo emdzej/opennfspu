@@ -146,6 +146,8 @@ static void graphics(void)
 static int16_t rec16(const uint8_t *r, int off) { int16_t v; memcpy(&v, r + off, 2); return v; }
 static int32_t rec32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
 
+static int career_year(void);
+
 static const uint8_t *part_rec(int32_t id)   /* 0x49c3e0: an nfs5.prt record by its id */
 {
     static uint8_t *prt;
@@ -195,6 +197,55 @@ static float wear_of(const SaveCar *c, int type)
         n++;
     }
     return 1 < n ? sum / (float)n : sum;
+}
+
+/* A part's repair in a year (0x518160): its price grown since its year as its worth, times its wear. */
+static int32_t part_repair(int32_t id, int32_t saved, int year)
+{
+    const uint8_t *p = part_rec(id);
+    if (!p) return 0;
+    int n = year - rec16(p, 0x46), sum = 0;
+    for (int i = 0; i < n && i < 0x3e; i++) sum += (int32_t)exe_u32(0x5ba4a4 + 4u * (unsigned)i);
+    int32_t price = rec32(p, 0x5c);
+    float wf;
+    memcpy(&wf, &saved, 4);
+    return ((price * sum) / 100 + price) * (int)wf / 100;
+}
+
+/* The repair screen's categories (FEOwnedCarAccessor's texts, 0x4f5xxx): their part types (+0x26) and,
+   for the damage, the average wear (0x4eecb0 ..; bodywork 6 and 7 together, 0x4eee40) shown as the
+   condition left ("%2.0f" of 100 less it); the cost the installed parts' repairs (0x4ef230 ..). */
+static const struct { const char *name; int type, type2; } k_cats[9] = {
+    {"ENGINE", 1, 0}, {"BRAKES", 2, 0}, {"TRANSMISSION", 3, 0}, {"SUSPENSION", 4, 0}, {"SHOCKS", 5, 0},
+    {"BODYWORK", 6, 7}, {"SWAYBARS", 8, 0}, {"TIRES", 9, 0}, {"COSMETIC", 10, 0}};
+
+static int32_t category_cost(const SaveCar *c, int type, int type2, int year)
+{
+    int32_t sum = 0;
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+        const uint8_t *p = part_rec(c->parts[i][0]);
+        int t = p ? rec16(p, 0x26) : -1;
+        if (t == type || (type2 && t == type2)) sum += part_repair(c->parts[i][0], c->parts[i][1], year);
+    }
+    return sum;
+}
+
+/* QUICKFIX (FEQuickFixCallBackList 0x50e9f0): every category's repair (its check box: all here), not with
+   too little money (the message 0x329); else the parts' wear to none (0x4efb00 ..), the money less it. */
+int FEData_QuickFix(void)
+{
+    Save *sv = FESave_Current();
+    FEAccessor *a = FEAccess_Find("OwnedCars.Car");
+    if (!sv || !a || !FEAccess_Count(a)) return -1;
+    SaveCar *c = &sv->cars[FEAccess_Pos(a)];
+    int year = career_year();
+    int32_t total = 0;
+    for (int k = 0; k < 9; k++) total += category_cost(c, k_cats[k].type, k_cats[k].type2, year);
+    if (sv->money < total) return 0x329;
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) c->parts[i][1] = 0;   /* (0.0f) */
+    sv->money -= total;
+    FESave_Write();
+    return 0;
 }
 
 /* A car's damage in per cent (0x4eefd0): its parts' wear by type, 6 and 7 at half, over 9 (0x5b74b8). */
@@ -641,6 +692,23 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!sv || !a->count) return "";
         if (!strcmp(arg, "PURCHASEPRICE")) return FE_MoneyText(rec32(sv->cars[a->pos].rec, 0x6a4));
         if (!strcmp(arg, "CURRENTVALUE")) return FE_MoneyText(FEData_CarValue(&sv->cars[a->pos], sv->usedinfo));
+        static char db[16];
+        const SaveCar *c = &sv->cars[a->pos];
+        if (!strcmp(arg, "OVERALLDAMAGE")) { snprintf(db, sizeof db, "%2.0f", 100.0 - car_damage(c)); return db; }
+        int32_t total = 0;
+        for (int k = 0; k < 9; k++) {
+            size_t nl = strlen(k_cats[k].name);
+            int32_t cost = category_cost(c, k_cats[k].type, k_cats[k].type2, career_year());
+            total += cost;
+            if (strncmp(arg, k_cats[k].name, nl) || strncmp(arg + nl, "DAMAGE", 6)) continue;
+            if (!strcmp(arg + nl + 6, "COST")) return FE_MoneyText(cost);
+            if (!arg[nl + 6]) {
+                float w = k_cats[k].type2 ? (wear_of(c, k_cats[k].type) + wear_of(c, k_cats[k].type2)) * 0.5f : wear_of(c, k_cats[k].type);
+                snprintf(db, sizeof db, "%2.0f", 100.0 - w);   /* "%2.0f" 0x5dae18 */
+                return db;
+            }
+        }
+        if (!strcmp(arg, "OVERALLDAMAGECOST")) return FE_MoneyText(total);
         if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
     }
     if (!arg || !*arg || !strcmp(arg, "SHORT")) return FEAccess_Text(a);

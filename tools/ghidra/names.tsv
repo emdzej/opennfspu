@@ -2598,3 +2598,6 @@
 004f83f0	FECar_Value	frontend	high	An owned car's value: price x year factor x 0.01, mileage and damage tables, parts' worth, a floor of 5 per cent
 004eefd0	FECar_Damage	frontend	high	The installed parts' wear by type (6, 7 at half) over 9
 00517b00	FEPart_Worth	frontend	high	A part's price grown by the yearly rates since its year, less its wear
+00518160	FEPart_RepairCost	frontend	high	A part's price grown since its year, times its wear
+004ef230	FECar_RepairCost	frontend	high	The installed parts' repairs of a type (engine 1; 0x4ef290 .. the others)
+0050e9f0	FEQuickFixCallBackList_Fix	frontend	high	The checked categories' repairs: too little money 0x329, else the wear gone
