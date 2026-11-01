@@ -10,8 +10,9 @@
 #include "render/hud2d.h"
 #include "front/fe2d.h"
 
-/* The folders the original's path table holds (0x65b330 controls, 0x65b334 art, 0x65b340 locale,
-   0x65b344 layouts; set at start). */
+/* The folders the original's path table holds (0x65b32c movies, 0x65b330 controls, 0x65b334 art,
+   0x65b340 locale, 0x65b344 layouts; set at start). */
+#define FE_DIR_MOVIES "FEData\\Movies\\"
 #define FE_DIR_CONTROLS "FEData\\Controls"
 #define FE_DIR_ART "FEData\\Art\\"
 #define FE_DIR_LOCALE "FEData\\Locale\\"

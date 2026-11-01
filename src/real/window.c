@@ -13,10 +13,6 @@
 
 Window WINDOW_cur;                 /* 0x5de620 (0x30 bytes copied) */
 int WINDOW_defaultdepth;           /* 0x5dead0 */
-/* The display window's type and depth (0x5de65c, 0x5de65d: bytes +0xc, +0xd of the display's window at
-   0x5de650), which the current window keeps when none is selected. Set by the display's setup (not
-   ported: zero). */
-static uint8_t display_type, display_depth;
 /* The display's size (0x5deac8, 0x5deacc): the clip of a window without a size. */
 static int display_w, display_h;
 static ThrashSurface *locked;      /* 0x69dd18: the driver surface locked for the current window */
@@ -118,12 +114,66 @@ static void unlock_current(void)
     THRASH.fn.window(0);
 }
 
+/* The shape type of a THRASH texture format. THRASH_FormatToShapeType 0x5565e0 */
+static uint8_t format_type(uint32_t format)
+{
+    switch (format & 0x7fffffffu) {
+    case 1: return 0x7a;
+    case 2: return 0x7b;
+    case 3: case 0xb: return 0x7e;
+    case 4: return 0x78;
+    case 5: return 0x7f;
+    case 6: return 0x7d;
+    case 7: return 0x6d;
+    case 0xc: return 0xf8;
+    case 0xd: return 0xfd;
+    }
+    return 0;
+}
+
 /* Locks the driver's window a window stands for and fills its header from the surface. 0x5340d0 */
 static int lock_window(Window *w)
 {
-    PENDING_NOTE(0x5340d0, "WINDOW_lock");
-    (void)w;
-    return 0;
+    int8_t id = w->lock;
+    THRASH.fn.window(id);
+    locked = THRASH.fn.lockwindow();
+    if (!locked) return 0;
+    w->magic = 0x57494e44;   /* 'WIND' */
+    w->width = locked->width;
+    w->height = locked->height;
+    w->type = format_type((uint32_t)locked->format);
+    uint8_t bits = (uint8_t)SHAPE_typevalid(&w->type);
+    w->depth = bits;
+    w->bpp = bits == 15 ? 16 : bits;
+    w->lock = id;
+    w->clip[0] = w->clip[1] = 0;
+    w->clip[2] = locked->width;
+    w->shift = shift_of(w->bpp);
+    w->clip[3] = locked->height;
+    w->stride = locked->pitch;
+    w->shape = NULL;
+    w->pixels = locked->pixels;
+    return 1;
+}
+
+/* The display's window (0x5de650): the driver's front buffer (lock 1), 640 x 480 until the mode's setup
+   locks it. */
+Window WINDOW_display = {.lock = 1, .clip = {0, 0, 640, 480}};
+/* The back buffer's (0x5de680, lock 2). */
+Window WINDOW_back = {.lock = 2, .clip = {0, 0, 640, 480}};
+
+int WINDOW_selectdisplay(void) { return WINDOW_select(&WINDOW_display); }   /* 0x5342a0 */
+int WINDOW_selectback(void) { return WINDOW_select(&WINDOW_back); }         /* 0x5342b0 */
+
+void WINDOW_displayinit(void)
+{
+    int ok = WINDOW_select(&WINDOW_display);
+    WINDOW_deselect();
+    if (ok) {
+        display_w = WINDOW_display.width;
+        display_h = WINDOW_display.height;
+        WINDOW_defaultdepth = WINDOW_display.depth;
+    }
 }
 
 void WINDOW_destroy(Window *w)
@@ -141,8 +191,8 @@ int WINDOW_select(Window *w)
     unlock_current();
     if (!w) {
         memset(&WINDOW_cur, 0, offsetof(Window, rec));
-        WINDOW_cur.type = display_type;
-        WINDOW_cur.depth = display_depth;
+        WINDOW_cur.type = WINDOW_display.type;     /* (0x5de65c, 0x5de65d) */
+        WINDOW_cur.depth = WINDOW_display.depth;
         return 1;
     }
     if (w->lock != 0 && w->lock != -1) ok = lock_window(w);
@@ -224,4 +274,74 @@ void WINDOW_drawshape(const uint8_t *shape, int x, int y)
         return;
     }
     movdfl(shape, x, y, &MOVDFL_copy);
+}
+
+/* A shape scaled to w x h at (x, y) on the current window (negative sizes mirror), sampled at the pixel
+   centres; an 8-bit shape on a 15- or 16-bit window through its palette (0x58af95), any other converted
+   to the window's type first and copied (0x58ae13). The translucent row drawers of 0x5deb14 aren't
+   ported (it is never set where the port draws). 0x5628c0 */
+void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h)
+{
+    if (!w || !h) return;
+    int sw = (int16_t)(shape[4] | shape[5] << 8), sh = (int16_t)(shape[6] | shape[7] << 8);
+    uint8_t *converted = NULL;
+    uint16_t clut[256];
+    bool paletted = false;
+    if (shape[0] != WINDOW_cur.type) {
+        if (SHAPE_typevalid(shape) == 8 && (WINDOW_cur.depth == 16 || WINDOW_cur.depth == 15)) {
+            paletted = true;
+            const uint16_t *c = getclut16ptr(shape, clut);
+            if (c != clut) memcpy(clut, c, sizeof clut);
+            if (WINDOW_cur.depth == 15) {   /* 565 -> 1555, black left clear (0x570050) */
+                for (int i = 0; i < 256; i++)
+                    clut[i] = clut[i] ? (uint16_t)((clut[i] >> 1 & 0xffe0) | (clut[i] & 0x1f) | 0x8000) : 0;
+            }
+        } else {
+            converted = SHAPE_converttype(shape, WINDOW_cur.type, 0, 0);
+            if (!converted) return;
+            shape = converted;
+        }
+    }
+    int x1 = WINDOW_cur.clip[2], y1 = WINDOW_cur.clip[3], cx0 = WINDOW_cur.clip[0], cy0 = WINDOW_cur.clip[1];
+    if (WINDOW_cur.pixels && x < x1 && y < y1 && cx0 < (w < 1 ? -w : w) + x && cy0 < (h < 1 ? -h : h) + y) {
+        int rowbytes = SHAPE_rowbytes(shape);
+        int xstep = (sw << 16) / w, ystep = (sh << 16) / h;
+        int yacc = ystep / 2, xacc = xstep / 2;
+        if (h < 0) {
+            h = -h;
+            yacc = ystep / 2 + (sh << 16);
+        }
+        if (w < 0) {
+            w = -w;
+            xacc = xstep / 2 + (sw << 16);
+        }
+        if (y < cy0) {
+            yacc += (cy0 - y) * ystep;
+            h += y - cy0;
+            y = cy0;
+        }
+        if (y1 < y + h) h = y1 - y;
+        if (x < cx0) {
+            xacc += (cx0 - x) * xstep;
+            w += x - cx0;
+            x = cx0;
+        }
+        if (x1 < x + w) w = x1 - x;
+        const uint8_t *src = shape + 0x10;
+        int bytes = WINDOW_cur.bpp >> 3;
+        uint8_t *row = WINDOW_cur.pixels + WINDOW_offset(x, y);
+        for (; h > 0; h--, row += WINDOW_cur.stride, yacc += ystep) {
+            const uint8_t *s = src + (yacc >> 16) * rowbytes;
+            for (int i = 0, xa = xacc; i < w; i++, xa += xstep) {
+                int col = xa >> 16;
+                if (paletted) {
+                    uint16_t v = clut[s[col]];
+                    memcpy(row + i * 2, &v, 2);
+                } else {
+                    memcpy(row + i * bytes, s + col * bytes, (size_t)bytes);
+                }
+            }
+        }
+    }
+    if (converted) MEM_purge(converted);
 }

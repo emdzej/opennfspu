@@ -1,6 +1,7 @@
 /* The render system (render.h): Render_Init and the render system object, the graphics device, the
    render-state object, display mode and quality, cameras and views, the race frame. */
 #include "render/render.h"
+#include "real/window.h"
 #include "render/sky.h"
 #include "game/camera.h"
 #include "game/hud.h"
@@ -174,15 +175,15 @@ static void dev_clear(RDevice *d)
 static const RDeviceVtbl device_vt = { dev_destroy, dev_open, dev_begin, dev_present, dev_clear };   /* 0x5bc41c */
 
 /* GLIDE_env 0x556910: the Glide environment variables (SST_VIDEO_24BPP, FX_GLIDE_NO_SPLASH, ...) don't
-   exist here; DDRAW_init, the 2D window (0x5341f0), MOUSE_init, KEY_init and the timer task (0x55fc00)
-   belong to other modules. */
+   exist here; DDRAW_init, MOUSE_init, KEY_init and the timer task (0x55fc00) belong to other modules.
+   The display's window is locked once for its size and depth (0x5341f0 on 0x5de650). */
 bool GLIDE_env(bool windowed, const char *driver, int display, int mode)
 {
     if (!THRASH_opendll(driver)) return false;           /* THRASH_drivername 0x5753f0 */
     if (!THRASH.fn.init()) return false;                 /* THRASH_openwindow */
     if (display) THRASH.fn.selectdisplay(display);
     THRASH.fn.setvideomode(mode, 2, 1);
-    PENDING_NOTE(0x5341f0, "WINDOW_create (the 2D window of the mode)");
+    WINDOW_displayinit();
     return true;
 }
 

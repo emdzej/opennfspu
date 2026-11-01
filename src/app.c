@@ -20,6 +20,7 @@
 #include "render/drive_selftest.h"
 #include "front/fe_selftest.h"
 #include "front/feapp.h"
+#include "front/feintro.h"
 #include "front/fesave.h"
 #include "front/feaccess.h"
 #include "render/render.h"
@@ -39,6 +40,8 @@ static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end fr
 static int fe_frames;
 static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (default gamesetup) */
 static bool fe_on;
+static int intro;             /* the intro movies before the front end (default start; --param intro=0 skips them):
+                                 1 to start, 2 playing, 0 none */
 static char race_track[64];   /* the race the front end started (GameMain 0x4b6840: FE, then the race) */
 
 bool app_init(void)
@@ -69,8 +72,11 @@ bool app_init(void)
     if (!plat_param("fe", fe_start, sizeof fe_start)) fe_start[0] = 0;
     if (!plat_param("fecb", fe_cb, sizeof fe_cb)) fe_cb[0] = 0;
     /* Without a viewer parameter the game starts as the original does: in the front end. */
-    if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest)
+    if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest) {
         snprintf(fe_start, sizeof fe_start, "gamesetup");
+        /* GameMain 0x4b6840: FE_IntroMovies once, before the first FEApplication_Run (unless 0x65743c) */
+        intro = !(plat_param("intro", v, sizeof v) && v[0] == '0');
+    }
     return true;
 }
 
@@ -105,6 +111,12 @@ bool app_frame(void)
                     return false;
                 }
             }
+        } else if (intro) {
+            if (intro == 1) {
+                FEIntro_Start();
+                intro = 2;
+            }
+            if (!FEIntro_Frame()) intro = 0;
         } else if (fe_start[0]) {
             if (!fe_on) fe_on = FEApp_Init(fe_start);
             if (fe_on) {

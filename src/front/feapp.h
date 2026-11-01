@@ -16,6 +16,8 @@
 
 /* The front end's start: its templates, strings, fonts, the 2D queue; then the start screen. */
 bool FEApp_Init(const char *start);
+/* The sound opened once (GameMain's Audio_Init 0x4a6610, before the intro movies and the front end). */
+bool FEApp_Sound(void);
 /* A screen by its layout's name ("gamesetup", "quickrace", ...): onto the stack (push), else in place
    of the top one. */
 bool FEApp_GotoScreen(const char *name, bool push);

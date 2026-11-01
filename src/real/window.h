@@ -33,6 +33,15 @@ _Static_assert(sizeof(Window) == 0x40, "the window header of createw.c");
 
 /* The current window (0x5de620): the selected window's header up to the record. */
 extern Window WINDOW_cur;
+/* The display's window (0x5de650): it stands for the driver's front buffer (lock 1). */
+extern Window WINDOW_display;
+/* The back buffer's window (0x5de680, lock 2). */
+extern Window WINDOW_back;
+int WINDOW_selectdisplay(void);   /* 0x5342a0 */
+int WINDOW_selectback(void);      /* 0x5342b0 */
+/* The display's window locked once after the mode is set: the display's size and depth, the default
+   depth of new windows (the setup after setvideomode, GLIDE_env 0x556910 and the EAGL device's 0x5388a0). */
+void WINDOW_displayinit(void);
 /* The default depth of new windows (0x5dead0: the display's), 0 = 16 bits. */
 extern int WINDOW_defaultdepth;
 
@@ -63,3 +72,5 @@ void WINDOW_clear(uint32_t colour);
 void WINDOW_fillrect(int x, int y, int w, int h, uint32_t colour);
 /* Draws a shape at (x, y) into the current window, converted to its type and clipped. 0x53d2e0 */
 void WINDOW_drawshape(const uint8_t *shape, int x, int y);
+/* A shape scaled to w x h at (x, y) on the current window (a negative size mirrors). 0x5628c0 */
+void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h);

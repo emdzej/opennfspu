@@ -63,6 +63,13 @@ static bool picture_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_click(FertControl *c);
 static void dialog_open(int kind, const char *text, int b1, int b2);
 static bool s_sound;
+
+bool FEApp_Sound(void)
+{
+    if (!s_sound) s_sound = Audio_Init();
+    return s_sound;
+}
+
 static uint32_t s_colours[4];         /* the race car's colours (the description's +0x218 ..) */
 static bool s_havecol;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
@@ -283,7 +290,7 @@ bool FEApp_Init(const char *start)
     g_r3d_frontend = 1;
     /* The sound (GameMain's Audio_Init 0x4a6610 before the front end; the port's race closes it at its
        end, so it opens again here) and the menus' music. */
-    if (!s_sound) s_sound = Audio_Init();
+    FEApp_Sound();
     s_music_at = -1;   /* 0x65b928: the application (the car renderer's showroom mode) */
     while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     if (s_nsaved) {

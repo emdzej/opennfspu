@@ -187,7 +187,10 @@ Identified with FFmpeg's EA demuxer, which reads these files as they are (`ffpro
   (other frames), audio `SCHl` (header), `SCCl` (count), `SCDl` (data), `SCEl` (end). Video is EA
   "Madcow" (`eamad`: an MPEG-1-like intra/inter DCT codec), 15.15 fps; 192x144 or 208x144 (chronicle
   clips), 320x240 (`EArts-av.mad`), 320x176 (`inPC-av.mad`). Audio: EA-XA R1 ADPCM, 22050 Hz stereo. The
-  exe checks `'MADk'` in `0x4dc300` and `0x4e1xxx`.
+  exe checks `'MADk'` in `0x4dc300` and `0x4e1xxx`. The exe's decoder (0x56c800..0x56d020, its assembly at
+  0x592c10..0x5933f0) also takes `MADe`: a predicted frame that isn't kept as the next one's reference. A
+  video chunk: +0xc the frame time (16.16 ms), +0x10/+0x12 width and height, +0x15 the quality, the bit
+  stream of 16-bit words from +0x18; 16 x 16 macroblocks of 7-bit YUV 4:2:2 (port: `src/real/mad.c`).
 - **ASF** (music, movie audio): `SCHl` starts with a `'PT\0\0'` patch header of tagged values (tag, length,
   big-endian value; `0xfd` opens the sub-header, `0xff` ends it): `0x80` version, `0x82` channels, `0x84`
   sample rate, `0x85` sample count; no `0x83` codec tag, so the default applies (EA-XA R1). Music: 32000 Hz
