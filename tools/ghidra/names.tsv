@@ -2648,3 +2648,5 @@
 00517df0	PartsStock_Install	frontend	high	The fitted part of the type and category off into the stock, the part out of the stock onto the car
 00518020	PartsStock_Uninstall	frontend	high	A fitted part into the stock
 004f1130	FECarSetupCallbackList_Update	frontend	high	Install or uninstall shown by the row chosen
+005164e0	FEPartsDamageRepairAccessor_ctor	frontend	high	A car accessor's fitted parts with their wear (Parts.UsedDamageList on UsedCar.Car)
+00516640	FEPartsDamageRepairAccessor_DrawItem	frontend	high	A row: category label, name, wear "%d %" at ID_DAMAGEPOS, none dim

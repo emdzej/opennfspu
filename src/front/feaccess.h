@@ -102,8 +102,10 @@ typedef struct {
     bool label;               /* its category's label above it (13 high) */
     int category;             /* the label's string */
     int height;               /* 14, and 13 more with the label */
-    char status[40];          /* the car setup's: INSTALLED / UNINSTALLED at ID_INSTALLYPOS */
+    char status[40];          /* the car setup's INSTALLED / UNINSTALLED, the used car's wear */
     bool status_dim;
+    const char *status_pos;   /* the control whose x places it (+3) */
+    int status_align;         /* 0 from there, 2 to there */
 } FEPartsRow;
 bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out);
 /* The parts screen made (0x518ba0). */

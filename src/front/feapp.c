@@ -1100,11 +1100,11 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
             if (!chosen) fg = 0xffffffffu;
         }
         list_text(f, tx, yy + 1.0f, row.text, fg, 0);
-        if (row.status[0]) {   /* (at ID_INSTALLYPOS + 3) */
-            FertControl *ip = control_named(FEApp_Top(), "ID_INSTALLYPOS");
+        if (row.status[0]) {   /* (at its control's x + 3: ID_INSTALLYPOS, ID_DAMAGEPOS) */
+            FertControl *ip = row.status_pos ? control_named(FEApp_Top(), row.status_pos) : NULL;
             int32_t ir[4] = {0, 0, 0, 0};
             if (ip) control_rect(ip, ir);
-            list_text(f, ip ? (float)(ir[0] + ox + 3) : x + w * 0.7f, yy + 1.0f, row.status, chosen ? fg : row.status_dim ? 0x80000000u : 0xff000000u, 0);
+            list_text(f, ip ? (float)(ir[0] + ox + 3) : x + w * 0.7f, yy + 1.0f, row.status, chosen ? fg : row.status_dim ? 0x80000000u : fg, row.status_align);
         }
         if (row.has_price) {
             char pb[24];

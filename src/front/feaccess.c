@@ -17,7 +17,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -1006,9 +1006,28 @@ bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
         snprintf(out->text, sizeof out->text, "%s %s", (const char *)p + 8, FEStrings_Get(rec32(p, 4)));
         snprintf(out->status, sizeof out->status, "%s", FEStrings_Get(rows[row].fitted ? 0x9f8 : 0xa05));
         out->status_dim = !rows[row].fitted;   /* (at half alpha, 0x80) */
+        out->status_pos = "ID_INSTALLYPOS";
         out->height = 0xe;
         out->category = part_category(p);
         const uint8_t *prev = row ? install_part(rows[row - 1], NULL) : NULL;
+        if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
+        return true;
+    }
+    if (a->kind == ACC_USEDDMG) {   /* FEPartsDamageRepairAccessor_v15 0x516640 */
+        const SaveCar *uc = acc_car(FEAccess_Find("UsedCar.Car"));
+        if (!uc || row < 0 || row >= uc->nother) return false;
+        const uint8_t *p = part_rec(uc->parts[uc->ninstalled + row][0]);
+        if (!p) return false;
+        float wear;
+        memcpy(&wear, &uc->parts[uc->ninstalled + row][1], 4);
+        snprintf(out->text, sizeof out->text, "%s %s", (const char *)p + 8, FEStrings_Get(rec32(p, 4)));
+        snprintf(out->status, sizeof out->status, "%d %%", (int)wear);   /* ("%d %" 0x5dce5c of its wear) */
+        out->status_pos = "ID_DAMAGEPOS";
+        out->status_align = 2;
+        out->dim = wear == 0.0f;   /* (none: at 0x40) */
+        out->height = 0xe;
+        out->category = part_category(p);
+        const uint8_t *prev = row ? part_rec(uc->parts[uc->ninstalled + row - 1][0]) : NULL;
         if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
         return true;
     }
@@ -1112,6 +1131,7 @@ void FEData_Init(void)
     add("Parts.AllParts", ACC_ALLPARTS, 2, 0, 0);       /* FEPartsAllPartsAccessor 0x514a30 */
     add("Parts.ShoppingList", ACC_BASKET, 0, 0, 0);     /* FEPartsShoppingBasket 0x5156c0 */
     add("Parts.InstallList", ACC_INSTALL, 0, 0, 0);     /* FEPartsCarSetupInventoryAccessor 0x515e70 */
+    add("Parts.UsedDamageList", ACC_USEDDMG, 0, 0, 0);  /* FEPartsDamageRepairAccessor 0x5164e0 on UsedCar.Car */
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     {
         FEAccessor *u = add("UsedCar.Car", ACC_OWNED, 0, 0, 0);   /* (0x4f5080(.., 0x33, 0, 0x4f85b0)) */
@@ -1173,6 +1193,12 @@ static void refresh(const FEAccessor *c)
         int n = r ? rec16(r, a->kind == ACC_COLOUR ? 0x3e6 : 0x528) : 0;
         a->count = n > 0 ? n : 1;
         if (a->pos >= a->count) a->pos = 0;
+        return;
+    }
+    if (a->kind == ACC_USEDDMG) {   /* (_v2 0x516520: the used car's fitted parts, 0x4efaf0) */
+        const SaveCar *uc = acc_car(FEAccess_Find("UsedCar.Car"));
+        a->count = uc ? uc->nother : 0;
+        if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
         return;
     }
     if (a->kind == ACC_ALLPARTS || a->kind == ACC_BASKET || a->kind == ACC_INSTALL) {
@@ -1296,6 +1322,7 @@ const char *FEAccess_Text(const FEAccessor *a)
         return "";
     case ACC_ALLPARTS:    /* (the item's text, slot 12 0x515590) */
     case ACC_INSTALL:
+    case ACC_USEDDMG:
     case ACC_BASKET: {
         FEPartsRow r;
         if (!FEData_PartsRow(a, a->pos, &r)) return "";
