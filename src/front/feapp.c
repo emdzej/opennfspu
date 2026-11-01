@@ -108,6 +108,8 @@ static int language(void) { return fe_int("language", 0); }
 
 static FertControl *load_screen(const char *name);
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool listbox_click(FertControl *c, int32_t mx, int32_t my);
+static FertControl *control_named(FertControl *w, const char *name);
 static void select_panel(FertControl *w, const char *name);
 static FertControl *load_screen(const char *name);
 
@@ -230,6 +232,7 @@ static FertControl *load_screen(const char *name)
         if (FertControl_findState(c, "hidden") >= 0) c->fecaps |= 0x20;
     }
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_USEDCARCBL")) s_used_parts = false;   /* (0x4f6790) */
+    if (!strcmp(screen_attr(w, "callbacklist"), "ID_BUYPARTSCBL")) FEData_PartsOpen();   /* (0x518ba0) */
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_TOURNYSCREEN")) {   /* (0x5051a0: its first offer) */
         s_tourny_win = w;
         s_tourny_offer = Market_FirstOffer();
@@ -417,6 +420,10 @@ static void callback(const char *cb)
         }
     } else if (!strcmp(cb, "SHOWPARTS") || !strcmp(cb, "SHOWDAMAGE")) {
         s_used_parts = cb[4] == 'P';   /* FEUsedCarCallbackList_v57 0x4f6bc0 / _v58 0x4f6c30 (+0x290) */
+    } else if (!strcmp(cb, "BUYPARTCALLBACK") || !strcmp(cb, "SELLPARTCALLBACK") || !strcmp(cb, "CLEARLISTCALLBACK") ||
+               !strcmp(cb, "REMOVEITEMCALLBACK") || !strcmp(cb, "PURCHASECALLBACK")) {
+        int m = FEData_PartsAction(cb);   /* (FEPurchasePartsCBL_v55 .. _v59) */
+        if (m > 0) FEApp_Message(m);   /* (0x32a: 0x512e70) */
     } else if (!strcmp(cb, "CHANGEDECAL")) {
         /* FEPaintShopCBL_v55 0x510a80: the race number's dialog (0x513b10: string 0xfb, digits, 2 at most) */
         dialog_open(DLG_INPUT, FEStrings_Get(0xfb), 0x2be, 0x2bf);
@@ -558,6 +565,9 @@ static FertControl *hit(FertControl *w, int32_t x, int32_t y)
             if (hit(c->sub, x - pos[0], y - pos[1])) return c;
             continue;
         }
+        /* (0x4c82c0: no rect, so no hit, with data.nosize 1, the passive controls': pictures, labels,
+           rectangles, watches) */
+        if (data_int_of(c, "nosize") == 1) continue;
         if (FertControl_contains(c, x - pos[0], y - pos[1])) return c;
     }
     return NULL;
@@ -590,6 +600,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         }
         s_parent = w;
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
+        if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 8) on_up(target);
         break;
     }
@@ -993,11 +1004,141 @@ static bool setting_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* A list box (NFS5.ListBox: FEComboBox always open, +0x1dd; its list's draw, 0x4c53e0 from LAB_004c60ce):
+   its accessor's rows from the first shown down its box (data.width x data.selectionboxmaxheight), each
+   drawn by its accessor (the parts lists': FEPartsAllPartsAccessor_v15 0x514ef0, FEPartsShoppingBasket_v15
+   0x515800): a category's label (its string centred between two lines) where the category changes, the
+   chosen row on the selected colour, a group's header with its icon (WeeIcons.fsh 3 shut / 0xb open), the
+   part's name and its price right of ID_PRICEPOS. The row chosen is kept in view (the scroll bar the
+   original keeps, +0x1bc, pends). */
+static struct { FertControl *c; int first; } s_lists[8];
+
+static int *list_first(FertControl *c)
+{
+    for (int i = 0; i < 8; i++)
+        if (s_lists[i].c == c) return &s_lists[i].first;
+    for (int i = 0; i < 8; i++)
+        if (!s_lists[i].c || i == 7) {
+            s_lists[i].c = c, s_lists[i].first = 0;
+            return &s_lists[i].first;
+        }
+    return &s_lists[0].first;
+}
+
+static HudFont *list_font(void)
+{
+    char fp[300];
+    FE_ResolvePath("Univers8b.ffn", fp, sizeof fp);   /* (data.fontpath) */
+    return FEFont_Get(fp);
+}
+
+static void list_text(HudFont *f, float x, float y, const char *t, uint32_t colour, int align)
+{
+    if (!f || !f->font || !t) return;
+    float fx, fy, fw, fh;
+    FONT_extent(f->font, t, &fx, &fy, &fw, &fh);
+    char *copy = FE2D_Alloc((int)strlen(t) + 1);
+    if (!copy) return;
+    strcpy(copy, t);
+    FE2D_Text(f, align == 2 ? x - fw : align == 1 ? x - fw * 0.5f : x, y, 0, colour, copy, 1.0f, 1.0f);
+}
+
+static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    if (!a) return true;
+    int32_t r[4];
+    control_rect(c, r);
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)data_int_of(c, "width"), h = (float)data_int_of(c, "selectionboxmaxheight");
+    int n = FEAccess_Count(a), pos = FEAccess_Pos(a), *first = list_first(c);
+    /* the chosen row in view */
+    if (pos < *first) *first = pos;
+    for (;;) {
+        int used = 0;
+        for (int i = *first; i <= pos && i < n; i++) {
+            FEPartsRow row;
+            if (FEData_PartsRow(a, i, &row)) used += row.height;
+        }
+        if (used <= (int)h || *first >= pos) break;
+        (*first)++;
+    }
+    FertControl *pp = control_named(s_parent ? s_parent : FEApp_Top(), "ID_PRICEPOS");
+    if (!pp) pp = control_named(FEApp_Top(), "ID_PRICEPOS");
+    int32_t pr[4] = {0, 0, 0, 0};
+    if (pp) control_rect(pp, pr);
+    float px = pp ? (float)(pr[0] + ox - 4) : x + w - 4.0f;
+    HudFont *f = list_font();
+    char icons[300];
+    FE_ResolvePath("WeeIcons.fsh", icons, sizeof icons);
+    FEShapes_Load(icons);
+    float yy = y;
+    FE2D_DepthStep();
+    for (int i = *first; i < n; i++) {
+        FEPartsRow row;
+        if (!FEData_PartsRow(a, i, &row)) continue;
+        if (yy + row.height > y + h + 1) break;
+        bool chosen = i == pos;
+        if (row.label) {   /* 0x5186c0: two lines and the category's name centred */
+            FE2D_Gouraud(x, yy, w, 1.0f, 0xff000000u, 0xff000000u, 0xff000000u, 0xff000000u);
+            list_text(f, x + w * 0.5f, yy + 1.0f, FEStrings_Get(row.category), 0xff000000u, 1);
+            FE2D_Gouraud(x, yy + 12.0f, w, 1.0f, 0xff000000u, 0xff000000u, 0xff000000u, 0xff000000u);
+            yy += 13.0f;
+        }
+        uint32_t bg = chosen ? 0xffbc0000u : row.header ? 0x60000000u : 0;   /* (highlightcolorselected) */
+        if (bg) FE2D_Gouraud(x, yy, w, 13.0f, bg, bg, bg, bg);
+        uint32_t fg = chosen ? 0xffffffffu : row.dim ? 0x40000000u : 0xff000000u;
+        float tx = x + 3.0f;
+        if (row.header) {
+            FeImage *ic = FEShapes_Image(icons, row.open ? 0xb : 3);
+            if (ic) {
+                FE2D_Image(ic, x, yy, (float)ic->w, (float)ic->h, 0xffffffffu, 0, false);
+                tx = x + (float)ic->w + 2.0f;
+            }
+            if (!chosen) fg = 0xffffffffu;
+        }
+        list_text(f, tx, yy + 1.0f, row.text, fg, 0);
+        if (row.has_price) {
+            char pb[24];
+            snprintf(pb, sizeof pb, "%d", (int)row.price);   /* ("%d" 0x5cd1b0) */
+            list_text(f, px, yy + 1.0f, pb, fg, 2);
+        }
+        yy += 14.0f;
+    }
+    return true;
+}
+
+/* A press on a list box chooses its row there (FEComboBox's 0x4c66c0 on its list). */
+static bool listbox_click(FertControl *c, int32_t mx, int32_t my)
+{
+    if (strcmp(c->id, "NFS5.ListBox")) return false;
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    if (!a) return true;
+    int32_t r[4];
+    control_rect(c, r);
+    (void)mx;
+    int n = FEAccess_Count(a), *first = list_first(c);
+    int yy = r[1];
+    for (int i = *first; i < n; i++) {
+        FEPartsRow row;
+        if (!FEData_PartsRow(a, i, &row)) continue;
+        int top = yy + (row.label ? 13 : 0);
+        if (my >= top && my < top + 14) {
+            FEAccess_SetPos(a, i);
+            PENDING_NOTE(0x4aab80, "the front end's click sound (5)");
+            return true;
+        }
+        yy += row.height;
+    }
+    return true;
+}
+
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): the bar, then its colour (its slot 0x74,
            the accessor's) as a 20 x 10 swatch 40 from its right and 4 down, outlined in black. (The custom
@@ -1264,6 +1405,17 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     const char *cbl = screen_attr(w, "callbacklist");
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
+    else if (!strcmp(cbl, "ID_BUYPARTSCBL")) {
+        bool buy, sell, basket, sel;   /* FEPurchasePartsCBL_v1 0x518cf0 */
+        bool part = FEData_PartsState(&buy, &sell, &basket, &sel);
+        enable(w, "ID_PARTSDESC", part);
+        enable(w, "ID_BUYPARTBUTTON", buy);
+        enable(w, "ID_SELLPARTBUTTON", sell);
+        enable(w, "ID_CLEARLIST", basket);
+        enable(w, "ID_REMOVEFROMLIST", sel);
+        enable(w, "ID_PURCHASEPART", basket);
+        enable(w, "ID_PARTDESCRIPBUTTON", buy);
+    }
     else if (!strcmp(cbl, "ID_PAINTSHOPCBL")) {
         FEData_PaintShop();
         if (s_dialog.purpose == DLG_FOR_DECAL && !s_dialog.up) {

@@ -179,6 +179,27 @@ When the garage car changes, the accessors take its colours. Every frame, the ca
 colours, package and number (+0x674 to +0x688). CHANGEDECAL asks for the race number in a
 two-digit input dialog (string 0xfb).
 
+## The parts shop
+
+The parts shop is FEPurchasePartsCBL (0x518ba0). The parts the player owns but hasn't fitted are the
+stock (0x69a0ec), which the save keeps as its `PartsMarket` section (n, then n part objects of
+0x168). The shop's two lists are:
+- **Parts.AllParts** (0x514a30), two groups under headers that open and shut (0x514d10):
+  - the parts that fit the garage car this year (0x5175f0), at their price (0x517aa0: +0x5c grown by
+    the yearly rates 0x5ba4a4);
+  - the stock without its body (0x518460), at their worth (0x517b00).
+- **Parts.ShoppingList** (0x5156c0): the transaction list, kept in the parts' order (0x515990). Its
+  TOTAL is the worths of the sales less the prices of the purchases.
+
+Purchasing (v59 0x518f30) needs the money (else message 0x32a). It then pays for each part bought and
+copies it into the stock (0x517ca0), and takes each part sold out of the stock for its worth
+(0x517ba0). In both lists a category's label (0x518640: by type, 13 high) heads the rows wherever the
+category changes.
+
+**List boxes** (NFS5.ListBox) are combo boxes that are always open (+0x1dd). The accessor draws each
+row. Passive controls (`data.nosize` 1: pictures, labels, rectangles, watches) have no hit rect
+(0x4c82c0), so they don't take the mouse.
+
 ## The port's order
 
 1. FERT's model: templates, layouts, controls, parts, attributes. Check: every template and layout

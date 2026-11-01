@@ -93,3 +93,20 @@ int FEAccess_Percent(const FEAccessor *a, const char *arg);
 void FEData_PaintShop(void);
 /* A colour accessor's colour (FEColourAccessor +0x2c; the dealer car's its palette entry). */
 uint32_t FEAccess_Colour(const FEAccessor *a);
+/* The parts shop's lists' rows (FEPartsAllPartsAccessor_v15 0x514ef0, FEPartsShoppingBasket_v15 0x515800). */
+typedef struct {
+    bool header, open;        /* a group's header and whether it's open */
+    char text[160];
+    bool has_price, dim;      /* dim: a part in stock already in the basket */
+    int32_t price;
+    bool label;               /* its category's label above it (13 high) */
+    int category;             /* the label's string */
+    int height;               /* 14, and 13 more with the label */
+} FEPartsRow;
+bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out);
+/* The parts screen made (0x518ba0). */
+void FEData_PartsOpen(void);
+/* A parts screen callback (BUYPARTCALLBACK, ...): 0, or a message (0x32a: too little money). */
+int FEData_PartsAction(const char *cb);
+/* What the buttons may do (FEPurchasePartsCBL_v1 0x518cf0); true with a part chosen. */
+bool FEData_PartsState(bool *buy, bool *sell, bool *basket, bool *selected);

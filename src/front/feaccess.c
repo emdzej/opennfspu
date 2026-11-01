@@ -17,7 +17,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -31,7 +31,7 @@ struct FEAccessor {
     uint32_t cval;   /* FEColourAccessor's colour (+0x2c) for the garage car's (src 1) */
 };
 
-enum { NACC = 64 };
+enum { NACC = 128 };
 static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
@@ -156,6 +156,11 @@ extern uint32_t g_carnschemes;   /* 0x6115f8 (render/carpages.h): the last car's
 static int career_year(void);
 static bool car_before(const uint8_t *a, const uint8_t *b);
 static SaveCar *acc_car(const FEAccessor *a);
+static int allparts_count(void);
+static int fit_parts(const uint8_t *r, int year, const uint8_t **out, int cap);
+static void allparts_row(int row, int *g, int *i);
+static int s_nbasket;
+static bool s_open_sale, s_open_stock;
 int FEData_CareerYear(void) { return career_year(); }
 
 static const uint8_t *part_rec(int32_t id)   /* 0x49c3e0: an nfs5.prt record by its id */
@@ -166,6 +171,14 @@ static const uint8_t *part_rec(int32_t id)   /* 0x49c3e0: an nfs5.prt record by 
     for (size_t i = 0; prt && (i + 1) * 0x168 <= nprt; i++)
         if (rec16(prt + 0x168 * i, 0) == id) return prt + 0x168 * i;
     return NULL;
+}
+
+/* A part's category string (0x518640: by its type, 6 and 7 one). */
+static int part_category(const uint8_t *p)
+{
+    static const int k[11] = {0, 0x9fa, 0x9fb, 0x9fc, 0x9fd, 0x9fe, 0x9ff, 0x9ff, 0xa00, 0xa01, 0xa02};
+    int t = rec16(p, 0x26);
+    return t >= 1 && t <= 10 ? k[t] : 0;
 }
 
 int32_t FEData_PartValue(int32_t id)
@@ -588,6 +601,289 @@ static SaveCar *acc_car(const FEAccessor *a)
     return l && a->pos >= 0 && a->pos < n ? &l[a->pos] : NULL;
 }
 
+/* ---- the parts shop (FEPurchasePartsCBL 0x518ba0) ---- */
+
+/* The player's parts in stock (0x69a0ec: the save's PartsMarket section, n then n parts of 0x168). */
+static SaveSection *stock_section(void)
+{
+    Save *sv = FESave_Current();
+    for (int i = 0; sv && i < sv->nsec; i++)
+        if (!strcmp(sv->sec[i].name, "PartsMarket") && sv->sec[i].size >= 4) return &sv->sec[i];
+    return NULL;
+}
+
+static int stock_count(void)
+{
+    SaveSection *x = stock_section();
+    int32_t n = x ? rec32(x->data, 0) : 0;
+    return x && n > 0 && (size_t)n * 0x168 + 4 <= x->size ? n : 0;
+}
+
+static uint8_t *stock_part(int i) { SaveSection *x = stock_section(); return x ? x->data + 4 + 0x168 * i : NULL; }
+
+static void stock_add(const uint8_t *part)   /* (0x517ca0's copy) */
+{
+    SaveSection *x = stock_section();
+    if (!x) return;
+    int n = stock_count();
+    uint8_t *d = realloc(x->data, 4 + (size_t)(n + 1) * 0x168);
+    if (!d) return;
+    x->data = d;
+    memcpy(d + 4 + 0x168 * n, part, 0x168);
+    n++;
+    memcpy(d, &n, 4);
+    x->size = 4 + (size_t)n * 0x168;
+}
+
+static void stock_remove(int i)
+{
+    SaveSection *x = stock_section();
+    int n = stock_count();
+    if (!x || i < 0 || i >= n) return;
+    memmove(x->data + 4 + 0x168 * i, x->data + 4 + 0x168 * (i + 1), (size_t)(n - i - 1) * 0x168);
+    n--;
+    memcpy(x->data, &n, 4);
+    x->size = 4 + (size_t)n * 0x168;
+}
+
+/* The stock without the body (0x518460: type 10 named "Body" kept out). */
+static int stock_list(int *out, int cap)
+{
+    int n = 0, k = stock_count();
+    const char *body = exe_str(0x5da740);
+    for (int i = 0; i < k && n < cap; i++) {
+        const uint8_t *p = stock_part(i);
+        if (rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, body)) continue;
+        out[n++] = i;
+    }
+    return n;
+}
+
+/* (s_open_sale, s_open_stock: the groups shown, +0x2c, +0x2d) */
+static const uint8_t *s_sale[256];       /* (+0x38: the parts that fit the garage car this year, 0x5175f0) */
+static int s_nsale, s_sale_car = -2, s_sale_year;
+
+static void sale_list(void)   /* FEPartsAllPartsAccessor_v2 0x514c70's */
+{
+    SaveCar *gc = garage_car();
+    int car = FEData_OwnedIndex("OwnedCars.Car"), year = career_year();
+    if (!gc) {
+        s_nsale = 0;
+        s_sale_car = -2;
+        return;
+    }
+    if (car == s_sale_car && year == s_sale_year) return;
+    s_sale_car = car, s_sale_year = year;
+    s_nsale = fit_parts(gc->rec + 4, year, s_sale, 256);
+}
+
+static int allparts_count(void)
+{
+    int n = 2, st[256];
+    if (s_open_sale) sale_list(), n += s_nsale;
+    if (s_open_stock) n += stock_list(st, 256);
+    return n;
+}
+
+/* A row's group and index (0x514bb0): group 0 the headers (0 the parts for sale, 1 the stock), 1 a
+   part for sale, 2 one in stock (its stock index). */
+static void allparts_row(int row, int *g, int *i)
+{
+    *g = 0, *i = 0;
+    if (row == 0) return;
+    int h = 1;
+    if (s_open_sale) {
+        sale_list();
+        h = s_nsale + 1;
+        if (row < h) {
+            *g = 1, *i = row - 1;
+            return;
+        }
+    }
+    if (row == h) {
+        *i = 1;
+        return;
+    }
+    int st[256], n = s_open_stock ? stock_list(st, 256) : 0;
+    if (row - h - 1 < n) *g = 2, *i = st[row - h - 1];
+}
+
+static const uint8_t *allparts_part(int row, int *g)
+{
+    int i;
+    allparts_row(row, g, &i);
+    if (*g == 1) return i < s_nsale ? s_sale[i] : NULL;
+    if (*g == 2) return stock_part(i);
+    return NULL;
+}
+
+/* A part's price in a year (0x517aa0): its price (+0x5c) grown by the yearly rates since its year. */
+static int32_t part_price(const uint8_t *p, int year)
+{
+    int n = year - rec16(p, 0x46), sum = 0;
+    for (int i = 0; i < n && i < 0x3e; i++) sum += (int32_t)exe_u32(0x5ba4a4 + 4u * (unsigned)i);
+    return rec32(p, 0x5c) * sum / 100 + rec32(p, 0x5c);
+}
+
+/* The basket (+0x24): parts to buy (buy, the part's record) or to sell (a stock index). */
+typedef struct { uint8_t part[0x168]; bool buy; int stock; } BasketItem;
+static BasketItem s_basket[64];   /* (s_nbasket of them) */
+
+static int32_t basket_value(const BasketItem *b)   /* (a sale's worth 0x517b00, a purchase's price less) */
+{
+    int year = career_year();
+    return b->buy ? -part_price(b->part, year) : part_worth(rec16(b->part, 0), rec32(b->part, 0x164), year);
+}
+
+/* A part into the basket (0x515990), the basket kept in order: by the parts' order (0x49c2c0), a
+   purchase before a sale of the same. */
+static void basket_add(const uint8_t *part, bool buy, int stock)
+{
+    if (s_nbasket >= 64) return;
+    BasketItem *b = &s_basket[s_nbasket++];
+    memcpy(b->part, part, 0x168);
+    b->buy = buy;
+    b->stock = stock;
+    for (int i = 0; i < s_nbasket; i++)
+        for (int j = i + 1; j < s_nbasket; j++) {
+            const uint8_t *x = s_basket[j].part, *y = s_basket[i].part;
+            bool before = rec16(x, 0x26) != rec16(y, 0x26) ? rec16(x, 0x26) < rec16(y, 0x26)
+                        : rec32(x, 0x5c) != rec32(y, 0x5c) ? rec32(x, 0x5c) < rec32(y, 0x5c)
+                        : rec16(x, 0) < rec16(y, 0);
+            bool after = rec16(y, 0x26) != rec16(x, 0x26) ? rec16(y, 0x26) < rec16(x, 0x26)
+                       : rec32(y, 0x5c) != rec32(x, 0x5c) ? rec32(y, 0x5c) < rec32(x, 0x5c)
+                       : rec16(y, 0) < rec16(x, 0);
+            if (before || (!after && s_basket[j].buy && !s_basket[i].buy)) {
+                BasketItem t = s_basket[i];
+                s_basket[i] = s_basket[j];
+                s_basket[j] = t;
+            }
+        }
+}
+
+static bool in_basket(int stock)
+{
+    for (int i = 0; i < s_nbasket; i++)
+        if (!s_basket[i].buy && s_basket[i].stock == stock) return true;
+    return false;
+}
+
+void FEData_PartsOpen(void)   /* the screen made (0x518ba0): its groups shut (0x515570), a new car's basket emptied */
+{
+    s_open_sale = s_open_stock = false;
+    static int last = -3;
+    int car = FEData_OwnedIndex("OwnedCars.Car");
+    if (car != last) s_nbasket = 0, last = car;
+    FEAccessor *a = FEAccess_Find("Parts.AllParts");
+    if (a) a->pos = 0;
+}
+
+int FEData_PartsAction(const char *cb)
+{
+    FEAccessor *a = FEAccess_Find("Parts.AllParts"), *b = FEAccess_Find("Parts.ShoppingList");
+    if (!a || !b) return 0;
+    refresh(a);
+    refresh(b);
+    int g, i;
+    const uint8_t *p = allparts_part(a->pos, &g);
+    allparts_row(a->pos, &g, &i);
+    if (!strcmp(cb, "BUYPARTCALLBACK")) {   /* FEPurchasePartsCBL_v55 0x518e30 */
+        if (p && g == 1) basket_add(p, true, -1);
+    } else if (!strcmp(cb, "SELLPARTCALLBACK")) {   /* _v56 0x518e80 */
+        if (p && g == 2 && !in_basket(i)) basket_add(p, false, i);
+    } else if (!strcmp(cb, "CLEARLISTCALLBACK")) {   /* _v57 0x518ee0 -> 0x515ba0 */
+        s_nbasket = 0;
+    } else if (!strcmp(cb, "REMOVEITEMCALLBACK")) {   /* _v58 0x518ef0 -> 0x515b40 */
+        if (b->pos < s_nbasket) {
+            memmove(&s_basket[b->pos], &s_basket[b->pos + 1], (size_t)(s_nbasket - b->pos - 1) * sizeof *s_basket);
+            s_nbasket--;
+        }
+    } else if (!strcmp(cb, "PURCHASECALLBACK")) {   /* _v59 0x518f30 */
+        Save *sv = FESave_Current();
+        int32_t total = 0;
+        for (int k = 0; k < s_nbasket; k++) total += basket_value(&s_basket[k]);
+        if (!sv) return 0;
+        if (sv->money < -total) return 0x32a;
+        for (int k = 0; k < s_nbasket; k++) {
+            BasketItem *it = &s_basket[k];
+            sv->money += basket_value(it);   /* (0x500890) */
+            if (it->buy) {
+                stock_add(it->part);   /* 0x517ca0 */
+            } else {
+                stock_remove(it->stock);   /* 0x517ba0 */
+                for (int j = k + 1; j < s_nbasket; j++)
+                    if (!s_basket[j].buy && s_basket[j].stock > it->stock) s_basket[j].stock--;
+            }
+        }
+        s_nbasket = 0;
+        FESave_Write();
+    }
+    refresh(a);
+    refresh(b);
+    return 0;
+}
+
+bool FEData_PartsState(bool *buy, bool *sell, bool *basket, bool *selected)
+{
+    FEAccessor *a = FEAccess_Find("Parts.AllParts"), *b = FEAccess_Find("Parts.ShoppingList");
+    if (!a || !b) return false;
+    refresh(a);
+    refresh(b);
+    int g, i;
+    const uint8_t *p = allparts_part(a->pos, &g);
+    allparts_row(a->pos, &g, &i);
+    *buy = p && g == 1;
+    *sell = p && g == 2 && !in_basket(i);
+    *basket = s_nbasket > 0;
+    *selected = b->pos < s_nbasket;
+    return p != NULL;
+}
+
+bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
+{
+    memset(out, 0, sizeof *out);
+    int year = career_year();
+    if (a->kind == ACC_ALLPARTS) {   /* FEPartsAllPartsAccessor_v15 0x514ef0, _v26 0x515450 */
+        int g, i;
+        const uint8_t *p = allparts_part(row, &g);
+        allparts_row(row, &g, &i);
+        out->height = 0xe;
+        if (g == 0) {
+            out->header = true;
+            out->open = i == 0 ? s_open_sale : s_open_stock;
+            if (i == 0) {
+                SaveCar *gc = garage_car();
+                snprintf(out->text, sizeof out->text, FEStrings_Get(0x9f6), gc ? (const char *)gc->rec + 6 : "");
+            } else {
+                snprintf(out->text, sizeof out->text, "%s", FEStrings_Get(0x9f7));
+            }
+            return true;
+        }
+        if (!p) return false;
+        snprintf(out->text, sizeof out->text, "%s %s", (const char *)p + 8, FEStrings_Get(rec32(p, 4)));
+        out->price = g == 1 ? part_price(p, year) : part_worth(rec16(p, 0), rec32(p, 0x164), year);
+        out->has_price = true;
+        out->dim = g == 2 && in_basket(i);
+        int pg;
+        const uint8_t *prev = allparts_part(row - 1, &pg);
+        out->category = part_category(p);
+        if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;   /* (0x518780) */
+        return true;
+    }
+    if (a->kind == ACC_BASKET) {   /* FEPartsShoppingBasket_v15 0x515800, _v26 0x515930 */
+        if (row < 0 || row >= s_nbasket) return false;
+        const uint8_t *p = s_basket[row].part;
+        snprintf(out->text, sizeof out->text, "%s %s", (const char *)p + 8, FEStrings_Get(rec32(p, 4)));
+        out->price = basket_value(&s_basket[row]);
+        out->has_price = true;
+        out->height = 0xe;
+        out->category = part_category(p);
+        if (row == 0 || part_category(s_basket[row - 1].part) != out->category) out->height += 0xd, out->label = true;
+        return true;
+    }
+    return false;
+}
+
 /* SAVESETTINGS (0x4f10a0 -> 0x4eeb50): the settings kept (+0x714); LOADSETTINGS (0x4f10c0 -> 0x4eeb30):
    the kept ones back. (The accessors read the car's settings, so they follow.) */
 void FEData_KeepSetup(bool load)
@@ -671,6 +967,8 @@ void FEData_Init(void)
         if (pk) pk->list = 0x5b7644;
         add("OwnedCar.DecalNum", ACC_INT, 101, -1, 0);
     }
+    add("Parts.AllParts", ACC_ALLPARTS, 2, 0, 0);       /* FEPartsAllPartsAccessor 0x514a30 */
+    add("Parts.ShoppingList", ACC_BASKET, 0, 0, 0);     /* FEPartsShoppingBasket 0x5156c0 */
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     {
         FEAccessor *u = add("UsedCar.Car", ACC_OWNED, 0, 0, 0);   /* (0x4f5080(.., 0x33, 0, 0x4f85b0)) */
@@ -734,6 +1032,11 @@ static void refresh(const FEAccessor *c)
         if (a->pos >= a->count) a->pos = 0;
         return;
     }
+    if (a->kind == ACC_ALLPARTS || a->kind == ACC_BASKET) {
+        a->count = a->kind == ACC_ALLPARTS ? allparts_count() : s_nbasket;
+        if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
+        return;
+    }
     if (a->kind == ACC_RTRACK) {
         remain_list();
         a->count = s_nremain;
@@ -788,6 +1091,18 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
         }
         return;
     }
+    if (a->kind == ACC_ALLPARTS) {   /* FEPartsAllPartsAccessor_v11 0x514d10: a header opens or shuts its group */
+        if (pos < 0 || pos >= a->count) pos = 0;
+        a->pos = pos;
+        int g, i;
+        allparts_row(pos, &g, &i);
+        if (g == 0) {
+            if (i == 1) s_open_stock = !s_open_stock;
+            else s_open_sale = !s_open_sale;
+            refresh(a);
+        }
+        return;
+    }
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
@@ -836,6 +1151,13 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_COLOUR:      /* (a colour box shows its swatch, not a text: FEColorBox pending) */
     case ACC_INTCOLOUR:
         return "";
+    case ACC_ALLPARTS:    /* (the item's text, slot 12 0x515590) */
+    case ACC_BASKET: {
+        FEPartsRow r;
+        if (!FEData_PartsRow(a, a->pos, &r)) return "";
+        snprintf(b, sizeof b, "%s", r.text);
+        return b;
+    }
     case ACC_RTRACK: {   /* the track's name (its record's string, +4) */
         const uint8_t *r = FEData_Tournament();
         const uint8_t *t = r ? track_by_id(rec16(r, 0x3a0 + 0xa4 * s_remain[a->pos])) : NULL;
@@ -886,6 +1208,12 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "LOCATION")) return FEAccess_Text(FEAccess_Find("Tournament.RemainingTracks"));
         PENDING_NOTE(0x505cd0, "the tournament's difficulty and record time (the remaining tracks)");
         return "";
+    }
+    if (a->kind == ACC_BASKET && arg && !strcmp(arg, "TOTAL")) {   /* FEPartsShoppingBasket_v5 0x515d30: "%d" */
+        int32_t total = 0;
+        for (int k = 0; k < s_nbasket; k++) total += basket_value(&s_basket[k]);
+        snprintf(b, sizeof b, "%d", total);
+        return b;
     }
     if (a->kind == ACC_OWNED && arg) {   /* FEOwnedCarAccessor's (0x4f8xxx) */
         refresh(a);

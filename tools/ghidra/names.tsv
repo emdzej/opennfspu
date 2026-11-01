@@ -2632,3 +2632,14 @@
 00510af0	FEPaintShopCBL_Update	frontend	high	The garage car's colours, stripes, race number from and to the accessors
 00510a80	FEPaintShopCBL_ChangeDecal	frontend	high	The race number's input dialog (0xfb, digits, 2)
 004b8dd0	FEColourAccessor_ctor	frontend	high	A colour accessor: palette count and colour functions, its colour at +0x2c
+00514a30	FEPartsAllPartsAccessor_ctor	frontend	high	The parts for sale for the garage car and the stock, two groups under headers
+00514bb0	FEPartsAllParts_Row	frontend	high	A row's group (0 headers, 1 for sale, 2 stock) and index
+00514ef0	FEPartsAllPartsAccessor_DrawItem	frontend	high	A row: category label, header icon, name, price
+005156c0	FEPartsShoppingBasket_ctor	frontend	high	The transaction list
+00515990	FEPartsShoppingBasket_Add	frontend	high	A part to buy or sell, the list kept in order
+00517aa0	Part_Price	frontend	high	A part's price in a year: +0x5c grown by the rates 0x5ba4a4
+00517ba0	PartsStock_Sell	frontend	high	A part out of the stock for its worth
+00517ca0	PartsStock_Buy	frontend	high	A part into the stock for its price
+00518460	PartsStock_List	frontend	high	The stock without the Body
+00518640	Part_Category	frontend	high	A part's category string by type
+00518f30	FEPurchasePartsCBL_Purchase	frontend	high	The transaction list carried out, 0x32a short of money
