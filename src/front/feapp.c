@@ -6,6 +6,7 @@
 #include "front/fe3d.h"
 #include "front/fesave.h"
 #include "front/femarket.h"
+#include "support/crt.h"
 #include "game/audio.h"
 #include "game/music.h"
 #include "game/options.h"
@@ -61,6 +62,7 @@ static int s_gametype;                /* Game.GameType (0x690ad4): 0 quick race,
 static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
 static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
+static int s_grid_pers[8], s_grid_start[8], s_ngrid = -1;   /* the knockout's grid for the race */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
@@ -293,6 +295,7 @@ void FEApp_RaceOver(const int *places, const int *times, int n)
 {
     if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, n);
     s_tour_race = -1;
+    if (s_gametype == 2) FEData_KnockoutResult(places, n);   /* (0x4ddb10) */
     if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */
     s_testdrive = false;
 }
@@ -406,6 +409,15 @@ int FEApp_Opponents(void) { return s_opponents; }
    flag 5 of 0x65b940: pending), a quick knockout 3 (the laps knock the last car out), the knockout and
    the career 2, multiplayer and the test drives 0, Factory Driver 4 with a mission's conditions (pending:
    0). */
+int FEApp_Grid(int pers[8], int start[9])
+{
+    if (s_ngrid < 0) return -1;
+    memcpy(pers, s_grid_pers, sizeof s_grid_pers);
+    memcpy(start, s_grid_start, sizeof s_grid_start);
+    start[8] = 0;
+    return s_ngrid;
+}
+
 int FEApp_RaceType(void)
 {
     if (s_testdrive) return 0;
@@ -474,6 +486,22 @@ static void callback(const char *cb)
         if (m > 0) FEApp_Message(m);   /* (0x32a: 0x512e70) */
     } else if (!strcmp(cb, "INSTALLPART") || !strcmp(cb, "UNINSTALLPART")) {
         FEData_InstallAction(cb);
+    } else if (!strcmp(cb, "KNOCKOUTTRACKINC") || !strcmp(cb, "KNOCKOUTTRACKDEC")) {
+        /* 0x50d4c0 / 0x50d500: the slot's track on or back (0x690a84 the room's way) */
+        FEAccessor *a = FEAccess_Find("Knockout.Track");
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[13] == 'I' ? 1 : -1));
+    } else if (!strcmp(cb, "MAKERANDOMKNOCKOUT")) {
+        /* 0x50cc30: every slot's traffic, direction, laps and track at random (the C runtime's rand) */
+        for (int k = 1; k <= 7; k++) {
+            static const char *f[4] = {"Traffic", "Direction", "Laps", "Track"};
+            for (int j = 0; j < 4; j++) {
+                char nm[32];
+                snprintf(nm, sizeof nm, "Track%d.%s", k, f[j]);
+                FEAccessor *a = FEAccess_Find(nm);
+                int n = a ? FEAccess_Count(a) : 0;
+                if (n) FEAccess_SetPos(a, CRT_rand() % n);
+            }
+        }
     } else if (!strcmp(cb, "CHANGEDECAL")) {
         /* FEPaintShopCBL_v55 0x510a80: the race number's dialog (0x513b10: string 0xfb, digits, 2 at most) */
         dialog_open(DLG_INPUT, FEStrings_Get(0xfb), 0x2be, 0x2bf);
@@ -544,10 +572,12 @@ static void callback(const char *cb)
         s_havecol = FEAccess_CarColours(ca, s_colours);
         s_laps = fe_int("num_laps", 1);
         s_opponents = 0;
+        s_ngrid = -1;
         s_testdrive = true;
         s_result = FE_PLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
         s_testdrive = false;
+        s_ngrid = -1;
         if (!can_play()) return;
         /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
            accessors pending: fe.txt's as the original's defaults). */
@@ -571,6 +601,20 @@ static void callback(const char *cb)
             snprintf(s_car, sizeof s_car, "%s", c);
             s_havecol = FEAccess_CarColours(FEAccess_Find("OwnedCars.Car"), s_colours);
             PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
+        } else if (s_gametype == 2) {
+            /* the knockout (0x4d5200 -> 0x4ecc60, 0x4ddc00): started with its first race, its slot's
+               track and laps, the racers still in on their places' grid */
+            if (!FEData_KnockoutOn()) FEData_KnockoutStart();
+            int laps = 1;
+            s_ngrid = FEData_KnockoutRace(s_track, sizeof s_track, &laps, s_grid_pers, s_grid_start);
+            snprintf(s_car, sizeof s_car, "%s", FEData_Car());
+            s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
+            s_owned_race = FEData_OwnedIndex("zMergedList.Car");
+            s_laps = laps;
+            s_opponents = s_ngrid;
+            s_testdrive = false;
+            s_result = FE_PLAY;
+            return;
         } else if (s_gametype == 1) {
             /* the quick knockout: LoopedTrack.Track's track, Game.NumKOOpponents opponents and as many
                laps (0x4ec480's option 0x11) */

@@ -116,6 +116,7 @@ bool app_frame(void)
                     g_drive_laps = FEApp_Laps();
                     g_drive_opponents = FEApp_Opponents();
                     g_drive_race_type = FEApp_RaceType();
+                    g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;
                 } else if (FEApp_Result() == FE_QUIT) {
                     return false;
                 }

@@ -23,3 +23,7 @@ extern bool g_race_parts_set;
    new car's (0x4ee230). */
 extern float g_race_setup[17];
 extern bool g_race_setup_set;
+/* A grid the front end chose (the knockout's, 0x4ddc00): the opponents' personalities (1-based) and
+   the starting places (start[0] the player's), when g_race_grid_set. */
+extern int g_race_grid_pers[8], g_race_grid_start[9];
+extern bool g_race_grid_set;

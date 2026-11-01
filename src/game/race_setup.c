@@ -28,6 +28,8 @@ bool g_race_parts_set;
 bool g_race_colours_set;
 float g_race_setup[17];
 bool g_race_setup_set;
+int g_race_grid_pers[8], g_race_grid_start[9];
+bool g_race_grid_set;
 
 bool RaceSetup_SingleCar(const char *name)
 {
@@ -142,7 +144,9 @@ bool RaceSetup_Opponents(int n)
     for (int i = 1; i <= n; i++) {
         uint8_t *d = g_cardesc[i];
         memcpy(d, g_cardesc[0], CARDESC_SIZE);
-        const uint8_t *r = per + 0x2c * (i - 1);
+        int pi = g_race_grid_set ? g_race_grid_pers[i - 1] - 1 : i - 1;   /* (the knockout's racers) */
+        if (pi < 0 || pi >= nper) pi = i - 1;
+        const uint8_t *r = per + 0x2c * pi;
         int16_t id;
         memcpy(&id, r, 2);
         float k = 1.0f;   /* the event's difficulty (its record's +0x3cc, the front end's) */
@@ -153,7 +157,7 @@ bool RaceSetup_Opponents(int n)
         put_i(d, 0x150, i);                                /* DRIVER */
         float v[8] = {k * sk[0], k * sk[2], k * sk[4], k * sk[6], sk[1], sk[3], sk[5], sk[7]};
         memcpy(d + 0x154, v, sizeof v);                    /* SKILLSLOW .. SKILLRANGEDEFAULT */
-        put_i(d, 0x174, n - i);                            /* STARTINGPOS */
+        put_i(d, 0x174, g_race_grid_set ? g_race_grid_start[i] : n - i);   /* STARTINGPOS (0x247) */
         int32_t name;
         memcpy(&name, r + 4, 4);
         const char *s = loc ? LOC_string(loc, name) : NULL;
@@ -161,7 +165,7 @@ bool RaceSetup_Opponents(int n)
         put_str(d, 0x1c0, s ? s : "");                     /* LICENSE */
         (void)id;
     }
-    put_i(g_cardesc[0], 0x174, n);
+    put_i(g_cardesc[0], 0x174, g_race_grid_set ? g_race_grid_start[0] : n);
     free(per);
     free(loc);
     g_nracecars = n + 1;

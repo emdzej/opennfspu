@@ -53,3 +53,5 @@ int FEApp_Laps(void);
 int FEApp_Opponents(void);
 /* The race's kind (RACE_TYPE, 0x6573ec) for the mode chosen. */
 int FEApp_RaceType(void);
+/* The knockout's grid (its racers' personalities, the starting places, start[0] the player's); -1 for none. */
+int FEApp_Grid(int pers[8], int start[9]);

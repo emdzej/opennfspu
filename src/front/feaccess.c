@@ -1208,6 +1208,25 @@ void FEData_Init(void)
             if (!strcasecmp(trk_name_of(NULL, i), v)) tp = i;
     add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
     add("Game.NumKOOpponents", ACC_INT, 7, 1, 3);      /* FEIntAccessor 0x4b9ef0(.., 4, 1, 7): 4 of 1 .. 7 */
+    /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
+       laps (0x5b9650: "1" .. "8"; the first slot's 3, its options 0xc .. 0xf in fe.txt: pending) */
+    for (int k = 1; k <= 7; k++) {
+        char nm[32];
+        if (k > 1) {
+            snprintf(nm, sizeof nm, "Track%d.Track", k);
+            add(nm, ACC_TRACK, s_navail, 0, 0);
+        }
+        snprintf(nm, sizeof nm, "Track%d.Traffic", k);
+        FEAccessor *x = add(nm, ACC_LIST, list_count(0x5b9628), 0, 0);
+        if (x) x->list = 0x5b9628;
+        snprintf(nm, sizeof nm, "Track%d.Direction", k);
+        x = add(nm, ACC_LIST, list_count(0x5b963c), 0, 0);
+        if (x) x->list = 0x5b963c;
+        snprintf(nm, sizeof nm, "Track%d.Laps", k);
+        x = add(nm, ACC_LIST, list_count(0x5b9650), 0, k == 1 ? 2 : 0);
+        if (x) x->list = 0x5b9650;
+    }
+    add("Knockout.TrackNumber", ACC_INT, 7, 0, 0);      /* FEKnockoutTrackNumberAccessor (vtable 0x5b50a4) */
     {
         FEAccessor *lt = add("LoopedTrack.Track", ACC_TRACK, s_nlooped, 0, 0);   /* (on 0x4f94a0's) */
         if (lt) lt->src = 1;
@@ -1262,6 +1281,16 @@ FEAccessor *FEAccess_Find(const char *path)
     snprintf(name, sizeof name, "%s", path ? path : "");
     char *paren = strchr(name, '(');
     if (paren) *paren = 0;
+    if (!strncmp(name, "Knockout.", 9) && strcmp(name + 9, "TrackNumber")) {
+        /* Knockout.Track, .Traffic, .Direction, .Laps: the slot's (FEAliasAccessor 0x4b8150 on
+           Track<n>.*, n Knockout.TrackNumber's + 1) */
+        int slot = 0;
+        for (int i = 0; i < s_nacc; i++)
+            if (!strcmp(s_acc[i].name, "Knockout.TrackNumber")) slot = s_acc[i].pos;
+        char t[64];
+        snprintf(t, sizeof t, "Track%d.%s", slot + 1, name + 9);
+        snprintf(name, sizeof name, "%s", t);
+    }
     for (int i = 0; i < s_nacc; i++)
         if (!strcmp(s_acc[i].name, name)) return &s_acc[i];
     return NULL;
@@ -1498,6 +1527,26 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "LOCATION")) return FEAccess_Text(FEAccess_Find("Tournament.RemainingTracks"));
         PENDING_NOTE(0x505cd0, "the tournament's difficulty and record time (the remaining tracks)");
         return "";
+    }
+    if (a->kind == ACC_INT && arg && !strcmp(a->name, "Knockout.TrackNumber")) {
+        /* FEKnockoutTrackNumberAccessor_v5 0x4ba290: "<d>TRACKNUMBER" its number, "<d>TRACKNAME",
+           "<d>TRACKLAPS", "<d>TRACKDIRECTION", "<d>TRACKTRAFFIC" slot d's, for the slots raced (fewer
+           than Game.NumKOOpponents); "TRACKNAME" the chosen slot's (DIFFICULTY, RECORDTIME pend) */
+        static char kb[64];
+        int d = arg[0] - '0', n = FEData_KOOpponents();
+        const char *f = arg;
+        if (d >= 0 && d <= 6) f = arg + 1;
+        else d = a->pos;
+        if (f == arg && strcmp(f, "TRACKNAME")) return "";
+        if (d >= n && f != arg) return "";
+        if (!strcmp(f, "TRACKNUMBER")) { snprintf(kb, sizeof kb, "%d", d + 1); return kb; }
+        const char *fld = !strcmp(f, "TRACKNAME") ? "Track" : !strcmp(f, "TRACKLAPS") ? "Laps"
+                        : !strcmp(f, "TRACKDIRECTION") ? "Direction" : !strcmp(f, "TRACKTRAFFIC") ? "Traffic" : NULL;
+        if (!fld) return "";
+        char nm[32];
+        snprintf(nm, sizeof nm, "Track%d.%s", d + 1, fld);
+        snprintf(kb, sizeof kb, "%s", FEAccess_Text(FEAccess_Find(nm)));
+        return kb;
     }
     if (a->kind == ACC_BASKET && arg && !strcmp(arg, "TOTAL")) {   /* FEPartsShoppingBasket_v5 0x515d30: "%d" */
         int32_t total = 0;
@@ -2036,8 +2085,60 @@ const char *FEData_Track(void)
     return a && a->count ? trk_name_of(a, a->pos) : "coastal";
 }
 
-static bool s_ko_on;   /* 0x690410: a knockout running (0x4dd9b0) */
+/* The knockout (0x690410, the save's Knockout section: pending): running, its race (+4), its opponents
+   (+8), each racer still in (0x69041c, 0 the player), their places (0x690450, the player's 0x69044c),
+   their last places (0x690470). */
+static bool s_ko_on;
+static int s_ko_race, s_ko_n, s_ko_place[8], s_ko_last[8];
+static bool s_ko_in[8];
 bool FEData_KnockoutOn(void) { return s_ko_on; }
+
+void FEData_KnockoutStart(void)   /* 0x4dd9e0 */
+{
+    s_ko_on = true;
+    s_ko_race = 0;
+    s_ko_n = FEData_KOOpponents();
+    for (int i = 0; i < 8; i++) s_ko_in[i] = i <= s_ko_n, s_ko_place[i] = i, s_ko_last[i] = -1;
+    s_ko_place[0] = s_ko_n + 1;   /* (the player behind them) */
+    PENDING_NOTE(0x4dd9e0, "the knockout's opponents' personalities and cars (OpponentCar.Car, 0x4f45c0)");
+}
+
+int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8])
+{
+    char nm[32];
+    snprintf(nm, sizeof nm, "Track%d.Track", s_ko_race + 1);
+    FEAccessor *t = FEAccess_Find(nm);
+    if (t) refresh(t);
+    snprintf(track, (size_t)cap, "%s", t && t->count ? trk_name_of(t, t->pos) : "coastal");
+    snprintf(nm, sizeof nm, "Track%d.Laps", s_ko_race + 1);
+    FEAccessor *l = FEAccess_Find(nm);
+    *laps = l ? l->pos + 1 : 1;
+    int n = 0;
+    start[0] = s_ko_place[0] - 1;   /* (STARTINGPOS 0x247: the places, 0-based) */
+    for (int i = 1; i <= s_ko_n && i < 8; i++)
+        if (s_ko_in[i]) {
+            pers[n] = i;   /* (the personality of racer i) */
+            start[++n] = s_ko_place[i] - 1;
+        }
+    return n;
+}
+
+void FEData_KnockoutResult(const int *places, int np)   /* 0x4ddb10 */
+{
+    if (!s_ko_on) return;
+    int keep = s_ko_n - s_ko_race;
+    int p0 = np > 0 && places[0] > 0 ? places[0] : 99;
+    if (p0 <= keep) {
+        for (int i = 0, k = 0; i <= s_ko_n && i < 8; i++)
+            if (s_ko_in[i]) s_ko_last[i] = k < np && places[k] > 0 ? places[k] : 99, k++;
+        for (int i = 0; i <= s_ko_n && i < 8; i++) {
+            if (!s_ko_in[i] || keep < s_ko_last[i]) s_ko_in[i] = false;
+            else s_ko_place[i] = s_ko_last[i];
+        }
+        if (++s_ko_race < s_ko_n) return;
+    }
+    s_ko_on = false;   /* (out, or the last race run) */
+}
 
 const char *FEData_LoopedTrack(void)
 {

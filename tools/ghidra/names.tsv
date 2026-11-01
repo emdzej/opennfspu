@@ -2664,3 +2664,8 @@
 004fb190	FE_TrackLists	frontend	high	The choosable tracks (0x691d04: not the skidpad; bonus +0x6c 3 once a reached era's tournament races there, or multiplayer) and the looped (0x691d08, +0x6e 1)
 00501f40	Era_Year	frontend	high	0x209 1970, 0x20a 1989, 0x20b 2000, others 0
 004ec480	FE_RaceOptions	frontend	high	The race's options: RACE_TYPE 0x10 by game type, the laps 0x11 (the quick knockout's its opponents), ...
+004dd9e0	Knockout_Start	frontend	high	The knockout begun: its opponents (Game.NumKOOpponents) all in, the player behind
+004ddb10	Knockout_Result	frontend	high	A race's places: the player past N - race ends it; the others past it out; the grid their places
+004ddc00	Knockout_RaceDesc	frontend	high	The racers still in into the race, their skills and STARTINGPOS (0x247)
+004ba290	FEKnockoutTrackNumberAccessor_Text	frontend	high	The slots' numbers, tracks, laps, direction, traffic for the races run
+0050cc30	FE_MakeRandomKnockout	frontend	high	Every slot's traffic, direction, laps and track at random

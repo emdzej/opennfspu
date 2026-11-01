@@ -130,3 +130,8 @@ int FEData_TourCheck(void);
 void FEData_SetGameType(int type);
 /* A knockout between its races (0x4dd9b0). */
 bool FEData_KnockoutOn(void);
+/* The knockout run (0x4dd9e0): start it; the race next (its slot's track and laps, the opponents still
+   in, their personalities and the grid: start[0] the player's, 0 the front); its results (0x4ddb10). */
+void FEData_KnockoutStart(void);
+int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8]);
+void FEData_KnockoutResult(const int *places, int np);
