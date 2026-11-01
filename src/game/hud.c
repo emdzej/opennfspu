@@ -19,6 +19,9 @@
 #include <math.h>
 #include "real/font.h"
 #include "real/loc.h"
+#include "real/random.h"
+#include "game/music.h"
+#include "app.h"
 #include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +37,9 @@ static bool hidden;          /* 0x60ca00 */
 static HudVisual *modal[8];
 static int nmodal;
 static HudVisual *summary;   /* 0x60ca4c */
+static HudVisual *mission;   /* 0x60ca50 */
+static HudVisual *s_time;    /* 0x60ca1c */
+static int s_cones_down;     /* 0x60ca04: the traffic objects knocked, last counted */
 static bool always;          /* 0x60c970: draw the front visuals whatever their state */
 
 static void add(HudVisual *v, bool front, bool last)
@@ -712,19 +718,20 @@ typedef struct {
 } HTime;
 
 static void value_plain(HCombo *c) { if (c->value) c->value->colour = HudConfig_scheme(); }      /* 0x41ca90 */
+static void value_red(HCombo *c) { if (c->value) c->value->colour = 0xccff0000u; }               /* 0x41ca80 */
 
 /* The race's time (from the start, tick 0x1c0; the finish's once finished, +0xb50 2), with the
-   penalties' (0x657830 each, not ported: 0); "time" (hud.loc 0x12). 0x431650 */
+   penalties' (0x657830 each); "time" (hud.loc 0x12), red in a mission over its damage. 0x431650 */
 static void time_draw(HudVisual *v)
 {
     HTime *t = (HTime *)v;
     Car *car = local_car();
     if (always && v->state != 0 && car) {
-        PENDING_NOTE(0x434f00, "the pursuit's red time (game type 9, 0x434f00; red 0x41ca80)");
-        if (t->flash == 0) value_plain(&t->combo);
+        if (g_race_mode == 9 && Mission_DamageOver(true)) value_red(&t->combo);   /* 0x434f00 */
+        else if (t->flash == 0) value_plain(&t->combo);
         int now = *CAR_I(car, 0xb50) == 2 ? *CAR_I(car, 0xb24) : g_sim_tick - 0x1c0;
         if (now < 0) now = 0;
-        int pen = t->penalties * 0;   /* (0x657830) */
+        int pen = t->penalties * g_mission_penalty;   /* (-1 without a penalty: the cones' fall takes time off) */
         HTime_Format((int)((float)pen * exe_f32(0x5b24e4) + (float)now), t->text, false);
         const char *s = LOC_string(HudConfig_loc(), 0x12);
         combo_draw(&t->combo, s ? s : "", t->text);
@@ -1887,6 +1894,18 @@ static void button_input(HButton *b, int click)
     if (b->clicked) PENDING_NOTE(0x4aab80, "the buttons' sound (9)");
 }
 
+/* A shadow d pixels to the right and below (x, y, w, h). 0x435ee0 (with d twice) */
+static void shadow(int x, int y, int w, int h, int d)
+{
+    if (g_hud_opaque) return;
+    float bot[16] = {(float)(x + d), (float)(y + h), 0, 1, (float)(x + w), (float)(y + h), 0, 1,
+                     (float)(x + w + d), (float)(y + h + d), 0, 1, (float)(x + d), (float)(y + h + d), 0, 1};
+    float rt[16] = {(float)(x + w), (float)(y + d), 0, 1, (float)(x + w + d), (float)(y + d), 0, 1,
+                    (float)(x + w + d), (float)(y + h + d), 0, 1, (float)(x + w), (float)(y + h), 0, 1};
+    quad_table(bot, 0x5b3418);
+    quad_table(rt, 0x5b3428);
+}
+
 static int32_t s_mouse_x = -1, s_mouse_y = -1;   /* (MOUSE_getstate 6, sampled with the HUD's input) */
 static uint32_t s_mouse_b;
 
@@ -1906,15 +1925,7 @@ static void button_draw(HButton *b)
     if (b->bevelled) {
         if ((!(s_mouse_b & 1) || !b->hover) && !b->pressed) tray_shade(b->x, b->y, b->w, b->h, 100);   /* 0x435d00 */
         else if (!g_hud_opaque) inner(b->x, b->y, b->w, b->h, exe_i32(0x5cc910), 0x5b3438);   /* 0x436090 */
-        if (!g_hud_opaque) {   /* the shadow, 0x435ee0 (5, 5) */
-            int x = b->x, y = b->y, w = b->w, h = b->h, d = 5;
-            float bot[16] = {(float)(x + d), (float)(y + h), 0, 1, (float)(x + w), (float)(y + h), 0, 1,
-                             (float)(x + w + d), (float)(y + h + d), 0, 1, (float)(x + d), (float)(y + h + d), 0, 1};
-            float rt[16] = {(float)(x + w), (float)(y + d), 0, 1, (float)(x + w + d), (float)(y + d), 0, 1,
-                            (float)(x + w + d), (float)(y + h + d), 0, 1, (float)(x + w), (float)(y + h), 0, 1};
-            quad_table(bot, 0x5b3418);
-            quad_table(rt, 0x5b3428);
-        }
+        shadow(b->x, b->y, b->w, b->h, 5);
     }
 }
 
@@ -2125,6 +2136,183 @@ static HudVisual *summary_new(const char *title)
     int x = (g_display.width - s->bb.w) / 2, y = (g_display.height - s->bb.h) / 2;   /* 0x41b120 */
     s->table = table_new(x, y, exe_i32(0x5b2e00) + x, exe_i32(0x5b2e04) + y, n, 8, widths, s->head);
     return &s->bb.base;
+}
+
+/* ---- the mission's summary (HMissionSummary, 0x14c bytes, vtable 0x5b2c88; 0x428900): Factory Driver's
+   verdict, the narrator's picture and name beside his words typed out a letter a frame, a button to try
+   again after a failure ---- */
+
+enum { MS_LINES = 16 };
+
+typedef struct {
+    HBillBoard bb;
+    HudArt *face;                  /* +0x120: the narrator's (FactoryPeople.fsh) */
+    HButton *retry;                /* +0x124 */
+    char lines[MS_LINES][0x80];    /* +0x128: the words in lines */
+    int nlines;
+    HText *text;                   /* +0x12c */
+    int32_t tx, ty;                /* +0x130, +0x134 */
+    int32_t line, chars;           /* +0x138, +0x13c: the line being typed, its letters so far */
+    HText *name;                   /* +0x144 (+0x140, the cones fallen: g_mission_knocked) */
+    uint8_t small;                 /* +0x148: the name too wide, drawn smaller */
+} HMissionSummary;
+
+static char s_typed[0x80];   /* 0x60caa0 */
+
+/* The words broken into lines of about 50 letters at the spaces (HMissionSummary_v5's second part). */
+static void ms_wrap(HMissionSummary *m, const char *s)
+{
+    int len = (int)strlen(s), start = 0, last = len - 1;   /* (last: the original's is unset before a space) */
+    for (int i = 0; i < len;) {
+        int j = i;
+        while (s[j] == ' ') last = j++;
+        if (0x31 < j - start || len - 1 <= j) {
+            if (j == len - 1) last = j;
+            int n = last - start + 1;
+            if (m->nlines < MS_LINES && 0 < n) {
+                if (0x7f < n) n = 0x7f;
+                memcpy(m->lines[m->nlines], s + start, (size_t)n);
+                m->lines[m->nlines][n] = 0;
+                m->nlines++;
+            }
+            start = last + 1;
+        }
+        i = j + 1;
+    }
+}
+
+/* Opening: the verdict (once, unless shown already), its music, a message of the verdict's at random
+   with the player's name, in lines. HMissionSummary_v5 0x4293b0 */
+static void ms_setstate(HudVisual *v, int32_t st)
+{
+    HMissionSummary *m = (HMissionSummary *)v;
+    m->nlines = 0;
+    if (v->state == 0) {   /* 0x42a310 */
+        Mission_Judge();
+        REAL_rand();
+        const int32_t *ids = g_mission_pass ? g_mission_win : g_mission_lose;
+        int n = 0;
+        for (int k = 0; k < 3; k++)
+            if (0 < ids[k]) n++;
+        uint32_t r = REAL_rand();
+        Music_Play(g_mission_pass ? exe_str(0x5ccb28) : exe_str(0x5ccb20), 1);   /* "win_", "lose_" */
+        if (n) {   /* (the original divides by none) */
+            const char *f = LOC_string(HudConfig_loc(), ids[r % (unsigned)n]);
+            Car *me = local_car();
+            char words[0x280];
+            snprintf(words, sizeof words, f ? f : "", me ? (const char *)CAR_DESCB(me) + 0x17c : "");
+            ms_wrap(m, words);
+        }
+    }
+    bb_setstate(v, st);
+}
+
+/* HMissionSummary_v1 0x428dc0 */
+static void ms_draw(HudVisual *v)
+{
+    HMissionSummary *m = (HMissionSummary *)v;
+    bb_draw(&m->bb);
+    if (v->state == 0 || v->state == 1 || v->state == 2) {   /* 0x42a310, 0x42a370 */
+        m->line = m->chars = 0;
+        return;
+    }
+    if (m->face) {
+        HudArt_draw(m->face);
+        /* the name's plate under the picture, a black frame round both, their shadow */
+        int x = m->face->x, y = m->face->y, w = m->face->w, h = m->face->h;
+        float q[16];
+        box(x, y + h, w, 0xf, q);
+        flat(q, 0x4cffffffu);
+        box(x, y, w, h + 0xf, q);
+        uint32_t c[2] = {0xff000000u, 0xff000000u};
+        for (int k = 0; k < 4; k++) {
+            const float *a = q + 4 * k, *b = q + 4 * ((k + 1) & 3);
+            float p[8] = {a[0], a[1], 0, 1, b[0], b[1], 0, 1};   /* 0x435900, 0x419eb0 */
+            Hud2D_Line(p, c);
+        }
+        shadow(x, y, w, h + 0xf, 5);
+    }
+    const char *nm = LOC_string(HudConfig_loc(), 0x4700 + g_mission_narrator);
+    text_print(m->name, nm ? nm : "", m->small ? 0.9f : 1.0f, 1.0f);
+    if (g_mission_pass == 0 && m->retry) button_draw(m->retry);
+    if (!m->text || !m->text->font || !m->text->font->font) return;
+    float y = 0.0f, a, b, tw, th;
+    double step = exe_f64(0x5b2cc0);
+    for (int u = 0; u <= m->line; u++) {
+        if (m->nlines <= u) continue;
+        m->text->x = m->tx, m->text->y = (int)((float)m->ty + y);
+        text_extent(m->text, m->lines[u], &a, &b, &tw, &th);
+        y = (float)((double)th * step + (double)y);
+        if (u < m->line) {
+            text_print(m->text, m->lines[u], 1.0f, 1.0f);
+            continue;
+        }
+        /* the line being typed: a letter more each frame, then the next */
+        memset(s_typed, 0, sizeof s_typed);
+        m->chars++;
+        snprintf(s_typed, sizeof s_typed, "%.*s", m->chars, m->lines[u]);
+        if ((int)strlen(m->lines[u]) < m->chars) {
+            m->chars = 0;
+            if (m->nlines <= ++m->line) m->line = m->nlines;
+            memset(s_typed, 0, 0x33);
+            text_print(m->text, m->lines[u], 1.0f, 1.0f);
+            m->text->x = m->tx, m->text->y = (int)((float)m->ty + y);
+        }
+        text_print(m->text, s_typed, 1.0f, 1.0f);
+    }
+}
+
+/* The button after a failure: try again (3). HMissionSummary_v9 0x429350 */
+static int ms_input(HudVisual *v, int x, int y, int click)
+{
+    HMissionSummary *m = (HMissionSummary *)v;
+    (void)x, (void)y;
+    if (m->retry) button_input(m->retry, click);   /* 0x41b320 */
+    if (v->state != 0 && g_mission_pass == 0 && m->retry && m->retry->clicked) return 3;
+    PENDING_NOTE(0x42a330, "the billboards' key (0x19)");
+    return 0;
+}
+
+static void ms_destroy(HudVisual *v)   /* 0x428c20 */
+{
+    HMissionSummary *m = (HMissionSummary *)v;
+    HudArt_free(m->face);
+    button_free(m->retry);
+    text_free(m->text);
+    text_free(m->name);
+    bb_free(&m->bb);
+    free(m);
+}
+
+static const HudVisualVtbl mission_vt = {ms_destroy, ms_draw, NULL, ms_setstate, bb_setpos, NULL, bb_done, ms_input};
+
+static HudVisual *mission_new(void)
+{
+    HMissionSummary *m = calloc(1, sizeof *m);
+    if (!m) return NULL;
+    const uint8_t *loc = HudConfig_loc();
+    int w = exe_i32(0x5b2c70), h = exe_i32(0x5b2c74);
+    bb_init(&m->bb, &mission_vt, w, h, LOC_string(loc, 0x46d6), LOC_string(loc, 0x46d7), true, true, false);
+    int W = g_display.width, H = g_display.height;
+    int fx = (W - w) / 2 + 0x14, fy = H / 2 - 0x40;   /* 0x41b120 */
+    m->face = HudArt_load("factorypeople", g_mission_narrator, fx, fy, 0x36, 0x40, false, false, true);
+    int bw = exe_i32(0x5b2c78), bh = exe_i32(0x5b2c7c);
+    m->retry = button_new(W / 2 - bw / 2, H / 2 + bh * -4 + h / 2, bw, bh, LOC_string(loc, 0x46bd), true);
+    m->text = text_new(HudConfig_font(0x64), 0xff000000u, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    m->tx = W / 2 - w / 4;
+    m->ty = H / 2 - h / 4;
+    m->name = text_new(HudConfig_font(0x64), 0xcc000000u, 0xcc000000u, fx, fy, 0, 0, 0, false);
+    if (m->name && m->name->font && m->name->font->font) {
+        /* the name centred under the picture, or from its left edge and smaller when wider */
+        const char *nm = LOC_string(loc, 0x4700 + g_mission_narrator);
+        float a, b, tw, th, room = exe_f32(0x5b2c80);
+        text_extent(m->name, nm ? nm : "", &a, &b, &tw, &th);
+        if (tw < room) m->name->x = (int)((room - tw) * exe_f32(0x5b23f0) + (float)fx);
+        else m->small = 1, m->name->x = fx + 2;
+        m->name->y = fy + 0x42;
+    }
+    REAL_srand(app_ticks_ms() / 1000u);   /* srand(time(0)) (0x537e80): the port's clock in seconds */
+    return &m->bb.base;
 }
 
 /* ---- the dials (HDial, vtable 0x5b2aac; 0x4212c0): a face over a dark disc, the needle a quad turned to
@@ -2551,7 +2739,9 @@ void HUD_Init(void)
     always = true;  /* (HUD_LoadStrings 0x41e190 sets 0x60c970) */
     add(gear_new(), true, false);
     add(speed_new(), true, false);
-    add(time_new(&time_vt, HUDPOS_TIME, HudConfig_i32(0xa4), HudConfig_i32(0xa8)), true, false);           /* 0x4315d0 */
+    s_time = time_new(&time_vt, HUDPOS_TIME, HudConfig_i32(0xa4), HudConfig_i32(0xa8));   /* 0x4315d0 */
+    add(s_time, true, false);
+    s_cones_down = 0;
     add(time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4)), true, false);   /* 0x42a0f0 */
     PENDING_NOTE(0x42f880, "HUD_Init's text damage (HTextDamage 0x42f880, the second layout's +0x3c 2 or 3)");
     add(position_new(), true, false);
@@ -2568,6 +2758,8 @@ void HUD_Init(void)
         summary = summary_new(title ? title : "");   /* 0x42bc30 */
         add(summary, false, false);
     }
+    mission = mission_new();   /* 0x428900 */
+    add(mission, false, false);
     static const int pause_ids[3] = {0x46bc, 0x46bd, 0x46be}, pause_actions[3] = {2, 3, 0x1a};
     s_pause = menu_new(0x5b2d40, 0x5b2d48, 0x46d0, 3, pause_ids, pause_actions);   /* 0x42a3a0 */
     add(s_pause, false, false);
@@ -2605,10 +2797,7 @@ static void race_screens(void)
     } else if (g_race_mode == 9) {
         /* Factory Driver: the mission's summary (0x60ca50) up, its opening (HMissionSummary_v5 0x4293b0)
            judging the mission */
-        Mission_Judge();
-        PENDING_NOTE(0x428dc0, "HMissionSummary's board (the narrator's name, the verdict's words typed out, speech)");
-        push_modal(summary);   /* (the port: the results' board in its place) */
-        if (summary) summary->flag = 1;
+        push_modal(mission);
     } else {
         PENDING_NOTE(0x426c50, "the race-over screens of the other game types");
     }
@@ -2688,7 +2877,7 @@ void HUD_Free(void)
 {
     nmodal = 0;
     s_pause = s_exit = NULL;
-    summary = NULL;
+    summary = mission = s_time = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);
     wrongway = NULL;
     for (int i = 0; i < nlist; i++)
@@ -2729,7 +2918,6 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         if (!e->last && e->front && 0x1c0 < g_sim_tick && (always || e->v->state == 2) && (g_race_view == 0 || g_race_view == 1))
             e->v->vt->draw(e->v);
     }
-    PENDING_NOTE(0x425910, "the pursuit's time trays (game type 9: 0x60ca1c, 0x60ca40)");
     Car *me = local_car();
     if (wrongway && me && *CAR_I(me, 0xd30) != 0 && g_race_mode != 9 && g_race_view != 2 && 0x1c0 < g_sim_tick) wrongway->vt->draw(wrongway);
     end_pass(r);
@@ -2766,4 +2954,22 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
     PENDING_NOTE(0x425910, "HUD_Draw's modal visuals, replay and network parts");
     RenderState_SetZFunc(rs, zfunc);
     RenderState_SetFogMode(rs, fog);
+    /* A mission with cones: when more traffic objects are down than last counted, one more cone (however
+       many fell) for the summary and a penalty on the time, flashed. */
+    if ((g_race_view == 0 || g_race_view == 1) && g_race_mode == 9 && (g_mission_cones != -1 || g_mission_penalty != -1)) {
+        int n = 0;
+        for (int i = 0; i < g_ntrafficcars; i++)   /* (0x65807c's count over 0x5e8c24) */
+            if (g_traffic[i] && *CAR_I(g_traffic[i], 0x42c) != 0) n++;
+        if (n != s_cones_down) {
+            PENDING_NOTE(0x4aac20, "the cone's sound");
+            s_cones_down = n;
+            g_mission_knocked++;   /* 0x4297e0 */
+            if (s_time) {
+                HTime *t = (HTime *)s_time;
+                t->flash = 0x10;   /* 0x431790 */
+                value_red(&t->combo);
+                t->penalties++;    /* 0x4317a0 */
+            }
+        }
+    }
 }

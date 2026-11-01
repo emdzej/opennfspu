@@ -40,7 +40,6 @@ bool Mission_DamageOver(bool live)
 
 void Mission_Judge(void)
 {
-    PENDING_NOTE(0x42a310, "the network game's summary (0x42a310: no verdict)");
     int32_t pass = 1;
     Car *c = local_racer();
     if (g_mission_place != 0) {

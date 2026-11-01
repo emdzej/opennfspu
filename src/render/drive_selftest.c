@@ -319,6 +319,10 @@ bool DRIVE_selftest(const char *track, const char *car)
     }
     /* The race over (all the humans finished): the race-over screens (the original's second race loop,
        race view 2, replays the race behind them: the replay isn't ported, the race goes on). */
+    {
+        char ev[12];   /* --param endrace=<tick>: the race over at that tick (port addition, tests) */
+        if (!g_race_over && plat_param("endrace", ev, sizeof ev) && atoi(ev) <= g_sim_tick) g_race_over = 1;
+    }
     if (g_race_over && g_race_view < 2) {
         /* GameMain's second race loop: the race again from its start, replaying the packets
            (0x414ed0, 0x413ec0), the HUD's visuals hidden (0x425740), then the race-over screens. */
