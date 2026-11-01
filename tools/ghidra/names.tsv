@@ -2650,3 +2650,9 @@
 004f1130	FECarSetupCallbackList_Update	frontend	high	Install or uninstall shown by the row chosen
 005164e0	FEPartsDamageRepairAccessor_ctor	frontend	high	A car accessor's fitted parts with their wear (Parts.UsedDamageList on UsedCar.Car)
 00516640	FEPartsDamageRepairAccessor_DrawItem	frontend	high	A row: category label, name, wear "%d %" at ID_DAMAGEPOS, none dim
+0050c9f0	FECallBackList_TestDriveUsed	frontend	high	Test drive (0x699fc8 1, type 0x5dc1b8 7), then PLAYGAME
+0050ca10	FECallBackList_TestDriveNew	frontend	high	Test drive type 6
+0050ca30	FECallBackList_TestDriveCarSetup	frontend	high	Test drive type 8
+004ef890	FECar_HasRequiredParts	frontend	high	Each stock part's kind among the fitted, else the message 0x28a of the missing
+005019d0	FE_CarIncomplete	frontend	high	The chosen car lacks a required part (0x4ef890)
+004f1100	FECarSetupCallbackList_TestDriveCheck	frontend	high	The car setup's test drive screen when the car is complete

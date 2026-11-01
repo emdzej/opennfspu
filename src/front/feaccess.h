@@ -13,6 +13,7 @@
    Positions start from fe.txt's race description, what the original's options hold. */
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct FEAccessor FEAccessor;
@@ -118,3 +119,5 @@ bool FEData_PartsState(bool *buy, bool *sell, bool *basket, bool *selected);
 int FEData_InstallAction(const char *cb);
 /* The install list's row chosen: a fitted part (true) or one in stock; false for none. */
 bool FEData_InstallState(bool *fitted);
+/* The garage car has its required parts (0x4ef890); else msg says which are missing. */
+bool FEData_CarComplete(char *msg, size_t cap);

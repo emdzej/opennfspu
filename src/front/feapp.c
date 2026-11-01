@@ -57,6 +57,7 @@ static int s_gametype;                /* Game.GameType (0x690ad4): 4 the career 
 static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
 static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
+static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
@@ -268,7 +269,7 @@ bool FEApp_Init(const char *start)
 
 void FEApp_RaceWear(const int32_t *ids, const float *wear, int n)
 {
-    if (s_owned_race >= 0) FEData_AddWear(s_owned_race, ids, wear, n);
+    if (s_owned_race >= 0 && !s_testdrive) FEData_AddWear(s_owned_race, ids, wear, n);
     s_owned_race = -1;
     FESave_Write();
 }
@@ -278,6 +279,7 @@ void FEApp_RaceOver(const int *places, const int *times, int n)
     if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, n);
     s_tour_race = -1;
     if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */
+    s_testdrive = false;
 }
 
 void FEApp_End(void)
@@ -396,8 +398,18 @@ static bool can_play(void) { return play_mode() != 0; }
    callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, the screens' own pending. */
 static void callback(const char *cb)
 {
-    if (!strcmp(cb, "GOBACK")) {
-        FEApp_Back();
+    if (!strcmp(cb, "GOBACK") || !strcmp(cb, "TESTDRIVECHECK")) {
+        /* the car setup's (FECarSetupCallbackList_v45 0x4f1360, 0x4f1100 for TESTDRIVECHECK): only with the
+           car's required parts (0x5019d0 -> 0x4ef890, else its message, 0x512e70) */
+        if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CARSETUP")) {
+            char m[600];
+            if (!FEData_CarComplete(m, sizeof m)) {
+                dialog_open(DLG_ONE, m, 0x2be, 0);
+                return;
+            }
+        }
+        if (cb[0] == 'T') FEApp_GotoScreen("testdrivecarsetup", true);
+        else FEApp_Back();
     } else if (!strcmp(cb, "OPTIONS")) {
         FEApp_GotoScreen("options", true);
     } else if (!strcmp(cb, "SHOWPLAYLISTPANEL") || !strcmp(cb, "HIDEPLAYLISTPANEL")) {
@@ -475,7 +487,26 @@ static void callback(const char *cb)
         }
     } else if (!strcmp(cb, "QUIT")) {
         s_result = FE_QUIT;
+    } else if (!strcmp(cb, "TESTDRIVEUSED") || !strcmp(cb, "TESTDRIVENEW") || !strcmp(cb, "TESTDRIVECARSETUP")) {
+        /* FECallBackList_v48 .. _v50 (0x50c9f0 ..): a test drive (0x699fc8 1, the type 0x5dc1b8 7 used, 6 new,
+           8 the car setup's), then PLAYGAME (slot 0xd4): Track1.Track's track, the car of the screen's
+           accessor, alone. (The race's own type for a test drive, from 0x690aac through 0x4ee430, pends: the
+           port runs it as a race of the options' laps; no wear and no result are kept.) */
+        const char *acc = cb[9] == 'U' ? "UsedCar.Car" : cb[9] == 'N' ? "DealerCar.Car" : "OwnedCars.Car";
+        FEAccessor *ca = FEAccess_Find(acc);
+        const char *c = FEAccess_CarFile(ca);
+        if (!c) return;
+        s_tour_race = -1;
+        s_owned_race = cb[9] == 'C' ? FEData_OwnedIndex("OwnedCars.Car") : -1;   /* (its parts and setup) */
+        snprintf(s_track, sizeof s_track, "%s", FEData_Track());
+        snprintf(s_car, sizeof s_car, "%s", c);
+        s_havecol = FEAccess_CarColours(ca, s_colours);
+        s_laps = fe_int("num_laps", 1);
+        s_opponents = 0;
+        s_testdrive = true;
+        s_result = FE_PLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
+        s_testdrive = false;
         if (!can_play()) return;
         /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
            accessors pending: fe.txt's as the original's defaults). */

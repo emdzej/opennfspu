@@ -956,6 +956,33 @@ int FEData_InstallAction(const char *cb)
     return 0;
 }
 
+/* Whether the garage car has a part of each kind its stock parts are (0x4ef890: each stock part's
+   name, +0x28, and type among the fitted ones'); else the message of the missing ones (string 0x28a,
+   "%s  ", then their names, "%s %s" the first, "%s, %s" the rest). */
+bool FEData_CarComplete(char *msg, size_t cap)
+{
+    SaveCar *gc = garage_car();
+    if (!gc) return true;
+    bool all = true, first = true;
+    snprintf(msg, cap, "%s  ", FEStrings_Get(0x28a));
+    for (int i = 0; i < gc->ninstalled; i++) {
+        const uint8_t *s = part_rec(gc->parts[i][0]);
+        if (!s) continue;
+        bool have = false;
+        for (int k = 0; k < gc->nother && !have; k++) {
+            const uint8_t *q = part_rec(gc->parts[gc->ninstalled + k][0]);
+            have = q && !strcmp((const char *)q + 0x28, (const char *)s + 0x28) && rec16(q, 0x26) == rec16(s, 0x26);
+        }
+        if (have) continue;
+        all = false;
+        char t[512];
+        snprintf(t, sizeof t, first ? "%s %s" : "%s, %s", msg, FEStrings_Get(rec32(s, 4)));
+        snprintf(msg, cap, "%s", t);
+        first = false;
+    }
+    return all;
+}
+
 bool FEData_InstallState(bool *fitted)
 {
     FEAccessor *a = FEAccess_Find("Parts.InstallList");
@@ -1029,6 +1056,14 @@ bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
         out->category = part_category(p);
         const uint8_t *prev = row ? part_rec(uc->parts[uc->ninstalled + row - 1][0]) : NULL;
         if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
+        return true;
+    }
+    if (a->kind != ACC_BASKET) {   /* another accessor's: its item's text (slot 12), 14 high */
+        if (row < 0 || row >= a->count) return false;
+        FEAccessor t = *a;
+        t.pos = row;
+        snprintf(out->text, sizeof out->text, "%s", FEAccess_Text(&t));
+        out->height = 0xe;
         return true;
     }
     if (a->kind == ACC_BASKET) {   /* FEPartsShoppingBasket_v15 0x515800, _v26 0x515930 */
