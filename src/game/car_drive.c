@@ -114,7 +114,7 @@ void CarSim_Controls(Car *c)
             if (DESC_I(c, 0x14) == 0) {
                 *steer = want;
             } else {
-                int lim = g_race_wet || DESC_I(c, 0x518) ? 0x12 : 0xc;
+                int lim = g_race_rally || DESC_I(c, 0x518) ? 0x12 : 0xc;
                 int d = want - *steer;
                 if (d < 0) d = -d < lim ? d : -lim;
                 else if (lim <= d) d = lim;
@@ -490,7 +490,7 @@ float CarSim_Engine(Car *c)
                 torque = torque * g_drive_throttle;
             }
             if (target < *rpm) *rpm = target;
-            if (g_race_wet) {
+            if (g_race_rally) {
                 double k = *CAR_F(c, 0xdc0);
                 if (k < K(0x5b23f8)) k = -k;
                 k += K(0x5b24a8);
@@ -581,7 +581,7 @@ void CarSim_TyreLoads(Car *c)
     *CAR_F(c, 0x928) = fr;
     *CAR_F(c, 0x9ec) = move + *CAR_F(c, 0x9ec);
     *CAR_F(c, 0xab0) = move + *CAR_F(c, 0xab0);
-    if (g_race_wet) {
+    if (g_race_rally) {
         *CAR_F(c, 0x864) = fl * K(0x5b27a4);
         *CAR_F(c, 0x928) = fr * K(0x5b27a4);
     }
@@ -669,7 +669,7 @@ static void tyre_locked(Car *c, int w)
    holding the driven wheels' spin. 0x4a1ba0 */
 static void tyre_grip(Car *c, int w)
 {
-    float l = *WF(c, w, 0x98) * (g_race_wet ? K(0x5b23f0) : K(0x5b25e8)), s = *WF(c, w, 0x90);
+    float l = *WF(c, w, 0x98) * (g_race_rally ? K(0x5b23f0) : K(0x5b25e8)), s = *WF(c, w, 0x90);
     if (l < K(0x5b23f8)) l = -l;
     if (s < K(0x5b23f8)) s = -s;
     float big = l, small = s;
@@ -825,7 +825,7 @@ void CarSim_Tyre(Car *c, int w)
     *WF(c, w, 0x94) = 0;
     *WF(c, w, 0x98) = *WF(c, w, 0xa8);
     tyre_grip(c, w);   /* 0x4a1ba0 */
-    if (g_race_wet && *WI(c, w, 0xc0)) *WF(c, w, 0x90) *= K(0x5b2480);
+    if (g_race_rally && *WI(c, w, 0xc0)) *WF(c, w, 0x90) *= K(0x5b2480);
     if (steer != K(0x5b23f8)) {
         /* Back into the car's frame. */
         float t = steer * K(0x5b4aa0);
@@ -990,7 +990,7 @@ static void drive(Car *c)
     w[1] = tw[1] * (DESC_I(c, 0x518) ? K(0x5b24b8) : K(0x5b4a74)) + w[1];
     *CAR_F(c, 0xe08) = *CAR_F(c, 0xe08) * K(0x5b260c) + F[0] * K(0x5b2468);
     *CAR_F(c, 0xe04) = F[2] * K(0x5b2604) + *CAR_F(c, 0xe04) * K(0x5b25e8);
-    if (g_race_wet) {
+    if (g_race_rally) {
         float s = *CAR_F(c, 0xdc0);
         if (s < K(0x5b23f8)) s = -s;
         if (K(0x5b2400) < s) s = K(0x5b2400);

@@ -12,7 +12,7 @@
 #include <string.h>
 
 int32_t g_sim_tick;
-int32_t g_race_wet;
+int32_t g_race_rally;
 int32_t g_race_network;
 int32_t g_race_rollover_events;
 int32_t g_race_heavy;
@@ -224,7 +224,7 @@ float CarSim_Ground(Car *c, float out[3])
         memcpy(c->b + t + 0x24, &s->surface, 2);
         *CAR_I(c, t + 0x88) = s->surface;
         int kind = s->surface & 0xf;
-        if (g_race_wet && (kind == 1 || kind == 10)) *CAR_I(c, t + 0x88) = 2;
+        if (g_race_rally && (kind == 1 || kind == 10)) *CAR_I(c, t + 0x88) = 2;
         if (CarSim_ContactMode(c, s, contact[i]) == 0) {   /* 0x4943f0 */
             const float *v = WSurface_Vertex(s, 0);
             contact[i][1] = (-((pts[i][0] - v[0]) * n[0]) - (pts[i][2] - v[2]) * n[2]) / n[1] + v[1];
@@ -695,7 +695,7 @@ void CarSim_Track(void *car)
     *CAR_I(c, 0x460) = c->body.surface;
     int kind = c->body.surface & 0xf;
     *CAR_I(c, 0x464) = kind;
-    if (g_race_wet && (kind == 1 || kind == 10)) *CAR_I(c, 0x464) = 2;
+    if (g_race_rally && (kind == 1 || kind == 10)) *CAR_I(c, 0x464) = 2;
     if (!g_road || !g_road->nnodes) return;
     /* The heading against the road: the angle of the car's forward to the node's side axis. */
     float a = (float)asin(dot3(CAR_F(c, 0x37c), node_vec(c->body.node, 0x28)));

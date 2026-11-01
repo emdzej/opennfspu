@@ -99,10 +99,10 @@ extern CarList g_ranked;      /* 0x5e8b88: the race's cars by their race distanc
 extern CarList g_ordered;     /* 0x5e8bac: by race distance (+0x550 the car swapped with, +0x554 when) */
 extern int32_t g_race_view_opponents;   /* 0x657414 (class-2 opponents viewed too) */
 
-/* The race's state the simulation reads: the tick counter (0x606ac4, 64 Hz), wet roads (0x6573f8), a
+/* The race's state the simulation reads: the tick counter (0x606ac4, 64 Hz), the RALLY option (0x6573f8: the Dakar cheat's road grip), a
    network game (0x657408). */
 extern int32_t g_sim_tick;
-extern int32_t g_race_wet;
+extern int32_t g_race_rally;
 extern int32_t g_race_network;
 extern int32_t g_race_rollover_events;   /* 0x657a2c */
 extern int32_t g_race_heavy;             /* 0x6573fc: the human cars ten times heavier */

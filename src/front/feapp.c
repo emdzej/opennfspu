@@ -583,6 +583,7 @@ int FEApp_RaceType(void)
     case 1: return 3;
     case 2:
     case 4: return 2;
+    case 0: return FE_Cheat(5) ? 1 : 0;   /* (Fuzzyfuz: the pursuit) */
     default: return 0;
     }
 }

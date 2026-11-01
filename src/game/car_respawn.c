@@ -176,7 +176,7 @@ static void race_part(Car *c)
 static void wheel_sounds(Car *c)
 {
     float front = *CAR_F(c, 0x934) + *CAR_F(c, 0x870), rear = *CAR_F(c, 0xabc) + *CAR_F(c, 0x9f8);
-    bool open = g_race_wet && WSurface_FindAbove(&c->body, CAR_F(c, 0x330), NULL) == 0;
+    bool open = g_race_rally && WSurface_FindAbove(&c->body, CAR_F(c, 0x330), NULL) == 0;
     float f = 0;
     if (*CAR_F(c, 0x78) < K(0x5b26f0) && *CAR_F(c, 0x424) < K(0x5b2604) && K(0x5b23f0) < *CAR_F(c, 0x3a0)) {
         if (0 < front) f = K(0x5b241c) < front ? 10.0f : front;

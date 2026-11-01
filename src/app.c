@@ -167,15 +167,20 @@ bool app_frame(void)
                     snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
                     g_drive_race_type = FEApp_RaceType();
-                    /* 0x4ecc60: the derby cheat (7) makes the race a lap knockout on the skidpad with
-                       damage, collisions on and the DERBY option set */
+                    /* 0x4ecc60: the Dakar cheat (0) sets RALLY, fetherw8 (8) HEAVY; the derby cheat (7)
+                       makes the race a lap knockout on the skidpad with damage, collisions on and the
+                       DERBY option set */
                     g_race_cheats = g_fe_cheats;
+                    g_race_rally = FE_Cheat(0);   /* RALLY (0x19) */
+                    g_race_heavy = FE_Cheat(8);   /* HEAVY (0x1a) */
                     g_race_derby = FE_Cheat(7);
                     if (g_race_derby) {
                         snprintf(race_track, sizeof race_track, "%s", exe_str(0x5da6d0));   /* "Skidpad" */
                         g_drive_race_type = 3;
                         PENDING_NOTE(0x4ecc60, "the derby's LINEAR_TRACK 0, DAMAGE 1, NOCOLLISION 0 (the port's options)");
                     }
+                    if (FE_Cheat(5) && FEApp_GameType() == 0)
+                        PENDING_NOTE(0x4ec590, "Fuzzyfuz: the quick race's police (four cop cars, class 8; RACE_TYPE 1, 0x4eab10)");
                     if (!FEData_TrackRecords(race_track, g_track_records, g_lap_records, g_record_names, g_record_cars)) {
                         memset(g_track_records, 0, sizeof g_track_records);
                         memset(g_lap_records, 0, sizeof g_lap_records);
