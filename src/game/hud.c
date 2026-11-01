@@ -2265,12 +2265,101 @@ static HudVisual *records_new(void)
 
 typedef struct { int32_t points, time, earnings, racer; } TourEntry;
 
+/* The player's winnings by race (HWinnings, 0x6c bytes, vtable 0x5b34d8; 0x436790), shown while the
+   mouse is over the player's earnings: each race's prize and safe-driving bonus, after the last race
+   the bonus prize, then the total, on a dark box. */
+typedef struct {
+    HText *label, *amount;   /* +0x10, +0x14: left and right aligned */
+    int32_t w, h;            /* +0x1c 200, +0x20: 30 a race run and 70 */
+    float q[16];             /* +0x24: the box */
+    int32_t line;            /* +0x64: "X"'s height and a half */
+    int32_t row;             /* +0x68: the player's standing */
+} HWinnings;
+
+static HWinnings *winnings_new(void)
+{
+    HWinnings *w = calloc(1, sizeof *w);
+    if (!w) return NULL;
+    w->label = text_new(HudConfig_font(100), 0xffffffffu, 0xffffffffu, 0, 0, 0, 0, 0, false);
+    w->amount = text_new(HudConfig_font(100), 0xffffffffu, 0xffffffffu, 0, 0, 0, 0, 1, false);
+    w->w = 200;
+    w->h = g_race_tour.runs * 0x1e + 0x46;
+    float a, b, tw, th = 0;
+    if (w->label && w->label->font && w->label->font->font) text_extent(w->label, exe_str(0x5cd238), &a, &b, &tw, &th);
+    w->line = (int)(th * exe_f32(0x5b23f0) + th);
+    return w;
+}
+
+static void winnings_free(HWinnings *w)   /* HWinnings_v0 0x436880 */
+{
+    if (!w) return;
+    text_free(w->label);
+    text_free(w->amount);
+    free(w);
+}
+
+/* The box about (x, y): up by the races run less one line, kept on the screen. 0x436d00 */
+static void winnings_place(HWinnings *w, int x, int y)
+{
+    int h = (g_race_tour.runs * 2 + 3) * w->line + 0x14;
+    y -= (g_race_tour.runs - 1) * w->line;
+    if (g_display.height < y + h) y = g_display.height - h - 10;
+    box(x, y, w->w, w->h, w->q);
+}
+
+static void winnings_line(HWinnings *w, int row, const char *label, const char *amount)
+{
+    int x = (int)(w->q[0] + exe_f32(0x5b241c)), y = (int)((float)(w->line * row) + w->q[1] + exe_f32(0x5b241c));
+    if (w->label) w->label->x = x, w->label->y = y;
+    text_print(w->label, label, 1.0f, 1.0f);
+    if (w->amount) w->amount->x = x + 0xb4, w->amount->y = y;
+    text_print(w->amount, amount, 1.0f, 1.0f);
+}
+
+/* (the lines' texts, kept till the 2D layer draws them: 0x610a8c's slots) */
+static char s_winnings_text[44][0x40];
+
+/* 0x4368c0 */
+static void winnings_draw(HWinnings *w)
+{
+    const RaceTournament *t = &g_race_tour;
+    const uint8_t *loc = HudConfig_loc();
+    int row = 0, n = 0;
+    char (*b)[0x40] = s_winnings_text;
+    for (int r = 0; r < 10; r++) {
+        if (t->won[r] <= 0 && t->safe_won[r] <= 0) continue;
+        const char *p = LOC_string(loc, 0x46f5), *sb = LOC_string(loc, 0x46f6);
+        snprintf(b[n], 0x40, "%s %d ", p ? p : "", r + 1);   /* ("%s %s ", 0x5cd240) */
+        snprintf(b[n + 1], 0x40, "%d ", t->won[r]);
+        winnings_line(w, row++, b[n], b[n + 1]);
+        snprintf(b[n + 2], 0x40, "%s %d ", sb ? sb : "", r + 1);
+        snprintf(b[n + 3], 0x40, "%d ", t->safe_won[r]);
+        winnings_line(w, row++, b[n + 2], b[n + 3]);
+        n += 4;
+    }
+    if (t->last_race) {
+        const char *bl = LOC_string(loc, 0x46f7);
+        snprintf(b[n], 0x40, "%s", bl ? bl : "");
+        snprintf(b[n + 1], 0x40, "%d ", 0 <= w->row && w->row < 8 ? t->bonus[w->row] : 0);
+        winnings_line(w, row++, b[n], b[n + 1]);
+        n += 2;
+    }
+    const char *tot = LOC_string(loc, 0x46f8);
+    snprintf(b[n], 0x40, "%s", tot ? tot : "");
+    snprintf(b[n + 1], 0x40, "%d ", t->earnings[0]);   /* (racer 0's, whoever is the player) */
+    winnings_line(w, row, b[n], b[n + 1]);
+    float bottom = (float)(w->line + 10 + (int)((float)(w->line * row) + w->q[1] + exe_f32(0x5b241c)));
+    w->q[9] = w->q[13] = bottom;
+    quad_table(w->q, 0x5cd20c);   /* 0x419fb0 */
+}
+
 typedef struct {
     HBillBoard bb;
     TourEntry entry[8];            /* +0x120 */
     HTable *table;                 /* +0x1a0 */
     uint8_t spoken;                /* +0x1a4 */
     const char *head[2][4];        /* +0x1a8, +0x1b8 */
+    HWinnings *winnings;           /* +0x1e8 */
     int32_t row;                   /* +0x1ec: the player's */
 } HTourStandings;
 
@@ -2381,16 +2470,18 @@ static void standings_setstate(HudVisual *v, int32_t st)
             if (!g_race_tour.rally) snprintf(t->cell[i][2], 0x20, "%d", e->points);
             else HTime_Format(e->time, t->cell[i][2], false);
             snprintf(t->cell[i][3], 0x20, "%d", 0 <= e->racer && e->racer < 8 ? g_race_tour.earnings[e->racer] : 0);
-            if (e->racer == g_race_local) s->row = i;   /* (and HWinnings' row, 0x436dc0) */
+            if (e->racer == g_race_local) {
+                s->row = i;
+                if (s->winnings) s->winnings->row = i;   /* 0x436dc0 */
+            }
         }
         t->mark = s->row + 1;
     }
     bb_setstate(v, st);
 }
 
-/* The billboard, its table once open; a win so far before the last race said (0x4a62a0). The
-   earnings' breakdown under the mouse (HWinnings 0x436790: the race's prize and safe bonus by race)
-   pends. 0x4319e0 */
+/* The billboard, its table once open; a win so far before the last race said (0x4a62a0); the player's
+   winnings by race while the mouse is over the player's earnings (0x42f200, 0x42f280). 0x4319e0 */
 static void standings_draw(HudVisual *v)
 {
     HTourStandings *s = (HTourStandings *)v;
@@ -2401,13 +2492,22 @@ static void standings_draw(HudVisual *v)
         s->spoken = 1;
         if (!g_race_tour.last_race && s->row == 0) Audio_Say(0x9e);
     }
-    PENDING_NOTE(0x436790, "HWinnings: the player's winnings by race under the mouse");
+    HTable *t = s->table;
+    if (t && s->winnings) {
+        int x0 = t->x + t->colw[0] + t->colw[1] + t->colw[2], x1 = x0 + t->colw[3];
+        int y0 = t->y + (s->row * 5 + 5) * 4, y1 = t->y + (s->row * 5 + 10) * 4;
+        if (x0 < s_mouse_x && s_mouse_x < x1 && y0 < s_mouse_y && s_mouse_y < y1) {
+            winnings_place(s->winnings, (x1 - x0) / 2 + x0, (y1 - y0) / 2 + y0);   /* 0x436d00 */
+            winnings_draw(s->winnings);
+        }
+    }
 }
 
 static void standings_destroy(HudVisual *v)   /* HTournamentStandings_v0 0x431990 */
 {
     HTourStandings *s = (HTourStandings *)v;
     table_free(s->table);
+    winnings_free(s->winnings);
     bb_free(&s->bb);
     free(s);
 }
@@ -2428,6 +2528,7 @@ static HudVisual *standings_new(void)
     int x = (g_display.width - s->bb.w) / 2, y = (g_display.height - s->bb.h) / 2;   /* 0x41b120 */
     bool rally = g_race_tour.rally != 0;   /* (0x6577e4) */
     s->table = table_new(x, y, w + x, h + y, 4, 8, rally ? 0x5b31f8 : 0x5b31e8, s->head[rally]);
+    s->winnings = winnings_new();   /* 0x436790 */
     return &s->bb.base;
 }
 
