@@ -55,6 +55,8 @@ static void car_fields(uint8_t *d, const uint8_t *rec)
     int16_t body;
     memcpy(&body, rec + 0x1c0, 2);
     put_i(d, 0x328, body);                                /* BODYSTYLE */
+    /* TACH0RPM, TACH1000RPM, SPEEDO0KM, SPEEDO100KM: the cockpit needles' zero and scale (turns) */
+    memcpy(d + 0x524, rec + 0x2f0, 16);
 }
 
 static void stock_parts(uint8_t *d, const uint8_t *rec)
