@@ -10,6 +10,8 @@
 #include "render/rlists.h"
 #include "render/sky.h"
 #include "render/sprite.h"
+#include "render/particles.h"
+#include "render/carparticle.h"
 
 /* RenderState setters (0x5375e0: +0x0c and state 0x39; 0x5375a0: +0x04 and state 0x28). */
 static void rs_set39(RenderState *rs, int v)
@@ -54,10 +56,11 @@ void Render_PendingWorld(RCamera *c)
     rs_set39(g_render->device->rs, 1);
     rs_set28(g_render->device->rs, 3);
     RLists_Flush();                                            /* 0x4671d0 */
-    PENDING_NOTE(0x455130, "Render_World: 0x455130 (particles)");
-    /* The cars (0x43f610): the game's car list draws them through the hook until that draw is ported. */
+    /* The cars: the original's are entries of the render lists (R3DObject_Draw 0x4433c0, flushed above);
+       the game's car list draws them through the hook until their entries are ported. */
     if (g_render_cars) g_render_cars(c);
-    else PENDING_NOTE(0x43f610, "Render_World: 0x43f610 (the cars)");
+    Particles_Draw();                                          /* 0x455130 */
+    CarParticles_DrawAll();                                    /* 0x43f610 */
     if (c->v12c == 2) Sky_DrawAfter();
     PENDING_NOTE(0x458ef0, "Render_World: 0x458ef0");
 }

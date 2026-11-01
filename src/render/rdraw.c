@@ -1,6 +1,7 @@
 /* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
 #include "render/rdraw.h"
 #include "render/sprite.h"
+#include "render/particles.h"
 #include "render/dynlight.h"
 #include "exe.h"
 #include "game/track.h"
@@ -200,7 +201,7 @@ static void article_special(RDrawObject *o, int index, const RListEntry *e)
     const uint32_t *ef = UData_data((UData *)e->item);
     switch (ef ? ef[0] : 0) {
     case 2: Sprite_DrawGlow((const float *)(ef + 2)); break;   /* 0x451810 */
-    case 3: PENDING_NOTE(0x455020, "the effect particle emitter (RGenericParticleSystem)"); break;
+    case 3: Particles_Ask((const PartEmitter *)(ef + 2), (float)e->key); break;   /* 0x455020 */
     case 4:
         if (g_render_extras) {
             R3DMaterialSet *ms = ((RDrawBundle *)o)->bundle->world;

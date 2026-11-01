@@ -1,5 +1,7 @@
 /* A race car's hits and its return to the road (see car_respawn.h). */
 #include "game/car_respawn.h"
+#include "render/carparticle.h"
+#include "render/r3dcar.h"
 #include "game/sim_rand.h"
 #include "exe.h"
 #include "game/ai.h"
@@ -138,8 +140,10 @@ static void race_part(Car *c)
             float f = *CAR_F(c, 0x430) * K(0x5b272c);
             int kind = (int32_t)exe_u32(0x5cc518 + 4u * (uint32_t)((int32_t)t >> 16));
             int surf = (int)(w & 0xff);
-            if (t == 0x40000 || t == 0x30000)
-                PENDING_NOTE(0x43f3f0, "the hits' sparks and debris");
+            if (t == 0x40000 || t == 0x30000) {   /* the hit point (+0x440), the car's velocity */
+                R3DCar *r = c->p[CARP_R3D];
+                if (r) CarParticles_Sparks(r->particles, CAR_F(c, 0x440), CAR_F(c, 0x33c));   /* 0x43f3f0 */
+            }
             if (t != 0x40000 && (int32_t)t < 0x30001) surf = (int32_t)exe_u32(0x5cc4d8 + 4u * (w & 0xff));
             else if (t == 0x50000) {
                 if (*CAR_I(c, 0x434) == 0) surf = (int32_t)exe_u32(0x5cc534 + 4u * (w & 0xff));

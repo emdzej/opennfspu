@@ -1,5 +1,6 @@
 /* The race's cars (see car.h). */
 #include "game/car.h"
+#include "render/carparticle.h"
 #include "game/race_car.h"
 #include "exe.h"
 #include "pending.h"
@@ -475,6 +476,7 @@ static void Car_MakeRenderer(Car *c)
     snprintf(path, sizeof path, "GameData\\CarModel\\%s", (const char *)CAR_DESCB(c) + 0x228);
     R3DCar_LoadCrp(&r->car, path);
     c->p[CARP_R3D] = &r->car;
+    r->car.particles = CarParticles_New(c);   /* (R3DCar_ctor 0x43794e: 0x43ed40) */
     /* The sizes the load writes into the state are the car's own fields in the original (+0x3a8 the half
        box, +0x3b4 the radius): the simulation's collisions read them there. */
     memcpy(CAR_F(c, 0x3a8), r->state.halfsize, 12);

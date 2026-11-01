@@ -1,5 +1,7 @@
 /* The drive mode (see drive_selftest.h). */
 #include "render/drive_selftest.h"
+#include "render/particles.h"
+#include "render/carparticle.h"
 #include "real/mouse.h"
 #include "eagl/eagl.h"
 #include "render/headlights.h"
@@ -83,6 +85,9 @@ static void draw_cars(RCamera *c)
         r->lit = true;
         R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */
         R3DCar_Draw(r, &c->view->model);
+        /* R3DCar_v7's particles: not the viewed car's in the in-car and hood views. */
+        if (*CAR_I(car, CAR_INDEX) != g_camera_car || (g_racecam[0].mode != 0 && g_racecam[0].mode != 1))
+            CarParticles_Update(r->particles, true);   /* 0x43eeb0 */
     }
 }
 
@@ -104,9 +109,11 @@ static bool load(const char *track, const char *carname)
     RTex_detectquality(&(RTexMachine){1000000000, 256ll << 20, 64u << 20, 32});
     Track_Load();
     if (!g_world || !g_world->root) return false;
+    Render_LoadViewKeys(g_track_name);  /* 0x44f9b0 */
     Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sprites_Init();                     /* 0x451360 */
+    Particles_Init();                   /* 0x455180 */
     DynLights_Init();                   /* 0x455e30 */
     Sky_LoadFsh(g_track_name, false);
     SpriteBank_Load();                  /* 0x452090 */
@@ -126,6 +133,7 @@ static bool load(const char *track, const char *carname)
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
     g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
+    Render_SeedRand((uint32_t)g_race_seed);   /* (0x44fbd0) */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
     AI_Load();             /* the racing line (0x4031f0) */
     Input_Reset(false);
@@ -376,6 +384,8 @@ void DRIVE_Shutdown(void)
     for (int i = 0; i < g_ncars; i++) {
         R3DCar *r = g_cars[i] ? g_cars[i]->p[CARP_R3D] : NULL;
         if (r) {
+            CarParticles_Free(r->particles);   /* (R3DCar's destructor: 0x43ee50) */
+            r->particles = NULL;
             R3DCar_Free(r);
             g_cars[i]->p[CARP_R3D] = NULL;
         }
@@ -389,6 +399,9 @@ void DRIVE_Shutdown(void)
     Sun_Free();             /* 0x4600e0 */
     DynLights_Free();       /* 0x455ec0 */
     Sprites_Free();         /* 0x451480 */
+    Render_FreeViewKeys();  /* 0x44f9e0 */
+    CarParticles_Clear();   /* 0x43ecd0 */
+    Particles_Free();       /* 0x4552c0 */
     R3DCar_FreeCommon();    /* 0x443a80 (0x414fa0: the car commons go with the race) */
     Render_FreeCommonFsh(); /* 0x448af0 */
     Scene_Clear();          /* 0x46cf60 */

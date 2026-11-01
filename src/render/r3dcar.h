@@ -153,6 +153,7 @@ typedef struct R3DCar {
     uint8_t reverse;                /* +0x566: the lever in reverse (slot 6) */
     /* the spoiler's ease (the +0x64 object's +0x170 .. +0x17c: start ms, length ms, from, to) */
     struct { uint32_t since, dur; float from, to; } spoilerease;
+    struct CarParticles *particles;   /* +0x704 (R3DCar_ctor's, made by the game's car here) */
 } R3DCar;
 
 /* Game state the renderer reads (globals of the original). */

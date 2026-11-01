@@ -1,6 +1,12 @@
 /* The render system (render.h): Render_Init and the render system object, the graphics device, the
    render-state object, display mode and quality, cameras and views, the race frame. */
 #include "render/render.h"
+#include "render/drive_selftest.h"
+#include "render/particles.h"
+#include "game/race.h"
+#include "game/race_car.h"
+#include "game/track.h"
+#include "vfs.h"
 #include "real/window.h"
 #include "render/sky.h"
 #include "game/camera.h"
@@ -97,6 +103,12 @@ void RenderState_SetZFunc(RenderState *rs, int zfunc)
 {
     rs->state28 = zfunc;
     EAGL_RSSet(0x28, (uintptr_t)zfunc);
+}
+
+void RenderState_SetZWrite(RenderState *rs, int on)
+{
+    rs->state39 = on;
+    EAGL_RSSet(0x39, (uintptr_t)on);
 }
 
 /* The new cull is sent at once only while the material states' last cull value (0x5ded4c, the cull pair
@@ -217,7 +229,7 @@ void Render_DisplayInit(void)
 }
 
 /* 0x44ebe0. The globals other than the method key stay in this module until their readers are ported
-   (shadows 0x6197e5, particles 0x6197e0, specials 0x6197ec/0x6197f0/0x6197f4, car detail 0x6197c4). */
+   (shadows 0x6197e5, specials 0x6197ec/0x6197f0/0x6197f4, car detail 0x6197c4). */
 static int specials_level;          /* 0x6197f4 */
 uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it in this build */
 uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
@@ -236,11 +248,12 @@ void Render_SetupQuality(void)
     g_render_extras = card_type != 0xe;
     g_render_skiplod0 = 0;
     switch (g_renderopts.specialfx) {
-    case 0: specials_level = 0; g_render_extras = 0; break;
-    case 1: specials_level = 1; g_render_extras = 0; break;
-    case 2: specials_level = 2; break;
+    case 0: specials_level = 0; g_render_extras = 0; g_render_particles = 0; break;
+    case 1: specials_level = 1; g_render_extras = 0; g_render_particles = 100; break;
+    case 2: specials_level = 2; g_render_particles = 200; break;
     default:
         specials_level = 3;
+        g_render_particles = 0x100;
         PENDING_NOTE(0x6197a6, "the card's trilinear flag (Render_DetectCard)");
         break;
     }
@@ -503,7 +516,7 @@ void Render_MainViews(RaceViews *rv)
     c->flags[2] = c->flags[3] = c->flags[4] = 1;
     c->v12c = 2;
     c->range = 400.0f;
-    c->viewdist = (float)g_renderopts.viewdistance;      /* 0x6197cc */
+    c->viewdist = g_render_viewdist;                     /* 0x6197cc */
     c->viewdist2 = c->viewdist * c->viewdist;
     Camera_ToView(c->update[1], c, c->update[0]);        /* Camera_Track 0x461060 -> 0x464e40 */
     RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 1 : 2);
@@ -515,11 +528,111 @@ void Render_MainViews(RaceViews *rv)
     Render_PendingAfterViews();                          /* 0x44fd70 */
 }
 
+/* ---- the view distance along the track (0x61bc38: Track_LoadKeyframes 0x44fa10, 0x44fb80) ----
+
+   <track>_forward.key (_backwards.key for the reversed track): a version (1), a count, then pairs of a
+   road node and the view distance from it on. Without the file (or an old version, "Old version of
+   keyframes detected") 400 pairs of (-1, 400) of which the first two count: (0, 600), (100000, 600). */
+static int32_t *s_keys;   /* the pairs from [2] */
+static int s_keyat;       /* the pair last found */
+float g_render_viewdist = 400.0f;   /* 0x6197cc */
+
+static void keys_seek(int node)   /* 0x44fb00 */
+{
+    const int32_t *k = s_keys;
+    int n = k[1];
+    if (!g_race_reverse) {
+        s_keyat = 0;
+        if (n != 2 && -1 < n - 2) {
+            int i;
+            do {
+                i = s_keyat;
+                if (k[2 + 2 * i] <= node && node < k[2 + 2 * (i + 1)]) return;
+                s_keyat = i + 1;
+            } while (i + 1 < n - 2);
+        }
+    } else {
+        s_keyat = n - 1;
+        if (1 < s_keyat)
+            while (node <= k[2 + 2 * (s_keyat - 1)] || k[2 + 2 * s_keyat] < node)
+                if (--s_keyat < 2) return;
+    }
+}
+
+/* The distance for a road node: the pair found last if the node is still in its span (forward: after
+   its node up to the next's; backwards: from the one before up to its own), else sought again. 0x44fb80 */
+static float keys_find(int node)
+{
+    const int32_t *k = s_keys;
+    int i = s_keyat;
+    bool in = !g_race_reverse ? k[2 + 2 * i] < node && node <= k[2 + 2 * (i + 1)]
+                              : k[2 + 2 * (i - 1)] <= node && node < k[2 + 2 * i];
+    if (!in) keys_seek(node);
+    float d;
+    memcpy(&d, &k[2 + 2 * s_keyat + 1], 4);
+    return d;
+}
+
+void Render_LoadViewKeys(const char *track)   /* 0x44f9b0, Track_LoadKeyframes 0x44fa10 */
+{
+    Render_FreeViewKeys();
+    char path[256];
+    snprintf(path, sizeof path, exe_str(g_race_reverse ? 0x5ceacc : 0x5ceab8), g_track_dir, track);
+    size_t size = 0;
+    uint8_t *d = vfs_read_all(path, &size);
+    if (d && (size < 8 || d[0] != 1 || d[1] || d[2] || d[3] || size < 8 + 8 * (size_t)(d[4] | d[5] << 8 | d[6] << 16 | (uint32_t)d[7] << 24))) {
+        if (size >= 4) plat_log("Old version of keyframes detected");   /* 0x5cea80 */
+        free(d);
+        d = NULL;
+    }
+    if (!d) {
+        d = calloc(1, 0xc88);
+        if (!d) return;
+        int32_t *k = (int32_t *)d;
+        for (int i = 0; i < 400; i++) {
+            k[2 + 2 * i] = -1;
+            float f = 400.0f;
+            memcpy(&k[3 + 2 * i], &f, 4);
+        }
+        k[1] = 2;
+        k[2] = 0;
+        float f = 600.0f;
+        memcpy(&k[3], &f, 4);
+        k[4] = 100000;
+        memcpy(&k[5], &f, 4);
+    }
+    s_keys = (int32_t *)d;
+    s_keys[0] = 1;
+    s_keyat = 0;
+    keys_seek(0);
+}
+
+void Render_FreeViewKeys(void)   /* 0x44f9e0 */
+{
+    free(s_keys);
+    s_keys = NULL;
+}
+
+/* The view distance (0x44f070): the track's by the camera's road node times the option's share (0x5ce90c:
+   1/2, 2/3, 5/6, 1), the whole of it in a replay's camera narrower than 37.5 degrees; at least 50. */
+static void set_viewdist(float d)
+{
+    float k = 1.0f;
+    if (g_race_view < 2 || 37.5f <= g_racecam[0].fov) {   /* 0x5b3c9c */
+        int a = g_renderopts.adjustableviewdistance;
+        uint32_t u = exe_u32(0x5ce90c + 4u * (uint32_t)(a < 0 ? 0 : a > 3 ? 3 : a));
+        memcpy(&k, &u, 4);
+    }
+    g_render_viewdist = k * d;
+    if (g_render_viewdist < 50.0f) g_render_viewdist = 50.0f;   /* 0x5b251c */
+}
+
 void Render_Frame(RaceViews *rv)
 {
     Render_BeginFrame(g_render);
-    Render_PendingParticles();                           /* Particles_Tick by the timer (0x628148) */
-    Render_PendingFrameSetup();                          /* 0x44fb80, 0x44f070, 0x44eb50 */
+    Particles_Frame(g_drive_paused);                     /* Particles_Tick by the timer (0x628148; 0x606a98, 0x606a8c never set here) */
+    if (s_keys) set_viewdist(keys_find(g_racecam[0].surf.node));   /* 0x44fb80, 0x44f070 (the camera's +0xdc) */
+    PENDING_NOTE(0x44eb50, "the false sort layers' level by the speed (0x6197e8)");
     Render_MainViews(rv);
     View_Begin(g_render, rv->overlay);
     View_End(g_render);

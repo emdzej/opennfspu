@@ -1,5 +1,7 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "render/particles.h"
+#include "render/carparticle.h"
 #include "game/audio.h"
 #include "game/scene.h"
 #include "game/sim_rand.h"
@@ -62,7 +64,8 @@ void Sim_Step(void)
         Audio_Tick();                         /* 0x4a7ef0 (Race_TickOdd's) */
         Race_UpdatePositions();               /* 0x415fe0 */
         Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
-        PENDING_NOTE(0x417030, "the odd tick's World_Tick, the cars' renderers' and particles' ticks");
+        PENDING_NOTE(0x417030, "the odd tick's World_Tick and the cars' renderers' ticks (R3DCar_TickAll)");
+        CarParticles_TickAll();               /* R3DCarParticle_Tick 0x43f590 */
         Scene_Tick();                         /* 0x470b10 */
     }
     PENDING_NOTE(0x48ed20, "Net_Tick");
@@ -76,7 +79,8 @@ void Race_Restart(int32_t start)
     g_race_started = 0;
     g_sim_tick = start;
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x4a4560 */
-    PENDING_NOTE(0x414ed0, "the race restart's other parts (0x44fbd0, the cops' script, the cameras 0x468fe0, 0x412170)");
+    Render_SeedRand((uint32_t)g_race_seed);   /* 0x44fbd0 */
+    PENDING_NOTE(0x414ed0, "the race restart's other parts (the cops' script, the cameras 0x468fe0, 0x412170)");
     for (int i = 0; i < g_ncars; i++) {
         g_ranked.c[i] = g_cars[i];   /* 0x411100 */
         g_ordered.c[i] = g_cars[i];
