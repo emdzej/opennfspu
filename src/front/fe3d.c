@@ -129,6 +129,8 @@ typedef struct {
     float diffuse[3];         /* +0x2a0 */
     float dir[3];             /* +0x2b8 */
     float zoom;               /* +0x2e8: towards the close-up place */
+    int hinge_axis;           /* the tick's hinges 1 and 2 (_v1): the garage's third component, the factory's
+                                 first, -1 none (the victory room's) */
     /* the dealership's (FEDealership3DRoom 0x4e8090) */
     bool dealer;
     FE3DObject *seg[3];       /* +0x2ec .. +0x2f4: dealer2a, dealer2b, dealer2c */
@@ -164,9 +166,49 @@ static FE3DRoom *garage_new(void)
     r->dir[1] = -0.98f;
     r->dir[2] = 0.114f;
     static const uint32_t none[4] = {0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu};
+    r->hinge_axis = 2;
     r->model = FE3DObject_New(2, "garage", none, 0, -1, 0, NULL);   /* 0x4e9570 */
     FE3DObject_SetPos(r->model, r->pos[0], r->pos[1], r->pos[2]);
     PENDING_NOTE(0x4e9380, "FEGarage3DRoom_v15: the car's floor shadow ('FESH' and its matrix)");
+    return r;
+}
+
+/* The factory (0x4e8f20) and the victory room (FEVictory3DRoom_Load 0x4ea860): spinning rooms as the
+   garage, their own places and light. */
+static FE3DRoom *spinning_new(const char *id, const char *name, float z, float fov, const float amb[3],
+                              const float dif[3], float dy, float dz, int axis)
+{
+    FE3DRoom *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    snprintf(r->id, sizeof r->id, "%s", id);
+    r->spin = 30.0f;
+    r->pos[1] = -1.1f;
+    r->pos[2] = z;
+    r->fov = fov;
+    memcpy(r->ambient, amb, sizeof r->ambient);
+    memcpy(r->diffuse, dif, sizeof r->diffuse);
+    r->dir[1] = dy;
+    r->dir[2] = dz;
+    r->hinge_axis = axis;
+    static const uint32_t none[4] = {0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu};
+    r->model = FE3DObject_New(2, name, none, 0, -1, 0, NULL);   /* 0x4e9570 */
+    FE3DObject_SetPos(r->model, r->pos[0], r->pos[1], r->pos[2]);
+    return r;
+}
+
+static FE3DRoom *factory_new(void)
+{
+    static const float amb[3] = {110.0f, 120.0f, 110.0f}, dif[3] = {50.0f, 50.0f, 50.0f};
+    return spinning_new("ID_FACTORY", "factory", 4.8f, 37.5f, amb, dif, -0.99f, 0.1f, 0);
+}
+
+static FE3DRoom *victory_new(void)
+{
+    static const float amb[3] = {75.0f, 75.0f, 75.0f}, dif[3] = {110.0f, 110.0f, 110.0f};
+    FE3DRoom *r = spinning_new("ID_VICTORY", "victory", 5.2f, 32.0f, amb, dif, -0.98f, 0.2f, -1);
+    /* (its era's movie, er1pc-av.mad .. er4pc-av.mad by the career's year against the eras' 0x209 ..
+       0x20b, onto the model's part 5 each tick, FEVictory3DRoom_v1 0x4eaa80) */
+    PENDING_NOTE(0x4ea860, "the victory room's era movie on its screen (EA MAD)");
     return r;
 }
 
@@ -357,11 +399,14 @@ static void room_draw(FE3DRoom *r, EaglMatStack *model)
         return;
     }
     int32_t t = ticks();
-    if (r->model) {
+    if (r->model && r->hinge_axis >= 0) {
         /* FEGarage3DRoom_v1 0x4e92e0: the room model's (+0x2ec) hinges 1 and 2 turn with the clock (their
            third component; FEFactory3DRoom_v1 0x4e9030 the first) */
-        hinge(r->model, 1, 0, 0, (float)t * 0.0078125f);       /* 0x5b273c */
-        hinge(r->model, 2, 0, 0, (float)t * 0.0052083335f);    /* 0x5b71ac */
+        float a[3] = {0, 0, 0}, b[3] = {0, 0, 0};
+        a[r->hinge_axis] = (float)t * 0.0078125f;      /* 0x5b273c */
+        b[r->hinge_axis] = (float)t * 0.0052083335f;   /* 0x5b71ac */
+        hinge(r->model, 1, a[0], a[1], a[2]);
+        hinge(r->model, 2, b[0], b[1], b[2]);
     }
     float k = 1.0f - r->zoom;
     float x = k * r->pos[0], y = k * r->pos[1] - r->zoom * 0.8f, z = r->zoom * 0.3f + k * r->pos[2];   /* 0x5b24e8, 0x5b25f0 */
@@ -389,7 +434,9 @@ void FE3D_SetRoom(const char *id)
     if (!strcmp(id, "ID_GARAGE")) s_room = garage_new();
     else if (!strcmp(id, "ID_DEALER")) s_room = dealer_new();
     else if (!strcmp(id, "ID_TRACK")) s_room = track_new();
-    else if (*id) PENDING_NOTE(0x4e6f10, "the dealership, factory, track select and victory rooms");
+    else if (!strcmp(id, "ID_FACTORY")) s_room = factory_new();
+    else if (!strcmp(id, "ID_VICTORY")) s_room = victory_new();
+    else if (*id) PENDING_NOTE(0x4e6f10, "a room of another id");
 }
 
 void FE3D_SetIndex(int index)
