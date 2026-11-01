@@ -15,6 +15,7 @@
 #include "game/sim_rand.h"
 #include "game/race_progress.h"
 #include "pending.h"
+#include "render/carpages.h"
 #include "game/race_car.h"
 #include "game/scene.h"
 #include "game/track.h"
@@ -369,6 +370,7 @@ void DRIVE_Shutdown(void)
     Sun_Free();             /* 0x4600e0 */
     DynLights_Free();       /* 0x455ec0 */
     Sprites_Free();         /* 0x451480 */
+    R3DCar_FreeCommon();    /* 0x443a80 (0x414fa0: the car commons go with the race) */
     Render_FreeCommonFsh(); /* 0x448af0 */
     Scene_Clear();          /* 0x46cf60 */
     BWorld_DeInit();        /* 0x471ba0 */

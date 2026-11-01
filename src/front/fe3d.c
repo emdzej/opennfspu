@@ -357,9 +357,11 @@ static void room_draw(FE3DRoom *r, EaglMatStack *model)
         return;
     }
     int32_t t = ticks();
-    if (r->car) {
-        hinge(r->car, 1, 0, 0, (float)t * 0.0078125f);       /* 0x5b273c */
-        hinge(r->car, 2, 0, 0, (float)t * 0.0052083335f);    /* 0x5b71ac */
+    if (r->model) {
+        /* FEGarage3DRoom_v1 0x4e92e0: the room model's (+0x2ec) hinges 1 and 2 turn with the clock (their
+           third component; FEFactory3DRoom_v1 0x4e9030 the first) */
+        hinge(r->model, 1, 0, 0, (float)t * 0.0078125f);       /* 0x5b273c */
+        hinge(r->model, 2, 0, 0, (float)t * 0.0052083335f);    /* 0x5b71ac */
     }
     float k = 1.0f - r->zoom;
     float x = k * r->pos[0], y = k * r->pos[1] - r->zoom * 0.8f, z = r->zoom * 0.3f + k * r->pos[2];   /* 0x5b24e8, 0x5b25f0 */

@@ -15,6 +15,7 @@
 #include "exe.h"
 #include "app.h"
 #include "pending.h"
+#include "render/carpages.h"
 #include "platform.h"
 #include "render/r3dcar.h"
 #include "render/render.h"
@@ -314,6 +315,7 @@ void FEApp_End(void)
         s_sound = false;
     }
     FE3D_Free();
+    R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
     g_r3d_frontend = 0;
 }
 
