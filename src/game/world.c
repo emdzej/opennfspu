@@ -482,7 +482,8 @@ static void anim_matrix(W3DObjectBundle *b, int entry, float out[16])
 static void scene_matrix(W3DObjectBundle *b, int entry, float out[16])
 {
     EaglMatrix m;
-    if (b->smack && WAnimatable_Matrix(b->smack, entry, 0, &m)) {   /* 0x476730, 0x476970 */
+    if (b->smack && WAnimatable_HasAnim(b->smack, entry, 0)) {   /* 0x476730 (the first piece's) */
+        WAnimatable_Matrix(b->smack, entry, -1, false, &m);       /* 0x476970 (the current record's) */
         memcpy(out, m.m, sizeof m.m);
         return;
     }
@@ -496,7 +497,8 @@ static void scene_matrix(W3DObjectBundle *b, int entry, float out[16])
 static void instance_matrix(W3DObjectBundle *b, int entry, float out[16])
 {
     EaglMatrix m;
-    if (b->smack && WAnimatable_Matrix(b->smack, entry, 0, &m)) {   /* 0x476730, 0x476970 */
+    if (b->smack && WAnimatable_HasAnim(b->smack, entry, 0)) {   /* 0x476730 (the first piece's) */
+        WAnimatable_Matrix(b->smack, entry, -1, false, &m);       /* 0x476970 (the current record's) */
         memcpy(out, m.m, sizeof m.m);
         return;
     }

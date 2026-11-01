@@ -5,8 +5,9 @@
    simulated position and rotation it follows, those of the traffic car the race makes for it (game/
    traffic.h: Car_RaceInit 0x4a12f0 points the body at the car's). The entry's piece and its current
    record each have a SmackAnim (0x4710e0, vtable 0x5b45e4): the body's motion since its placing as a
-   matrix (slot 1, 0x471140). The canned pieces of the other animated objects (0x476310: by the hit's
-   speed, QuatAnims from the prototypes' 'Anim' items) are pending. */
+   matrix (slot 1, 0x471140). The other animated objects play canned pieces (0x476310): by the hit's
+   speed, QuatAnims from their prototypes' 'Anim' and 'Anqt' items, turned toward the hit and drifting
+   with it; the looping ones from the start. */
 #pragma once
 #include "eagl/eagl.h"
 #include "support/udata.h"
@@ -44,14 +45,16 @@ typedef struct {
     EaglMatrix last;        /* +0x88 */
 } WSmackAnim;
 
-/* A piece's record (0x18 bytes). */
+/* A piece's record (0x18 bytes). Its animation is a SmackAnim (a body's) or a QuatAnim (a canned piece,
+   game/anim.h): both begin with the base Anim's flag byte, start tick and state. */
 typedef struct {
-    WSmackAnim *anim;       /* +0x00 */
+    void *anim;             /* +0x00 */
     UData *article;         /* +0x04 */
     UData *art2;            /* +0x08 */
     UData *art3;            /* +0x0c: the vertex animation's */
     WSmackBody *body;       /* +0x10 */
     uint32_t type;          /* +0x14 */
+    uint8_t canned;         /* port: the anim is a QuatAnim (the original's by its vtable) */
 } WSmackPiece;
 
 /* An entry (0x38 bytes). */
@@ -84,9 +87,13 @@ int SmackAnim_Matrix(WSmackAnim *s, EaglMatrix *out);
 
 /* The body follows a rotation and a position (a traffic object's +0x364, +0x330). 0x4832a0 */
 void WSmackBody_Follow(WSmackBody *b, const float *rot, const float *pos);
-/* An entry's matrix with its piece's motion (-1: the current record's): the motion times the placing; false
-   when the piece has no SmackAnim. 0x476730, 0x476970 */
-bool WAnimatable_Matrix(WAnimatable *a, int i, int piece, EaglMatrix *out);
+/* Whether the entry's piece (-1: the current record) has an animation. 0x476730 */
+bool WAnimatable_HasAnim(const WAnimatable *a, int i, int piece);
+/* The entry's matrix with its piece's motion (-1: the current record's): the motion (the identity with
+   `still`) times the placing. 0x476970 */
+void WAnimatable_Matrix(WAnimatable *a, int i, int piece, bool still, EaglMatrix *out);
+/* The pieces drawn (the live ones, at least one). 0x450220 */
+int WAnimatable_Pieces(const WAnimatable *a, int i);
 /* The hit kind of entry i struck at vel: 0 for an object with a body, else 2 - whether its canned
    pieces start (1, 2). 0x476760 */
 int WAnimatable_HitKind(WAnimatable *a, int i, const float vel[3]);

@@ -5,6 +5,7 @@
 #include "game/world.h"
 #include "game/wtree.h"
 #include "game/audio.h"
+#include "game/anim.h"
 #include "pending.h"
 #include "render/r3dcar.h"   /* EAGL_MatAxisAngle */
 #include <math.h>
@@ -266,6 +267,33 @@ int SmackAnim_Matrix(WSmackAnim *s, EaglMatrix *out)   /* 0x471140 */
     return s->state;
 }
 
+/* ---- a piece's animation (the base Anim's virtual slots) ---- */
+
+static int anim_state(const WSmackPiece *p) { return p->canned ? ((const QuatAnim *)p->anim)->state : ((const WSmackAnim *)p->anim)->state; }
+static uint8_t anim_b4(const WSmackPiece *p) { return p->canned ? ((const QuatAnim *)p->anim)->b4 : ((const WSmackAnim *)p->anim)->b4; }
+static int anim_matrix(WSmackPiece *p, EaglMatrix *out)   /* slot 1 */
+{
+    return p->canned ? QuatAnim_Matrix(p->anim, out) : SmackAnim_Matrix(p->anim, out);
+}
+/* slot 4: a SmackAnim moved within the last 64 ticks (0x471330), a QuatAnim playing (0x471480) */
+static bool anim_recent(const WSmackPiece *p)
+{
+    if (p->canned) return ((const QuatAnim *)p->anim)->state == 1;
+    return g_sim_tick - ((const WSmackAnim *)p->anim)->moved <= 0x40;
+}
+static void anim_reset(WSmackPiece *p)   /* slot 7 (0x471360): still */
+{
+    if (p->canned) ((QuatAnim *)p->anim)->state = 0;
+    else ((WSmackAnim *)p->anim)->state = 0;
+}
+static void anim_free(WSmackPiece *p)   /* slot 0 */
+{
+    if (!p->anim) return;
+    if (p->canned) QuatAnim_free(p->anim);
+    else free(p->anim);
+    p->anim = NULL;
+}
+
 /* ---- the entries ---- */
 
 /* (the scene and instance bundles share their layout to +0x40, the placings: the original reads both
@@ -281,15 +309,94 @@ static void entry_init(WAnimatable *a, int i, UData *article)   /* 0x476210 */
     e->npieces = d ? (d->npieces ? d->npieces : 1) : 0;
     e->pieces = calloc(e->npieces ? (size_t)e->npieces : 1, sizeof *e->pieces);
     if (!e->pieces) return;
-    e->pieces[0] = (WSmackPiece){NULL, article, NULL, NULL, NULL, type};
+    e->pieces[0] = (WSmackPiece){NULL, article, NULL, NULL, NULL, type, 0};
     e->cur = e->pieces[0];
+}
+
+static UData *proto_article(WAnimatable *a, uint32_t type)   /* 0x4785d0, 0x478600 */
+{
+    WInstanceBundle *in = (WInstanceBundle *)a->bundle;
+    int p = WSceneBundle_findproto((const WSceneBundle *)(const void *)in, type);
+    return 0 <= p ? in->protos[p].article : NULL;
+}
+
+static const uint32_t *item_words(UData *a, uint32_t id)
+{
+    UData *r = UData_find(a, id);
+    return r == UData_itemsend(a) ? NULL : (const uint32_t *)UData_data(r);
+}
+
+/* 0x476310: the canned pieces for a hit at vel: the definition's speed bins (+0x5c, +0x60) pick a run of
+   its pieces (+0x70: their counts; one, the first, below the first speed), each a QuatAnim of its second
+   prototype's 'Anim' (its keys' count, its loop flag) and 'Anqt' (the keys) items at 0.1 s a key over the
+   piece's playback rate, turned by the hit's direction in the object's axes and drifting with the hit's
+   velocity times the velocity factor; the first piece's also the current record's. False when the
+   definition has no pieces or a piece's prototype has no running animation. */
+static bool canned_start(WAnimatable *a, int i, const float vel[3])
+{
+    WSmackEntry *e = &a->e[i];
+    const WObjectDef *d = e->def;
+    if (!d || !d->npieces) return false;
+    float speed = sqrtf(vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]);   /* 0x532890 */
+    int first = 0, count = 1, k = 0;
+    if (0 < d->nspeeds) {
+        while (k < d->nspeeds && d->speed[k] < speed) k++;
+        if (0 < k) {
+            k--;
+            for (int j = 0; j < k; j++) first += d->speedpieces[j];
+            count = d->speedpieces[k];
+        }
+    }
+    const WPlaced *pl = &((WInstanceBundle *)a->bundle)->placed[i];
+    for (int j = 0; j < count; j++) {
+        if (first + j >= WOBJ_MAXPIECES || j >= e->npieces) return false;   /* (the original reads on) */
+        const WObjectPiece *pc = d->piece[first + j];
+        if (!pc) return false;
+        UData *art = proto_article(a, pc->basegroup);
+        if (!art) art = e->pieces[0].article;
+        UData *art2 = proto_article(a, pc->quatgroup);   /* (its vertex animation the same article) */
+        WSmackPiece *p = &e->pieces[j];
+        *p = (WSmackPiece){NULL, art, art2, art2, NULL, pc->basegroup, 0};
+        const uint32_t *anim = art2 ? item_words(art2, 0x416e696d) : NULL;   /* 'Anim' */
+        if (!anim || (anim[0] == 0 && anim[1] == 0)) return false;
+        uint8_t loop = anim[1] != 0;
+        const uint32_t *keys = item_words(art2, 0x416e7174);   /* 'Anqt' */
+        float rate = f32(0x5b2604) / pc->playbackrate;
+        /* the hit in the object's axes: its direction's turn, the drift */
+        float rt[9], lv[3];
+        for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++) rt[3 * r + c] = pl->rot[3 * c + r];   /* 0x532770 */
+        for (int c = 0; c < 3; c++) lv[c] = vel[0] * rt[c] + vel[1] * rt[3 + c] + vel[2] * rt[6 + c];   /* 0x5327b0 */
+        double k2pi;
+        const uint8_t *kp = exe_data(0x5bb2c8, 8);
+        if (kp) memcpy(&k2pi, kp, 8);
+        else k2pi = 0.15915494309189535;
+        float turn = (float)(atan2((double)lv[0], (double)lv[2]) * k2pi);   /* 0x5325d0 */
+        float drift[3] = {lv[0] * d->velocityfactor, lv[1] * d->velocityfactor, lv[2] * d->velocityfactor};
+        for (int n = 0; n < (j == 0 ? 2 : 1); n++) {
+            QuatAnim *q = QuatAnim_new(anim[0], (const uint8_t *)keys, loop, pc->flags, rate, turn);   /* 0x4713f0 */
+            if (!q) return false;
+            memcpy(q->d->drift, drift, sizeof drift);
+            QuatAnim_Start(q);   /* slot 5 */
+            if (n == 0) {
+                p->anim = q;
+                p->canned = 1;
+                e->live++;
+            } else {
+                anim_free(&e->cur);
+                e->cur.anim = q;
+                e->cur.canned = 1;
+            }
+        }
+    }
+    return true;
 }
 
 /* 0x477280: a smackable (collision kind 3, by the article's Base type) with a prototype of its placed type
    gets its body: the contact points of the prototype (a sign's by 0x476ac0, the others' 0x476e60), the
    entry's definition's mass (10 without one) and sound kind; its piece the prototype's article for the
    dynamically lit ones, the entry's own for the others; a SmackAnim for the piece and one for the current
-   record. The others with a running 'Anim' item start their canned animation (0x476310: pending). */
+   record. The others whose prototype loops its 'Anim' start their canned pieces (0x476310). */
 static void entry_body(WAnimatable *a, int i)
 {
     WInstanceBundle *in = (WInstanceBundle *)a->bundle;
@@ -301,7 +408,10 @@ static void entry_body(WAnimatable *a, int i)
     if (!d) return;
     int p = WSceneBundle_findproto((const WSceneBundle *)(const void *)in, in->placed[i].type);   /* 0x4785d0 */
     if (d->collidetype != 3) {
-        if (0 <= p) PENDING_NOTE(0x476310, "the animated objects' canned pieces (by the hit's speed)");
+        /* a looping animation starts at once, as if hit standing still */
+        if (p < 0) return;
+        const uint32_t *anim = item_words(in->protos[p].article, 0x416e696d);   /* 'Anim' */
+        if (anim && anim[1] != 0 && !e->cur.anim) canned_start(a, i, zero3);
         return;
     }
     if (p < 0) return;
@@ -327,7 +437,7 @@ static void entry_body(WAnimatable *a, int i)
     }
     a->bodies[a->nbodies++] = b;
     e->colour = 0xffffffffu;
-    e->pieces[0] = (WSmackPiece){NULL, e->dynlight ? proto : art, NULL, NULL, b, d->tag};
+    e->pieces[0] = (WSmackPiece){NULL, e->dynlight ? proto : art, NULL, NULL, b, d->tag, 0};
     e->pieces[0].anim = smackanim_new(b);
     e->cur = e->pieces[0];
     e->cur.anim = smackanim_new(b);
@@ -357,8 +467,8 @@ void WAnimatable_free(WAnimatable *a)   /* 0x475ff0 */
     if (!a) return;
     for (uint32_t i = 0; i < a->bundle->count; i++) {
         WSmackEntry *e = &a->e[i];
-        if (e->pieces) free(e->pieces[0].anim);
-        free(e->cur.anim);
+        for (int k = 0; e->pieces && k < e->npieces; k++) anim_free(&e->pieces[k]);
+        anim_free(&e->cur);
         free(e->pieces);
     }
     for (uint32_t i = 0; i < a->nbodies; i++) body_free(a->bodies[i]);
@@ -374,45 +484,62 @@ void WSmackBody_Follow(WSmackBody *b, const float *rot, const float *pos)   /* 0
     b->b1c = 0;
 }
 
-bool WAnimatable_Matrix(WAnimatable *a, int i, int piece, EaglMatrix *out)   /* 0x476730, 0x476970 */
+bool WAnimatable_HasAnim(const WAnimatable *a, int i, int piece)   /* 0x476730 */
+{
+    const WSmackEntry *e = &a->e[i];
+    if (piece < 0) return e->cur.anim != NULL;
+    return e->pieces && piece < e->npieces && e->pieces[piece].anim;
+}
+
+void WAnimatable_Matrix(WAnimatable *a, int i, int piece, bool still, EaglMatrix *out)   /* 0x476970 */
 {
     WSmackEntry *e = &a->e[i];
-    if (!e->pieces) return false;
     WSmackPiece *p = piece < 0 ? &e->cur : &e->pieces[piece];
-    if (!p->anim) return false;
     EaglMatrix m, place;
-    SmackAnim_Matrix(p->anim, &m);   /* slot 1 */
+    anim_matrix(p, &m);   /* slot 1 (its state kept even when not used) */
+    if (still) EAGL_MatIdentity(&m);   /* 0x5bc660 */
     const WPlaced *pl = &((WInstanceBundle *)a->bundle)->placed[i];
     EAGL_MatFromRotTrans(&place, pl->rot, pl->pos);   /* 0x539a40 */
     EAGL_MatMul(&m, &place, out);    /* 0x558f90 */
-    return true;
 }
+
+int WAnimatable_Pieces(const WAnimatable *a, int i) { return a->e[i].live < 1 ? 1 : a->e[i].live; }   /* 0x450220 */
 
 int WAnimatable_HitKind(WAnimatable *a, int i, const float vel[3])   /* 0x476760 */
 {
-    (void)vel;
-    const WSmackEntry *e = &a->e[i];
-    if (e->cur.anim) return 0;   /* (its traffic object meets the car instead) */
-    if (e->pieces && e->def && ((const WObjectDef *)e->def)->collidetype != 3 && e->npieces)
-        PENDING_NOTE(0x476310, "the animated objects' canned pieces (by the hit's speed)");
-    return 2;   /* 0x476310 not started */
+    WSmackEntry *e = &a->e[i];
+    if (e->cur.anim) return 0;   /* (a body's traffic object meets the car instead; a played one is gone) */
+    return 2 - canned_start(a, i, vel);
 }
 
-/* SmackAnim slot 4 (0x471330): moved within the last 64 ticks. */
-static bool smackanim_recent(const WSmackAnim *s) { return g_sim_tick - s->moved <= 0x40; }
+/* 0x4766a0: the played pieces dropped (a canned one without its loop) or stopped. */
+static void pieces_done(WSmackEntry *e)
+{
+    for (int k = 0; k < e->live && k < e->npieces; k++) {
+        WSmackPiece *p = &e->pieces[k];
+        if (p->anim && !anim_b4(p) && !p->body) {
+            anim_free(p);
+            *p = (WSmackPiece){0};
+        } else if (p->anim && !anim_b4(p)) {
+            anim_reset(p);   /* slot 7 */
+        } else if (!p->anim && !p->body) {
+            *p = (WSmackPiece){0};
+        }
+    }
+    e->live = 0;
+}
 
-/* The current record's SmackAnim (its own, beside the first piece's) is only brought up to date by its
-   slot 1 here, for a lit object, and by the draw's marker once `sounded` is set: an unlit object's state
-   stays 0, so its sound here never plays (the car's hit sound, the kind at +0x44c, is what is heard). */
+/* The current record's animation runs whenever the entry's matrix is taken (its slot 5, 0x478050): a
+   knocked object's state goes to 1 once its body is off its place. */
 void WAnimatable_Tick(WAnimatable *a)   /* 0x4767a0 */
 {
     W3DObjectBundle *b = a->bundle;
     for (uint32_t i = 0; i < b->count; i++) {
         WSmackEntry *e = &a->e[i];
         if (!e->cur.anim) continue;
-        int state = e->cur.anim->state;
+        int state = anim_state(&e->cur);
         if (state == 2) {
-            PENDING_NOTE(0x4766a0, "the knockable objects' finished pieces");
+            pieces_done(e);   /* 0x4766a0 */
         } else if (state == 1) {
             if (!e->sounded) {
                 /* knocked off its place: its sound once (the flag is the current record's article) */
@@ -425,10 +552,10 @@ void WAnimatable_Tick(WAnimatable *a)   /* 0x4767a0 */
         } else {
             e->sounded = 0;
         }
-        if (e->dynlight && (e->colour == 0xffffffffu || state == 1) && smackanim_recent(e->cur.anim)) {
+        if (e->dynlight && (e->colour == 0xffffffffu || state == 1) && anim_recent(&e->cur)) {
             /* the light at its centre from the polygon under it (a fresh tracker, 0x473060), packed */
             EaglMatrix m;
-            SmackAnim_Matrix(e->cur.anim, &m);   /* slot 1 (its result unused) */
+            anim_matrix(&e->cur, &m);   /* slot 1 (its result unused) */
             WSurface t;
             WSurface_Init(&t);
             float sp[4], l[4];
@@ -448,13 +575,13 @@ void WAnimatable_Restart(WAnimatable *a)   /* 0x476100 */
     for (uint32_t i = 0; i < a->bundle->count; i++) {
         WSmackEntry *e = &a->e[i];
         if (e->cur.anim) {
-            /* 0x4766a0: the playing pieces (only the canned ones play) dropped or stopped */
-            if (e->live) PENDING_NOTE(0x4766a0, "the knockable objects' canned pieces reset");
-            e->live = 0;
-            if (!e->cur.anim->b4 && !e->cur.body) {
-                PENDING_NOTE(0x476100, "a canned current record dropped for the first piece");
-            } else if (!e->cur.anim->b4) {
-                e->cur.anim->state = 0;   /* slot 7 (0x471360) */
+            pieces_done(e);   /* 0x4766a0 */
+            if (!anim_b4(&e->cur) && !e->cur.body) {
+                /* a played canned object: its current record dropped, the first piece its record again */
+                anim_free(&e->cur);
+                if (e->pieces) e->pieces[0] = e->cur;
+            } else if (!anim_b4(&e->cur)) {
+                anim_reset(&e->cur);   /* slot 7 */
             }
         }
         e->sounded = 0;

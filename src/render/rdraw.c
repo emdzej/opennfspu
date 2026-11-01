@@ -243,9 +243,8 @@ static const uint8_t *lod_entry(const uint8_t *base, uint32_t key)
    colour stream 'Am' overridden to the colour (white but for a lit knockable object: the light at it;
    the vertex stream 'vt' too: with no vertex animation, the article's own); its markers ('ef' type 2)
    pending. */
-static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const EaglMatrix *m, uint32_t colour)
+static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, const EaglMatrix *m, uint32_t colour)
 {
-    WArticleCache *c = entry_cache(d, index);
     R3DPart p;
     part_from(&p, c);
     const uint8_t *base = R3DPart_Item(&p, R3D_BASE, 0xffffffffu);
@@ -277,24 +276,39 @@ static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const E
     part_back(c, &p);
 }
 
-/* Its draw (0x44fee0): the level by the queued distance; the entry's matrix (the bundle's slot 5, with a
-   knockable object's motion) and the article under it. With the bundle's knockable state (+0x14) the
-   original draws each piece under its own matrix, the piece's article lit by the entry's colour: for a
-   body's single piece that is the same article and matrix, white until the tick (0x4767a0) lights it. */
+/* Its draw (0x44fee0): nothing without a level of the entry's article at the queued distance; then the
+   entry's matrix (the bundle's slot 5) and its article, or with the bundle's knockable state (+0x14) each
+   live piece (one at least) under its own animation's matrix (else slot 5), its article (a canned
+   piece's prototype; a local item cache, as 0x450250 makes) lit by the entry's colour. */
 static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
 {
     RDrawBundle *d = (RDrawBundle *)o;
     g_rdraw_key = e->key;
-    uint32_t colour = 0xffffffffu;
-    const WAnimatable *a = d->bundle->smack;
-    if (a) {
-        PENDING_NOTE(0x450250, "the knockable objects' pieces: the lit prototypes' articles, the canned pieces, the markers (0x450850)");
-        colour = a->e[index].colour;   /* (-1 until a lit object takes its light) */
-    }
     if (!d->bundle->vt->matrix) return;
+    WAnimatable *a = d->bundle->smack;
     EaglMatrix m;
-    d->bundle->vt->matrix(d->bundle, index, m.m);
-    draw_article(d, index, e, &m, colour);
+    if (!a) {
+        d->bundle->vt->matrix(d->bundle, index, m.m);
+        draw_article(d, entry_cache(d, index), e, &m, 0xffffffffu);
+        return;
+    }
+    const WSmackEntry *se = &a->e[index];
+    int n = WAnimatable_Pieces(a, index);   /* 0x450220 */
+    for (int k = 0; k < n && se->pieces && k < se->npieces; k++) {
+        const WSmackPiece *pc = &se->pieces[k];
+        if (WAnimatable_HasAnim(a, index, k)) WAnimatable_Matrix(a, index, k, false, &m);   /* 0x476970 */
+        else d->bundle->vt->matrix(d->bundle, index, m.m);
+        if (!pc->article) continue;
+        if (pc->art3) {
+            /* the vertex animation of art3's 'Anim' frames (its second word, the frames' count) */
+            UData *r = UData_find(pc->art3, 0x416e696du);
+            if (r != UData_itemsend(pc->art3) && ((const uint32_t *)UData_data(r))[1])
+                PENDING_NOTE(0x450250, "the canned pieces' vertex animation (their art3's frames)");
+        }
+        WArticleCache c = {pc->article, UData_itemsend(pc->article), {{0}}};
+        draw_article(d, &c, e, &m, se->colour);
+    }
+    if (se->sounded) PENDING_NOTE(0x450850, "the knocked objects' markers");
 }
 
 static void anim_special(RDrawObject *o, int index, const RListEntry *e) { (void)o, (void)index, (void)e; }   /* 0x44fe50 */
