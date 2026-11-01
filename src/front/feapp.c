@@ -116,6 +116,7 @@ static int language(void) { return fe_int("language", 0); }
 static FertControl *load_screen(const char *name);
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool listbox_click(FertControl *c, int32_t mx, int32_t my);
+static bool ko_list_click(FertControl *c, int32_t my);
 static FertControl *control_named(FertControl *w, const char *name);
 static void select_panel(FertControl *w, const char *name);
 static FertControl *load_screen(const char *name);
@@ -731,6 +732,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         s_parent = w;
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
+        if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
         if (target && type == 8) on_up(target);
         break;
     }
@@ -1244,6 +1246,50 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* The knockout's slots (FEKnockoutTrackListControl_v15 0x4f9730): the slots raced (Game.NumKOOpponents of
+   the seven) shaded (0x80fedd81), the chosen slot (Knockout.TrackNumber, back to 0 when past them) in
+   the highlight, lines between the rows and down at 0xb, 0x71, 0xa4 and 0xcc, an outline; a press
+   (_v9 0x4f9a10) chooses the slot there. */
+static bool ko_list_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    FEAccessor *t = FEAccess_Find("Knockout.TrackNumber");
+    int n = FEData_KOOpponents();
+    if (!t) return true;
+    if (FEAccess_Pos(t) >= n) FEAccess_SetPos(t, 0);
+    int32_t r[4];
+    control_rect(c, r);
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]);
+    float rh = (float)(r[3] - r[1]) * 0.14285715f;   /* (0x5b7e78: a seventh) */
+    const uint32_t bg = 0x80fedd81u, hl = 0xffffbb00u, ln = 0x80000000u, k = 0xff000000u;
+    FE2D_DepthStep();
+    FE2D_Gouraud(x, y, w, rh * (float)n, bg, bg, bg, bg);
+    FE2D_DepthStep();
+    FE2D_Gouraud(x, y + (float)FEAccess_Pos(t) * rh, w, rh, hl, hl, hl, hl);
+    FE2D_DepthStep();
+    for (int i = 1; i < n; i++) FE2D_Gouraud(x, y + (float)i * rh, w, 1.0f, ln, ln, ln, ln);
+    static const int cols[4] = {0xb, 0x71, 0xa4, 0xcc};
+    for (int i = 0; i < 4; i++) FE2D_Gouraud(x + (float)cols[i], y, 1.0f, rh * (float)n, ln, ln, ln, ln);
+    const float h = rh * (float)n;
+    FE2D_Gouraud(x, y, w, 1.0f, k, k, k, k);
+    FE2D_Gouraud(x, y + h - 1.0f, w, 1.0f, k, k, k, k);
+    FE2D_Gouraud(x, y, 1.0f, h, k, k, k, k);
+    FE2D_Gouraud(x + w - 1.0f, y, 1.0f, h, k, k, k, k);
+    return true;
+}
+
+static bool ko_list_click(FertControl *c, int32_t my)
+{
+    if (strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return false;
+    FEAccessor *t = FEAccess_Find("Knockout.TrackNumber");
+    int32_t r[4];
+    control_rect(c, r);
+    if (!t || r[3] <= r[1]) return true;
+    int slot = (my - r[1]) * 7 / (r[3] - r[1]);
+    if (slot >= 0 && slot < FEData_KOOpponents()) FEAccess_SetPos(t, slot);
+    return true;
+}
+
 /* A press on a list box chooses its row there (FEComboBox's 0x4c66c0 on its list). */
 static bool listbox_click(FertControl *c, int32_t mx, int32_t my)
 {
@@ -1275,6 +1321,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): the bar, then its colour (its slot 0x74,
            the accessor's) as a 20 x 10 swatch 40 from its right and 4 down, outlined in black. (The custom

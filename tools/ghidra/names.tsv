@@ -2669,3 +2669,5 @@
 004ddc00	Knockout_RaceDesc	frontend	high	The racers still in into the race, their skills and STARTINGPOS (0x247)
 004ba290	FEKnockoutTrackNumberAccessor_Text	frontend	high	The slots' numbers, tracks, laps, direction, traffic for the races run
 0050cc30	FE_MakeRandomKnockout	frontend	high	Every slot's traffic, direction, laps and track at random
+004f9730	FEKnockoutTrackListControl_Draw	frontend	high	The slots raced shaded, the chosen highlit, the rows' and columns' lines
+004f9a10	FEKnockoutTrackListControl_Press	frontend	high	The slot at the press chosen (y x 7 / height)
