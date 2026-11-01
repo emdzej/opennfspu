@@ -2656,3 +2656,8 @@
 004ef890	FECar_HasRequiredParts	frontend	high	Each stock part's kind among the fitted, else the message 0x28a of the missing
 005019d0	FE_CarIncomplete	frontend	high	The chosen car lacks a required part (0x4ef890)
 004f1100	FECarSetupCallbackList_TestDriveCheck	frontend	high	The car setup's test drive screen when the car is complete
+00504020	Tournament_AllowsCar	frontend	high	A car id among the tournament's shorts from +0x30 (+0xda of them)
+00504110	Tournament_OtherUnfinished	frontend	high	A tournament other than the current partly run
+005029e0	Tournament_EntryFee	frontend	high	The tournament's entry fee (+0xdc)
+005038b0	Tournament_RacesLeft	frontend	high	The tournament's races not run
+004d5200	FE_PlayGame	frontend	high	The race's checks by mode: restrictions 0x32d, unfinished 0x35a, cars 0x339/0x32e, the fee 0x359; then the race

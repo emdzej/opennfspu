@@ -121,3 +121,5 @@ int FEData_InstallAction(const char *cb);
 bool FEData_InstallState(bool *fitted);
 /* The garage car has its required parts (0x4ef890); else msg says which are missing. */
 bool FEData_CarComplete(char *msg, size_t cap);
+/* The career race allowed (0, the entry fee paid at a first race) or the message why not (0x32d, 0x359). */
+int FEData_TourCheck(void);

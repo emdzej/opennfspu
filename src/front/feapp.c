@@ -522,6 +522,11 @@ static void callback(const char *cb)
             const char *t = FEData_TourTrack();
             const char *c = FEAccess_CarFile(FEAccess_Find("OwnedCars.Car"));
             if (!t || !c) return;
+            int m = FEData_TourCheck();
+            if (m) {
+                FEApp_Message(m);
+                return;
+            }
             s_tour_race = FEData_TourRace();   /* (before the laps: they're its) */
             s_owned_race = FEData_OwnedIndex("OwnedCars.Car");
             snprintf(s_track, sizeof s_track, "%s", t);

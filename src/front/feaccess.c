@@ -155,6 +155,7 @@ static int32_t rec32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off,
 extern uint32_t g_carnschemes;   /* 0x6115f8 (render/carpages.h): the last car's stripe packages */
 static int career_year(void);
 static bool car_before(const uint8_t *a, const uint8_t *b);
+static SaveCar *garage_car(void);
 static SaveCar *acc_car(const FEAccessor *a);
 static int allparts_count(void);
 typedef struct { bool fitted; int idx; } InstallRow;
@@ -421,6 +422,32 @@ static const uint8_t *track_by_id(int id)
     for (int i = 0; i < s_ntracks; i++)
         if (rec16(s_trk + TRK_SIZE * s_tracks[i], 0) == id) return s_trk + TRK_SIZE * s_tracks[i];
     return s_ntracks ? s_trk + TRK_SIZE * s_tracks[0] : NULL;
+}
+
+/* The career race's checks (0x4d5200 for Game.GameType 4): the garage car one the tournament allows
+   (0x504020: its record's id among the shorts from +0x30, +0xda of them; else 0x32d); at its first race
+   (none run, 0x502920 == 0x5038b0) the entry fee (+0xdc, 0x5029e0) paid, 0x359 without the money.
+   (Another tournament unfinished asks first, 0x504110 -> 0x35a: pending.) */
+int FEData_TourCheck(void)
+{
+    uint8_t *r = (uint8_t *)FEData_Tournament();
+    SaveCar *gc = garage_car();
+    Save *sv = FESave_Current();
+    if (!r || !gc || !sv) return 0;
+    int16_t car = rec16(gc->rec + 4, 0);
+    bool ok = false;
+    for (int i = 0; i < rec16(r, 0xda) && !ok; i++) ok = rec16(r, 0x30 + 2 * i) == car;
+    if (!ok) return 0x32d;
+    int n = rec16(r, 0x39c), left = 0;
+    for (int i = 0; i < n; i++) left += r[0x3d0 + 0xa4 * i] == 0;
+    if (left == n) {
+        int32_t fee = rec32(r, 0xdc);
+        if (sv->money < fee) return 0x359;
+        sv->money -= fee;   /* (0x500890) */
+        FESave_Write();
+    }
+    PENDING_NOTE(0x504110, "the unfinished tournament's question (0x35a) and its reset");
+    return 0;
 }
 
 int FEData_TourRace(void)
