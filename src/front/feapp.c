@@ -1,5 +1,6 @@
 /* The front end's application (feapp.h). */
 #include "front/feapp.h"
+#include "front/femovie.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
@@ -1451,6 +1452,13 @@ static bool control_in(const FertControl *w, const FertControl *c)
     return false;
 }
 
+static bool on_stack(const FertControl *c)
+{
+    for (int k = 0; k < s_depth; k++)
+        if (control_in(s_stack[k], c)) return true;
+    return false;
+}
+
 /* The screens changed: the typing states of controls no longer on the stack dropped (a screen's controls
    are made with it, so a new screen's start afresh: their v21). */
 static void screen_entered(void)
@@ -1461,6 +1469,7 @@ static void screen_entered(void)
         if (!on) memset(&s_types[i], 0, sizeof s_types[i]);
     }
     lists_drop_stale();
+    FEMovieBox_Drop(on_stack);
 }
 
 /* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
@@ -2015,6 +2024,7 @@ static bool factory_draw(FertControl *c, int32_t ox, int32_t oy)
 
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
+    if (FEMovieBox_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
@@ -2550,6 +2560,7 @@ void FEApp_Frame(void)
         }
     }
     menu_music();
+    FEMovieBox_Update();
     FertControl *w = FEApp_Top();
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     sync_room(w);

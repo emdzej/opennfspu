@@ -446,13 +446,9 @@ static void draw_at(FertControl *w, int32_t ox, int32_t oy)
             PENDING_NOTE(0x4caea0, "FEHudDisplayControl: the HUD's preview");
             continue;
         }
-        if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) {
-            /* FEMovieCircle_v15 0x4cd520: its stencil shapes cut the movie (FEMovieBox_v15) into the oval;
-               none of its parts is drawn plainly. The movies aren't ported: nothing until they are. */
-            PENDING_NOTE(0x4cd520, "FEMovieCircle: the movie in the oval (the stencil, FEMovieBox)");
-            continue;
-        }   /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
+        /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
         if (FE_ControlDrawHook && FE_ControlDrawHook(c, ox, oy)) continue;
+        if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) continue;   /* (none of its parts is drawn plainly: femovie.c) */
         if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
         else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
         else FEControl_Draw(c, ox, oy);
