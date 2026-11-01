@@ -79,6 +79,7 @@ void RenderState_SetZFunc(RenderState *rs, int zfunc);   /* 0x5375a0: setstate 0
 void RenderState_SetZWrite(RenderState *rs, int on);
 /* The race's view distance (0x6197cc): the track's by road node (render.c), each frame. */
 extern float g_render_viewdist;
+extern int32_t g_render_falsesort;  /* 0x6197e8: the false sort layers' level (0x44eb50) */
 extern int32_t g_render_specials;   /* 0x6197f4: the special effects' level 0..3 */
 extern int32_t g_render_precip;     /* 0x6197f0: the weather's most drops (60, 140, 220, 300) */
 /* The track's view distances by road node (<track>_forward.key / _backwards.key). 0x44f9b0, 0x44f9e0 */

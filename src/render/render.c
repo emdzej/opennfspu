@@ -628,12 +628,38 @@ static void set_viewdist(float d)
     if (g_render_viewdist < 50.0f) g_render_viewdist = 50.0f;   /* 0x5b251c */
 }
 
+/* 0x44eb50: the false sort layers' level: none at the low special effects, 2 at the highest; at 2 the
+   race's by the first car's +0x35c (0 from 15 up, 0x5b243c), the replay's by the camera's field of view
+   (2 under 37.5, 0x5b3c9c), else 1. */
+int32_t g_render_falsesort;   /* 0x6197e8 */
+
+static void falsesort_level(void)
+{
+    switch (g_renderopts.specialfx) {
+    case 0:
+    case 1: g_render_falsesort = 0; return;
+    case 2: break;
+    case 3: g_render_falsesort = 2; return;
+    default: return;
+    }
+    if (g_race_view < 2) {
+        if (g_cars[0] && 15.0f <= *CAR_F(g_cars[0], 0x35c)) {
+            g_render_falsesort = 0;
+            return;
+        }
+    } else if (g_racecam[0].fov < 37.5f) {
+        g_render_falsesort = 2;
+        return;
+    }
+    g_render_falsesort = 1;
+}
+
 void Render_Frame(RaceViews *rv)
 {
     Render_BeginFrame(g_render);
     Particles_Frame(g_drive_paused);                     /* Particles_Tick by the timer (0x628148; 0x606a98, 0x606a8c never set here) */
     if (s_keys) set_viewdist(keys_find(g_racecam[0].surf.node));   /* 0x44fb80, 0x44f070 (the camera's +0xdc) */
-    PENDING_NOTE(0x44eb50, "the false sort layers' level by the speed (0x6197e8)");
+    falsesort_level();                                   /* 0x44eb50 */
     Render_MainViews(rv);
     View_Begin(g_render, rv->overlay);
     View_End(g_render);

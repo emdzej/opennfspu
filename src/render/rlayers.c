@@ -2,6 +2,9 @@
 #include "render/rlayers.h"
 #include "render/r3dcar.h"
 #include "render/headlights.h"
+#include "render/render.h"
+#include "render/rdraw.h"
+#include "render/thrash.h"
 #include "exe.h"
 #include "pending.h"
 #include "platform.h"
@@ -59,6 +62,8 @@ static EaglLayer *exec_spectex(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_shadowmap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_vertexlight(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_falsesort1(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_falsesort2(EaglLayer *, EaglStream *, EaglStream *);
 
 static const RLayerClass classes[] = {
     {0x8001, -1, 0x5b3c18, 1, true, false, 0, 0, 0x20, NULL, 0x448bf0, "RCustomLayers::LayerUVAnimate"},
@@ -73,8 +78,8 @@ static const RLayerClass classes[] = {
     {0x800c, -1, 0x5b3c38, 1, true, false, 4, 0, 0x20, exec_indexedcolour, 0x449900, "RCustomLayers::LayerIndexedColour"},
     {0x800d, -1, 0x5b3c30, 1, true, false, 8, 0, 0x20, exec_indexeduv, 0x449830, "RCustomLayers::LayerIndexedUV"},
     {0x800e, 1, 0x5b3c28, 1, true, false, 0x10, 0, 0x20, exec_transform, 0x448eb0, "RCustomLayers::LayerTransformCoords"},
-    {0x800f, 0x8000, 0, 0, false, false, 0, 0, 0x20, NULL, 0x4499c0, "RCustomLayers::LayerFalseSort1"},
-    {0x8010, 0x8000, 0, 0, false, false, 0, 0, 0x20, NULL, 0x449a10, "RCustomLayers::LayerFalseSort2"},
+    {0x800f, 0x8000, 0, 0, false, false, 0, 0, 0x20, exec_falsesort1, 0x4499c0, "RCustomLayers::LayerFalseSort1"},
+    {0x8010, 0x8000, 0, 0, false, false, 0, 0, 0x20, exec_falsesort2, 0x449a10, "RCustomLayers::LayerFalseSort2"},
     {0x8011, -1, 0, 0, true, false, 4, 0, 0, NULL, 0x453490, "Headlights::LayerVertexLight_Ambient"},
     {0x8100, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_spectex, 0x445450, "R3DSpecularTextureLayer"},
     {0x8101, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_skymap, 0x445a40, "R3DSkyMapTextureLayer"},
@@ -805,5 +810,35 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
         for (int k = 0; k < n; k++, o += stride) memcpy(o, &col[k], 4);
     }
     c->flags |= EAGL_CF_DIFFUSE;
+    return l->next;
+}
+
+/* ---- the false sort layers (0x4499c0, 0x449a10) ----
+
+   Before (1) and after (2) the layers between: the driver's filtering (state 7) off and on again, or,
+   at the level (0x6197e8) 2, or 1 with the list's key (0x61975c) up to 9999, the depth writes off and on
+   through the render state (0x5375e0). The second one's direct path returns no next layer, which ends
+   the material's layers there, as the original's. */
+static bool falsesort_direct(void)
+{
+    return g_render_falsesort != 2 && (g_render_falsesort != 1 || 9999 < g_rdraw_key);
+}
+
+static EaglLayer *exec_falsesort1(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0, (void)s1;
+    if (falsesort_direct()) THRASH.fn.setstate(THRASH_STATE_FILTER, 0);
+    else RenderState_SetZWrite(g_render->device->rs, 0);
+    return l->next;
+}
+
+static EaglLayer *exec_falsesort2(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0, (void)s1;
+    if (falsesort_direct()) {
+        THRASH.fn.setstate(THRASH_STATE_FILTER, 1);
+        return NULL;
+    }
+    RenderState_SetZWrite(g_render->device->rs, 1);
     return l->next;
 }
