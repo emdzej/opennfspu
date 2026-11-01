@@ -108,6 +108,48 @@ front-end object with that half turn added, about the point the original's draw 
     (0x4c9f50);
   - the accessor watch: its accessor's text in its label.
 
+## The used car market
+
+The market (0x691b88) is a list of car objects. The save's `UsedCarMarket` section holds only the
+market's own cars (written by 0x4f7030, read by 0x4f6d70) and the year it was last updated (0x691b58).
+A car object has these market fields:
+
+| Offset | Field |
+|---|---|
+| +0x68c | asking price |
+| +0x690 | sold (the market's own cars) |
+| +0x691 | for sale |
+| +0x692 | an offer made |
+| +0x694 | the offer |
+| +0x6a0 | the player's car |
+
+- **Selling** (the garage's SELLCAR, 0x50f590) works only while the player keeps at least one car that
+  is not for sale. Otherwise it shows message 0x3c. The asking price is typed into an input dialog
+  (FEDialogInputCancel 0x513980: string 800, digits only, at most 8). OK puts the car up for sale
+  (0x4f8760) and updates the market for the career's year (0x4f7350). While the car is for sale, the
+  "sell" button gives way to "remove from market" (DONTSELLCAR, 0x4f88e0).
+- **Listing is per session.** The player's cars join the in-memory list only. A car still for sale when
+  the game quits keeps its flag, but the market's loader rebuilds the list without it, so the car
+  is in no list and DONTSELLCAR finds nothing to take back. The port keeps this behaviour.
+- **The market update** (0x4f7350) runs at a listing and after every career race (0x4ed390). In order:
+  - it seeds the random numbers from the time (the port uses its frame clock, so runs repeat);
+  - it lets the buyers act (0x4f7430);
+  - it drops the market's sold cars;
+  - it reprices the rest at their value (0x4f83f0);
+  - it adds the year's new cars (0x4f7660, pending).
+- **The buyers** (0x4f7430) work out a score for each car:
+  - (value − asking price) × 100 / value, minus its damage, plus 100;
+  - plus points for its mileage, from one of four tables chosen by its age;
+  - plus a fifth of +0x69c, plus points for its damage.
+
+  The score's row in the table 0x5b7d88 gives a percentage and a flag. Without the flag, that
+  percentage of the time the car sells at the asking price (for a player's car, an offer of the
+  asking price). Otherwise the car gets an offer of its value plus a random −3% to +3%, capped at the
+  asking price.
+- **Offers** are asked about on the tournament screen when it is created (FETournamentCallBackList
+  0x5051a0, 0x5053a0), in a yes/no dialog with string 0x327. Yes takes the money and removes the car
+  (0x501740); no clears the offer (0x4f8cc0).
+
 ## The port's order
 
 1. FERT's model: templates, layouts, controls, parts, attributes. Check: every template and layout

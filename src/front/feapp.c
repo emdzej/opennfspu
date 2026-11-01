@@ -5,6 +5,7 @@
 #include "front/feaccess.h"
 #include "front/fe3d.h"
 #include "front/fesave.h"
+#include "front/femarket.h"
 #include "game/audio.h"
 #include "game/music.h"
 #include "game/options.h"
@@ -30,13 +31,31 @@ static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents;
 static char s_car[64] = "964";
 static int s_depth;
-static struct { bool up; int text; float x, y, w, h, tw; } s_dialog;   /* the message up (0x512d00) */
-static bool dialog_button_hit(int32_t mx, int32_t my);
+/* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
+   an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
+enum { DLG_ONE, DLG_TWO, DLG_INPUT };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER };
+static struct {
+    bool up;
+    int kind, purpose, done;
+    char text[300];
+    int b1, b2;              /* the buttons' strings */
+    char input[16];          /* FEDialogInput's text (+0xe4), its length cap (+0xe8), digits only (+0xf1) */
+    int cap;
+    bool digits;
+    float x, y, w, h, tw;
+} s_dialog;
+static int dialog_button_hit(int32_t mx, int32_t my);
+static void dialog_key(uint8_t code);
+static void dialog_open(int kind, const char *text, int b1, int b2);
 static bool s_sound;
 static uint32_t s_colours[4];         /* the race car's colours (the description's +0x218 ..) */
 static bool s_havecol;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
 static int s_owned_race = -1;         /* the owned car raced (its index in the save) */
+static int s_gametype;                /* Game.GameType (0x690ad4): 4 the career (the other modes' values pend) */
+static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
+static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
@@ -162,6 +181,17 @@ static bool select_panel_deep(FertControl *w, const char *name)
     return false;
 }
 
+/* An attribute of the screen's own part ("screen", "callbacklist", ...); "" without it. */
+static const char *screen_attr(FertControl *w, const char *name)
+{
+    if (!w || !w->screen) return "";
+    for (int k = 0; k < w->screen->nparts; k++) {
+        FertAttr *a = FertAttrList_find(&w->screen->parts[k]->attrs, name);
+        if (a) return FertAttr_str(a);
+    }
+    return "";
+}
+
 static FertControl *load_screen(const char *name)
 {
     char path[300];
@@ -179,6 +209,12 @@ static FertControl *load_screen(const char *name)
         FertControl *c = w->children[i];
         if (FertControl_findState(c, "hover") >= 0) c->fecaps |= 4;   /* (+0x110 as the template's states) */
         if (FertControl_findState(c, "selected") >= 0) c->fecaps |= 0x100;
+        if (FertControl_findState(c, "disabled") >= 0) c->fecaps |= 0x10;
+        if (FertControl_findState(c, "hidden") >= 0) c->fecaps |= 0x20;
+    }
+    if (!strcmp(screen_attr(w, "callbacklist"), "ID_TOURNYSCREEN")) {   /* (0x5051a0: its first offer) */
+        s_tourny_win = w;
+        s_tourny_offer = Market_FirstOffer();
     }
     open_panels(w);
     return w;
@@ -220,6 +256,7 @@ void FEApp_RaceOver(const int *places, const int *times, int n)
 {
     if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, n);
     s_tour_race = -1;
+    if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */
 }
 
 void FEApp_End(void)
@@ -368,13 +405,27 @@ static void callback(const char *cb)
         /* FEGarageCallBackList_v57 0x50f590: not the only car (the message 0x3c); else its confirmation
            panel (+0x2d8 slot 0x50) and the sale at the car's value: pending (0x4f83f0) */
         Save *sv = FESave_Current();
-        if (!sv || sv->ncars <= 1) FEApp_Message(0x3c);
-        else PENDING_NOTE(0x50f590, "selling a car (its confirmation and its value 0x4f83f0)");
+        if (sv && 1 < sv->ncars - Market_Listed()) {
+            /* (+0x2d8: FEDialogInputCancel 0x513980(800, digits, 8): the asking price) */
+            dialog_open(DLG_INPUT, FEStrings_Get(800), 0x2be, 0x2bf);
+            s_dialog.digits = true;
+            s_dialog.cap = 8;
+            s_dialog.purpose = DLG_FOR_SELL;
+        } else {
+            FEApp_Message(0x3c);   /* (0x512d00(0x3c, 0x2be)) */
+        }
+    } else if (!strcmp(cb, "DONTSELLCAR")) {
+        /* FEGarageCallBackList_v58 0x50f610: the garage's car taken off the market (0x4f88e0) */
+        Market_Unlist(FEData_OwnedIndex("OwnedCars.Car"));
+        FESave_Write();
     } else if (!strcmp(cb, "TOURNREMAININC") || !strcmp(cb, "TOURNREMAINDEC")) {
         /* the pre-race screen's arrows (FEPreRaceCallBackList): the tournament's next or last race left */
         FEAccessor *a = FEAccess_Find("Tournament.RemainingTracks");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[11] == 'I' ? 1 : -1));
+    } else if (!strncmp(cb, "SETTYPE", 7) && strcmp(cb, "SETTYPECAREERMODE")) {
+        s_gametype = 0;   /* (FEMainScreen's 0x5107a0 .. 0x510800: not the career) */
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
+        s_gametype = 4;
         /* FEMainScreen_v63 0x510430: the career (Game.GameType 4, the car lists again), its tournaments when
            it was started (PlayerInfo's 0x691dd5), else its first screen, which starts it */
         Save *sv = FESave_Current();
@@ -531,8 +582,15 @@ static void poll(void)   /* 0x529530 */
     }
     uint32_t changed = b ^ s_buttons;
     s_buttons = b;
-    if (s_dialog.up) {   /* (the dialog's the only one taking the mouse) */
-        if ((changed & 1) && !(b & 1) && dialog_button_hit(mx, my)) s_dialog.up = false;
+    if (s_dialog.up) {   /* (the dialog's the only one taking the mouse and the keys) */
+        uint8_t k[16];
+        int nk = plat_key_presses(k, 16);
+        for (int i = 0; i < nk && s_dialog.up; i++) dialog_key(k[i]);
+        int hit = (changed & 1) && !(b & 1) ? dialog_button_hit(mx, my) : 0;
+        if (hit && s_dialog.up) {
+            s_dialog.up = false;
+            s_dialog.done = hit;
+        }
         return;
     }
     if (changed & 1) {
@@ -708,14 +766,23 @@ static float draw_wrapped(HudFont *font, const char *text, float x0, float y, fl
    (string 0x2be, 80 x 18 at 120 across, under the text) that closes it. Its draw (0x512310): a gouraud body
    5 wider each way, four bevel edges, the text centred in black, a drop shadow; over every screen, the
    only one taking the mouse while it's up. (The button's own look: the port's red bar.) */
-void FEApp_Message(int string_id)
+static void dialog_open(int kind, const char *text, int b1, int b2)
 {
+    memset(&s_dialog, 0, sizeof s_dialog);
     s_dialog.up = true;
-    s_dialog.text = string_id;
+    s_dialog.kind = kind;
+    snprintf(s_dialog.text, sizeof s_dialog.text, "%s", text ? text : "");
+    s_dialog.b1 = b1;
+    s_dialog.b2 = b2;
     s_dialog.x = 160.0f, s_dialog.w = 320.0f;
     s_dialog.tw = 300.0f;   /* 0x43960000 */
     s_dialog.h = 100.0f;
     s_dialog.y = 240.0f - 50.0f;
+}
+
+void FEApp_Message(int string_id)
+{
+    dialog_open(DLG_ONE, FEStrings_Get(string_id), 0x2be, 0);
 }
 
 static HudFont *dialog_font(void)
@@ -725,25 +792,91 @@ static HudFont *dialog_font(void)
     return FEFont_Get(fp);
 }
 
-static void dialog_layout(void)
+/* The places (relative to the box) of the buttons and the input: the one-button's under the text
+   (0x512ea0); the others' (0x5133a0, 0x513b50) stacked from the text's height + 20: the input, then
+   0x12 lower the first button, 0x15 lower the second; the box that and 0x15, centred on 240. */
+static float dialog_layout(float *b1y, float *b2y, float *iny)
 {
     HudFont *f = dialog_font();
-    const char *t = FEStrings_Get(s_dialog.text);
-    float th = f && f->font && t ? draw_wrapped(f, t, 0, 0, s_dialog.tw, 1, 0, false) : 20.0f;
-    s_dialog.h = th + 18.0f + 0x15;   /* (the text, the button, 0x15) */
-    s_dialog.y = (float)(0xf0 - (int)(th + 0x15) / 2);
+    float th = f && f->font ? draw_wrapped(f, s_dialog.text, 0, 0, s_dialog.tw, 1, 0, false) : 20.0f;
+    if (s_dialog.kind == DLG_ONE) {
+        s_dialog.h = th + 18.0f + 0x15;   /* (the text, the button, 0x15) */
+        s_dialog.y = (float)(0xf0 - (int)(th + 0x15) / 2);
+        *b1y = s_dialog.h - 18.0f - 4.0f;
+        *b2y = *iny = 0;
+        return th;
+    }
+    int y = (int)(th + 20.0f);   /* (__ftol of the height + 20, 0x5b2470) */
+    *iny = (float)y;
+    if (s_dialog.kind == DLG_INPUT) y += 0x12;
+    *b1y = (float)y;
+    y += 0x15;
+    *b2y = (float)y;
+    y += 0x15;
+    s_dialog.h = (float)y;
+    s_dialog.y = (float)(0xf0 - y / 2);
+    return th;
 }
 
-static bool dialog_button_hit(int32_t mx, int32_t my)
+static int dialog_button_hit(int32_t mx, int32_t my)
 {
-    float bx = s_dialog.x + 120.0f, by = s_dialog.y + s_dialog.h - 18.0f - 4.0f;
-    return bx <= mx && mx < bx + 80.0f && by <= my && my < by + 18.0f;
+    float b1y, b2y, iny;
+    dialog_layout(&b1y, &b2y, &iny);
+    float bx = s_dialog.x + 120.0f, y = s_dialog.y;
+    if (bx <= mx && mx < bx + 80.0f && y + b1y <= my && my < y + b1y + 18.0f) return 1;
+    if (s_dialog.kind != DLG_ONE && bx <= mx && mx < bx + 80.0f && y + b2y <= my && my < y + b2y + 18.0f) return 2;
+    return 0;
+}
+
+/* A key to the dialog (FEDialogInput_v4 0x514530 as the input's; FEDialogInputCancel_v1 0x5140e0 takes
+   its Enter as OK): the keys as their characters (the port maps the digits, the keypad's and the letters;
+   the original reads WM_CHAR), backspace the last one off, Enter done; a digits-only input takes 0..9 up
+   to its cap. Each key the front end's sound 9. */
+static void dialog_key(uint8_t code)
+{
+    if (s_dialog.kind != DLG_INPUT) return;
+    static const char row1[] = "1234567890", rowq[] = "qwertyuiop", rowa[] = "asdfghjkl", rowz[] = "zxcvbnm";
+    static const uint8_t pad[] = {0x52, 0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, 0x48, 0x49};   /* keypad 0..9 */
+    int ch = 0;
+    if (code >= 0x02 && code <= 0x0b) ch = row1[code - 2];
+    else if (code >= 0x10 && code <= 0x19) ch = rowq[code - 0x10];
+    else if (code >= 0x1e && code <= 0x26) ch = rowa[code - 0x1e];
+    else if (code >= 0x2c && code <= 0x32) ch = rowz[code - 0x2c];
+    else if (code == 0x39) ch = ' ';
+    else if (code == 0x0e) ch = 8;
+    else if (code == 0x1c || code == 0x9c) ch = 13;
+    for (int i = 0; i < 10; i++)
+        if (code == pad[i]) ch = '0' + i;
+    if (!ch) return;
+    PENDING_NOTE(0x4aab80, "the front end's key sound (9)");
+    size_t n = strlen(s_dialog.input);
+    if (ch == 8) {
+        if (n) s_dialog.input[n - 1] = 0;
+    } else if (ch == 13) {
+        s_dialog.up = false;
+        s_dialog.done = 1;
+    } else if ((!s_dialog.digits || (ch >= '0' && ch <= '9')) && (int)n < s_dialog.cap) {
+        s_dialog.input[n] = (char)ch;
+        s_dialog.input[n + 1] = 0;
+    }
+}
+
+static void dialog_button(float bx, float by, int str, HudFont *f)
+{
+    FE2D_DepthStep();
+    FE2D_Gouraud(bx, by, 80.0f, 18.0f, 0xffe00c0cu, 0xff820000u, 0xffe00c0cu, 0xff820000u);
+    const char *t = FEStrings_Get(str);
+    if (f && f->font && t) {
+        FE2D_DepthStep();
+        draw_wrapped(f, t, bx, by + 2.0f, 80.0f, 1, 0xffffffffu, true);
+    }
 }
 
 static void dialog_draw(void)
 {
     if (!s_dialog.up) return;
-    dialog_layout();
+    float b1y, b2y, iny;
+    dialog_layout(&b1y, &b2y, &iny);
     float x = s_dialog.x, y = s_dialog.y, w = s_dialog.w, h = s_dialog.h, c = 5.0f, c2 = 10.0f;
     FE2D_DepthStep();
     FE2D_Gouraud(x - c, y - c, w + c2, h + c2, 0xff82a2b0u, 0xff82a2b0u, 0xe5fed66bu, 0xe5fed66bu);
@@ -762,16 +895,24 @@ static void dialog_draw(void)
     FE2D_Quad(bot, cb);
     FEStyle_DropShadow(x - c, y - c, w + c2, h + c2, 0xff, 4, 4);
     HudFont *f = dialog_font();
-    const char *t = FEStrings_Get(s_dialog.text);
     FE2D_DepthStep();
-    if (f && f->font && t) draw_wrapped(f, t, x + c2, y + c2, s_dialog.tw, 1, 0xff000000u, true);
-    float bx = x + 120.0f, by = y + h - 18.0f - 4.0f;
-    FE2D_Gouraud(bx, by, 80.0f, 18.0f, 0xffe00c0cu, 0xff820000u, 0xffe00c0cu, 0xff820000u);
-    const char *ok = FEStrings_Get(0x2be);
-    if (f && f->font && ok) {
-        FE2D_DepthStep();
-        draw_wrapped(f, ok, bx, by + 2.0f, 80.0f, 1, 0xffffffffu, true);
+    if (f && f->font) draw_wrapped(f, s_dialog.text, x + c2, y + c2, s_dialog.tw, 1, 0xff000000u, true);
+    if (s_dialog.kind == DLG_INPUT && f && f->font) {
+        /* FEDialogInput_v11 0x5143c0: its text in black centred on its place (160 across), (width + 8) / 2
+           to its left; the cursor a 1 x 14 bar at its end, on for 32 of every 64 ticks. */
+        float fx, fy, fw = 0, fh;
+        FONT_extent(f->font, s_dialog.input, &fx, &fy, &fw, &fh);
+        float cx = x + 160.0f, ty = y + iny;
+        char *copy = FE2D_Alloc((int)strlen(s_dialog.input) + 1);
+        if (copy) {
+            strcpy(copy, s_dialog.input);
+            FE2D_Text(f, cx - (fw + 8.0f) * 0.5f, ty, 0, 0xff000000u, copy, 1.0f, 1.0f);
+        }
+        uint32_t ticks = (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+        if ((ticks & 0x3f) < 0x20) FE2D_Gouraud((fw + 8.0f) * 0.5f + cx - 8.0f, ty - 1.0f, 1.0f, 14.0f, 0xff000000u, 0xff000000u, 0xff000000u, 0xff000000u);
     }
+    dialog_button(x + 120.0f, y + b1y, s_dialog.b1, f);
+    if (s_dialog.kind != DLG_ONE) dialog_button(x + 120.0f, y + b2y, s_dialog.b2, f);
 }
 
 /* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
@@ -933,6 +1074,117 @@ static void draw_combos(FertControl *w)
     }
 }
 
+/* A control of the screen by name (FEApplication's 0x5287b0), in its panels too. */
+static FertControl *control_named(FertControl *w, const char *name)
+{
+    for (int i = 0; w && i < w->nchildren; i++) {
+        FertControl *c = w->children[i];
+        if (!strcmp(c->name, name)) return c;
+        FertControl *s = c->sub ? control_named(c->sub, name) : NULL;
+        if (s) return s;
+    }
+    return NULL;
+}
+
+static void set_flag(FertControl *w, const char *name, uint32_t flag, bool on)   /* 0x4c79c0 .. 0x4c7a80 */
+{
+    FertControl *c = control_named(w, name);
+    if (!c) return;
+    uint32_t f = c->feflags;
+    if (on && (c->fecaps & flag)) c->feflags |= flag;
+    else if (!on) c->feflags &= ~flag;
+    if (f != c->feflags) refresh_state(c);
+}
+/* 0x50cf40: enabled or not (0x10); 0x50cfd0: hidden or not (0x20). */
+static void enable(FertControl *w, const char *name, bool on) { set_flag(w, name, 0x10, !on); }
+static void hide(FertControl *w, const char *name, bool on) { set_flag(w, name, 0x20, on); }
+
+/* The garage's callback list's update (FEGarageCallBackList_v1 0x50f250): its buttons by the car shown
+   (OwnedCars.Car) and the mode (the used and new cars, the parts and the repairs the career's; a car for
+   sale shows "remove from market" for "sell"); the asking price's dialog closed with OK and a text: the
+   car put up at it (0x4f8760), the market's turn (0x4f7350) in the career's year. */
+static void garage_update(FertControl *w)
+{
+    Save *sv = FESave_Current();
+    int car = FEData_OwnedIndex("OwnedCars.Car");
+    bool has = sv && car >= 0 && car < sv->ncars, listed = has && sv->cars[car].rec[0x691];
+    bool career = s_gametype == 4;
+    enable(w, "ID_CHOOSECARBOX", has);
+    enable(w, "ID_CARSETUP", has);
+    enable(w, "ID_PAINTBUTTON", has);
+    enable(w, "ID_SETTINGSBUTTON", has);
+    enable(w, "ID_USEDCARSBUTTON", career);
+    enable(w, "ID_NEWCARSBUTTON", career);
+    enable(w, "ID_PARTSBUTTON", has && career);
+    enable(w, "ID_REPAIRBUTTONGARAGE", has && career);
+    if (career) {
+        hide(w, "ID_REMOVEFMBUTTON", !has || !listed);
+        enable(w, "ID_SELLCARBUTTON", has);
+        hide(w, "ID_SELLCARBUTTON", listed && has);
+    } else {
+        hide(w, "ID_REMOVEFMBUTTON", true);
+        enable(w, "ID_SELLCARBUTTON", false);
+        hide(w, "ID_SELLCARBUTTON", false);
+    }
+    if (s_dialog.purpose == DLG_FOR_SELL && !s_dialog.up) {
+        if (s_dialog.done == 1 && s_dialog.input[0]) {
+            const char *t = s_dialog.input;   /* (0x523aa0: "0x" hex, else atol) */
+            unsigned hx;
+            long price = strlen(t) >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X') && sscanf(t + 2, "%x", &hx) == 1 ? (long)hx : atol(t);
+            Market_List(car, (int32_t)price);
+            Market_Update(FEData_CareerYear());
+            FESave_Write();
+        }
+        s_dialog.purpose = DLG_FOR_NONE;
+    }
+}
+
+/* The tournament screen's update's offers (FETournamentCallBackList_v1 0x5053a0): the car with an offer
+   asked about (+0x2e4: FEDialogTwoItem 0x513370, yes 700 / no 0x2bd, the text 0x327 of the offer, the
+   car's name, the asking price); yes takes it (0x501740, the garage at its first car), no turns it down
+   (0x4f8cc0); then the next one. (The screen's buttons it disables meanwhile: the dialog has the mouse.) */
+static void tourny_update(FertControl *w)
+{
+    if (w != s_tourny_win) return;
+    if (s_dialog.purpose == DLG_FOR_OFFER) {
+        if (s_dialog.up) return;
+        Save *sv = FESave_Current();
+        if (s_dialog.done == 1) {
+            Market_Accept(s_tourny_offer);
+            FEAccessor *a = FEAccess_Find("OwnedCars.Car");
+            if (a) FEAccess_SetPos(a, 0);
+        } else {
+            Market_Decline(s_tourny_offer);
+        }
+        (void)sv;
+        FESave_Write();
+        s_dialog.purpose = DLG_FOR_NONE;
+        s_tourny_offer = Market_FirstOffer();
+        return;
+    }
+    if (s_tourny_offer < 0 || s_dialog.up) return;
+    Save *sv = FESave_Current();
+    if (!sv || s_tourny_offer >= sv->ncars) {
+        s_tourny_offer = -1;
+        return;
+    }
+    const uint8_t *r = sv->cars[s_tourny_offer].rec;
+    int32_t offer, price;
+    memcpy(&offer, r + 0x694, 4);
+    memcpy(&price, r + 0x68c, 4);
+    char text[300];
+    snprintf(text, sizeof text, FEStrings_Get(0x327), offer, (const char *)r + 4 + 2, price);
+    dialog_open(DLG_TWO, text, 700, 0x2bd);
+    s_dialog.purpose = DLG_FOR_OFFER;
+}
+
+static void screen_update(FertControl *w)   /* the screen's callback list's update (its v1) */
+{
+    const char *cbl = screen_attr(w, "callbacklist");
+    if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
+    else if (!strcmp(cbl, "ID_TOURNYSCREEN")) tourny_update(w);
+}
+
 /* The menus' music (FEMainScreen_v1 0x50faf0): a song of "Menu*" (0x5dca14) every 0x1e00 ticks (a minute),
    the one before faded out, at the options' level (MUSICLEVEL). */
 static void menu_music(void)
@@ -977,6 +1229,7 @@ void FEApp_Frame(void)
         FEWindow_Draw(s_overlay);
     }
     if (w) {
+        screen_update(w);
         update_watches(w);
         update_all(w);   /* (the controls' ticks) */
         FEWindow_Draw(w);

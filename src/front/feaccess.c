@@ -148,6 +148,7 @@ static int16_t rec16(const uint8_t *r, int off) { int16_t v; memcpy(&v, r + off,
 static int32_t rec32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
 
 static int career_year(void);
+int FEData_CareerYear(void) { return career_year(); }
 
 static const uint8_t *part_rec(int32_t id)   /* 0x49c3e0: an nfs5.prt record by its id */
 {
@@ -300,7 +301,7 @@ int FEData_QuickFix(void)
 }
 
 /* A car's damage in per cent (0x4eefd0): its parts' wear by type, 6 and 7 at half, over 9 (0x5b74b8). */
-static float car_damage(const SaveCar *c)
+float FEData_CarDamage(const SaveCar *c)
 {
     float a = (wear_of(c, 7) + wear_of(c, 6)) * 0.5f;
     return (a + wear_of(c, 1) + wear_of(c, 10) + wear_of(c, 9) + wear_of(c, 8) + wear_of(c, 5) + wear_of(c, 4) +
@@ -320,7 +321,7 @@ int32_t FEData_CarValue(const SaveCar *c, int year)
     int32_t miles = rec32(o, 0x698), madj = 0, dadj = 0;
     for (uint32_t t = 0x5b7c08; t < 0x5b7c44; t += 12)
         if ((int32_t)exe_u32(t) <= miles && miles <= (int32_t)exe_u32(t + 4)) madj = (int32_t)exe_u32(t + 8) * base / 100;
-    int dmg = (int)car_damage(c);
+    int dmg = (int)FEData_CarDamage(c);
     for (uint32_t t = 0x5b7c48; t < 0x5b7c84; t += 12)
         if ((int32_t)exe_u32(t) <= dmg && dmg <= (int32_t)exe_u32(t + 4)) dadj = (int32_t)exe_u32(t + 8) * base / 100;
     int32_t inst = 0, stock = 0;
@@ -816,7 +817,7 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "CURRENTVALUE")) return FE_MoneyText(FEData_CarValue(&sv->cars[a->pos], sv->usedinfo));
         static char db[16];
         const SaveCar *c = &sv->cars[a->pos];
-        if (!strcmp(arg, "OVERALLDAMAGE")) { snprintf(db, sizeof db, "%2.0f", 100.0 - car_damage(c)); return db; }
+        if (!strcmp(arg, "OVERALLDAMAGE")) { snprintf(db, sizeof db, "%2.0f", 100.0 - FEData_CarDamage(c)); return db; }
         int32_t total = 0;
         for (int k = 0; k < 9; k++) {
             size_t nl = strlen(k_cats[k].name);

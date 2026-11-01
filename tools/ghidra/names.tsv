@@ -2601,3 +2601,20 @@
 00518160	FEPart_RepairCost	frontend	high	A part's price grown since its year, times its wear
 004ef230	FECar_RepairCost	frontend	high	The installed parts' repairs of a type (engine 1; 0x4ef290 .. the others)
 0050e9f0	FEQuickFixCallBackList_Fix	frontend	high	The checked categories' repairs: too little money 0x329, else the wear gone
+004f6d70	UsedCarMarket_Load	frontend	high	The UsedCarMarket section: n, the market's year (0x691b58), n cars; the list rebuilt from them
+004f7030	UsedCarMarket_Save	frontend	high	The market's own cars (+0x6a0 0) and its year
+004f7350	UsedCarMarket_Update	frontend	high	srand(time), the year, the buyers, the sold ones out, the rest repriced, the new cars
+004f7430	UsedCarMarket_Buyers	frontend	high	Each car's score (price vs value, damage, mileage by age, +0x69c) -> sale or an offer
+004f7660	UsedCarMarket_NewCars	frontend	med	The year's new used cars by age chance (0x5b7a10), 24 at most
+004f8760	UsedCarMarket_List	frontend	high	A player's car put up: +0x68c price, +0x691, +0x6a0
+004f88e0	UsedCarMarket_Unlist	frontend	high	A car taken off the market (DONTSELLCAR)
+004f8960	UsedCarMarket_PlayerCars	frontend	high	The player's cars in the market
+004f8b10	UsedCarMarket_Offers	frontend	high	The player's cars with an offer (+0x692)
+004f8cc0	UsedCarMarket_Decline	frontend	high	The offer cleared
+00501740	PlayerInfo_SellCar	frontend	high	An offer taken: money + the offer (clamped), the car out of the garage and the market
+004eeb30	FECar_LoadSetup	frontend	high	The saved setup (+0x714) back into the settings (+0x6d0), 17 floats
+00513980	FEDialogInputCancel_ctor	frontend	high	A message with an input (digits only, its cap), OK and cancel stacked under it
+00514270	FEDialogInput_ctor	frontend	high	The input: its centre x, y, colour, cap, digits-only flag
+005133a0	FEDialogTwoItem_Layout	frontend	high	Two buttons under the text (text h + 20, 0x15 apart), the box centred on 240
+004a51d0	FloatToFixed16	frontend	high	A float x 65536 (0x5b3e68), truncated
+004ed390	FE_AfterRace	frontend	med	The car lists again; in the career the market's update for the year
