@@ -473,6 +473,7 @@ static void Car_MakeRenderer(Car *c)
     r->state.spec = &r->spec;
     r->state.style = DESC_I(c, 0x328);   /* +0x568: BODYSTYLE */
     r->state.index = *CAR_I(c, CAR_INDEX);
+    r->state.damage = CAR_F(c, 0x4e4);   /* (the state is the car itself in the original) */
     R3DCar_Init(&r->car, &r->state);
     R3DCar_SetColours(&r->car, r->spec.scheme);   /* 0x443ce0 */
     char path[128];

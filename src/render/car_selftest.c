@@ -71,6 +71,11 @@ static bool load(const char *name)
     spec.racenumber = -1;
     for (int i = 0; i < CAR_NOPTIONS; i++) spec.options[i] = -1;
     state.spec = &spec;
+    static float dents[10];   /* --param dent=<0..100>: every damage zone at that (the dents) */
+    if (plat_param("dent", v, sizeof v)) {
+        for (int z = 0; z < 10; z++) dents[z] = (float)atof(v);
+        state.damage = dents;
+    }
     R3DCar_Init(&car, &state);
     char path[96];
     if (strchr(name, '\\')) snprintf(path, sizeof path, "%s", name);   /* (a full path: the front end's rooms) */
@@ -119,6 +124,7 @@ bool CAR_selftest(const char *name)
     if (tm) TexManager_begin(tm);   /* textures to the card for the frame, as the race frame does */
     RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 1 : 2);
     View_Begin(g_render, camera);
+    R3DCar_Dents(&car, false);   /* (R3DCar_v7's 0x438160) */
     R3DCar_Draw(&car, &camera->view->model);
     View_End(g_render);
     if (tm) TexManager_end(tm);

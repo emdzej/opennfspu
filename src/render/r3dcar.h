@@ -47,6 +47,7 @@ typedef struct {
     float halfsize[3];           /* +0x3a8: half the bounding box (0x444fc0) */
     float radius;                /* +0x3b4 */
     int32_t index;               /* +0x520: the car's (CAR_INDEX), the camera's car's draws its interior */
+    const float *damage;         /* +0x4e4: the ten damage zones (0 .. 100) */
     uint32_t flags;              /* +0x52c: 0x10 = sizes and the wheels' LOD from LOD list index 0 (not 4) */
     R3DCarSpec *spec;            /* +0x558 */
     int style;                   /* +0x568 */
@@ -131,6 +132,7 @@ typedef struct R3DCar {
     uint8_t loaded;                 /* +0x470 */
     uint8_t interior;               /* +0x471: draw the cockpit LOD */
     uint8_t textures;               /* +0x47c: textures are loaded with the geometry */
+    float dents[10];                /* +0x6a8: the zones' damage the parts were last deformed by */
     int texinfo;                    /* +0x480 */
     R3DCarAnim anim[8];             /* +0x568 */
     float wheelpos[4][3];           /* +0x6d0: wheel slot offsets (the simulation's) */
@@ -195,6 +197,10 @@ void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m);
 void R3DCar_AnimReset(R3DCar *car, int slot, float v);
 /* The animated parts of the slots moved since the last time, between their two frames (0x437f60). */
 void R3DCar_ApplyMorphs(R3DCar *car);
+/* The dents (0x438160): when a zone's damage (0x438210: capped per zone, by another table for the
+   camera's car seen from inside) changed, or with `force`, each LOD's deformable parts take it
+   (0x43e2c0), then the damage textures (0x445110). */
+void R3DCar_Dents(R3DCar *car, bool force);
 void R3DCarLOD_Bounds(R3DCarLOD *lod, EaglMatStack *model, float mn[3], float mx[3]); /* R3DCarLOD_v4 0x43ddc0 */
 
 /* The object's draw: model matrix from the car state (0x4433c0), then the LOD dispatch (R3DObject_v14

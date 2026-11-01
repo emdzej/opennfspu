@@ -229,14 +229,13 @@ void Render_DisplayInit(void)
 }
 
 /* 0x44ebe0. The globals other than the method key stay in this module until their readers are ported
-   (shadows 0x6197e5, specials 0x6197ec, car detail 0x6197c4). */
+   (shadows 0x6197e5, specials 0x6197ec); the car detail 0x6197c4 is render/r3dcar.h's g_r3d_quality. */
 int32_t g_render_specials;          /* 0x6197f4 */
 int32_t g_render_precip;            /* 0x6197f0: the weather's most drops */
 uint8_t g_render_skiplod0;          /* 0x6197e5: every quality level clears it in this build */
 uint8_t g_render_extras;            /* 0x6197e6: the 0x40000 'pr' lists and the effects (card type isn't 0xe) */
 uint8_t g_render_skidmarks;         /* 0x6197e7: the skid marks (game/skid.h) */
 uint32_t g_render_skidmask = 0xf;   /* 0x6197ec: a pair replaces the last on the steps it masks off */
-static int car_detail;              /* 0x6197c4 */
 uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb: the cars' dynamic lights and reflections */
 
 void Render_SetupQuality(void)
@@ -267,9 +266,8 @@ void Render_SetupQuality(void)
     else g_rmethod_key |= 3;
     /* the chrome option: 0 none, 1 (0x6197c8/c9 only), 2 the dynamic lights and the reflections too */
     g_render_carlights = g_render_carenv = g_renderopts.carchrome >= 2;
-    car_detail = g_renderopts.cardetail == 0 ? 0 : g_renderopts.cardetail == 1 ? 1 : 2;
+    g_r3d_quality = g_renderopts.cardetail == 0 ? 0 : g_renderopts.cardetail == 1 ? 1 : 2;   /* 0x6197c4 */
     if (RTex_flagsallowed && (g_rmethod_key & 2)) g_rmethod_key = (g_rmethod_key & ~3u) | 4;
-    (void)car_detail;
 }
 
 /* ---- the render system ---- */

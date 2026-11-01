@@ -41,4 +41,5 @@ void RenderOptions_Load(void)
     if (plat_param("sky_detail", v, sizeof v)) g_renderopts.skyrendering = atoi(v);
     if (plat_param("carchrome", v, sizeof v)) g_renderopts.carchrome = atoi(v);   /* (a viewer aid: the reflections) */
     if (plat_param("lensflare", v, sizeof v)) g_renderopts.lensflare = atoi(v);   /* (and the sun's flare) */
+    if (plat_param("cardetail", v, sizeof v)) g_renderopts.cardetail = atoi(v);   /* (and the cars' detail: their dents) */
 }

@@ -37,6 +37,7 @@ static uint32_t kind_index(int kind, uint32_t index)
 }
 
 static void *item_data(const UData *r) { return UData_data(r); }
+static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
 
 static uint32_t le32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 
@@ -496,6 +497,81 @@ void R3DCar_ApplyMorphs(R3DCar *car)
         }
 }
 
+/* ---- the dents ---- */
+
+/* A zone's damage as the parts take it: the zone held under its cap (x 0x5b242c, 100): the table at
+   0x5b35d4 for the camera's car with the camera inside (its mode or its flag 8), 0x5b35ac otherwise.
+   0x438210 */
+static float zone_damage(const R3DCar *car, int z)
+{
+    const float *d = car->state->damage;
+    float v = d ? d[z] : 0;
+    uint32_t table = 0x5b35ac;
+    if (car->state->index == g_camera_car && (g_racecam[0].mode != 0 || (g_racecam[0].flags2 >> 3 & 1))) table = 0x5b35d4;
+    float cap = f32(table + 4u * (unsigned)z) * f32(0x5b242c);
+    return cap < v ? cap : v;
+}
+
+/* 0x43e2c0: each deformable part (Base flag 8, detail above 0, its own vertices) of the LOD: its vertex
+   list's damage table ('dz' + the list's index: a count, then per group its zone, vertex count and first
+   index, then the indices); without the damaged shape (the list's index + 0x8000) the vertices copied
+   back, else each group whose zone changed sets its vertices to the shape's plus the damaged shape's
+   offsets times the zone's damage x 0.02 (at most 1); the part marked damaged past a half. */
+static void lod_dent(R3DCar *car, R3DCarLOD *lod)
+{
+    for (uint32_t k = 0; k < lod->nparts; k++) {
+        R3DPart *p = &lod->parts[k];
+        if (!(p->info[10] & 8) || g_r3d_quality <= 0 || !p->verts) continue;
+        uint32_t idx = (uint32_t)(p->entry[8] | p->entry[9] << 8);
+        UData *dz = UData_find(p->article, 0x647a0000u | idx);   /* 0x59f050 */
+        p->damage = 0;
+        if (dz == p->end) continue;
+        const uint32_t *t = item_data(dz);
+        UData *rb = cache_find(&p->cache[R3D_VT], p->article, kind_index(R3D_VT, idx));
+        uint32_t nv = rb == p->end ? 0 : rb->count;
+        const float (*base)[4] = rb == p->end ? NULL : item_data(rb);
+        UData *rd = cache_find(&p->cache[R3D_VT], p->article, kind_index(R3D_VT, idx + 0x8000));
+        const float (*dent)[4] = rd == p->end ? NULL : item_data(rd);
+        if (!base) continue;
+        if (!dent) {
+            memcpy(p->verts, base, (size_t)nv * 16);   /* MEM_copy */
+            continue;
+        }
+        uint32_t ng = t[0];
+        for (uint32_t g = 0; g < ng; g++) {
+            const uint32_t *gr = t + 1 + 3 * g;
+            int z = (int)gr[0];
+            if (z < 0 || 10 <= z || zone_damage(car, z) == car->dents[z]) continue;   /* 0x4382c0 */
+            float w = zone_damage(car, z) * f32(0x5b3714);
+            if (f32(0x5b24a8) < w) {
+                w = 1.0f;
+                p->damage = 1;
+            } else if (f32(0x5b23f0) < w) {
+                p->damage = 1;
+            }
+            for (uint32_t j = 0; j < gr[1]; j++) {
+                uint32_t v = t[ng * 3 + gr[2] + j + 1];
+                if (nv <= v) continue;
+                float o[3] = {dent[v][0] * w, dent[v][1] * w, dent[v][2] * w};   /* 0x53c340 */
+                p->verts[v][0] = o[0] + base[v][0];
+                p->verts[v][1] = o[1] + base[v][1];
+                p->verts[v][2] = o[2] + base[v][2];
+                p->verts[v][3] = 1.0f;
+            }
+        }
+    }
+}
+
+void R3DCar_Dents(R3DCar *car, bool force)   /* 0x438160 */
+{
+    bool changed = force;
+    for (int z = 0; z < 10 && !changed; z++) changed = zone_damage(car, z) != car->dents[z];
+    if (!changed) return;
+    for (uint32_t l = 0; l < car->nlods; l++) lod_dent(car, car->lods[l]);
+    for (int z = 0; z < 10; z++) car->dents[z] = zone_damage(car, z);
+    if (car->textures) PENDING_NOTE(0x447f40, "the damage textures (0x445110: the pages redrawn by the zones)");
+}
+
 /* R3DCar_v20 0x43b040: slot 1 at its last frame when the car's description says so (+0x50c), then the
    moved slots' parts. */
 static void car_postlod(R3DCar *car)
@@ -749,7 +825,6 @@ void R3DCar_Free(R3DCar *car)
 
 /* ---- rotations (EAGL_MatAxisAngle 0x539940, 0x532430) ---- */
 
-static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
 
 static double f64(uint32_t va)
 {
