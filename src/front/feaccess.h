@@ -39,6 +39,8 @@ const char *FEAccess_CarFile(const FEAccessor *a);
 
 /* The race the choices describe: the track's name (its .crp), the car's file, the opponents. */
 const char *FEData_Track(void);
+/* The track's eight records (nfs5.trk's, 0x4ec200): the race and lap times, drivers, cars. */
+bool FEData_TrackRecords(const char *track, int32_t race[8], int32_t lap[8], char names[8][32], char cars[8][32]);
 /* zMergedList.Car's car one of the player's (0x4f4420: its place before the owned cars' count). */
 bool FEData_MergedOwned(void);
 /* GenericCar.Car's nfs5.car record (the merged list's car past the owned ones), NULL on an owned car. */

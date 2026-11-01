@@ -768,9 +768,8 @@ static void multitime_draw(HudVisual *v)
     Car *car = local_car();
     if (HudConfig_choicei32(0x4c) == 0 || !always || v->state == 0 || !car) return;   /* 0x41e870 */
     int label, n = 0;
-    PENDING_NOTE(0x433790, "the track records (0x657498, 0x6574b8: HTrackRecords)");
-    if (g_race_linear) label = 0x15, n = 0;
-    else if (g_hud_splits == 1) label = 0x16, n = 0;
+    if (g_race_linear) label = 0x15, n = g_track_records[0];
+    else if (g_hud_splits == 1) label = 0x16, n = g_lap_records[0];
     else if (g_hud_splits == 2) {
         label = 0x17;
         int laps = *CAR_I(car, 0xb20);
@@ -2157,6 +2156,110 @@ static HudVisual *summary_new(const char *title)
     return &s->bb.base;
 }
 
+/* ---- the track's records (HTrackRecords, 0x158 bytes, vtable 0x5b32b0; 0x433790): the eight best race
+   times of a point-to-point track or lap times of a circuit, with the drivers and their cars, the
+   player's entered when good enough ---- */
+
+typedef struct {
+    HBillBoard bb;
+    HTable *table;                 /* +0x120 */
+    uint8_t spoken;                /* +0x124 */
+    uint8_t race_record;           /* +0x125: the race's best time */
+    uint8_t lap_record;            /* +0x126: the lap's */
+    const char *head[4];           /* +0x128 */
+} HTrackRecords;
+
+static HudVisual *s_records;   /* 0x60ca5c */
+
+/* The player's race time (a point-to-point track's) or best lap entered among the records, the ones
+   after it moved down, its driver and car with it; the new best noted for the announcer. 0x433980 */
+static void records_update(HudVisual *v)
+{
+    HTrackRecords *r = (HTrackRecords *)v;
+    Car *me = local_car();
+    if (!me) return;
+    int32_t *rec = g_race_linear ? g_track_records : g_lap_records;
+    int32_t t = g_race_linear ? *CAR_I(me, 0xcd8) : *CAR_I(me, 0xcfc);
+    for (int i = 0; i < 8; i++) {
+        if (rec[i] <= t || t == 0) continue;
+        for (int k = 7; k > i; k--) {
+            rec[k] = rec[k - 1];
+            memcpy(g_record_names[k], g_record_names[k - 1], 32);
+            memcpy(g_record_cars[k], g_record_cars[k - 1], 32);
+        }
+        rec[i] = t;
+        snprintf(g_record_names[i], 32, "%s", (const char *)CAR_DESCB(me) + 0x17c);
+        snprintf(g_record_cars[i], 32, "%s", (const char *)CAR_DESCB(me) + 0x534);
+        break;
+    }
+    PENDING_NOTE(0x433980, "the new records kept for the front end after the race (its nfs5.trk records)");
+    r->race_record = r->lap_record = 0;
+    if (!g_race_linear) r->lap_record = t != 0 && t <= g_lap_records[0];
+    else r->race_record = t <= g_track_records[0] && t != 0;
+    r->spoken = 0;
+}
+
+/* Opening: the rows from the records (the place's name, the driver, the car, the time), the player's
+   first marked. 0x433c50 */
+static void records_setstate(HudVisual *v, int32_t st)
+{
+    HTrackRecords *r = (HTrackRecords *)v;
+    HTable *t = r->table;
+    Car *me = local_car();
+    if (v->state == 0 && t) {
+        int mark = -1;
+        for (int i = 0; i < 8; i++) {
+            const char *place = LOC_string(HudConfig_loc(), 0x46c4 + i);
+            snprintf(t->cell[i][0], 0x20, "%s", place ? place : "");
+            snprintf(t->cell[i][1], 0x20, "%.31s", g_record_names[i]);
+            snprintf(t->cell[i][2], 0x20, "%s", g_record_cars[i]);
+            HTime_Format(g_race_linear ? g_track_records[i] : g_lap_records[i], t->cell[i][3], false);
+            if (me && (g_track_records[i] == *CAR_I(me, 0xcd8) || g_lap_records[i] == *CAR_I(me, 0xcfc)) && mark == -1) mark = i;
+        }
+        if (mark != -1) t->mark = mark + 1;
+    }
+    bb_setstate(v, st);
+}
+
+/* The billboard, its table once open; the announcer's line on the first frame: a new best lap's
+   (0x4a63d0) or race time's (0x4a6310). 0x433920 */
+static void records_draw(HudVisual *v)
+{
+    HTrackRecords *r = (HTrackRecords *)v;
+    bb_draw(&r->bb);
+    if (v->state == 0 || v->state == 1 || v->state == 2) return;
+    if (r->table) table_draw(r->table);
+    if (r->spoken) return;
+    r->spoken = 1;
+    if (r->lap_record) Audio_Say((int)(REAL_rand() % 5) + 0x7d);
+    else if (r->race_record) Audio_Say((int)(REAL_rand() % 12) + 0x71);
+}
+
+static void records_destroy(HudVisual *v)   /* HTrackRecords_v0 0x4338e0 */
+{
+    HTrackRecords *r = (HTrackRecords *)v;
+    table_free(r->table);
+    bb_free(&r->bb);
+    free(r);
+}
+
+static const HudVisualVtbl records_vt = {records_destroy, records_draw, records_update, records_setstate, bb_setpos, NULL, bb_done, NULL};
+
+static HudVisual *records_new(void)
+{
+    HTrackRecords *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    const uint8_t *loc = HudConfig_loc();
+    const char *title = LOC_string(loc, g_race_linear ? 0x46d5 : 0x46ee);
+    int w = exe_i32(0x5b3290), h = exe_i32(0x5b3294);
+    bb_init(&r->bb, &records_vt, w, h, "", title ? title : "", true, true, true);
+    static const int ids[4] = {0, 0x46bf, 0x46c0, 0x46c2};
+    for (int c = 0; c < 4; c++) r->head[c] = ids[c] ? LOC_string(loc, ids[c]) : exe_str(0x5b32a8);
+    int x = (g_display.width - r->bb.w) / 2, y = (g_display.height - r->bb.h) / 2;   /* 0x41b120 */
+    r->table = table_new(x, y, w + x, h + y, 4, 8, 0x5b3298, r->head);
+    return &r->bb.base;
+}
+
 /* ---- the mission's summary (HMissionSummary, 0x14c bytes, vtable 0x5b2c88; 0x428900): Factory Driver's
    verdict, the narrator's picture and name beside his words typed out a letter a frame, a button to try
    again after a failure ---- */
@@ -3038,6 +3141,8 @@ void HUD_Init(void)
     }
     mission = mission_new();   /* 0x428900 */
     add(mission, false, false);
+    s_records = records_new();   /* 0x433790 (0x60ca5c) */
+    add(s_records, false, false);
     static const int pause_ids[3] = {0x46bc, 0x46bd, 0x46be}, pause_actions[3] = {2, 3, 0x1a};
     s_pause = menu_new(0x5b2d40, 0x5b2d48, 0x46d0, 3, pause_ids, pause_actions);   /* 0x42a3a0 */
     add(s_pause, false, false);
@@ -3078,12 +3183,13 @@ static void race_screens(void)
     if (g_race_mode == 0 || g_race_mode == 3 || g_race_mode == 1 || g_race_mode == 2 || g_race_mode == 5) {
         push_modal(summary);
         if (summary) summary->flag = 1;   /* (slot 11: the second key's hint) */
-        if (g_race_mode != 3) PENDING_NOTE(0x433790, "the track's records (HTrackRecords)");
+        if (g_race_mode != 3) push_modal(s_records);
     } else if (g_race_mode == 4) {
         /* the career: the results first, then its boards */
         push_modal(summary);
         if (summary) summary->flag = 1;
-        PENDING_NOTE(0x426c50, "the career's race-over boards (0x60ca68 the standing, 0x60ca54, 0x60c9fc 0x46f0, 0x60ca5c)");
+        PENDING_NOTE(0x426c50, "the career's race-over boards (0x60ca68 the standing, 0x60ca54, 0x60c9fc 0x46f0)");
+        push_modal(s_records);
     } else if (g_race_mode == 9) {
         /* Factory Driver: the mission's summary (0x60ca50) up, its opening (HMissionSummary_v5 0x4293b0)
            judging the mission */
@@ -3158,6 +3264,12 @@ void HUD_HideAll(void)
 void HUD_RaceOver(void)
 {
     PENDING_NOTE(0x426a40, "the race-over HUD's other parts (place swaps, the replay's HUD)");
+    /* The records take the player's time first, when the player has a place (or in a mission). */
+    Car *me = local_car();
+    if (s_records && ((me && *CAR_I(me, 0xcd4) != 0) || g_race_mode == 9)) {
+        if (g_race_mode == 4) PENDING_NOTE(0x427620, "the career's standings updated (0x60ca54's slot 2)");
+        s_records->vt->reset(s_records);   /* 0x433980 */
+    }
     race_screens();   /* 0x426c50 */
     /* (port: the list's first is shown at once; the original's starts hidden and is passed) */
     if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
@@ -3169,6 +3281,7 @@ void HUD_Free(void)
     s_pause = s_exit = NULL;
     summary = mission = s_time = NULL;
     s_congrats = NULL;
+    s_records = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);
     wrongway = NULL;
     for (int i = 0; i < nlist; i++)

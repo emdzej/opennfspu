@@ -40,3 +40,9 @@ extern RaceOpponent g_race_opp[8];
 extern bool g_race_opp_set;
 /* The player's name (the race description's +0x558 +0x17c: the front end's player, "" for none). */
 extern char g_race_player[64];
+/* The track's records the front end gives the race (its nfs5.trk record's eight, 0x4ec200; the race
+   options TRACKRECORDS1.., LAPRECORDS1.., TRACKRECORDSNAME1.., TRACKRECORDSCAR1..): the race times
+   (0x657498), the lap times (0x6574b8; the front end passes the same times for both), the drivers
+   (0x6574d8) and their cars (0x6575d8), best first. HTrackRecords enters the player's. */
+extern int32_t g_track_records[8], g_lap_records[8];
+extern char g_record_names[8][32], g_record_cars[8][32];

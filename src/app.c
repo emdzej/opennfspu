@@ -158,6 +158,10 @@ bool app_frame(void)
                     Options_Apply();
                     snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
+                    if (!FEData_TrackRecords(race_track, g_track_records, g_lap_records, g_record_names, g_record_cars)) {
+                        memset(g_track_records, 0, sizeof g_track_records);
+                        memset(g_lap_records, 0, sizeof g_lap_records);
+                    }
                     g_drive_laps = FEApp_Laps();
                     g_drive_opponents = FEApp_Opponents();
                     g_drive_race_type = FEApp_RaceType();

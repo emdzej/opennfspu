@@ -34,6 +34,8 @@ bool g_race_grid_set;
 RaceOpponent g_race_opp[8];
 bool g_race_opp_set;
 char g_race_player[64];
+int32_t g_track_records[8], g_lap_records[8];
+char g_record_names[8][32], g_record_cars[8][32];
 
 static const uint8_t *find_car(const uint8_t *db, size_t n, const char *name)
 {

@@ -2271,6 +2271,28 @@ const char *FEData_Track(void)
     return a && a->count ? trk_name_of(a, a->pos) : "coastal";
 }
 
+/* The track's eight records for the race (0x4ec200: 0x4fa6c0's +0x1b0 of the race's track, 0x4c bytes
+   each: +0x00 the driver, +0x14 the car, +0x48 the time; the same times as the race's and the lap's
+   records). false without the track. */
+bool FEData_TrackRecords(const char *track, int32_t race[8], int32_t lap[8], char names[8][32], char cars[8][32])
+{
+    if (!s_trk || !track) return false;
+    for (int i = 0; i < s_ntracks; i++) {
+        const uint8_t *r = s_trk + TRK_SIZE * s_tracks[i];
+        if (strcasecmp((const char *)r + 8, track)) continue;
+        for (int k = 0; k < 8; k++) {
+            const uint8_t *e = r + 0x1b0 + 0x4c * k;
+            int32_t t;
+            memcpy(&t, e + 0x48, 4);
+            race[k] = lap[k] = t;
+            snprintf(names[k], 32, "%.19s", (const char *)e);
+            snprintf(cars[k], 32, "%.31s", (const char *)e + 0x14);
+        }
+        return true;
+    }
+    return false;
+}
+
 /* The knockout's state (0x690410, 0x84 bytes; the save's "Knockout" section, which its loader 0x4dd810
    copies raw, so the port works the section in place, else its own):
      +0x00 running (a byte)   +0x04 the race   +0x08 the opponents
