@@ -169,6 +169,7 @@ bool app_frame(void)
                     g_drive_race_type = FEApp_RaceType();
                     /* 0x4ecc60: the derby cheat (7) makes the race a lap knockout on the skidpad with
                        damage, collisions on and the DERBY option set */
+                    g_race_cheats = g_fe_cheats;
                     g_race_derby = FE_Cheat(7);
                     if (g_race_derby) {
                         snprintf(race_track, sizeof race_track, "%s", exe_str(0x5da6d0));   /* "Skidpad" */

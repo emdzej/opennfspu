@@ -1030,7 +1030,13 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
     float c[3] = {st->rot[3] * st->halfsize[1], st->rot[4] * st->halfsize[1], st->rot[5] * st->halfsize[1]};
     EaglMatrix m;
     static const float zero[3] = {0, 0, 0};
-    EAGL_MatScale(&m, -1.0f, 1.0f, -1.0f, 1.0f);
+    /* a TINYCAR's model at 0x5b37c8's scale (the race's bundle draw 0x4431e0) */
+    float k = 1.0f;
+    if (st->spec && st->spec->stretch) {
+        union { uint32_t u; float f; } c = {exe_u32(0x5b37c8)};
+        k = c.f;
+    }
+    EAGL_MatScale(&m, -k, k, -k, 1.0f);
     EAGL_MatPostMul(EAGL_StackTopForWrite(model), &m);
     EAGL_MatFromRotTrans(&m, st->rot, zero);
     EAGL_MatPostMul(EAGL_StackTopForWrite(model), &m);

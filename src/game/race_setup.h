@@ -13,6 +13,8 @@ bool RaceSetup_SingleCar(const char *name);
    four skills and their ranges, slow, medium, fast and default) scaled by the event's difficulty (1 here),
    its personality i; the player at the back of the grid. */
 bool RaceSetup_Opponents(int n);
+/* The front end's cheats (0x65b940, the bits FE_Cheat reads) the descriptions follow (0x4ee430). */
+extern uint32_t g_race_cheats;
 /* The human car's colours the front end chose (the description's +0x218 order), when set. */
 extern uint32_t g_race_colours[4];
 extern bool g_race_colours_set;

@@ -62,6 +62,20 @@ static void car_fields(uint8_t *d, const uint8_t *rec)
     memcpy(d + 0x524, rec + 0x2f0, 16);
 }
 
+uint32_t g_race_cheats;
+
+/* The cheats' fields (0x4ee430, for every class but traffic): the 993 Coupe 3.6's driving (3: SPECNAME
+   "993coupe36", AISPECNAME "993") and TINYCAR (1, +0x518) and GLASSCAR (2, +0x51c; no code turns it on). */
+static void cheat_fields(uint8_t *d)
+{
+    if (g_race_cheats >> 3 & 1) {
+        put_str(d, 0x268, exe_str(0x5da71c));
+        put_str(d, 0x2a8, exe_str(0x5d0f98));
+    }
+    if (g_race_cheats >> 1 & 1) put_i(d, 0x518, 1);
+    if (g_race_cheats >> 2 & 1) put_i(d, 0x51c, 1);
+}
+
 static void stock_parts(uint8_t *d, const uint8_t *rec)
 {
     int16_t np;
@@ -94,6 +108,7 @@ bool RaceSetup_SingleCar(const char *name)
     put_str(d, 0x17c, "");                                /* DRIVERNAME */
     put_str(d, 0x1c0, "");                                /* LICENSE */
     car_fields(d, rec);
+    cheat_fields(d);
     /* PARTINDEX (+0x28, 20): the car's parts (the front end hands the owned car's installed ones over,
        0x4ee430; else the record's stock list, +0x3bc ids from +0x3be, as a new car gets them, 0x4ee030) */
     stock_parts(d, rec);
@@ -173,6 +188,7 @@ bool RaceSetup_Opponents(int n)
             /* Factory Driver's opponents in their own cars (0x4eb830): the record's fields, its stock
                parts, the colours and the race number the front end picked */
             car_fields(d, cr);
+            cheat_fields(d);
             stock_parts(d, cr);
             memcpy(d + 0x218, g_race_opp[i - 1].colours, 16);
             put_i(d, 0x510, g_race_opp[i - 1].racenum);
