@@ -1,5 +1,6 @@
 /* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
 #include "render/rdraw.h"
+#include "game/smack.h"
 #include "game/skid.h"
 #include "render/sprite.h"
 #include "render/particles.h"
@@ -239,9 +240,10 @@ static const uint8_t *lod_entry(const uint8_t *base, uint32_t key)
 }
 
 /* An article under a matrix (0x450250): its level's primitive lists, each through its material with the
-   colour stream 'Am' overridden to white (the vertex stream 'vt' too: with no vertex animation, the
-   article's own); its markers ('ef' type 2) pending. */
-static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const EaglMatrix *m)
+   colour stream 'Am' overridden to the colour (white but for a lit knockable object: the light at it;
+   the vertex stream 'vt' too: with no vertex animation, the article's own); its markers ('ef' type 2)
+   pending. */
+static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const EaglMatrix *m, uint32_t colour)
 {
     WArticleCache *c = entry_cache(d, index);
     R3DPart p;
@@ -261,9 +263,10 @@ static void draw_article(RDrawBundle *d, int index, const RListEntry *e, const E
                 R3DMaterial *mat = ms && mi < ms->count ? ms->mat[mi] : NULL;
                 if (!mat || !mat->method) continue;
                 static int32_t ov[256];
-                static uint32_t white = 0xffffffffu;
+                static uint32_t am;
+                am = colour;
                 R3DMaterial_SetOverride(mat, mat->method->nids <= 256 ? ov : NULL);
-                if (mat->override) R3DMaterial_OverrideStream(mat, 0x416d0001u, &white, 4);   /* 'Am' */
+                if (mat->override) R3DMaterial_OverrideStream(mat, 0x416d0001u, &am, 4);   /* 'Am' */
                 R3DMaterial_DrawList(mat, &p, g_world ? g_world->root : NULL, pr, rec->count);
                 mat->override = NULL;   /* +0x0c */
             }
@@ -282,11 +285,16 @@ static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
 {
     RDrawBundle *d = (RDrawBundle *)o;
     g_rdraw_key = e->key;
-    if (d->bundle->smack) PENDING_NOTE(0x450250, "the knockable objects' pieces: the lit prototypes, the canned pieces, the markers (0x450850)");
+    uint32_t colour = 0xffffffffu;
+    const WAnimatable *a = d->bundle->smack;
+    if (a) {
+        PENDING_NOTE(0x450250, "the knockable objects' pieces: the lit prototypes' articles, the canned pieces, the markers (0x450850)");
+        colour = a->e[index].colour;   /* (-1 until a lit object takes its light) */
+    }
     if (!d->bundle->vt->matrix) return;
     EaglMatrix m;
     d->bundle->vt->matrix(d->bundle, index, m.m);
-    draw_article(d, index, e, &m);
+    draw_article(d, index, e, &m, colour);
 }
 
 static void anim_special(RDrawObject *o, int index, const RListEntry *e) { (void)o, (void)index, (void)e; }   /* 0x44fe50 */
