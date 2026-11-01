@@ -2625,3 +2625,7 @@
 004eda40	FECar_ctor	frontend	high	A car object: its part lists, 0x4ee230, +0x6a8 x 10 zero
 004ee230	FECar_Init	frontend	high	A car object of a record: colours, stripes, race number, market fields, stock parts, settings
 005a1579	rand	crt	high	MSVC rand
+004f68f0	FEUsedCarCallbackList_Buy	frontend	high	A used car bought: 0x322 / 0x3d, the price paid (+0x6a4), out of the market into the garage, sorted
+004f6930	FEUsedCarCallbackList_Update	frontend	high	The used car screen: buttons by count, the damage or parts panel
+004ca270	FEGouraudIndicatorBar_Share	frontend	high	The bar's share: the accessor's slot 0x18 for an argument, else pos x 100 / count
+004e0da0	FE_LoadScreen	frontend	med	A layout by name (".lay" added when missing)

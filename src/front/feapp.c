@@ -56,6 +56,7 @@ static int s_owned_race = -1;         /* the owned car raced (its index in the s
 static int s_gametype;                /* Game.GameType (0x690ad4): 4 the career (the other modes' values pend) */
 static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
+static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
@@ -108,6 +109,21 @@ static int language(void) { return fe_int("language", 0); }
 static FertControl *load_screen(const char *name);
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy);
 static void select_panel(FertControl *w, const char *name);
+static FertControl *load_screen(const char *name);
+
+/* A panel's screen loaded (FEPanel 0x4ce4d0 -> 0x4e0da0), placed at the panel's position (its screen
+   "moveable", 0x526e20: the layout's places are the panel's). */
+static FertControl *load_panel(FertControl *c, const char *file)
+{
+    FertControl *s = load_screen(file);
+    FertAttr *pp = FertAttrList_find(&c->attrs, "pos"), *sp = s ? FertAttrList_find(&s->attrs, "pos") : NULL;
+    if (pp && sp) {
+        int32_t pos[2];
+        FertAttr_point(pp, pos);
+        FertAttr_setPoint(sp, pos[0], pos[1]);
+    }
+    return s;
+}
 
 /* A screen's panels (FEPanel_v20 0x4ce480: closed and hidden until chosen) and radio groups (FERadioGroup
    0x4cf8a0: open at once, their screen's selected item choosing its panel, 0x4cf8e0). */
@@ -125,7 +141,7 @@ static void open_panels(FertControl *w)
             FertAttr *a = FertAttrList_find(&c->parts[k]->attrs, "filename");
             if (a) f = FertAttr_str(a);
         }
-        if (!f || !*f || !(c->sub = load_screen(f))) continue;
+        if (!f || !*f || !(c->sub = load_panel(c, f))) continue;
         c->feflags &= ~0x20u;   /* 0x4ce4d0: open, shown (0x4c7a80) */
         for (int j = 0; j < c->sub->nchildren; j++) {
             FertControl *t = c->sub->children[j];
@@ -155,7 +171,7 @@ static void select_panel(FertControl *w, const char *name)
                     FertAttr *a = FertAttrList_find(&c->parts[k]->attrs, "filename");
                     if (a) f = FertAttr_str(a);
                 }
-                if (f && *f) c->sub = load_screen(f);
+                if (f && *f) c->sub = load_panel(c, f);
             }
             if (c->sub) c->feflags &= ~0x20u;
             /* the audio area's tick (0x4f6xxx: its main panel opened with the audio panel) */
@@ -195,7 +211,8 @@ static const char *screen_attr(FertControl *w, const char *name)
 static FertControl *load_screen(const char *name)
 {
     char path[300];
-    snprintf(path, sizeof path, "%s%s.lay", FE_DIR_LAYOUTS, name);
+    /* (0x4e0da0: ".lay" 0x5d9bd0 added when the name hasn't it) */
+    snprintf(path, sizeof path, "%s%s%s", FE_DIR_LAYOUTS, name, strstr(name, exe_str(0x5d9bd0)) ? "" : exe_str(0x5d9bd0));
     FertControl *w = FertControl_new(true);
     if (!w) return NULL;
     if (!FertWindow_LoadLayout(w, path)) {
@@ -212,6 +229,7 @@ static FertControl *load_screen(const char *name)
         if (FertControl_findState(c, "disabled") >= 0) c->fecaps |= 0x10;
         if (FertControl_findState(c, "hidden") >= 0) c->fecaps |= 0x20;
     }
+    if (!strcmp(screen_attr(w, "callbacklist"), "ID_USEDCARCBL")) s_used_parts = false;   /* (0x4f6790) */
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_TOURNYSCREEN")) {   /* (0x5051a0: its first offer) */
         s_tourny_win = w;
         s_tourny_offer = Market_FirstOffer();
@@ -390,12 +408,15 @@ static void callback(const char *cb)
         FEAccessor *a = FEAccess_Find("DealerCar.Car");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[9] == 'I' ? 1 : -1));
     } else if (!strcmp(cb, "BUYCAR")) {
-        int m = FEData_BuyCar();   /* (FEDealershipCallbackList_v55 0x50e5f0) */
+        /* (the screen's callback list's: FEDealershipCallbackList_v55 0x50e5f0, FEUsedCarCallbackList_v55 0x4f68f0) */
+        int m = !strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_USEDCARCBL") ? FEData_BuyUsed() : FEData_BuyCar();
         if (m > 0) {
             char b[200];
             (void)b;
             FEApp_Message(m);   /* 0x512d00 */
         }
+    } else if (!strcmp(cb, "SHOWPARTS") || !strcmp(cb, "SHOWDAMAGE")) {
+        s_used_parts = cb[4] == 'P';   /* FEUsedCarCallbackList_v57 0x4f6bc0 / _v58 0x4f6c30 (+0x290) */
     } else if (!strcmp(cb, "DEFAULTSETTINGS")) {
         FEData_DefaultSetup();
     } else if (!strcmp(cb, "SAVESETTINGS") || !strcmp(cb, "LOADSETTINGS")) {
@@ -973,10 +994,17 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
     if (c->feflags & 0x20) return true;
-    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    const char *path = data_str(c, "accessor");
+    FEAccessor *a = FEAccess_Find(path);
     if (!a) return true;
-    int n = FEAccess_Count(a);
-    float pct = n ? (float)(FEAccess_Pos(a) * 100 / n) : 0;
+    char arg[32] = "";
+    const char *pp = path ? strchr(path, '(') : NULL;
+    if (pp) {
+        snprintf(arg, sizeof arg, "%s", pp + 1);
+        char *e = strchr(arg, ')');
+        if (e) *e = 0;
+    }
+    float pct = (float)FEAccess_Percent(a, arg);
     int32_t r[4];
     control_rect(c, r);
     float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
@@ -1180,10 +1208,32 @@ static void tourny_update(FertControl *w)
     s_dialog.purpose = DLG_FOR_OFFER;
 }
 
+/* The used car screen's update (FEUsedCarCallbackList_v1 0x4f6930): buying, the test drive and the car
+   box with a car to show; the damage panel or the parts panel and its list (SHOWPARTS / SHOWDAMAGE), the
+   button for the other. */
+static void usedcar_update(FertControl *w)
+{
+    FEAccessor *u = FEAccess_Find("UsedCar.Car");
+    bool has = u && FEAccess_Count(u) > 0;
+    enable(w, "ID_BUYCARBUTTON", has);
+    enable(w, "ID_TESTDRIVEUSEDBUTTON", has);
+    enable(w, "ID_CHOOSEUSEDBOX", has);
+    bool parts = has && s_used_parts;
+    hide(w, "ID_SHOWPARTSBUTTON", !has || parts);
+    hide(w, "ID_SHOWDAMAGEBUTTON", has ? !parts : true);
+    hide(w, "ID_PARTSBOX", !parts);
+    if (has) enable(w, parts ? "ID_SHOWDAMAGEBUTTON" : "ID_SHOWPARTSBUTTON", true);
+    else enable(w, "ID_SHOWPARTSBUTTON", false);
+    const char *want = parts ? "ID_PARTSPANEL" : "ID_USEDCARDAMAGEPANEL";
+    FertControl *pc = control_named(w, want);
+    if (pc && (!pc->sub || (pc->feflags & 0x20))) select_panel(w, want);
+}
+
 static void screen_update(FertControl *w)   /* the screen's callback list's update (its v1) */
 {
     const char *cbl = screen_attr(w, "callbacklist");
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
+    else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
     else if (!strcmp(cbl, "ID_TOURNYSCREEN")) tourny_update(w);
 }
 

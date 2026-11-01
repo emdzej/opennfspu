@@ -146,6 +146,22 @@ A car object has these market fields:
   percentage of the time the car sells at the asking price (for a player's car, an offer of the
   asking price). Otherwise the car gets an offer of its value plus a random −3% to +3%, capped at the
   asking price.
+- **Buying a used car** (FEUsedCarCallbackList_v55 0x4f68f0): the UsedCar.Car accessor is the owned
+  cars' class over the market's own cars (0x4f5080 with 0x4f85b0). Too little money gives message 0x322
+  and 80 cars gives 0x3d. Otherwise the asking price is paid and kept at +0x6a4, and the car moves from
+  the market to the garage, which is then sorted (0x4f0550).
+- **The market's new cars** (0x4f7660) come from the racing cars that have a model (0x6919f0, sorted),
+  out at least two years, at the chance for their age. A used car (0x4f7860) gets:
+  - one of its record's colour sets, and an interior colour, at random;
+  - a stripe package and a race number from the C runtime's `rand`;
+  - its mileage;
+  - a share of the parts that fit it (0x5175f0), picked from the first "left" entries of the list (the
+    shuffled index the original keeps is never read), then its stock parts that don't clash;
+  - ten wear figures, the body's wear being their average.
+
+  The market keeps at most 25 cars.
+- **Panels** draw and take the mouse at their own position: a panel's screen is placed where the panel
+  is (FEPanel 0x4ce4d0). The used car screen's damage and parts panels are the first that aren't at 0,0.
 - **Offers** are asked about on the tournament screen when it is created (FETournamentCallBackList
   0x5051a0, 0x5053a0), in a yes/no dialog with string 0x327. Yes takes the money and removes the car
   (0x501740); no clears the offer (0x4f8cc0).

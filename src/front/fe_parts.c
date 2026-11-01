@@ -405,8 +405,13 @@ void FEControl_Draw(FertControl *c, int32_t ox, int32_t oy)
     for (int i = 0; i < s->nparts; i++) FEPart_Draw(c->parts[s->parts[i]], pos[0] + ox, pos[1] + oy);   /* 0x529e70 */
 }
 
-void FEWindow_Draw(FertControl *w)
+/* A window at its origin: its own position (a panel's screen's is the panel's) on its parent's. */
+static void draw_at(FertControl *w, int32_t ox, int32_t oy)
 {
+    int32_t wp[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&w->attrs, "pos");
+    if (pa) FertAttr_point(pa, wp);
+    ox += wp[0], oy += wp[1];
     /* (the screen object, the layout's first section, holds the screen's settings: room, callback list,
        music; the window's draw doesn't draw it) */
     for (int i = w->nchildren - 1; 0 <= i; i--) {   /* 0x528390: last first */
@@ -414,7 +419,7 @@ void FEWindow_Draw(FertControl *w)
         if (!strcmp(c->id, "NFS5.3DCAR")) continue;
         if (!strcmp(c->id, "NFS5.PANEL") || !strcmp(c->id, "NFS5.RADIOGROUP")) {
             /* FEPanel 0x4ce720: its screen when open (its area is the layout editor's) */
-            if (c->sub && !(c->feflags & 0x20)) FEWindow_Draw(c->sub);
+            if (c->sub && !(c->feflags & 0x20)) draw_at(c->sub, ox, oy);
             continue;
         }
         if (!strcmp(c->id, "NFS5.TrackSmall2dSpline") || !strcmp(c->id, "NFS5.TrackLarge2dSpline")) {
@@ -432,12 +437,14 @@ void FEWindow_Draw(FertControl *w)
             PENDING_NOTE(0x4cd520, "FEMovieCircle: the movie in the oval (the stencil, FEMovieBox)");
             continue;
         }   /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
-        if (FE_ControlDrawHook && FE_ControlDrawHook(c, 0, 0)) continue;
-        if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, 0, 0);
-        else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, 0, 0);
-        else FEControl_Draw(c, 0, 0);
+        if (FE_ControlDrawHook && FE_ControlDrawHook(c, ox, oy)) continue;
+        if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
+        else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
+        else FEControl_Draw(c, ox, oy);
     }
 }
+
+void FEWindow_Draw(FertControl *w) { draw_at(w, 0, 0); }
 
 /* ---------------------------------------------------------------- the front end's styles (0x520780 ..) */
 

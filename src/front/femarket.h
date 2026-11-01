@@ -6,6 +6,7 @@
    A car object's market fields: +0x68c the asking price, +0x690 sold (the market's own), +0x691 for
    sale, +0x692 an offer made, +0x694 the offer, +0x6a0 the player's. */
 #pragma once
+#include "front/fesave.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -13,6 +14,8 @@
 void Market_List(int owned, int32_t price);
 /* Taken back (0x4f88e0): nothing when it isn't in the market. */
 void Market_Unlist(int owned);
+/* One of the market's own cars (the save's used index) bought: out of the market into *out (0x4f88e0). */
+bool Market_TakeUsed(int used, SaveCar *out);
 /* The player's cars in the market (0x4f8960's count). */
 int Market_Listed(void);
 /* The market a year on (0x4f7350): the buyers' turn (0x4f7430), the market's sold cars gone, its others

@@ -83,3 +83,8 @@ int FEData_CareerYear(void);
 bool FEData_UsedCar(const uint8_t *r, int year, SaveCar *out);
 /* The records the market's new cars come from (0x6919f0: the racers with a model, in order). */
 int FEData_UsedPool(const uint8_t **out, int cap);
+/* Buying the used car shown (UsedCar.Car): 0, or the message to show (0x322, 0x3d). */
+int FEData_BuyUsed(void);
+/* A bar's share of an accessor (FEGouraudIndicatorBar 0x4ca270): for an argument the accessor's (a car's
+   condition in per cent), else its position in per cent of its count. */
+int FEAccess_Percent(const FEAccessor *a, const char *arg);

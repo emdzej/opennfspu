@@ -13,7 +13,7 @@
    player's put up since the session began, each where it joined. */
 typedef struct {
     bool owned;
-    int idx;   /* into the save's cars or its used cars */
+    int idx;   /* the player's: its car id (+0); the market's: its index in the save's used cars */
 } MarketEnt;
 
 static MarketEnt s_ent[256];
@@ -31,8 +31,23 @@ static Save *market(void)
     return sv;
 }
 
-static uint8_t *rec_of(Save *sv, MarketEnt e) { return e.owned ? sv->cars[e.idx].rec : sv->used[e.idx].rec; }
-static const SaveCar *car_of(Save *sv, MarketEnt e) { return e.owned ? &sv->cars[e.idx] : &sv->used[e.idx]; }
+static int owned_index(Save *sv, int32_t id)   /* (the garage's order changes as cars come and go) */
+{
+    for (int i = 0; i < sv->ncars; i++) {
+        int32_t v;
+        memcpy(&v, sv->cars[i].rec, 4);
+        if (v == id) return i;
+    }
+    return -1;
+}
+
+static SaveCar *car_of(Save *sv, MarketEnt e)
+{
+    if (!e.owned) return &sv->used[e.idx];
+    int i = owned_index(sv, e.idx);
+    return i >= 0 ? &sv->cars[i] : NULL;
+}
+static uint8_t *rec_of(Save *sv, MarketEnt e) { SaveCar *c = car_of(sv, e); return c ? c->rec : NULL; }
 static int32_t get32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
 static void put32(uint8_t *r, int off, int32_t v) { memcpy(r + off, &v, 4); }
 static int16_t get16(const uint8_t *r, int off) { int16_t v; memcpy(&v, r + off, 2); return v; }
@@ -56,8 +71,10 @@ static void drop(int k)   /* the entry out of the list */
 
 static int find_owned(int owned)
 {
+    if (owned < 0 || owned >= s_sv->ncars) return -1;
+    int32_t id = get32(s_sv->cars[owned].rec, 0);
     for (int k = 0; k < s_n; k++)
-        if (s_ent[k].owned && s_ent[k].idx == owned) return k;
+        if (s_ent[k].owned && s_ent[k].idx == id) return k;
     return -1;
 }
 
@@ -72,7 +89,7 @@ void Market_List(int owned, int32_t price)   /* 0x4f8760 */
     r[0x692] = 0;
     put32(r, 0x694, 0);
     r[0x6a0] = 1;
-    s_ent[s_n++] = (MarketEnt){true, owned};
+    s_ent[s_n++] = (MarketEnt){true, get32(r, 0)};
 }
 
 void Market_Unlist(int owned)   /* 0x4f88e0 */
@@ -87,6 +104,30 @@ void Market_Unlist(int owned)   /* 0x4f88e0 */
     r[0x692] = 0;
     put32(r, 0x694, 0);
     drop(k);
+}
+
+/* One of the market's own cars bought (FEUsedCarCallbackList_v55 0x4f68f0 -> 0x4f88e0): out of the
+   market, its market fields cleared, into *out. */
+bool Market_TakeUsed(int used, SaveCar *out)
+{
+    Save *sv = market();
+    if (!sv || used < 0 || used >= sv->nused) return false;
+    int k = -1;
+    for (int j = 0; j < s_n && k < 0; j++)
+        if (!s_ent[j].owned && s_ent[j].idx == used) k = j;
+    if (k < 0) return false;
+    *out = sv->used[used];
+    put32(out->rec, 0x68c, 0);
+    out->rec[0x691] = 0;
+    out->rec[0x690] = 0;
+    out->rec[0x692] = 0;
+    put32(out->rec, 0x694, 0);
+    memmove(&sv->used[used], &sv->used[used + 1], (size_t)(sv->nused - used - 1) * sizeof *sv->used);
+    sv->nused--;
+    drop(k);
+    for (int j = 0; j < s_n; j++)
+        if (!s_ent[j].owned && s_ent[j].idx > used) s_ent[j].idx--;
+    return true;
 }
 
 int Market_Listed(void)
@@ -112,6 +153,7 @@ static void buyers(Save *sv)
     for (int k = 0; k < s_n; k++) {
         const SaveCar *c = car_of(sv, s_ent[k]);
         uint8_t *r = rec_of(sv, s_ent[k]);
+        if (!c) continue;
         int32_t value = FEData_CarValue(c, year);
         double t = ((double)value - (double)get32(r, 0x68c)) * kd(0x5b4bb0) / (double)value;
         int32_t dmg = ftol(FEData_CarDamage(c));
@@ -176,7 +218,7 @@ static void new_cars(Save *sv, int year)
         if (!FEData_UsedCar(pool[i], year, &nc)) continue;
         if (s_n > 0x18)
             for (int k = 0; k < s_n; k++)
-                if (!rec_of(sv, s_ent[k])[0x6a0]) {
+                if (!s_ent[k].owned && !rec_of(sv, s_ent[k])[0x6a0]) {
                     drop_used(sv, k);
                     break;
                 }
@@ -202,12 +244,12 @@ void Market_Update(int year)   /* 0x4f7350 */
     buyers(sv);
     for (int k = 0; k < s_n;) {
         const uint8_t *r = rec_of(sv, s_ent[k]);
-        if (r[0x690] && !r[0x6a0]) drop_used(sv, k);
+        if (r && r[0x690] && !r[0x6a0]) drop_used(sv, k);
         else k++;
     }
     for (int k = 0; k < s_n; k++) {
         uint8_t *r = rec_of(sv, s_ent[k]);
-        if (!r[0x6a0]) put32(r, 0x68c, FEData_CarValue(car_of(sv, s_ent[k]), year));
+        if (r && !r[0x6a0]) put32(r, 0x68c, FEData_CarValue(car_of(sv, s_ent[k]), year));
     }
     new_cars(sv, year);
 }
@@ -217,7 +259,7 @@ int Market_FirstOffer(void)   /* 0x4f8b10 */
     Save *sv = market();
     for (int k = 0; sv && k < s_n; k++) {
         const uint8_t *r = rec_of(sv, s_ent[k]);
-        if (r[0x6a0] && r[0x692] && s_ent[k].owned) return s_ent[k].idx;
+        if (r && r[0x6a0] && r[0x692] && s_ent[k].owned) return owned_index(sv, s_ent[k].idx);
     }
     return -1;
 }
@@ -243,7 +285,5 @@ void Market_Accept(int owned)   /* 0x501740 */
     free(sv->cars[owned].parts);
     memmove(&sv->cars[owned], &sv->cars[owned + 1], (size_t)(sv->ncars - owned - 1) * sizeof *sv->cars);
     sv->ncars--;
-    for (int j = 0; j < s_n; j++)
-        if (s_ent[j].owned && s_ent[j].idx > owned) s_ent[j].idx--;
     FESave_Write();
 }
