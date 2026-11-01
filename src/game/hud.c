@@ -130,6 +130,24 @@ static void go_digits(H321Go *g, int step, int frame)
     }
 }
 
+/* The ring (0x418930): the screen darkened (0x33000000) by a clock wipe from the top, a sixteenth of a
+   turn per frame of the step: triangles from the centre to the screen's edge at its corners, the edges'
+   middles and the points a quarter in from them (the original's table holds the sixteen three times, one
+   copy per step; their points are the same). */
+static void go_ring(H321Go *g, int frame, int step)
+{
+    const float cx = (float)g->cx, cy = (float)g->cy, w = (float)g->w, h = (float)g->h;
+    const float w3 = (float)(g->w * 3 / 4), h3 = (float)(g->h * 3 / 4), cx2 = (float)(g->cx / 2), cy2 = (float)(g->cy / 2);
+    const float edge[17][2] = {{cx, 0}, {w3, 0}, {w, 0}, {w, cy2}, {w, cy}, {w, h3}, {w, h}, {w3, h}, {cx, h},
+                               {cx2, h}, {0, h}, {0, h3}, {0, cy}, {0, cy2}, {0, 0}, {cx2, 0}, {cx, 0}};
+    int last = frame + step * 16;
+    for (int i = step * 16; i <= last; i++) {
+        int k = i % 16;
+        float t[12] = {cx, cy, 0, 1, edge[k][0], edge[k][1], 0, 1, edge[k + 1][0], edge[k + 1][1], 0, 1};
+        Hud2D_TriNow(t, 0x33000000u);
+    }
+}
+
 /* From tick 256 to 448 (the start): the rings, the cross through the centre, the digit of the step (3, 2,
    1, a step each 64 ticks), its frame (the tick within the step, in sixteenths). 0x418510 */
 static void go_draw(HudVisual *v)
@@ -155,7 +173,7 @@ static void go_draw(HudVisual *v)
         Hud2D_Line(hl, lc);
         Hud2D_Line(vl, lc);
         go_digits(g, step, frame);
-        PENDING_NOTE(0x418930, "the countdown's ring of segments (0x418930)");
+        go_ring(g, frame, step);
         return;
     }
     if (v->state != 0) v->state = 0;

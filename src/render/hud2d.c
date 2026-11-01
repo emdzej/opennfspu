@@ -160,6 +160,12 @@ void Hud2D_QuadNow(const float corners[16], uint32_t colour)
     draw_now(4, 4, corners, c, NULL, NULL);
 }
 
+void Hud2D_TriNow(const float corners[12], uint32_t colour)
+{
+    uint32_t c[3] = {colour, colour, colour};
+    draw_now(3, 3, corners, c, NULL, NULL);
+}
+
 void Hud2D_TexQuadNow(Texture *t, const uint32_t colours[4], const float corners[16], const float uv[8])
 {
     draw_now(4, 4, corners, colours, uv, t);

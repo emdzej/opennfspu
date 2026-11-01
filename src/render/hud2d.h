@@ -32,10 +32,11 @@ void Hud2D_Text(const char *s, uint32_t colour, float x, float y, HudFont *f, fl
 /* A line (two points x y z w, two colours). 0x419eb0 */
 void Hud2D_Line(const float points[8], const uint32_t colours[2]);
 /* Drawn at once rather than queued: a line (0x465f10), n vertices of lines in one colour (0x465ea0), a
-   flat quad (0x465f60), a textured quad (an art's own material, 0x59ee20). */
+   flat quad (0x465f60), a flat triangle (0x465fc0), a textured quad (an art's own material, 0x59ee20). */
 void Hud2D_LineNow(const float points[8], const uint32_t colours[2]);
 void Hud2D_LinesNow(int n, const float *points, uint32_t colour);
 void Hud2D_QuadNow(const float corners[16], uint32_t colour);
+void Hud2D_TriNow(const float corners[12], uint32_t colour);
 void Hud2D_TexQuadNow(Texture *t, const uint32_t colours[4], const float corners[16], const float uv[8]);
 /* The pass's queued quads, texts and lines drawn, the queues emptied. 0x41a350 */
 void Hud2D_Flush(void);
