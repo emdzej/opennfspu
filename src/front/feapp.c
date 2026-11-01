@@ -362,6 +362,7 @@ void FEApp_End(void)
 
 /* A popup (the screens with a popup circle: the original keeps them in their screen's list, +0x8 ..,
    drawn over it; the port stacks them). */
+static void screen_entered(void);
 static bool is_popup(const FertControl *w)
 {
     for (int i = 0; w && i < w->nchildren; i++)
@@ -373,6 +374,7 @@ static bool is_popup(const FertControl *w)
 static void close_popups(void)
 {
     while (s_depth > 1 && is_popup(s_stack[s_depth - 1])) FertControl_free(s_stack[--s_depth]);
+    screen_entered();
 }
 
 /* FEFactoryDriverCBL's constructor (0x519180): the welcome the first time, the first mission's words
@@ -413,6 +415,7 @@ bool FEApp_GotoScreen(const char *name, bool push)
     }
     snprintf(s_stack_name[s_depth], sizeof s_stack_name[0], "%s", name);
     s_stack[s_depth++] = w;
+    screen_entered();
     if (!strcasecmp(name, "factorydriver")) factory_open();
     return true;
 }
@@ -420,6 +423,7 @@ bool FEApp_GotoScreen(const char *name, bool push)
 void FEApp_Back(void)
 {
     if (s_depth > 1) FertControl_free(s_stack[--s_depth]);
+    screen_entered();
 }
 
 FertControl *FEApp_Top(void) { return s_depth ? s_stack[s_depth - 1] : NULL; }
@@ -1159,16 +1163,17 @@ static bool account_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
-/* Text broken into lines of width (0x522900 -> 0x522e80; the port breaks at spaces, greedily), drawn
-   from (x0, y) one font height apart, aligned 0 left, 1 centred, 2 right (0x522b10); its height. */
-static float draw_wrapped(HudFont *font, const char *text, float x0, float y, float width, int align, uint32_t colour, bool draw)
+/* Text broken into lines of width (0x522e80; the port breaks at spaces, greedily). The step (+0x10) is the
+   last line's extent height + 2 (0x5b2580), truncated; the height (+4) each line's extent + 2, summed. */
+enum { WRAP_LINES = 32 };
+static char s_wrap[WRAP_LINES][256];
+static int wrap_lines(HudFont *font, const char *text, float width, int *step, float *total)
 {
-    float y0 = y, fx, fy, fw, fh;
-    FONT_extent(font->font, "X", &fx, &fy, &fw, &fh);
-    float lh = fh > 0 ? fh : 10.0f;
-    char line[256];
+    int nlines = 0;
+    float fx, fy, fw, fh = 0;
+    *step = 0, *total = 0;
     const char *p = text;
-    while (*p) {
+    while (*p && nlines < WRAP_LINES) {
         int n = 0, last = -1;
         while (p[n] && p[n] != '\n') {
             char t[256];
@@ -1183,20 +1188,67 @@ static float draw_wrapped(HudFont *font, const char *text, float x0, float y, fl
         }
         int len = n;
         if (p[n] && p[n] != '\n' && last >= 0) len = last;
-        memcpy(line, p, (size_t)len);
-        line[len] = 0;
-        FONT_extent(font->font, line, &fx, &fy, &fw, &fh);
-        float x = align == 1 ? x0 + (width - fw) * 0.5f : align == 2 ? x0 + width - fw : x0;
-        char *copy = draw ? FE2D_Alloc(len + 1) : NULL;
-        if (copy) {
-            memcpy(copy, line, (size_t)len + 1);
-            FE2D_Text(font, x, y, 0, colour, copy, 1.0f, 1.0f);
-        }
-        y += lh;
+        memcpy(s_wrap[nlines], p, (size_t)len);
+        s_wrap[nlines][len] = 0;
+        FONT_extent(font->font, s_wrap[nlines], &fx, &fy, &fw, &fh);
+        *total = (float)(int)(fh + *total + 2.0f);
+        *step = (int)(fh + 2.0f);
+        nlines++;
         p += len;
         while (*p == ' ' || *p == '\n') p++;
     }
-    return y - y0;
+    return nlines;
+}
+
+static void wrap_text(HudFont *font, const char *t, float x, float y, uint32_t colour)
+{
+    char *copy = FE2D_Alloc((int)strlen(t) + 1);
+    if (!copy) return;
+    strcpy(copy, t);
+    FE2D_Text(font, x, y, 0, colour, copy, 1.0f, 1.0f);
+}
+
+static uint32_t fade_a(uint32_t c, int a);
+/* The lines drawn from (x0, y) one step apart, aligned 0 left, 1 centred, 2 right (0x522b10). Typed
+   (chars >= 0): the first chars characters, the lines' in turn; in the line it ends in, the last of them
+   at rem thirds of the colour's alpha (0x4d82a0) and, when the cursor's shape is there, the cursor
+   (WeeIcons GLNT) 0x12 to its left, white at the colour's alpha (0x4d8280); the lines past it none. */
+static void wrap_draw(HudFont *font, int nlines, int step, float x0, float y, float width, int align, uint32_t colour,
+                      int chars, int rem, FeImage *cursor)
+{
+    float fx, fy, fw, fh;
+    for (int i = 0; i < nlines; i++, y += (float)step) {
+        char *l = s_wrap[i];
+        int len = (int)strlen(l);
+        FONT_extent(font->font, l, &fx, &fy, &fw, &fh);
+        float x = align == 1 ? x0 + (width - fw) * 0.5f : align == 2 ? x0 + width - fw : x0;
+        if (chars < 0 || chars >= len) {
+            if (chars >= 0) chars -= len;
+            wrap_text(font, l, x, y, colour);
+            continue;
+        }
+        if (chars == 0) continue;
+        char last = l[chars - 1];
+        l[chars - 1] = 0;
+        FONT_extent(font->font, l, &fx, &fy, &fw, &fh);
+        float cx = (float)(int)(x + fw);
+        wrap_text(font, l, x, y, colour);
+        l[chars - 1] = last;
+        char one[2] = {last, 0};
+        wrap_text(font, one, cx, y, fade_a(colour, rem * 0xff / 3));
+        if (cursor) FE2D_Image(cursor, cx - 18.0f, y, (float)cursor->w, (float)cursor->h, (colour >> 24) << 24 | 0xffffffu, 0, false);
+        chars = 0;
+    }
+}
+
+/* Text wrapped and drawn whole (see wrap_lines, wrap_draw); its height. */
+static float draw_wrapped(HudFont *font, const char *text, float x0, float y, float width, int align, uint32_t colour, bool draw)
+{
+    int step;
+    float total;
+    int n = wrap_lines(font, text, width, &step, &total);
+    if (draw) wrap_draw(font, n, step, x0, y, width, align, colour, -1, 0, NULL);
+    return total;
 }
 
 /* The one-button message (FEDialogOneItemSelfDeleting 0x512d00 on FEDialog 0x511c60): the string's text
@@ -1355,9 +1407,58 @@ static void dialog_draw(void)
     if (s_dialog.kind != DLG_ONE) dialog_button(x + 120.0f, y + b2y, s_dialog.b2, f);
 }
 
+/* The word-wraps' typing (data.animating, +0x180 / +0x144): started at the screen's entry (v21 0x522440 /
+   0x522220: the start and now ticks, a wait of 0x97 ticks); after the wait, nothing drawn, the clock starts
+   again and the text types at a character every 3 ticks (TIMER_ticks, 128 a second). The now tick follows
+   the timer while the screen isn't fading (0x4c83f0 == 0; the port has no fades). */
+typedef struct { FertControl *c; uint32_t start, now; int wait; } TypeState;
+static TypeState s_types[8];
+
+static uint32_t timer_ticks(void) { return (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u); }
+
+static void type_start(TypeState *t, bool animating)
+{
+    t->start = t->now = timer_ticks();
+    t->wait = animating ? 0x97 : 0;
+}
+
+static TypeState *type_state(FertControl *c, bool animating)
+{
+    for (int i = 0; i < 8; i++)
+        if (s_types[i].c == c) return &s_types[i];
+    for (int i = 0; i < 8; i++)
+        if (!s_types[i].c || i == 7) {
+            s_types[i].c = c;
+            type_start(&s_types[i], animating);
+            return &s_types[i];
+        }
+    return &s_types[0];
+}
+
+static void lists_drop_stale(void);
+static bool control_in(const FertControl *w, const FertControl *c)
+{
+    if (w == c) return true;
+    for (int i = 0; w && i < w->nchildren; i++)
+        if (control_in(w->children[i], c)) return true;
+    return false;
+}
+
+/* The screens changed: the typing states of controls no longer on the stack dropped (a screen's controls
+   are made with it, so a new screen's start afresh: their v21). */
+static void screen_entered(void)
+{
+    for (int i = 0; i < 8; i++) {
+        bool on = false;
+        for (int k = 0; k < s_depth && s_types[i].c && !on; k++) on = control_in(s_stack[k], s_types[i].c);
+        if (!on) memset(&s_types[i], 0, sizeof s_types[i]);
+    }
+    lists_drop_stale();
+}
+
 /* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
-   lines of the control's width (0x522900 -> 0x522e80; the port breaks at spaces, greedily), each line one
-   font height lower, aligned by data.align (0 left, 1 centred, 2 right). (Its typing animation pends.) */
+   lines of the control's width (0x522900 -> 0x522e80), aligned by data.align (0 left, 1 centred, 2
+   right), typed when data.animating. */
 static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (c->feflags & 0x20) return true;
@@ -1393,7 +1494,26 @@ static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
     control_rect(c, r);
     float width = (float)(r[2] - r[0]);
     int align = data_int_of(c, "align");
-    draw_wrapped(font, text, (float)(r[0] + ox), (float)(r[1] + oy), width, align, colour, true);
+    bool animating = data_int_of(c, "animating") != 0;
+    TypeState *t = type_state(c, animating);
+    t->now = timer_ticks();
+    if (t->wait) {
+        if (t->wait < (int)(timer_ticks() - t->start)) type_start(t, false);
+        return true;
+    }
+    int step;
+    float total;
+    int n = wrap_lines(font, text, width, &step, &total);
+    FeImage *cursor = NULL;
+    if (animating) {   /* (0x522900: the cursor with the 3D rooms' detail on, 0x5d9d38) */
+        char icons[300];
+        FE_ResolvePath("WeeIcons.fsh", icons, sizeof icons);
+        FEShapes_Load(icons);
+        cursor = FEShapes_Named(icons, "GLNT");   /* (0x5d7bf0) */
+    }
+    int typed = (int)(t->now - t->start);
+    wrap_draw(font, n, step, (float)(r[0] + ox), (float)(r[1] + oy), width, align, colour,
+              animating ? typed / 3 : -1, typed % 3, cursor);
     return true;
 }
 
@@ -1629,6 +1749,18 @@ typedef struct {
     int shown;
 } ListState;
 static ListState s_lists[8];
+
+static bool control_in(const FertControl *w, const FertControl *c);
+static void lists_drop_stale(void)   /* (as screen_entered's) */
+{
+    for (int i = 0; i < 8; i++) {
+        bool on = false;
+        for (int k = 0; k < s_depth && s_lists[i].c && !on; k++) on = control_in(s_stack[k], s_lists[i].c);
+        if (on) continue;
+        if (s_slider_held == &s_lists[i].slider) s_slider_held = NULL;
+        memset(&s_lists[i], 0, sizeof s_lists[i]);
+    }
+}
 
 static ListState *list_state(FertControl *c)
 {

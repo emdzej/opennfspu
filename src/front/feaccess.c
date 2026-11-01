@@ -1596,6 +1596,24 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         FEAccessor *p = FEAccess_Find("Factory.ProfileNum");
         return FEFactory_Data(arg, p ? p->pos : 0);
     }
+    if ((a->kind == ACC_ALLPARTS || a->kind == ACC_INSTALL) && arg && *arg) {
+        /* FEPartsAllPartsAccessor_v5 0x515630, FEPartsCarSetupInventoryAccessor_v5 0x516460: whatever the
+           argument, the chosen row's part's description, the string after its name's by 500 (0x4e0270).
+           On a header the original reads a part pointer it never set; the port gives nothing. */
+        const uint8_t *p = NULL;
+        refresh(a);
+        if (a->kind == ACC_ALLPARTS) {
+            int g;
+            p = allparts_part(a->pos, &g);
+        } else {
+            InstallRow rows[256];
+            int n = install_rows(rows, 256);
+            if (a->pos >= 0 && a->pos < n) p = install_part(rows[a->pos], NULL);
+        }
+        if (!p) return "";
+        const char *s = FEStrings_Get(rec32(p, 4) + 500);
+        return s ? s : "";
+    }
     if (a->kind == ACC_TDATA) {   /* 0x5058a0 */
         Save *sv = FESave_Current();
         if (arg && !strcmp(arg, "CASH")) return FE_MoneyText(sv ? sv->money : 0);
