@@ -102,6 +102,8 @@ typedef struct {
     bool label;               /* its category's label above it (13 high) */
     int category;             /* the label's string */
     int height;               /* 14, and 13 more with the label */
+    char status[40];          /* the car setup's: INSTALLED / UNINSTALLED at ID_INSTALLYPOS */
+    bool status_dim;
 } FEPartsRow;
 bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out);
 /* The parts screen made (0x518ba0). */
@@ -110,3 +112,7 @@ void FEData_PartsOpen(void);
 int FEData_PartsAction(const char *cb);
 /* What the buttons may do (FEPurchasePartsCBL_v1 0x518cf0); true with a part chosen. */
 bool FEData_PartsState(bool *buy, bool *sell, bool *basket, bool *selected);
+/* The car setup's INSTALLPART / UNINSTALLPART (0x4f1300, 0x4f12b0). */
+int FEData_InstallAction(const char *cb);
+/* The install list's row chosen: a fitted part (true) or one in stock; false for none. */
+bool FEData_InstallState(bool *fitted);

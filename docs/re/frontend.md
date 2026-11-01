@@ -196,6 +196,10 @@ copies it into the stock (0x517ca0), and takes each part sold out of the stock f
 (0x517ba0). In both lists a category's label (0x518640: by type, 13 high) heads the rows wherever the
 category changes.
 
+The car setup's **Parts.InstallList** (0x515fa0) lists the garage car's fitted parts without the body,
+then the stock parts in the car's list (0x517850). Installing (0x517df0) first moves the fitted part of
+the same type and category into the stock. Uninstalling (0x518020) moves a fitted part into the stock.
+
 **List boxes** (NFS5.ListBox) are combo boxes that are always open (+0x1dd). The accessor draws each
 row. Passive controls (`data.nosize` 1: pictures, labels, rectangles, watches) have no hit rect
 (0x4c82c0), so they don't take the mouse.

@@ -424,6 +424,8 @@ static void callback(const char *cb)
                !strcmp(cb, "REMOVEITEMCALLBACK") || !strcmp(cb, "PURCHASECALLBACK")) {
         int m = FEData_PartsAction(cb);   /* (FEPurchasePartsCBL_v55 .. _v59) */
         if (m > 0) FEApp_Message(m);   /* (0x32a: 0x512e70) */
+    } else if (!strcmp(cb, "INSTALLPART") || !strcmp(cb, "UNINSTALLPART")) {
+        FEData_InstallAction(cb);
     } else if (!strcmp(cb, "CHANGEDECAL")) {
         /* FEPaintShopCBL_v55 0x510a80: the race number's dialog (0x513b10: string 0xfb, digits, 2 at most) */
         dialog_open(DLG_INPUT, FEStrings_Get(0xfb), 0x2be, 0x2bf);
@@ -1098,6 +1100,12 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
             if (!chosen) fg = 0xffffffffu;
         }
         list_text(f, tx, yy + 1.0f, row.text, fg, 0);
+        if (row.status[0]) {   /* (at ID_INSTALLYPOS + 3) */
+            FertControl *ip = control_named(FEApp_Top(), "ID_INSTALLYPOS");
+            int32_t ir[4] = {0, 0, 0, 0};
+            if (ip) control_rect(ip, ir);
+            list_text(f, ip ? (float)(ir[0] + ox + 3) : x + w * 0.7f, yy + 1.0f, row.status, chosen ? fg : row.status_dim ? 0x80000000u : 0xff000000u, 0);
+        }
         if (row.has_price) {
             char pb[24];
             snprintf(pb, sizeof pb, "%d", (int)row.price);   /* ("%d" 0x5cd1b0) */
@@ -1405,6 +1413,21 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     const char *cbl = screen_attr(w, "callbacklist");
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
+    else if (!strcmp(cbl, "ID_CARSETUP")) {
+        /* FECarSetupCallbackList_v1 0x4f1130: install for a part in stock, uninstall for a fitted one,
+           uninstall shown off with none. (The gear ratio panel for +0x1ac 0x1f8 pends.) */
+        bool fitted = false, any = FEData_InstallState(&fitted);
+        enable(w, "ID_PARTSDESC", any);
+        if (!any) {
+            hide(w, "ID_INSTALLBUTTON", true);
+            hide(w, "ID_UNINSTALLBUTTON", false);
+            enable(w, "ID_UNINSTALLBUTTON", false);
+        } else {
+            enable(w, "ID_UNINSTALLBUTTON", true);
+            hide(w, "ID_INSTALLBUTTON", fitted);
+            hide(w, "ID_UNINSTALLBUTTON", !fitted);
+        }
+    }
     else if (!strcmp(cbl, "ID_BUYPARTSCBL")) {
         bool buy, sell, basket, sel;   /* FEPurchasePartsCBL_v1 0x518cf0 */
         bool part = FEData_PartsState(&buy, &sell, &basket, &sel);

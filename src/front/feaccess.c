@@ -17,7 +17,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -157,6 +157,8 @@ static int career_year(void);
 static bool car_before(const uint8_t *a, const uint8_t *b);
 static SaveCar *acc_car(const FEAccessor *a);
 static int allparts_count(void);
+typedef struct { bool fitted; int idx; } InstallRow;
+static int install_rows(InstallRow *out, int cap);
 static int fit_parts(const uint8_t *r, int year, const uint8_t **out, int cap);
 static void allparts_row(int row, int *g, int *i);
 static int s_nbasket;
@@ -839,6 +841,131 @@ bool FEData_PartsState(bool *buy, bool *sell, bool *basket, bool *selected)
     return p != NULL;
 }
 
+/* The car setup's parts (FEPartsCarSetupInventoryAccessor's 0x515fa0): the garage car's fitted parts
+   but its body, then the stock's that fit it (0x517850: each stock part once for each time its id is in
+   the car's list, +0x32e ids from +0x330, but the body), in the parts' order (0x49c2c0). */
+static const uint8_t *install_part(InstallRow r, int32_t *value)
+{
+    SaveCar *gc = garage_car();
+    if (r.fitted) {
+        if (!gc || r.idx >= gc->nother) return NULL;
+        if (value) *value = gc->parts[gc->ninstalled + r.idx][1];
+        return part_rec(gc->parts[gc->ninstalled + r.idx][0]);
+    }
+    const uint8_t *p = stock_part(r.idx);
+    if (value && p) *value = rec32(p, 0x164);
+    return p;
+}
+
+static bool part_before(const uint8_t *x, const uint8_t *y)
+{
+    if (rec16(x, 0x26) != rec16(y, 0x26)) return rec16(x, 0x26) < rec16(y, 0x26);
+    if (rec32(x, 0x5c) != rec32(y, 0x5c)) return rec32(x, 0x5c) < rec32(y, 0x5c);
+    return rec16(x, 0) < rec16(y, 0);
+}
+
+static int install_rows(InstallRow *out, int cap)
+{
+    InstallRow rows[256];
+    int n = 0;
+    SaveCar *gc = garage_car();
+    if (!gc) return 0;
+    const char *body = exe_str(0x5da740);
+    for (int i = 0; i < gc->nother && n < 256; i++) {
+        const uint8_t *p = part_rec(gc->parts[gc->ninstalled + i][0]);
+        if (p && rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, body)) continue;
+        rows[n++] = (InstallRow){true, i};
+    }
+    const uint8_t *r = gc->rec + 4;
+    int nl = rec16(r, 0x32e), ns = stock_count();
+    for (int i = 0; i < ns; i++) {
+        const uint8_t *p = stock_part(i);
+        for (int k = 0; k < nl && k < 0x46 && n < 256; k++) {
+            if (rec16(r, 0x330 + 2 * k) != rec16(p, 0)) continue;
+            if (rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, body)) continue;
+            rows[n++] = (InstallRow){false, i};
+        }
+    }
+    for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++) {
+            const uint8_t *x = install_part(rows[j], NULL), *y = install_part(rows[i], NULL);
+            if (x && y && part_before(x, y)) {
+                InstallRow t = rows[i];
+                rows[i] = rows[j];
+                rows[j] = t;
+            }
+        }
+    for (int i = 0; i < n && i < cap; i++) out[i] = rows[i];
+    return n;
+}
+
+/* A fitted part into the stock (0x518020): its nfs5.prt record with its value (+0x164). */
+static void unfit(SaveCar *gc, int i)
+{
+    const uint8_t *p = part_rec(gc->parts[gc->ninstalled + i][0]);
+    if (p) {
+        uint8_t rec[0x168];
+        memcpy(rec, p, 0x168);
+        memcpy(rec + 0x164, &gc->parts[gc->ninstalled + i][1], 4);
+        stock_add(rec);
+    }
+    memmove(&gc->parts[gc->ninstalled + i], &gc->parts[gc->ninstalled + i + 1], (size_t)(gc->nother - i - 1) * sizeof *gc->parts);
+    gc->nother--;
+}
+
+int FEData_InstallAction(const char *cb)
+{
+    FEAccessor *a = FEAccess_Find("Parts.InstallList");
+    SaveCar *gc = garage_car();
+    if (!a || !gc) return 0;
+    InstallRow rows[256];
+    int n = install_rows(rows, 256);
+    if (a->pos >= n) return 0;
+    InstallRow r = rows[a->pos];
+    if (!strcmp(cb, "UNINSTALLPART")) {   /* 0x4f12b0 -> 0x518020 */
+        if (r.fitted) unfit(gc, r.idx);
+    } else if (!strcmp(cb, "INSTALLPART") && !r.fitted) {   /* 0x4f1300 -> 0x517df0 */
+        const uint8_t *p = stock_part(r.idx);
+        if (!p) return 0;
+        uint8_t rec[0x168];
+        memcpy(rec, p, 0x168);
+        /* the fitted part of its type and category off into the stock first (the first one) */
+        for (int i = 0; i < gc->nother; i++) {
+            const uint8_t *q = part_rec(gc->parts[gc->ninstalled + i][0]);
+            if (q && rec16(q, 0x26) == rec16(rec, 0x26) && !strcmp((const char *)q + 0x28, (const char *)rec + 0x28)) {
+                unfit(gc, i);
+                break;
+            }
+        }
+        /* the part out of the stock onto the car */
+        int k = -1, ns = stock_count();
+        for (int i = 0; i < ns && k < 0; i++)
+            if (!memcmp(stock_part(i), rec, 0x168)) k = i;
+        if (k < 0) return 0;
+        int tot = gc->ninstalled + gc->nother;
+        int32_t (*np)[2] = realloc(gc->parts, (size_t)(tot + 1) * sizeof *np);
+        if (!np) return 0;
+        gc->parts = np;
+        gc->parts[tot][0] = rec16(rec, 0);
+        memcpy(&gc->parts[tot][1], rec + 0x164, 4);
+        gc->nother++;
+        stock_remove(k);
+    }
+    refresh(a);
+    FESave_Write();
+    return 0;
+}
+
+bool FEData_InstallState(bool *fitted)
+{
+    FEAccessor *a = FEAccess_Find("Parts.InstallList");
+    InstallRow rows[256];
+    int n = install_rows(rows, 256);
+    if (!a || a->pos >= n) return false;
+    *fitted = rows[a->pos].fitted;
+    return true;
+}
+
 bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
 {
     memset(out, 0, sizeof *out);
@@ -868,6 +995,21 @@ bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
         const uint8_t *prev = allparts_part(row - 1, &pg);
         out->category = part_category(p);
         if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;   /* (0x518780) */
+        return true;
+    }
+    if (a->kind == ACC_INSTALL) {   /* FEPartsCarSetupInventoryAccessor_v15 0x516220, _v26 0x5163b0 */
+        InstallRow rows[256];
+        int n = install_rows(rows, 256);
+        if (row < 0 || row >= n) return false;
+        const uint8_t *p = install_part(rows[row], NULL);
+        if (!p) return false;
+        snprintf(out->text, sizeof out->text, "%s %s", (const char *)p + 8, FEStrings_Get(rec32(p, 4)));
+        snprintf(out->status, sizeof out->status, "%s", FEStrings_Get(rows[row].fitted ? 0x9f8 : 0xa05));
+        out->status_dim = !rows[row].fitted;   /* (at half alpha, 0x80) */
+        out->height = 0xe;
+        out->category = part_category(p);
+        const uint8_t *prev = row ? install_part(rows[row - 1], NULL) : NULL;
+        if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
         return true;
     }
     if (a->kind == ACC_BASKET) {   /* FEPartsShoppingBasket_v15 0x515800, _v26 0x515930 */
@@ -969,6 +1111,7 @@ void FEData_Init(void)
     }
     add("Parts.AllParts", ACC_ALLPARTS, 2, 0, 0);       /* FEPartsAllPartsAccessor 0x514a30 */
     add("Parts.ShoppingList", ACC_BASKET, 0, 0, 0);     /* FEPartsShoppingBasket 0x5156c0 */
+    add("Parts.InstallList", ACC_INSTALL, 0, 0, 0);     /* FEPartsCarSetupInventoryAccessor 0x515e70 */
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     {
         FEAccessor *u = add("UsedCar.Car", ACC_OWNED, 0, 0, 0);   /* (0x4f5080(.., 0x33, 0, 0x4f85b0)) */
@@ -1032,8 +1175,8 @@ static void refresh(const FEAccessor *c)
         if (a->pos >= a->count) a->pos = 0;
         return;
     }
-    if (a->kind == ACC_ALLPARTS || a->kind == ACC_BASKET) {
-        a->count = a->kind == ACC_ALLPARTS ? allparts_count() : s_nbasket;
+    if (a->kind == ACC_ALLPARTS || a->kind == ACC_BASKET || a->kind == ACC_INSTALL) {
+        a->count = a->kind == ACC_ALLPARTS ? allparts_count() : a->kind == ACC_BASKET ? s_nbasket : install_rows(NULL, 0);
         if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
         return;
     }
@@ -1152,6 +1295,7 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_INTCOLOUR:
         return "";
     case ACC_ALLPARTS:    /* (the item's text, slot 12 0x515590) */
+    case ACC_INSTALL:
     case ACC_BASKET: {
         FEPartsRow r;
         if (!FEData_PartsRow(a, a->pos, &r)) return "";

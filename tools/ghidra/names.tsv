@@ -2643,3 +2643,8 @@
 00518460	PartsStock_List	frontend	high	The stock without the Body
 00518640	Part_Category	frontend	high	A part's category string by type
 00518f30	FEPurchasePartsCBL_Purchase	frontend	high	The transaction list carried out, 0x32a short of money
+00515fa0	FEPartsCarSetupInventory_Build	frontend	high	The car's fitted parts but the body, then the stock's that fit it, in order
+00517850	PartsStock_ForCar	frontend	high	The stock parts in a car's list (each time its id is there), not the body
+00517df0	PartsStock_Install	frontend	high	The fitted part of the type and category off into the stock, the part out of the stock onto the car
+00518020	PartsStock_Uninstall	frontend	high	A fitted part into the stock
+004f1130	FECarSetupCallbackList_Update	frontend	high	Install or uninstall shown by the row chosen
