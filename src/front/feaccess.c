@@ -1950,9 +1950,18 @@ static void tour_end(uint8_t *r)
 /* A career race's results into the save (the original's race-over update pends; the port's, on the
    race's fields the standings read): +0x3d0 run; for each of the eight racers its points (+0x3d2: 9 less
    its place, 8 the winner's as the debug "all won" 0x503a00 gives), its time (+0x3e4) and its prize
-   (+0x424: the places' prizes from +0x3a8); the player's prize into the money; then the tournament's end
+   (+0x424: the places' prizes from +0x3a8), a clean car's safe-driving bonus (+0x404); the player's
+   prize and bonus into the money; then the tournament's end
    (0x503080). */
-void FEData_TourResult(int race, const int *places, const int *times, int n)
+static float exe_f32(uint32_t va)
+{
+    uint32_t v = exe_u32(va);
+    float f;
+    memcpy(&f, &v, 4);
+    return f;
+}
+
+void FEData_TourResult(int race, const int *places, const int *times, const bool *clean, int n)
 {
     Save *sv = FESave_Current();
     uint8_t *r = (uint8_t *)FEData_Tournament();
@@ -1966,6 +1975,14 @@ void FEData_TourResult(int race, const int *places, const int *times, int n)
         memcpy(x + 0x3d2 + 2 * k, &pts, 2);
         memcpy(x + 0x3e4 + 4 * k, &t, 4);
         memcpy(x + 0x424 + 4 * k, &won, 4);
+        /* the safe-driving bonus (0x502f10's +0x404): a clean car's, the race's whole to the winner, half
+           the second's, a quarter the third's */
+        if (k < n && clean && clean[k]) {
+            int32_t b = rec32(x, 0x3c8), safe = p == 1 ? b : p == 2 ? (int32_t)((float)b * exe_f32(0x5b23f0))
+                                                   : p == 3 ? (int32_t)((float)b * exe_f32(0x5b2468)) : 0;
+            memcpy(x + 0x404 + 4 * k, &safe, 4);
+            if (k == 0) sv->money += safe;
+        }
         if (k == 0) sv->money += won;
     }
     tour_end(r);
@@ -2308,6 +2325,35 @@ bool FEData_TrackRecords(const char *track, int32_t race[8], int32_t lap[8], cha
         return true;
     }
     return false;
+}
+
+void FEData_TourRaceInfo(RaceTournament *t)
+{
+    memset(t, 0, sizeof *t);
+    const uint8_t *r = FEData_Tournament();
+    int race = FEData_TourRace();
+    if (!r || race < 0) return;
+    int n = rec16(r, 0x39c);
+    if (n > 10) n = 10;
+    t->rally = r[0xe8] != 0;                                   /* 0xd6 */
+    for (int k = 0; k < 8; k++) {
+        t->race_points[k] = 8 - k;                             /* 0xa8 .. 0xaf */
+        t->prize[k] = rec32(r, 0x3a4 + 0xa4 * race + 4 * (k + 1));   /* 0x503540 */
+        t->bonus[k] = rec32(r, 0xe8 + 4 * (k + 1));            /* 0x502a30 */
+        for (int i = 0; i < n; i++) {
+            const uint8_t *x = r + 0xa4 * i;
+            if (!x[0x3d0]) continue;
+            t->total_points[k] += rec16(x, 0x3d2 + 2 * k);     /* 0x502a90 */
+            t->total_time[k] += rec32(x, 0x3e4 + 4 * k);       /* 0x502b10 */
+            t->earnings[k] += rec32(x, 0x404 + 4 * k) + rec32(x, 0x424 + 4 * k);   /* 0x502b90 */
+        }
+    }
+    t->safe_bonus = rec32(r, 0x3c8 + 0xa4 * race);             /* 0x5035c0 */
+    t->race = race;                                            /* 0x5028e0 */
+    int left = 0;
+    for (int i = 0; i < n; i++) left += !r[0x3d0 + 0xa4 * i];
+    t->last_race = left == 1;                                  /* 0xb9: 0x5038b0 */
+    PENDING_NOTE(0x4ebb70, "the era's end (0xba: 0x503d60, 0x5040b0, 0x503020), the era (0x503db0), the winnings by race (0x503630, 0x5036a0)");
 }
 
 void FEData_TrackRecordEnter(const char *track, const char *name, const char *car, int32_t t)

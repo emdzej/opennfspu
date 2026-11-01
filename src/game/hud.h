@@ -34,6 +34,8 @@ void HUD_LapDone(void);
 void HUD_Free(void);
 /* The race over: the results and the other race-over screens in turn (0x426a40 with 1). */
 void HUD_RaceOver(void);
+/* The race's start (0x426a40 with 0): the cars' damage kept for the career's safe-driving bonus. */
+void HUD_RaceStart(void);
 /* Whether a modal visual (a race screen, the pause menu) is up. 0x426a20 */
 bool HUD_ModalShown(void);
 /* Every visual hidden, the modal list emptied (the replay's start). 0x425740 */

@@ -34,7 +34,7 @@ int FEApp_Language(void);
 
 /* The race the front end set up is over: the racers' places (0 not finished) and times, the player
    first, for the career's. */
-void FEApp_RaceOver(const int *places, const int *times, int n);
+void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int n);
 /* The player's result into the track's records (before FEApp_RaceOver). */
 void FEApp_RaceRecord(const char *name, const char *car, int32_t best, int32_t time);
 

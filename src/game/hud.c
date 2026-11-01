@@ -2259,6 +2259,229 @@ static HudVisual *records_new(void)
     return &r->bb.base;
 }
 
+/* ---- the career's standings (HTournamentStandings, 0x1f0 bytes, vtable 0x5b3210; 0x4317c0): the
+   tournament's racers by their points with this race's (a rally's by the total time), their earnings,
+   the player's row marked ---- */
+
+typedef struct { int32_t points, time, earnings, racer; } TourEntry;
+
+typedef struct {
+    HBillBoard bb;
+    TourEntry entry[8];            /* +0x120 */
+    HTable *table;                 /* +0x1a0 */
+    uint8_t spoken;                /* +0x1a4 */
+    const char *head[2][4];        /* +0x1a8, +0x1b8 */
+    int32_t row;                   /* +0x1ec: the player's */
+} HTourStandings;
+
+static HudVisual *s_standings;   /* 0x60ca54 */
+static HudVisual *s_standing_congrats;   /* 0x60ca68 (an HCongrats) */
+static HudVisual *s_info;        /* 0x60c9fc */
+static int32_t s_start_damage[8];   /* 0x60c9c8: each car's damage at the race's start */
+
+/* A car's damage as the career's safe-driving bonus measures it: its ten zones (from z) summed, each
+   step truncated. */
+static int32_t zones_damage(const Car *c, int z)
+{
+    int32_t sum = 0;
+    for (int k = 0; k < 10; k++) sum = (int32_t)((float)sum + *CAR_F((Car *)c, z + 4 * k));
+    return sum;
+}
+
+/* The career race's results into the tournament's numbers: each racer's points and prize by place, the
+   safe-driving bonus (whole to the winner, half the second's, a quarter the third's) to a car no more
+   damaged than it started (else +0xcc0 marks it), the player's winnings by race, the total times.
+   0x427620 */
+static void tour_update(void)
+{
+    RaceTournament *t = &g_race_tour;
+    t->runs++;
+    for (int i = 0; i < g_racers.n && i < 8; i++) {
+        Car *c = g_racers.c[i];
+        int p = *CAR_I(c, 0xcd4) - 1;
+        if (p < 0 || 7 < p) p = 7;   /* (the original indexes by it unchecked) */
+        t->total_points[i] += t->race_points[p];
+        t->earnings[i] += t->prize[p];
+        bool clean = zones_damage(c, 0xc98) <= s_start_damage[i];
+        if (!clean) c->b[0xcc0] = 1;
+        int32_t bonus = 0;
+        if (clean) {
+            if (p == 0) bonus = t->safe_bonus;
+            else if (p == 1) bonus = (int32_t)((float)t->safe_bonus * exe_f32(0x5b23f0));
+            else if (p == 2) bonus = (int32_t)((float)t->safe_bonus * exe_f32(0x5b2468));
+            t->earnings[i] += bonus;
+        }
+        if (i == g_race_local && 0 <= t->race && t->race < 10) {
+            t->won[t->race] = t->prize[p];
+            t->safe_won[t->race] = clean ? bonus : 0;
+        }
+        t->total_time[i] += *CAR_I(c, 0xcd8);
+    }
+}
+
+/* The standings sorted (0x501e30, a bubble sort): by points, then earnings, then the lower time; a
+   rally's by the lower time, then the lower earnings. */
+static void tour_sort(TourEntry *e, int n, bool rally)
+{
+    for (int pass = 0; pass < n; pass++)
+        for (int i = 0; i + 1 < n; i++) {
+            TourEntry *a = &e[i], *b = &e[i + 1];
+            bool swap = rally ? (b->time < a->time || (b->time == a->time && b->earnings < a->earnings))
+                              : (a->points < b->points ||
+                                 (a->points == b->points && (a->earnings < b->earnings ||
+                                                             (a->earnings == b->earnings && b->time < a->time))));
+            if (swap) {
+                TourEntry x = *a;
+                *a = *b, *b = x;
+            }
+        }
+}
+
+/* The standings from the tournament's numbers, sorted; after the last race the bonus prizes by final
+   standing go into the earnings. 0x431ae0 */
+static void standings_update(HudVisual *v)
+{
+    HTourStandings *s = (HTourStandings *)v;
+    RaceTournament *t = &g_race_tour;
+    int n = g_racers.n < 8 ? g_racers.n : 8;
+    for (int i = 0; i < n; i++)
+        s->entry[i] = (TourEntry){t->total_points[i], t->total_time[i], t->earnings[i], i};
+    tour_sort(s->entry, n, t->rally != 0);
+    if (t->last_race)
+        for (int k = 0; k < n; k++) t->earnings[s->entry[k].racer] += t->bonus[k];
+    s->spoken = 0;
+}
+
+/* The player's standing, 1 the first. 0x431de0 */
+static int standings_rank(void)
+{
+    HTourStandings *s = (HTourStandings *)s_standings;
+    if (!s) return 1;
+    int n = g_racers.n < 8 ? g_racers.n : 8;
+    for (int k = 0; k < n; k++)
+        if (s->entry[k].racer == g_race_local) return k + 1;
+    return n + 1;
+}
+
+/* Opening: the rows (the place's name, the driver, the points or a rally's time, the earnings), the
+   player's marked. 0x431b90 */
+static void standings_setstate(HudVisual *v, int32_t st)
+{
+    HTourStandings *s = (HTourStandings *)v;
+    HTable *t = s->table;
+    if (v->state == 0 && t) {
+        s->row = 0;
+        int n = g_racers.n < 8 ? g_racers.n : 8;
+        for (int i = 0; i < n; i++) {
+            const TourEntry *e = &s->entry[i];
+            const char *place = LOC_string(HudConfig_loc(), 0x46c4 + i);
+            snprintf(t->cell[i][0], 0x20, "%s", place ? place : "");
+            Car *c = e->racer < g_racers.n ? g_racers.c[e->racer] : NULL;
+            snprintf(t->cell[i][1], 0x20, "%.31s", c ? (const char *)CAR_DESCB(c) + 0x17c : "");
+            if (!g_race_tour.rally) snprintf(t->cell[i][2], 0x20, "%d", e->points);
+            else HTime_Format(e->time, t->cell[i][2], false);
+            snprintf(t->cell[i][3], 0x20, "%d", 0 <= e->racer && e->racer < 8 ? g_race_tour.earnings[e->racer] : 0);
+            if (e->racer == g_race_local) s->row = i;   /* (and HWinnings' row, 0x436dc0) */
+        }
+        t->mark = s->row + 1;
+    }
+    bb_setstate(v, st);
+}
+
+/* The billboard, its table once open; a win so far before the last race said (0x4a62a0). The
+   earnings' breakdown under the mouse (HWinnings 0x436790: the race's prize and safe bonus by race)
+   pends. 0x4319e0 */
+static void standings_draw(HudVisual *v)
+{
+    HTourStandings *s = (HTourStandings *)v;
+    bb_draw(&s->bb);
+    if (v->state == 0 || v->state == 1 || v->state == 2) return;
+    if (s->table) table_draw(s->table);
+    if (!s->spoken) {
+        s->spoken = 1;
+        if (!g_race_tour.last_race && s->row == 0) Audio_Say(0x9e);
+    }
+    PENDING_NOTE(0x436790, "HWinnings: the player's winnings by race under the mouse");
+}
+
+static void standings_destroy(HudVisual *v)   /* HTournamentStandings_v0 0x431990 */
+{
+    HTourStandings *s = (HTourStandings *)v;
+    table_free(s->table);
+    bb_free(&s->bb);
+    free(s);
+}
+
+static const HudVisualVtbl standings_vt = {standings_destroy, standings_draw, standings_update, standings_setstate, bb_setpos, NULL, bb_done, NULL};
+
+static HudVisual *standings_new(void)
+{
+    HTourStandings *s = calloc(1, sizeof *s);
+    if (!s) return NULL;
+    const uint8_t *loc = HudConfig_loc();
+    const char *title = LOC_string(loc, 0x46d4);
+    int w = exe_i32(0x5b31e0), h = exe_i32(0x5b31e4);
+    bb_init(&s->bb, &standings_vt, w, h, "", title ? title : "", true, true, true);
+    static const int ids[2][4] = {{0, 0x46bf, 0x46cf, 0x46f1}, {0, 0x46bf, 0x46f2, 0x46f1}};
+    for (int k = 0; k < 2; k++)
+        for (int c = 0; c < 4; c++) s->head[k][c] = ids[k][c] ? LOC_string(loc, ids[k][c]) : exe_str(0x5b3208);
+    int x = (g_display.width - s->bb.w) / 2, y = (g_display.height - s->bb.h) / 2;   /* 0x41b120 */
+    bool rally = g_race_tour.rally != 0;   /* (0x6577e4) */
+    s->table = table_new(x, y, w + x, h + y, 4, 8, rally ? 0x5b31f8 : 0x5b31e8, s->head[rally]);
+    return &s->bb.base;
+}
+
+/* ---- a message on a billboard (HInfo, 0x128 bytes, vtable 0x5b2bfc; 0x4282b0): "Info" titled, its
+   text centred ---- */
+
+typedef struct {
+    HBillBoard bb;
+    const char *text;   /* +0x120 */
+    HText *ttext;       /* +0x124 */
+} HInfo;
+
+static void info_draw(HudVisual *v)   /* HInfo_v1 0x428390 */
+{
+    HInfo *m = (HInfo *)v;
+    bb_draw(&m->bb);
+    if (v->state != 0 && !(v->state == 1 || v->state == 2) && m->text) text_print(m->ttext, m->text, 1.0f, 1.0f);
+}
+
+/* The text, centred on the billboard. 0x4283d0 */
+static void info_settext(HudVisual *v, const char *text)
+{
+    HInfo *m = (HInfo *)v;
+    if (!m) return;
+    m->text = text;
+    float a, b, w = 0, h = 0;
+    if (m->ttext && m->ttext->font && m->ttext->font->font) text_extent(m->ttext, text ? text : "", &a, &b, &w, &h);
+    int x = (g_display.width - m->bb.w) / 2, y = (g_display.height - m->bb.h) / 2;   /* 0x41b120 */
+    if (m->ttext) {
+        m->ttext->x = (int)((float)(m->bb.w / 2) - w * exe_f32(0x5b23f0) + (float)x);
+        m->ttext->y = (int)((float)(m->bb.h / 2) - h * exe_f32(0x5b23f0) + (float)y);
+    }
+}
+
+static void info_destroy(HudVisual *v)   /* HInfo_v0 0x428350 */
+{
+    HInfo *m = (HInfo *)v;
+    text_free(m->ttext);
+    bb_free(&m->bb);
+    free(m);
+}
+
+static const HudVisualVtbl info_vt = {info_destroy, info_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, NULL};
+
+static HudVisual *info_new(bool keyhints)
+{
+    HInfo *m = calloc(1, sizeof *m);
+    if (!m) return NULL;
+    const char *title = LOC_string(HudConfig_loc(), 0x46ed);
+    bb_init(&m->bb, &info_vt, exe_i32(0x5b2bf0), exe_i32(0x5b2bf4), "", title ? title : "", true, keyhints, true);
+    m->ttext = text_new(HudConfig_font(0x4c), 0xff000000u, 0xff000000u, 0, 0, 0, 0, 0, false);
+    return &m->bb.base;
+}
+
 /* ---- the mission's summary (HMissionSummary, 0x14c bytes, vtable 0x5b2c88; 0x428900): Factory Driver's
    verdict, the narrator's picture and name beside his words typed out a letter a frame, a button to try
    again after a failure ---- */
@@ -2781,8 +3004,7 @@ void HUD_LapDone(void)
    At the race's end, for a podium place (only a win in game type 3): the screen's cross with the ring's
    gap at the centre, the gold, silver or bronze rings and the place's art fading in over 128 ticks, the
    announcer's line (and the winning or losing song), gone after 192 ticks. Its other use, the career's
-   standing (0x60ca68, the arts spinning, zooming and sliding to a corner: 0x41da10, 0x41dc90), isn't made
-   by the port's HUD yet. */
+   standing (0x60ca68), spins its arts, zooms the place's and slides it to a corner. */
 typedef struct {
     int idx, last, period, count, elapsed;   /* (two cycles: +0x70 .., +0x88 ..) */
     int pad;
@@ -2905,6 +3127,44 @@ static void congrats_place(HCongrats *g, int i, int a)
     HudArt_draw(art);
 }
 
+/* The spinning arts: the second cycle's frame at its size (0x5b29d0 ..) in the place's colour, the one
+   before it over it at that size, half seen on the frame's first tick. 0x41da10 */
+static void congrats_spin(HCongrats *g)
+{
+    int k = g->cyc[1].idx & 7, p = k == 0 ? 7 : k - 1;
+    uint32_t sz = 0x5b29d0 + 8u * (uint32_t)k;
+    int w = (int)((float)exe_i32(sz) * g->scale), h = (int)((float)exe_i32(sz + 4) * g->scale);
+    if (g->spin[k]) {
+        art_resize(g->spin[k], w, h);
+        HudArt_place(g->spin[k], g->x, g->y);
+        uint32_t c = congrats_colour(g->which);
+        HudArt_setcolours(g->spin[k], c, c, c, c);
+        HudArt_draw(g->spin[k]);
+    }
+    if (g->spin[p]) {
+        art_resize(g->spin[p], w, h);
+        HudArt_place(g->spin[p], g->x, g->y);
+        int pad = g->cyc[1].pad ? g->cyc[1].pad : 1;
+        uint32_t c = (uint32_t)(-((pad - g->cyc[1].elapsed) / pad)) << 31 | exe_u32(0x5b2a18 + 4u * (uint32_t)g->which);
+        HudArt_setcolours(g->spin[p], c, c, c, c);
+        HudArt_draw(g->spin[p]);
+    }
+}
+
+/* The place's art zoomed: 2, 4 then 6 times its size over the zoom's thirds (u 0..1). 0x41dc90 */
+static void congrats_zoom(HCongrats *g, int i, float u)
+{
+    if (i < 0 || 2 < i || !g->place[i]) return;
+    static const int mult[3] = {2, 4, 6};
+    int n = -(int)(u * exe_f32(0x5b23fc));
+    if (n < 0) n = 0;
+    if (2 < n) n = 2;
+    uint32_t sz = 0x5b29b8 + 8u * (uint32_t)i;
+    art_resize(g->place[i], exe_i32(sz) * mult[n], exe_i32(sz + 4) * mult[n]);
+    HudArt_place(g->place[i], g->x, g->y);
+    HudArt_draw(g->place[i]);
+}
+
 static void congrats_setstate(HudVisual *v, int32_t s)   /* HCongrats_v5 0x41dd60 */
 {
     HCongrats *g = (HCongrats *)v;
@@ -2955,7 +3215,12 @@ static void congrats_draw(HudVisual *v)   /* HCongrats_v1 0x41d070 */
     }
     if (!g->spoken) {
         if (!g->raceover) {
-            PENDING_NOTE(0x4a62d0, "the career standing's lines (0x6577d8, 0x6577dc)");
+            /* the tournament's standing after its last race (0x4a62d0), and unless the era ends the
+               next line (0x4a6260) */
+            if (g_race_tour.last_race && g->which < 4) {
+                Audio_Say((int)(REAL_rand() & 1) * 3 + 0x20 + g->which - 1);
+                if (!g_race_tour.end_of_era) Audio_Say((int)(REAL_rand() & 1) + 0x9c);
+            }
         } else {
             int n = g_racers.n;
             switch (g_race_mode) {
@@ -2985,12 +3250,31 @@ static void congrats_draw(HudVisual *v)   /* HCongrats_v1 0x41d070 */
     }
     congrats_lines(g);
     congrats_rings(g);
-    if (!g->raceover) {
-        PENDING_NOTE(0x41da10, "the career standing's spinning arts, zoom and slide (0x41da10, 0x41dc90)");
+    if (g->raceover) {
+        congrats_place(g, g->which - 1, t * 0xff / 0x80);
+        if (0xc0 < t) v->vt->setstate(v, 0);
         return;
     }
-    congrats_place(g, g->which - 1, t * 0xff / 0x80);
-    if (0xc0 < t) v->vt->setstate(v, 0);
+    /* The standing: the arts spinning, the place's zooming, then it at full strength sliding to its
+       corner as it shrinks to half. */
+    if (t < 0xb0) congrats_spin(g);
+    else if (t < 0xc0) congrats_zoom(g, g->which - 1, ((float)t - exe_f32(0x5b2a70)) * exe_f32(0x5b26a4));
+    else congrats_place(g, g->which - 1, 0xff);
+    if (0xbf < t && g->tx < g->x) {
+        int u = t - 0xc0;
+        g->x = (int)((float)g->sx - (float)u * g->dx);
+        g->y = (int)((float)g->sy - (float)u * g->dy);
+        if (g->x < g->tx) g->x = g->tx;
+        if (g->y < g->ty) g->y = g->ty;
+        g->scale = (float)(exe_f64(0x5b2750) - ((exe_f64(0x5b2750) - exe_f32(0x5b2a30)) * (double)(g->sx - g->x)) / (double)(g->sx - g->tx));
+    }
+}
+
+/* Out of the modal list once 177 ticks have passed (it goes on drawing). HCongrats_v3 0x41e160 */
+static bool congrats_done(HudVisual *v)
+{
+    HCongrats *g = (HCongrats *)v;
+    return 0xb0 < g_sim_tick - g->start || v->state == 0;
 }
 
 static void congrats_destroy(HudVisual *v)   /* HCongrats_v0 0x41cf70 */
@@ -3002,7 +3286,7 @@ static void congrats_destroy(HudVisual *v)   /* HCongrats_v0 0x41cf70 */
     free(g);
 }
 
-static const HudVisualVtbl congrats_vt = {congrats_destroy, congrats_draw, NULL, congrats_setstate, NULL, NULL, NULL, NULL};
+static const HudVisualVtbl congrats_vt = {congrats_destroy, congrats_draw, NULL, congrats_setstate, NULL, NULL, congrats_done, NULL};
 
 /* 0x41cb10: the arts centred (at the place, still 0, the constructor gives them), sized by the tables at
    0x5b29b8; the text (0x430e50, 0x80fab400) it makes is never drawn. */
@@ -3142,6 +3426,12 @@ void HUD_Init(void)
     add(mission, false, false);
     s_records = records_new();   /* 0x433790 (0x60ca5c) */
     add(s_records, false, false);
+    s_standing_congrats = congrats_new();   /* 0x41cb10 (0x60ca68) */
+    add(s_standing_congrats, false, false);
+    s_standings = standings_new();   /* 0x4317c0 (0x60ca54) */
+    add(s_standings, false, false);
+    s_info = info_new(true);   /* 0x4282b0(1) (0x60c9fc) */
+    add(s_info, false, false);
     static const int pause_ids[3] = {0x46bc, 0x46bd, 0x46be}, pause_actions[3] = {2, 3, 0x1a};
     s_pause = menu_new(0x5b2d40, 0x5b2d48, 0x46d0, 3, pause_ids, pause_actions);   /* 0x42a3a0 */
     add(s_pause, false, false);
@@ -3187,7 +3477,18 @@ static void race_screens(void)
         /* the career: the results first, then its boards */
         push_modal(summary);
         if (summary) summary->flag = 1;
-        PENDING_NOTE(0x426c50, "the career's race-over boards (0x60ca68 the standing, 0x60ca54, 0x60c9fc 0x46f0)");
+        int rank = standings_rank();   /* 0x431de0 */
+        if (g_race_tour.last_race && rank < 4 && s_standing_congrats) {
+            /* the tournament won or placed: its standing congratulated (0x41e150, 0x41dd40(1)) */
+            push_modal(s_standing_congrats);
+            ((HCongrats *)s_standing_congrats)->which = rank;
+            ((HCongrats *)s_standing_congrats)->raceover = 0;
+        }
+        push_modal(s_standings);
+        if (g_race_tour.last_race && 3 < rank && s_info) {
+            push_modal(s_info);
+            info_settext(s_info, LOC_string(HudConfig_loc(), 0x46f0));   /* 0x4283d0 */
+        }
         push_modal(s_records);
     } else if (g_race_mode == 9) {
         /* Factory Driver: the mission's summary (0x60ca50) up, its opening (HMissionSummary_v5 0x4293b0)
@@ -3260,13 +3561,26 @@ void HUD_HideAll(void)
     nmodal = 0;
 }
 
+void HUD_RaceStart(void)
+{
+    /* 0x426a40 with 0: the race-over's state cleared, each car's damage kept for the safe-driving
+       bonus */
+    for (int i = 0; i < g_racers.n && i < 8; i++) {
+        s_start_damage[i] = g_cars[i] ? zones_damage(g_cars[i], 0x4e4) : 0;
+        if (g_racers.c[i]) g_racers.c[i]->b[0xcc0] = 0;
+    }
+}
+
 void HUD_RaceOver(void)
 {
     PENDING_NOTE(0x426a40, "the race-over HUD's other parts (place swaps, the replay's HUD)");
     /* The records take the player's time first, when the player has a place (or in a mission). */
     Car *me = local_car();
     if (s_records && ((me && *CAR_I(me, 0xcd4) != 0) || g_race_mode == 9)) {
-        if (g_race_mode == 4) PENDING_NOTE(0x427620, "the career's standings updated (0x60ca54's slot 2)");
+        if (g_race_mode == 4) {
+            tour_update();   /* 0x427620 */
+            if (s_standings) s_standings->vt->reset(s_standings);   /* 0x431ae0 */
+        }
         s_records->vt->reset(s_records);   /* 0x433980 */
     }
     race_screens();   /* 0x426c50 */
@@ -3281,6 +3595,7 @@ void HUD_Free(void)
     summary = mission = s_time = NULL;
     s_congrats = NULL;
     s_records = NULL;
+    s_standings = s_standing_congrats = s_info = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);
     wrongway = NULL;
     for (int i = 0; i < nlist; i++)

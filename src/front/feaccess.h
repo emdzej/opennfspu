@@ -70,7 +70,7 @@ const uint8_t *FEData_Tournament(void);
 int FEData_TourRace(void);
 const char *FEData_TourTrack(void);
 /* That race run: the racers' places (0 not finished) and times, the player first. */
-void FEData_TourResult(int race, const int *places, const int *times, int n);
+void FEData_TourResult(int race, const int *places, const int *times, const bool *clean, int n);
 /* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
 int FEData_TourLaps(void);
 #include "front/fesave.h"
@@ -187,3 +187,6 @@ extern uint32_t g_fe_cheats;
 bool FE_Cheat(int bit);
 /* A name that is a cheat's code (0x4d8130): the cheat taken, true. */
 bool FEData_CheatCode(const char *name);
+
+/* The career race's tournament numbers for the race (0x4ebb70). */
+void FEData_TourRaceInfo(RaceTournament *t);

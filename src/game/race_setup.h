@@ -46,3 +46,16 @@ extern char g_race_player[64];
    (0x6574d8) and their cars (0x6575d8), best first. HTrackRecords enters the player's. */
 extern int32_t g_track_records[8], g_lap_records[8];
 extern char g_record_names[8][32], g_record_cars[8][32];
+/* The career's tournament as the front end gives the race (0x4ebb70's options, by the race's racer
+   order): the points by place (TOURNAMENTRACEPOINTS 0x6576d8: 8 .. 1), the totals so far
+   (TOURNAMENTTOTALPOINTS 0x6576f8), the race's prize by place (TOURNRACEPRIZEMONEY 0x65771c) and its
+   safe-driving bonus (TOURNRACESAFEBONUS 0x65773c), the earnings so far (TOURNPLAYEREARNINGS 0x657740),
+   the bonus prize by final standing (TOURNBONUSPRIZEMONEY 0x657760), the race (TOURNRACEINDEX
+   0x657780), the player's winnings by race (0x657784, 0x6577ac: the race's own), the races run in the
+   race (0x6577d4), the last race (TOURNAMENTLASTRACE 0x6577d8), the era's end (0x6577dc), the era
+   (0x6577e0), a rally (TOURNAMENTRALLY 0x6577e4: by time) and the total times (0x6577e8). */
+typedef struct {
+    int32_t race_points[8], total_points[8], prize[8], safe_bonus, earnings[8], bonus[8];
+    int32_t race, won[10], safe_won[10], runs, last_race, end_of_era, era, rally, total_time[8];
+} RaceTournament;
+extern RaceTournament g_race_tour;

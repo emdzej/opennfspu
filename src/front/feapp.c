@@ -358,9 +358,9 @@ void FEApp_RaceRecord(const char *name, const char *car, int32_t best, int32_t t
     FEData_TrackRecordEnter(s_track, name, car, g_race_linear ? time : best);
 }
 
-void FEApp_RaceOver(const int *places, const int *times, int n)
+void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int n)
 {
-    if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, n);
+    if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, clean, n);
     s_tour_race = -1;
     if (s_gametype == 2) FEData_KnockoutResult(places, n);   /* (0x4ddb10) */
     if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */

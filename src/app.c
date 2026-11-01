@@ -97,7 +97,9 @@ bool app_frame(void)
                 return false;
             } else if (g_drive_result == 1) {
                 {
-                    int places[8], times[8], n = DRIVE_Results(places, times);
+                    int places[8], times[8];
+                    bool clean[8];
+                    int n = DRIVE_Results(places, times, clean);
                     int32_t ids[20];
                     float wear[20];
                     int np = DRIVE_PartsWear(ids, wear);
@@ -105,7 +107,7 @@ bool app_frame(void)
                     char rn[32], rc[32];
                     int32_t best, time;
                     if (DRIVE_PlayerResult(rn, rc, &best, &time)) FEApp_RaceRecord(rn, rc, best, time);
-                    FEApp_RaceOver(places, times, n);
+                    FEApp_RaceOver(places, times, clean, n);
                 }
                 DRIVE_Shutdown();
                 if (fe_start[0]) {
@@ -171,6 +173,8 @@ bool app_frame(void)
                     g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;
                     g_race_opp_set = FEApp_OpponentCars(g_race_opp) >= 0;
                     g_race_mode = FEApp_GameType();   /* (0x4eab10's option 0x30) */
+                    if (g_race_mode == 4) FEData_TourRaceInfo(&g_race_tour);   /* (0x4ecc60 -> 0x4ebb70) */
+                    else memset(&g_race_tour, 0, sizeof g_race_tour);
                     {
                         Save *sv = FESave_Current();   /* (the description's player, 0x4eab10) */
                         snprintf(g_race_player, sizeof g_race_player, "%s", sv ? sv->player : "");
