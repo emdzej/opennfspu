@@ -53,7 +53,7 @@ static uint32_t s_colours[4];         /* the race car's colours (the description
 static bool s_havecol;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
 static int s_owned_race = -1;         /* the owned car raced (its index in the save) */
-static int s_gametype;                /* Game.GameType (0x690ad4): 4 the career (the other modes' values pend) */
+static int s_gametype;                /* Game.GameType (0x690ad4): 0 quick race, 1, 2 knockouts, 3 multiplayer, 4 career, 9 Factory Driver */
 static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
 static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
@@ -473,7 +473,10 @@ static void callback(const char *cb)
         FEAccessor *a = FEAccess_Find("Tournament.RemainingTracks");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[11] == 'I' ? 1 : -1));
     } else if (!strncmp(cb, "SETTYPE", 7) && strcmp(cb, "SETTYPECAREERMODE")) {
-        s_gametype = 0;   /* (FEMainScreen's 0x5107a0 .. 0x510800: not the career) */
+        /* FEMainScreen_v59 .. _v64 (0x510510 ..): Game.GameType 0 quick race, 1 quick knockout, 2 knockout,
+           3 multiplayer, 9 Factory Driver (its screen, factorydriver or factdone once done: pending) */
+        s_gametype = !strcmp(cb, "SETTYPEQUICKKNOCKOUT") ? 1 : !strcmp(cb, "SETTYPEKNOCKOUT") ? 2
+                   : !strcmp(cb, "SETTYPEMULTIPLAYER") ? 3 : !strcmp(cb, "SETTYPEFACTORYDRIVER") ? 9 : 0;
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
         s_gametype = 4;
         /* FEMainScreen_v63 0x510430: the career (Game.GameType 4, the car lists again), its tournaments when

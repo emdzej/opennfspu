@@ -1,6 +1,6 @@
 # Status
 
-**Early: the game starts in the front end; Quick Race lets you pick the track, the car and the opponents and starts the race; Escape pauses it, and its menu goes back to the menus.**
+**Early: the game starts in the front end; Quick Race lets you pick the track, the car and the opponents and starts the race; the Evolution career runs its tournaments with the garage (the dealer, used cars, parts, paint, the car setup); Escape pauses a race, and its menu goes back to the menus.**
 
 | Part | State |
 |---|---|
