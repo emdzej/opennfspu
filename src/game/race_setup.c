@@ -5,6 +5,7 @@
 #include "game/hud_config.h"
 #include "game/race_progress.h"
 #include "real/loc.h"
+#include "exe.h"
 #include "vfs.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -25,6 +26,8 @@ uint32_t g_race_colours[4];
 int32_t g_race_parts[20];
 bool g_race_parts_set;
 bool g_race_colours_set;
+float g_race_setup[17];
+bool g_race_setup_set;
 
 bool RaceSetup_SingleCar(const char *name)
 {
@@ -87,18 +90,21 @@ bool RaceSetup_SingleCar(const char *name)
         float sk[8] = {1, 1, 1, 1, 0, 0, 0, 0};
         memcpy(d + 0x154, sk, sizeof sk);
     }
-    /* The setup screen's sliders (FECarSetup 0x4f06f0) at their middle, as 1/65536ths (the brake bias
-       times 100); the gear and final ratio offsets and the toe at none. A stand-in until the front end's
-       defaults are ported. */
-    put_i(d, 0x114, 0x8000);                              /* FRONTDOWNFORCE */
-    put_i(d, 0x118, 0x8000);                              /* REARDOWNFORCE */
-    put_i(d, 0x11c, 0x8000 * 100);                        /* BRAKEBIAS */
-    put_i(d, 0x120, 0x8000);                              /* RIDEHEIGHT */
-    put_i(d, 0x124, 0x8000);                              /* SUSPENSIONTRAVEL */
-    put_i(d, 0x130, 0x8000);                              /* SUSPENSIONSTIFFNESS */
-    put_i(d, 0x134, 0x8000);                              /* SHOCKRATE */
-    put_i(d, 0x13c, 0x8000);                              /* FRONTTIREPRESSURE */
-    put_i(d, 0x140, 0x8000);                              /* REARTIREPRESSURE */
+    {
+        /* The car's settings (0x4ee430): each float times 0x5b3e68's constant, truncated (0x4a51d0), under
+           its tag (Options_Parse 0x4b0db0 fills the table of id, address, name that gives its field). The
+           setup screen's order: the downforces, brake bias, ride height, suspension travel, toe, shock
+           rate, tyre pressures, then the reverse, first to sixth and final ratios. SUSPENSIONSTIFFNESS
+           (+0x130) is not among them and stays 0. */
+        static const uint16_t field[17] = {0x114, 0x118, 0x11c, 0x120, 0x124, 0x128, 0x134, 0x13c, 0x140,
+                                           0xf4, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0xf0};
+        static const float fresh[17] = {50, 50, 50, 0, 0, 0, 1.0f, 30, 30, 0, 0, 0, 0, 0, 0, 0, 0};   /* 0x4ee230 */
+        const float *set = g_race_setup_set ? g_race_setup : fresh;
+        uint32_t kb = exe_u32(0x5b3e68);
+        float k;
+        memcpy(&k, &kb, 4);
+        for (int i = 0; i < 17; i++) put_i(d, field[i], (int32_t)(set[i] * k));
+    }
     put_i(d, 0xc, 1);                                     /* TRANSMISSION: automatic */
     /* The colours (+0x218 COLORCONFIG: body, stripe, interior, wheels; the car viewer's silver), no race
        number, colour package 0. */

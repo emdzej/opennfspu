@@ -106,6 +106,7 @@ bool app_frame(void)
                         g_race_colours_set = col != NULL;
                         if (col) memcpy(g_race_colours, col, sizeof g_race_colours);
                         g_race_parts_set = FEApp_Parts(g_race_parts) >= 0;
+                        g_race_setup_set = FEApp_Setup(g_race_setup);
                     }
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */

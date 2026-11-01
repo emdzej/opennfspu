@@ -172,7 +172,8 @@ int main(void)
         *CAR_I(g_cars[1], 0xecc) &= ~2;
         run(64, 64, 0);
         printf("  siren: rms %.0f without, %.0f with\n", plain, siren);
-        CHECK(siren > plain * 1.2);
+        /* (what the siren adds, as the lap's voice: how loud it is depends on where the race put the cop) */
+        CHECK(siren > plain && sqrt(siren * siren - plain * plain) > 1000.0);
     }
     /* The autobahn's train (an animated TRAN with animdefs.txt's sound 833): the car put beside it for
        two seconds, then back (0x4aed00's animated objects). */

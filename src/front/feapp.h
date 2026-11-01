@@ -47,5 +47,7 @@ const char *FEApp_Car(void);
 const uint32_t *FEApp_Colours(void);
 /* The owned car's installed parts for the race (-1 when the car isn't an owned one). */
 int FEApp_Parts(int32_t ids[20]);
+/* The raced owned car's settings (as FEData_OwnedSetup); false for a car not owned. */
+bool FEApp_Setup(float set[17]);
 int FEApp_Laps(void);
 int FEApp_Opponents(void);

@@ -19,3 +19,7 @@ extern bool g_race_colours_set;
 /* The human car's parts (PARTINDEX ids) the front end chose, when set. */
 extern int32_t g_race_parts[20];
 extern bool g_race_parts_set;
+/* The front end's car settings (the car object's seventeen from +0x6d0) when g_race_setup_set; else a
+   new car's (0x4ee230). */
+extern float g_race_setup[17];
+extern bool g_race_setup_set;

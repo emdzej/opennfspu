@@ -315,6 +315,7 @@ static void on_leave(FertControl *c)   /* 0x4c7820 */
 FEResult FEApp_Result(void) { return s_result; }
 const uint32_t *FEApp_Colours(void) { return s_havecol ? s_colours : NULL; }
 int FEApp_Parts(int32_t ids[20]) { return s_owned_race >= 0 ? FEData_OwnedParts(s_owned_race, ids) : -1; }
+bool FEApp_Setup(float set[17]) { return s_owned_race >= 0 && FEData_OwnedSetup(s_owned_race, set); }
 const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }

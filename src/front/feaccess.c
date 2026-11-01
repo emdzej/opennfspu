@@ -254,6 +254,14 @@ int FEData_OwnedParts(int car, int32_t ids[20])
     return n;
 }
 
+bool FEData_OwnedSetup(int car, float set[17])
+{
+    Save *sv = FESave_Current();
+    if (!sv || car < 0 || car >= sv->ncars) return false;
+    memcpy(set, sv->cars[car].rec + 0x6d0, 17 * sizeof(float));
+    return true;
+}
+
 void FEData_AddWear(int car, const int32_t *ids, const float *wear, int n)
 {
     Save *sv = FESave_Current();

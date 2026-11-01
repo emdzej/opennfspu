@@ -68,5 +68,7 @@ int FEData_OwnedIndex(const char *accessor);
 void FEData_AddWear(int car, const int32_t *ids, const float *wear, int n);
 /* An owned car's installed parts' ids (at most 20, the rest 0); their count. */
 int FEData_OwnedParts(int car, int32_t ids[20]);
+/* An owned car's seventeen settings (+0x6d0 of its object, the setup screen's order); false without one. */
+bool FEData_OwnedSetup(int car, float set[17]);
 /* The garage car's settings to a new car's (DEFAULTSETTINGS). */
 void FEData_DefaultSetup(void);
