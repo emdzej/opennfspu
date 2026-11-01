@@ -325,7 +325,11 @@ static const char *attr_str(const FertPart *p, const char *name)
     return a ? FertAttr_str(a) : "";
 }
 
+static const char *part_text(const FertPart *p);
+
 /* The text a part shows: a localized part's string of its stringID (0x4e5d80), else its text. */
+const char *FEPart_Text(const FertPart *p) { return part_text(p); }
+
 static const char *part_text(const FertPart *p)
 {
     if (p->kind == FPART_LOCALIZEDTEXT) return FEStrings_Get(atoi(attr_str(p, "stringID")));

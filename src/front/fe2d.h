@@ -29,6 +29,12 @@ void FE2D_Rect(float x, float y, float w, float h, uint32_t colour);
 void FE2D_Frame(float x, float y, float w, float h, uint32_t colour);
 /* A rectangle of four colours: top left, top right, bottom left, bottom right. 0x4d9160 */
 void FE2D_Gouraud(float x, float y, float w, float h, uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br);
+/* A colour from a to b by t of 255, each byte. 0x4d8300 */
+uint32_t FE2D_Mix(uint32_t a, uint32_t b, int t);
+/* The four-colour rectangle cut to the box x0, y0 .. x1, y1, the cut edges' colours mixed to their place.
+   0x4d8f50 */
+void FE2D_GouraudClipped(float x, float y, float w, float h, uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br,
+                         int x0, int y0, int x1, int y1);
 /* A quad of four corners (x, y) and their colours, clockwise from the first. 0x4d9380 */
 void FE2D_Quad(const float xy[8], const uint32_t colours[4]);
 /* An image at (x, y) of size (w, h), its corners on whole pixels, flipped by flags (1 across, 2 down);

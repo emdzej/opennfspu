@@ -439,3 +439,49 @@ char *FE2D_Alloc(int n)
     s_used += n;
     return p;
 }
+
+static float exe_f32(uint32_t va)
+{
+    uint32_t u = exe_u32(va);
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
+
+uint32_t FE2D_Mix(uint32_t a, uint32_t b, int t)
+{
+    uint32_t o = 0;
+    for (int sh = 0; sh < 32; sh += 8) o |= ((((a >> sh) & 0xff) * (uint32_t)(0xff - t) + ((b >> sh) & 0xff) * (uint32_t)t) / 0xff) << sh;
+    return o;
+}
+
+void FE2D_GouraudClipped(float x, float y, float w, float h, uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br,
+                         int x0, int y0, int x1, int y1)
+{
+    float k = exe_f32(0x5b3710);
+    if ((float)x1 < x + w) {
+        float nw = (float)x1 - x;
+        int t = (int)(nw * k / w);
+        tr = FE2D_Mix(tl, tr, t), br = FE2D_Mix(bl, br, t);
+        w = nw;
+    }
+    if (x < (float)x0) {
+        int t = (int)(((float)x0 - x) * k / w);
+        tl = FE2D_Mix(tl, tr, t), bl = FE2D_Mix(bl, br, t);
+        w -= (float)x0 - x;
+        x = (float)x0;
+    }
+    if ((float)y1 < y + h) {
+        float nh = (float)y1 - y;
+        int t = (int)(nh * k / h);
+        bl = FE2D_Mix(tl, bl, t), br = FE2D_Mix(tr, br, t);
+        h = nh;
+    }
+    if (y < (float)y0) {
+        int t = (int)(((float)y0 - y) * k / h);
+        tl = FE2D_Mix(tl, bl, t), tr = FE2D_Mix(tr, br, t);
+        h -= (float)y0 - y;
+        y = (float)y0;
+    }
+    if ((float)x0 <= x + w && x <= (float)x1 && y <= (float)y1 && (float)y0 <= y + h) FE2D_Gouraud(x, y, w, h, tl, tr, bl, br);
+}

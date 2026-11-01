@@ -6,6 +6,7 @@
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
 #include "front/feapp.h"
+#include "front/fedrift.h"
 #include "pending.h"
 #include "real/loc.h"
 #include "vfs.h"
@@ -96,8 +97,8 @@ static void picture_draw(FertControl *c, int32_t ox, int32_t oy)
 
 /* NFS5.ANIMSHOWCASEPICTURE (FEAnimatingShowcaseControl, 0x1d0 bytes, vtable 0x5b55d8): show.fsh's four
    pictures, each a left half (shapes 0 .. 3) and a right one (4 .. 7), one shown 128 ticks, then fading
-   into the next over 64. (Over them five words of its label drift in the overlay, 0x520110 / 0x520160
-   with Univers7b and Univers11b: pending.) */
+   into the next over 64. Over them five copies of its label's text drift (0x520110 / 0x520160) in
+   Univers7b and Univers11b, across 200, 0 .. 400, 200 of the screen. */
 typedef struct {
     FertControl *c;
     char path[300];
@@ -105,16 +106,36 @@ typedef struct {
     bool fading;          /* +0x150 */
     uint32_t since;       /* +0x154 */
     int span;             /* +0x158 */
+    char label[100];      /* +0x164 */
+    DriftWord words[5];   /* +0x160 (+0x15c the count) */
+    HudFont *fonts[2];    /* +0x1c8 (+0x1cc the count) */
 } Anim;
 static Anim s_anim;
 
+static HudFont *font(const char *name)   /* 0x4db960: a front end font by name */
+{
+    char file[64], path[300];
+    snprintf(file, sizeof file, "%s.ffn", name);
+    FE_ResolvePath(file, path, sizeof path);
+    return FEFont_Get(path);
+}
+
 static void anim_start(FertControl *c)   /* v20 0x4bd770 */
 {
-    if (s_anim.c) FEShapes_Release(s_anim.path);
+    if (s_anim.c) {
+        FEShapes_Release(s_anim.path);
+        for (int i = 0; i < 2; i++) FEFont_Release(s_anim.fonts[i]);
+    }
     memset(&s_anim, 0, sizeof s_anim);
     s_anim.c = c;
     FE_ResolvePath("show.fsh", s_anim.path, sizeof s_anim.path);   /* ("%sshow.fsh" 0x5d78d4) */
     FEShapes_Load(s_anim.path);
+    int k = FertControl_findPart(c, "label");   /* 0x4c8730 ("label" 0x5d78ec) */
+    snprintf(s_anim.label, sizeof s_anim.label, "%s", 0 <= k ? FEPart_Text(c->parts[k]) : "");
+    DriftWord_Box(200, 0, 400, 200);   /* 0x5200e0 */
+    for (int i = 0; i < 5; i++) DriftWord_Init(&s_anim.words[i]);
+    s_anim.fonts[0] = font(exe_str(0x5d77a8));   /* "Univers7b" */
+    s_anim.fonts[1] = font(exe_str(0x5d78e0));   /* "Univers11b" */
     s_anim.next = 1;
     s_anim.since = timer_ticks();
     s_anim.span = 0x80;
@@ -156,7 +177,8 @@ static void anim_draw(FertControl *c, int32_t ox, int32_t oy)   /* v15 0x4bd9a0 
         }
     }
     FE2D_OverlayBegin();   /* 0x4da570 */
-    PENDING_NOTE(0x520160, "the showcase's drifting words");
+    uint32_t wc = 0xa0ffffffu;   /* (0x4d82a0 by the control's fade, 0x4c8410: 0xff) */
+    for (int i = 0; i < 5; i++) DriftWord_Draw(&a->words[i], a->label, wc, a->fonts, 2);   /* 0x520160 */
     FE2D_OverlayEnd();     /* 0x4da5b0 */
 }
 

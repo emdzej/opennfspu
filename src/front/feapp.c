@@ -1807,13 +1807,6 @@ static void slider_held_up(void)
     s_slider_held = NULL;
 }
 
-static float exe_f32(uint32_t va)
-{
-    uint32_t u = exe_u32(va);
-    float f;
-    memcpy(&f, &u, 4);
-    return f;
-}
 
 static void slider_tick(ListSlider *s)   /* _v10 0x4dac80: the timer's repeat while still on the arrow */
 {
@@ -1824,45 +1817,6 @@ static void slider_tick(ListSlider *s)   /* _v10 0x4dac80: the timer's repeat wh
         slider_setpos(s, s->pos + s->step);
         slider_refresh(s);
     }
-}
-
-static uint32_t fe_mix(uint32_t a, uint32_t b, int t)   /* 0x4d8300: a to b by t of 255 */
-{
-    uint32_t o = 0;
-    for (int sh = 0; sh < 32; sh += 8) o |= ((((a >> sh) & 0xff) * (uint32_t)(0xff - t) + ((b >> sh) & 0xff) * (uint32_t)t) / 0xff) << sh;
-    return o;
-}
-
-/* A gradient cut to a box, the cut edges' colours mixed to their place (0x4d8f50). */
-static void gouraud_clipped(float x, float y, float w, float h, uint32_t tl, uint32_t tr, uint32_t bl, uint32_t br,
-                            int x0, int y0, int x1, int y1)
-{
-    float k = exe_f32(0x5b3710);
-    if ((float)x1 < x + w) {
-        float nw = (float)x1 - x;
-        int t = (int)(nw * k / w);
-        tr = fe_mix(tl, tr, t), br = fe_mix(bl, br, t);
-        w = nw;
-    }
-    if (x < (float)x0) {
-        int t = (int)(((float)x0 - x) * k / w);
-        tl = fe_mix(tl, tr, t), bl = fe_mix(bl, br, t);
-        w -= (float)x0 - x;
-        x = (float)x0;
-    }
-    if ((float)y1 < y + h) {
-        float nh = (float)y1 - y;
-        int t = (int)(nh * k / h);
-        bl = fe_mix(tl, bl, t), br = fe_mix(tr, br, t);
-        h = nh;
-    }
-    if (y < (float)y0) {
-        int t = (int)(((float)y0 - y) * k / h);
-        tl = fe_mix(tl, bl, t), tr = fe_mix(tr, br, t);
-        h -= (float)y0 - y;
-        y = (float)y0;
-    }
-    if ((float)x0 <= x + w && x <= (float)x1 && y <= (float)y1 && (float)y0 <= y + h) FE2D_Gouraud(x, y, w, h, tl, tr, bl, br);
 }
 
 static uint32_t fade_a(uint32_t c, int a) { return a == 0xff ? c : (uint32_t)(((c >> 24) * (uint32_t)a) / 0xff) << 24 | (c & 0xffffffu); }   /* 0x4d82a0 */
@@ -1876,8 +1830,8 @@ static void slider_draw(ListSlider *s, int ox, int oy, int a)   /* 0x4dafe0 */
     FEStyle_Emboss((float)(k[0] + ox), (float)(k[1] + oy), (float)k[2], (float)k[3], a, 7);
     int cx0 = t[0] + ox, cy0 = s->up[3] + s->up[1] + oy, cx1 = t[0] + ox + t[2], cy1 = oy + s->down[1];
     uint32_t w0 = fade_a(0x19ffffffu, a), w1 = fade_a(0xffffffffu, a), d0 = fade_a(0xcc000000u, a), d1 = fade_a(0x19000000u, a);
-    gouraud_clipped((float)(t[0] + 1 + ox), (float)(k[1] - 3 + oy), 14.0f, 3.0f, w0, w0, w1, w1, cx0, cy0, cx1, cy1);
-    gouraud_clipped((float)(t[0] + 1 + ox), (float)(k[3] + k[1] + oy), 14.0f, 3.0f, d0, d0, d1, d1, cx0, cy0, cx1, cy1);
+    FE2D_GouraudClipped((float)(t[0] + 1 + ox), (float)(k[1] - 3 + oy), 14.0f, 3.0f, w0, w0, w1, w1, cx0, cy0, cx1, cy1);
+    FE2D_GouraudClipped((float)(t[0] + 1 + ox), (float)(k[3] + k[1] + oy), 14.0f, 3.0f, d0, d0, d1, d1, cx0, cy0, cx1, cy1);
     char icons[300];
     FE_ResolvePath("WeeIcons.fsh", icons, sizeof icons);   /* ("%sWeeIcons.fsh" 0x5d976c) */
     static const char *const names[6] = {"ARup", "ARov", "ARin", "A2up", "A2ov", "A2in"};   /* 0x5d9764 .. 0x5d973c */

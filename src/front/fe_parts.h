@@ -23,6 +23,8 @@
    drawer made from it, its texture state 1 off); its release (0x4e31d0). NULL if it can't be read. */
 HudFont *FEFont_Get(const char *path);
 void FEFont_Release(HudFont *f);
+/* The text a part shows: a localized part's string of its stringID (0x4e5d80), else its text. */
+const char *FEPart_Text(const FertPart *p);
 
 /* The string table (0x4e0090: <locale>FEStrings.loc, the options' language: 7 and up 0, below 0 6);
    a string by id (0x4e0270): "" for 0, "Not Found" for none. */

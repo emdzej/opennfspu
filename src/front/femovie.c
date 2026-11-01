@@ -2,6 +2,7 @@
 #include "front/femovie.h"
 #include "front/fechronicle.h"
 #include "front/fe2d.h"
+#include "front/fedrift.h"
 #include "front/fe_parts.h"
 #include "front/feapp.h"
 #include "front/feaccess.h"
@@ -313,7 +314,73 @@ typedef struct {
     bool audio;          /* +0x140 */
     int32_t pos[2];      /* +0x144 */
     int32_t size[2];     /* +0x14c */
+    struct Drift *drift; /* the circle's decorations (+0x1f8 ..) */
 } Box;
+
+/* The movie circle's decorations (+0x1f8 .. +0x228): three lines across and three down over its box (its
+   pos and size), three crossings, four words in two fonts. */
+typedef struct Drift {
+    DriftLine across[3], down[3];   /* +0x1fc, +0x204 */
+    DriftCross cross[3];            /* +0x20c */
+    DriftWord words[4];             /* +0x224 */
+    HudFont *fonts[2];              /* +0x214: Univers7b, Univers11b */
+} Drift;
+
+static void point(const FertControl *c, const char *name, int32_t p[2])
+{
+    p[0] = p[1] = 0;
+    FertAttr *a = FertAttrList_find(&c->attrs, name);
+    if (a) FertAttr_point(a, p);
+}
+
+/* 0x4cd6c0 (from the circle's v20 and v21), once. */
+static Drift *drift_new(const FertControl *c)
+{
+    Drift *d = calloc(1, sizeof *d);
+    if (!d) return NULL;
+    int32_t pos[2], size[2];
+    point(c, "pos", pos);    /* (0x5d8b2c) */
+    point(c, "size", size);  /* (0x5d8b30) */
+    int x0 = pos[0], y0 = pos[1], x1 = pos[0] + size[0], y1 = pos[1] + size[1];
+    DriftLine_Box(x0, y0, x1, y1, true);
+    for (int i = 0; i < 3; i++) DriftLine_Init(&d->across[i]);
+    DriftLine_Box(x0, y0, x1, y1, false);
+    for (int i = 0; i < 3; i++) DriftLine_Init(&d->down[i]);
+    for (int i = 0; i < 3; i++) DriftCross_Init(&d->cross[i]);
+    DriftWord_Box(x0, y0, x1, y1);
+    for (int i = 0; i < 4; i++) DriftWord_Init(&d->words[i]);
+    static const char *const fonts[2] = {"Univers7b.ffn", "Univers11b.ffn"};   /* ("%sUnivers7b.ffn" 0x5d7f90, 0x5d8cec) */
+    for (int i = 0; i < 2; i++) {
+        char path[300];
+        FE_ResolvePath(fonts[i], path, sizeof path);
+        d->fonts[i] = FEFont_Get(path);   /* 0x4e2fb0 */
+    }
+    /* (+0x21c, +0x220: Univers11B and Univers8B by name, 0x4db960, for the cheat's text, 0x4cdb30) */
+    return d;
+}
+
+static void drift_free(Drift *d)   /* (FEMovieCircle_v22 0x4cd600) */
+{
+    if (!d) return;
+    for (int i = 0; i < 3; i++) DriftCross_Free(&d->cross[i]);   /* 0x51ff90 */
+    for (int i = 0; i < 2; i++) FEFont_Release(d->fonts[i]);    /* 0x4e31d0 */
+    free(d);
+}
+
+/* Over the movie (0x4cd980): the lines, the crossings and the words "NEED FOR SPEED" in white, at the
+   control's fade (0x4c8410: 0xff). With a cheat on (the application's +0xe0 v0xb0) they're orange and the
+   cheat's own text follows (0x4cdb30): pending. */
+static void drift_draw(Drift *d)
+{
+    int fade = 0xff;
+    uint32_t line = (uint32_t)((0x4cu * fade) / 0xff) << 24 | 0xffffffu;   /* 0x4d82a0 */
+    uint32_t word = (uint32_t)((0xa0u * fade) / 0xff) << 24 | 0xffffffu;
+    uint32_t ring = (uint32_t)((0x30u * fade) / 0xff) << 24 | 0xffffffu;
+    for (int i = 0; i < 3; i++) DriftLine_Draw(&d->across[i], line);   /* 0x51f320 */
+    for (int i = 0; i < 3; i++) DriftLine_Draw(&d->down[i], line);
+    for (int i = 0; i < 3; i++) DriftCross_Draw(&d->cross[i], ring, d->across, 3, d->down, 3);   /* 0x51ffc0 */
+    for (int i = 0; i < 4; i++) DriftWord_Draw(&d->words[i], exe_str(0x5d8d00), word, d->fonts, 2);   /* "NEED FOR SPEED", 0x520160 */
+}
 
 static Box s_boxes[4];
 
@@ -446,6 +513,7 @@ void FEMovieBox_Drop(bool (*keep)(const FertControl *c))
     for (int i = 0; i < 4; i++)
         if (s_boxes[i].c && !keep(s_boxes[i].c)) {
             FEMovie_Free(s_boxes[i].movie);   /* FEMovieBox_v22 0x4cce20 */
+            drift_free(s_boxes[i].drift);
             memset(&s_boxes[i], 0, sizeof s_boxes[i]);
         }
 }
@@ -474,7 +542,7 @@ bool FEMovieBox_Draw(FertControl *c, int32_t ox, int32_t oy)
     }
     /* FEMovieCircle_v15 0x4cd520: its stencil (the black rectangle stencilshape1 and the oval's eight
        pieces stencilshape2 .. 9) at its pos two depth steps nearer, then the movie drawn over what is
-       there (the z test), the queue flushed; then its lines and "NEED FOR SPEED" (0x4cd980, pending).
+       there (the z test), the queue flushed; then its lines and "NEED FOR SPEED" (0x4cd980).
        (The screen's transition offset, 0x4c8330, isn't modelled: none.) */
     int32_t px = ox + b->pos[0], py = oy + b->pos[1];
     FE2D_DepthPushStep();   /* 0x4da4c0 */
@@ -487,7 +555,8 @@ bool FEMovieBox_Draw(FertControl *c, int32_t ox, int32_t oy)
     FE2D_OverlayBegin();    /* 0x4da570 */
     box_draw(b, ox, oy);
     FE2D_Flush();           /* 0x4da0a0 */
-    PENDING_NOTE(0x4cd980, "FEMovieCircle's lines and NEED FOR SPEED over the movie");
+    if (!b->drift) b->drift = drift_new(c);
+    if (b->drift) drift_draw(b->drift);
     FE2D_OverlayEnd();      /* 0x4da5b0 */
     return true;
 }
