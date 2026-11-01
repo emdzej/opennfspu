@@ -33,6 +33,8 @@ static int s_depth;
 static struct { bool up; int text; float x, y, w, h, tw; } s_dialog;   /* the message up (0x512d00) */
 static bool dialog_button_hit(int32_t mx, int32_t my);
 static bool s_sound;
+static uint32_t s_colours[4];         /* the race car's colours (the description's +0x218 ..) */
+static bool s_havecol;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
@@ -303,6 +305,7 @@ static void on_leave(FertControl *c)   /* 0x4c7820 */
 }
 
 FEResult FEApp_Result(void) { return s_result; }
+const uint32_t *FEApp_Colours(void) { return s_havecol ? s_colours : NULL; }
 const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
@@ -384,10 +387,12 @@ static void callback(const char *cb)
             s_tour_race = FEData_TourRace();   /* (before the laps: they're its) */
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", c);
+            s_havecol = FEAccess_CarColours(FEAccess_Find("OwnedCars.Car"), s_colours);
             PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
         } else {
             snprintf(s_track, sizeof s_track, "%s", FEData_Track());
             snprintf(s_car, sizeof s_car, "%s", FEData_Car());
+            s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
         }
         s_laps = s_tour_race >= 0 ? FEData_TourLaps() : fe_int("num_laps", 1);
         s_opponents = s_tour_race >= 0 ? 7 : FEData_Opponents();   /* (the standings' eight racers) */
@@ -400,11 +405,13 @@ static void callback(const char *cb)
 }
 
 static bool is_combo(const FertControl *c) { return !strcmp(c->id, "NFS5.ComboBoxSlider"); }
+/* A colour box (FEColorBox: its swatch and the selection box pend; a click steps its colour). */
+static bool is_colourbox(const FertControl *c) { return !strcmp(c->id, "NFS5.ColorBox"); }
 
 static void on_up(FertControl *c)
 {
     if (c->feflags & 0x10) return;   /* 0x4c7a10: disabled */
-    if (is_combo(c)) {
+    if (is_combo(c) || is_colourbox(c)) {
         /* (FEComboBox opens its selection box, the list to pick from; the port steps to the next item
            for now) */
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
@@ -557,6 +564,8 @@ static void sync_room(FertControl *w)
     }
     FE3D_SetRoom(room);
     const char *car = NULL;
+    uint32_t col[4];
+    bool havecol = false;
     for (int i = 0; w && i < w->nchildren; i++) {
         FertControl *c = w->children[i];
         if (strcmp(c->id, "NFS5.3DCAR")) continue;
@@ -564,9 +573,10 @@ static void sync_room(FertControl *w)
         if (pt && atoi(pt) != 0) continue;
         FEAccessor *acc = FEAccess_Find(data_str(c, "accessor"));
         car = FEAccess_CarFile(acc);
+        havecol = FEAccess_CarColours(acc, col);
         if (acc) FE3D_SetIndex(FEAccess_Pos(acc));
     }
-    FE3D_SetCar(car);
+    FE3D_SetCar(car, havecol ? col : NULL);
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name)

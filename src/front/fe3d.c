@@ -395,18 +395,23 @@ void FE3D_SetIndex(int index)
     if (s_room) s_room->index = index;
 }
 
-void FE3D_SetCar(const char *file)
+static uint32_t s_carcol[4];
+
+void FE3D_SetCar(const char *file, const uint32_t *colours)
 {
     if (!s_room) return;
     if (!file) file = "";
-    if (!strcmp(s_carfile, file)) return;
+    static const uint32_t silver[4] = {0xffb8bcc0u, 0xffc0c0c0u, 0xff202020u, 0xff303030u};
+    if (!colours) colours = silver;
+    if (!strcmp(s_carfile, file) && !memcmp(s_carcol, colours, sizeof s_carcol)) return;
+    memcpy(s_carcol, colours, sizeof s_carcol);
     snprintf(s_carfile, sizeof s_carfile, "%s", file);
     FE3DObject_Free(s_room->car);
     s_room->car = NULL;
     if (!*file) return;
-    /* (the accessor's colours, 0x4bfbb0, pend: the race's silver) */
-    static const uint32_t colours[4] = {0xffb8bcc0u, 0xffc0c0c0u, 0xff202020u, 0xff303030u};
-    s_room->car = FE3DObject_New(0, file, colours, 0, -1, 0, NULL);   /* FECar3DControl_v21 0x4bf9a0 */
+    /* the accessor's colours (0x4bfbb0) in 0x4d0bb0's argument order: +0x218, +0x224, +0x21c, +0x220 */
+    const uint32_t args[4] = {colours[0], colours[3], colours[1], colours[2]};
+    s_room->car = FE3DObject_New(0, file, colours == silver ? silver : args, 0, -1, 0, NULL);   /* FECar3DControl_v21 0x4bf9a0 */
     FE3DObject_SetPos(s_room->car, s_room->pos[0], s_room->pos[1], s_room->pos[2]);   /* 0x4e98a0 */
 }
 

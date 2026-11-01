@@ -14,7 +14,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -333,6 +333,48 @@ const uint8_t *FEData_Tournament(void)
     return t + 0xd40 * s_tourny[a->pos];
 }
 
+static uint32_t swap32(uint32_t v) { return v >> 24 | (v >> 8 & 0xff00u) | (v << 8 & 0xff0000u) | v << 24; }
+
+/* A record's colours in the renderer's order (+0x218 .. of the description: the body, then the slots
+   0x7c and 0x80, then the interior; 0x4bf9a0's order of the slots 0x74 .. 0x80): the body the colour
+   entry ci's (v42: +0x3ec, 0x10 an entry), the interior entry ii's (v43: +0x530), the others the record's
+   +0x3f0 and +0x3f4 (v31, v32); each stored byte-swapped. */
+static void record_colours(const uint8_t *r, int ci, int ii, uint32_t out[4])
+{
+    int nc = rec16(r, 0x3e6), ni = rec16(r, 0x528);
+    out[0] = ci < nc ? swap32((uint32_t)rec32(r, 0x3ec + 0x10 * ci)) : swap32((uint32_t)rec32(r, 0x3ec));
+    out[1] = swap32((uint32_t)rec32(r, 0x3f0));
+    out[2] = swap32((uint32_t)rec32(r, 0x3f4));
+    out[3] = ii < ni ? swap32((uint32_t)rec32(r, 0x530 + 0x10 * ii)) : (ni ? swap32((uint32_t)rec32(r, 0x530)) : 0);
+    for (int i = 0; i < 4; i++) out[i] |= 0xff000000u;   /* (0x4bfbb0: | 0xff000000) */
+}
+
+bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4])
+{
+    if (!a) return false;
+    refresh(a);
+    if (!a->count) return false;
+    Save *sv = FESave_Current();
+    if ((a->kind == ACC_OWNED || (a->kind == ACC_MERGED && a->pos < a->owned)) && sv) {
+        const uint8_t *o = sv->cars[a->pos].rec;   /* the owned car's +0x674 .. (0x4ee230) */
+        out[0] = (uint32_t)rec32(o, 0x674) | 0xff000000u;
+        out[3] = (uint32_t)rec32(o, 0x678) | 0xff000000u;
+        out[1] = (uint32_t)rec32(o, 0x67c) | 0xff000000u;
+        out[2] = (uint32_t)rec32(o, 0x680) | 0xff000000u;
+        return true;
+    }
+    const uint8_t *r = FEAccess_CarRecord(a);
+    if (!r) return false;
+    int ci = 0, ii = 0;
+    if (a->kind == ACC_DEALER) {
+        FEAccessor *c = FEAccess_Find("DealerCar.Colour"), *i = FEAccess_Find("DealerCar.IntColour");
+        if (c) ci = c->pos;
+        if (i) ii = i->pos;
+    }
+    record_colours(r, ci, ii, out);
+    return true;
+}
+
 /* The career's year (0x502870: the save's Tournament section's first int, 0x5db75c). */
 static int career_year(void)
 {
@@ -429,6 +471,8 @@ void FEData_Init(void)
     add("OpponentCar.Car", ACC_CAR, s_ncars, 0, cp);
     dealer_list(n);
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
+    add("DealerCar.Colour", ACC_COLOUR, 1, 0, 0);        /* 0x4b8dd0 on the car's slots 0xa0 / 0xa8 */
+    add("DealerCar.IntColour", ACC_INTCOLOUR, 1, 0, 0);  /* (slots 0xa4 / 0xac) */
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     add("Tournament.Data", ACC_TDATA, 1, 0, 0);          /* FETournamentDataAccessor (0x5b81f0) */
     add_list("Tournament.EventType", 0x5b81a4, 0);          /* FETournamentEventTypeAccessor (0x506140) */
@@ -456,6 +500,14 @@ static int owned_count(void)
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) {   /* the dealer car's (v40 +0x3e6, v41 +0x528) */
+        FEAccessor *d = FEAccess_Find("DealerCar.Car");
+        const uint8_t *r = d && d->count ? s_car + CAR_SIZE * s_dealer[d->pos] : NULL;
+        int n = r ? rec16(r, a->kind == ACC_COLOUR ? 0x3e6 : 0x528) : 0;
+        a->count = n > 0 ? n : 1;
+        if (a->pos >= a->count) a->pos = 0;
+        return;
+    }
     if (a->kind == ACC_RTRACK) {
         remain_list();
         a->count = s_nremain;
@@ -529,6 +581,8 @@ const char *FEAccess_Text(const FEAccessor *a)
         return b;
     }
     case ACC_TDATA:
+    case ACC_COLOUR:      /* (a colour box shows its swatch, not a text: FEColorBox pending) */
+    case ACC_INTCOLOUR:
         return "";
     case ACC_RTRACK: {   /* the track's name (its record's string, +4) */
         const uint8_t *r = FEData_Tournament();
@@ -546,6 +600,7 @@ const char *FEAccess_Text(const FEAccessor *a)
 }
 
 const uint8_t *FEAccess_CarRecord(const FEAccessor *a);
+bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 
 const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
 {
@@ -759,7 +814,12 @@ int FEData_BuyCar(void)
     }
     memcpy(c->rec, &id, 4);
     memcpy(c->rec + 4, r, CAR_SIZE);
-    /* +0x674 .. +0x688: the accessor's colours (slots 0x74 .. 0x88: pending, 0) */
+    {   /* +0x674 .. +0x680: the accessor's colours (slots 0x74 .. 0x80; 0x84, 0x88 pend: 0) */
+        uint32_t col[4];
+        FEAccess_CarColours(d, col);
+        int32_t v[4] = {(int32_t)col[0], (int32_t)col[3], (int32_t)col[1], (int32_t)col[2]};
+        memcpy(c->rec + 0x674, v, sizeof v);
+    }
     c->rec[0x6a0] = 1;
     memcpy(c->rec + 0x6a4, &price, 4);
     static const float f50 = 50.0f, f1 = 1.0f, f30 = 30.0f;

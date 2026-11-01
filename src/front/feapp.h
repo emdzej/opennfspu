@@ -9,6 +9,7 @@
    hover state (0x4c7760, 0x4c7820, 0x4c7e70) and the GoTo buttons' destinations (0x4c8f50). */
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "front/fert.h"
 
@@ -39,5 +40,7 @@ typedef enum { FE_RUNNING, FE_PLAY, FE_QUIT } FEResult;
 FEResult FEApp_Result(void);
 const char *FEApp_Track(void);
 const char *FEApp_Car(void);
+/* The race car's colours (the description's +0x218 order), NULL for the port's silver. */
+const uint32_t *FEApp_Colours(void);
 int FEApp_Laps(void);
 int FEApp_Opponents(void);

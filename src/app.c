@@ -5,6 +5,7 @@
    car=<name> shows a car (CAR_selftest). */
 #include "app.h"
 #include "game/options.h"
+#include "game/race_setup.h"
 #include "snd/snd.h"
 #include "exe.h"
 #include "platform.h"
@@ -95,6 +96,11 @@ bool app_frame(void)
                 FEApp_Frame();
                 if (FEApp_Result() == FE_PLAY) {
                     FEApp_End();
+                    {
+                        const uint32_t *col = FEApp_Colours();
+                        g_race_colours_set = col != NULL;
+                        if (col) memcpy(g_race_colours, col, sizeof g_race_colours);
+                    }
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */
                     Options_Apply();

@@ -56,3 +56,6 @@ int FEData_TourLaps(void);
 #include "front/fesave.h"
 /* An owned car's value in a year (0x4f83f0). */
 int32_t FEData_CarValue(const SaveCar *c, int year);
+/* A car accessor's current car's colours in the description's order (+0x218: body, the slots 0x7c, 0x80,
+   interior): an owned car's own, else its record's (the dealer's chosen colour and interior). */
+bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);

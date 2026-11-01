@@ -21,6 +21,9 @@ static void put_str(uint8_t *desc, int off, const char *s)
 
 static void put_i(uint8_t *desc, int off, int32_t v) { memcpy(desc + off, &v, 4); }
 
+uint32_t g_race_colours[4];
+bool g_race_colours_set;
+
 bool RaceSetup_SingleCar(const char *name)
 {
     size_t n = 0;
@@ -83,7 +86,7 @@ bool RaceSetup_SingleCar(const char *name)
     /* The colours (+0x218 COLORCONFIG: body, stripe, interior, wheels; the car viewer's silver), no race
        number, colour package 0. */
     static const uint32_t colours[4] = {0xffb8bcc0u, 0xff202020u, 0xff303030u, 0xffc0c0c0u};
-    memcpy(d + 0x218, colours, sizeof colours);
+    memcpy(d + 0x218, g_race_colours_set ? g_race_colours : colours, sizeof colours);   /* (the front end's when it chose) */
     put_i(d, 0x510, -1);                                  /* RACENUMBER */
     put_i(d, 0x514, 0);                                   /* STRIPEPACKAGE: the colour scheme */
     /* The HUD's dials (0x4eadb0, the units option km/h). */
