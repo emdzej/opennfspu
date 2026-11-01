@@ -998,6 +998,30 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH")) return wordwrap_draw(c, ox, oy);
+    if (is_colourbox(c)) {
+        /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): the bar, then its colour (its slot 0x74,
+           the accessor's) as a 20 x 10 swatch 40 from its right and 4 down, outlined in black. (The custom
+           colour picker, FEColorSelectBox_v17 0x4c3800, and the drop-down pend.) */
+        if (c->feflags & 0x20) return true;
+        FEControl_Draw(c, ox, oy);
+        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+        if (!a) return true;
+        int32_t r[4];
+        control_rect(c, r);
+        float x = (float)(r[2] + ox - 0x28), y = (float)(r[1] + oy + 4);
+        uint32_t col = FEAccess_Colour(a) | 0xff000000u, k = 0xff000000u;
+        FE2D_DepthStep();
+        FE2D_Gouraud(x, y, 20.0f, 10.0f, col, col, col, col);
+        const float t[8] = {x, y, x + 20.0f, y, x, y + 1.0f, x + 20.0f, y + 1.0f}, bm[8] = {x, y + 9.0f, x + 20.0f, y + 9.0f, x, y + 10.0f, x + 20.0f, y + 10.0f};
+        const float l[8] = {x, y, x + 1.0f, y, x, y + 10.0f, x + 1.0f, y + 10.0f}, rt[8] = {x + 19.0f, y, x + 20.0f, y, x + 19.0f, y + 10.0f, x + 20.0f, y + 10.0f};
+        const uint32_t kk[4] = {k, k, k, k};
+        FE2D_DepthStep();
+        FE2D_Quad(t, kk);
+        FE2D_Quad(bm, kk);
+        FE2D_Quad(l, kk);
+        FE2D_Quad(rt, kk);
+        return true;
+    }
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
     if (c->feflags & 0x20) return true;
     const char *path = data_str(c, "accessor");

@@ -970,6 +970,17 @@ void FEData_PaintShop(void)
     if (changed) FESave_Write();
 }
 
+uint32_t FEAccess_Colour(const FEAccessor *a)
+{
+    if (!a || (a->kind != ACC_COLOUR && a->kind != ACC_INTCOLOUR)) return 0;
+    refresh(a);
+    if (a->src == 1) return a->cval;
+    FEAccessor *d = FEAccess_Find("DealerCar.Car");   /* (the dealer car's palette entry) */
+    const uint8_t *r = d && d->count ? s_car + CAR_SIZE * s_dealer[d->pos] : NULL;
+    if (!r) return 0;
+    return swap32((uint32_t)rec32(r, (a->kind == ACC_INTCOLOUR ? 0x530 : 0x3ec) + 0x10 * a->pos));
+}
+
 int FEAccess_Percent(const FEAccessor *a, const char *arg)
 {
     if (!a) return 0;

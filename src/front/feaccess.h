@@ -91,3 +91,5 @@ int FEAccess_Percent(const FEAccessor *a, const char *arg);
 /* The paint shop's update (FEPaintShopCBL_v1 0x510af0): the garage car's colours, stripes and race number
    between it and the accessors. */
 void FEData_PaintShop(void);
+/* A colour accessor's colour (FEColourAccessor +0x2c; the dealer car's its palette entry). */
+uint32_t FEAccess_Colour(const FEAccessor *a);
