@@ -444,7 +444,8 @@ void CarAnim_Update(R3DCar *r, Car *car)
     }
     h[0x16][1] = (float)g_sim_tick * 0.0078125f;   /* (TIMER_ticks x 0x5b273c; the port's clock is the simulation's) */
     uint32_t now = app_ticks_ms();   /* GetTickCount */
-    PENDING_NOTE(0x438370, "R3DCar_Animate's hood and trunk hinges (8, 9: the +0x64 object's eases)");
+    h[8][0] = ease(now, &r->hoodease.since, &r->hoodease.dur, r->hoodease.from, r->hoodease.to);
+    h[9][0] = ease(now, &r->trunkease.since, &r->trunkease.dur, r->trunkease.from, r->trunkease.to);
     h[0x11][0] = ease(now, &r->headease.since, &r->headease.dur, r->headease.from, r->headease.to);
     spoiler(r, car, now);
     if (DESC_I(car, 0x518)) {   /* slot 7 by the speed, none in reverse */

@@ -4,7 +4,6 @@
 #include <math.h>
 #include <string.h>
 
-void R3DCar_PendingStyleExtents(R3DCar *car) { PENDING_NOTE(0x437a30, "R3DCar_LoadStyles (stripe, timed extents)"); }
 bool R3DCar_PendingTexturesWanted(R3DCar *car)
 {
     PENDING_NOTE(0x44deb0, "RTex_Info");

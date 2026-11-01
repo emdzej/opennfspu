@@ -91,6 +91,10 @@ typedef struct { uint32_t count, table, start, dur, a, b; float t; } R3DCarPath;
 /* An animation slot of the car (8 records of 0x14 bytes from +0x568; 0x4380c0 / 0x4380e0). */
 typedef struct { int pos; int dir; float t; float frames; uint8_t on; } R3DCarAnim;
 
+/* A timed value of the +0x64 object (0x10 bytes per hinge: GetTickCount at the start, the length in ms (0 =
+   done), from, to). */
+typedef struct { uint32_t since, dur; float from, to; } R3DCarEase;
+
 struct CarPage;
 struct Texture;
 
@@ -143,7 +147,7 @@ typedef struct R3DCar {
     uint8_t lighton[16];
     float lightlevel[16];
     uint8_t headon;
-    struct { uint32_t since, dur; float from, to; } headease;
+    R3DCarEase headease;
     float road;
     /* The animation slots' timed paths (8 records of 0x1c bytes from +0x484, R3DCar_Animate): the frames
        in the path (0 = none), the path (an exe table of frame numbers, by its address), the start and
@@ -153,7 +157,8 @@ typedef struct R3DCar {
     uint8_t handbrake;              /* +0x564: the hand on the handbrake (slot 4) */
     uint8_t reverse;                /* +0x566: the lever in reverse (slot 6) */
     /* the spoiler's ease (the +0x64 object's +0x170 .. +0x17c: start ms, length ms, from, to) */
-    struct { uint32_t since, dur; float from, to; } spoilerease;
+    R3DCarEase spoilerease;
+    R3DCarEase hoodease, trunkease;   /* the +0x64 object's +0x80 and +0x90: hinges 8 (hood) and 9 (trunk) */
     struct CarParticles *particles;   /* +0x704 (R3DCar_ctor's, made by the game's car here) */
 } R3DCar;
 

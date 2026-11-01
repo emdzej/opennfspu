@@ -6,6 +6,7 @@
 #include "game/camera.h"
 #include "render/rlayers.h"
 #include "exe.h"
+#include "app.h"
 #include "real/mem.h"
 #include "real/set3d.h"
 #include "real/shape.h"
@@ -160,6 +161,39 @@ void R3DCar_LoadTpg(R3DCar *car, const char *name)
     IniFile_Load(&car->tpg, path);
 }
 
+static float ease_now(R3DCarEase *e, uint32_t now)   /* 0x437ef0 */
+{
+    if (e->dur != 0) {
+        float t = (float)(now - e->since) / (float)(int32_t)e->dur;
+        if (t <= 1.0f) return (e->to - e->from) * t + e->from;
+        e->dur = 0;
+    }
+    return e->to;
+}
+
+static void style_extent(R3DCarEase *e, float extent, uint32_t now)
+{
+    if (ease_now(e, now) == 0) {
+        e->from = ease_now(e, now);
+        e->to = 0;
+    } else if (e->dur == 0) {
+        e->from = e->to;
+        e->to = extent;
+    } else {
+        float t = (float)(now - e->since) / (float)(int32_t)e->dur;
+        float old = e->to;
+        e->to = extent;
+        if (t <= 1.0f) {
+            e->from = (old - e->from) * t + e->from;
+        } else {
+            e->dur = 0;
+            e->from = old;
+        }
+    }
+    e->since = now;
+    e->dur = 0;
+}
+
 void R3DCar_LoadStyles(R3DCar *car, int style)
 {
     R3DCarState *st = car->state;
@@ -183,9 +217,14 @@ void R3DCar_LoadStyles(R3DCar *car, int style)
             if (opt >= 0 && opt < CAR_NOPTIONS) st->options[opt] = v;
         }
     }
-    /* Then the stripe colour and the hood / trunk / headlight extents eased over time (GetTickCount):
-       pending with the car's animation state (car_pending.c). */
-    R3DCar_PendingStyleExtents(car);
+    if (IniFile_GetBool(&car->tpg, exe_str(0x5cd630), false))   /* "stripe" */
+        car->colours[6] = st->spec->colours[1];
+    /* The hood, the trunk and the pop-up headlights: closed (from where they are) if they are, else to the
+       car's extents, at once. */
+    uint32_t now = app_ticks_ms();   /* GetTickCount */
+    style_extent(&car->hoodease, car->hoodextent, now);
+    style_extent(&car->trunkease, car->trunkextent, now);
+    style_extent(&car->headease, car->headlightextent, now);
 }
 
 /* R3DCar_v19 0x43ad80 (before the LODs are built): the style's options, then the car spec's forced ones.
