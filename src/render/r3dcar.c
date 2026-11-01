@@ -3,6 +3,7 @@
    r3dcar.h and docs/re/cars.md. Names the game looks up in its files (section and key names, file name
    formats) and its tables are read from the exe by address. */
 #include "render/r3dcar.h"
+#include "render/weather.h"
 #include "game/camera.h"
 #include "render/rlayers.h"
 #include "exe.h"
@@ -1054,6 +1055,16 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
         g_rlayer_lighttex = &car->light.lighttex;
     }
     g_rlayer_spectex = car->globaltex;   /* (the light block's +0xdc: 0x440870) */
+    /* R3DCar_v14 0x43a3c0: the camera's car seen from inside (flag 8, 0x627f43) with a screen (four 'odnW'
+       points at least): the rain's splats on it first */
+    if (!g_r3d_frontend && car->state->index == g_camera_car && car->nwindow > 3 && (g_racecam[0].flags2 >> 3 & 1)) {
+        float q[4][4];
+        for (int i = 0; i < 4; i++) {
+            memcpy(q[i], car->window[i], sizeof car->window[i]);
+            q[i][3] = 1.0f;
+        }
+        Weather_DrawWindow((const float (*)[4])q);
+    }
     car_draw_lods(car, model);
     EaglMatrix world = *EAGL_StackTop(model);
     g_rlayer_lights = saved;

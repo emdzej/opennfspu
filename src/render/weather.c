@@ -1,6 +1,7 @@
 /* The weather's snow and rain: see weather.h. */
 #include "render/weather.h"
 #include "exe.h"
+#include "game/camera.h"
 #include "game/car.h"
 #include "game/hud.h"
 #include "game/input.h"
@@ -83,6 +84,7 @@ static struct {
     int32_t tick;     /* +0x00 */
     Precip *snow;     /* +0x04 */
     Precip *rain;     /* +0x08 */
+    struct Splats *splats;   /* +0x0c */
 } *s_weather;         /* 0x627e08 */
 
 float g_weather_time, g_weather_steps;   /* 0x627e10, 0x627e14 */
@@ -399,6 +401,354 @@ static Precip *precip_new(const PrecipCfg *c)
     return p;
 }
 
+/* ---- the drops on the windscreen (0x457670 .. 0x4587a0; 0x67e4 bytes) ---- */
+
+#define NSPLATS 201   /* (0xc9) */
+
+/* The screen's four corners (+0x6710, x y z w) sorted top left, top right, bottom left, bottom right,
+   and what's made of them (0x4577f0); the splats (triangles from a point down their way, as long as
+   their stage makes them and as wide), their stage by age, their way turning toward a target. */
+typedef struct Splats {
+    float level;                    /* [0]: the levels' sum it was made for */
+    int32_t n, target;              /* [1], [2] */
+    float verts[NSPLATS * 3][4];    /* +0x0c: a splat's point is its first vertex */
+    float uv[NSPLATS * 3][2];       /* +0x25bc */
+    uint32_t col[NSPLATS * 3];      /* +0x3894 */
+    uint8_t active[NSPLATS];        /* +0x4200 */
+    int16_t age[NSPLATS];           /* +0x42ca: ticks */
+    float dir[NSPLATS][3];          /* +0x445c: the way it runs */
+    float want[NSPLATS][3];         /* +0x4dc8: the way it turns to */
+    float side[NSPLATS][3];         /* +0x5734: across it (the way by the screen's normal) */
+    float len[NSPLATS];             /* +0x60a0 */
+    float width[NSPLATS];           /* +0x63c4 */
+    float lasteye[3];               /* +0x66e8 */
+    float speed;                    /* +0x66f4: the eye's ground speed (per second) */
+    bool moving, upside, snowing;   /* +0x66f8, +0x66f9, +0x66fa */
+    float sign;                     /* +0x66fc: turns -1 and 1 each step (read by nothing) */
+    bool dirty;                     /* +0x6700: the corners to be taken at the next draw */
+    SkyBlend blend;                 /* +0x6704 */
+    RMesh mesh;                     /* +0x670c */
+    float c[4][4];                  /* +0x6710 */
+    float normal[3];                /* +0x6750 */
+    float centre[3];                /* +0x675c */
+    float w, h;                     /* +0x6768, +0x676c */
+    float down[3];                  /* +0x6770 */
+    float across[3];                /* +0x677c: (-1, 0, 0) */
+    float top[3];                   /* +0x6788: the top edge's middle */
+    float mid[3];                   /* +0x6794: a quarter down from the centre's top */
+    float ymax, ymin, xmax, xmin;   /* +0x67a0 .. +0x67ac */
+    float area;                     /* +0x67b0: at most 1 */
+} Splats;
+
+static void cross3(const float a[3], const float b[3], float out[3])   /* 0x5325f0 (0x56e6a5) */
+{
+    float t[3] = {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+    memcpy(out, t, sizeof t);
+}
+
+static void normalize3(float v[3])   /* Vec3_Normalize 0x532640 */
+{
+    float l = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (l != 0) {
+        float r = 1.0f / l;
+        v[0] *= r, v[1] *= r, v[2] *= r;
+    }
+}
+
+static void swap4(float a[4], float b[4])
+{
+    float t[4];
+    memcpy(t, a, sizeof t);
+    memcpy(a, b, sizeof t);
+    memcpy(b, t, sizeof t);
+}
+
+/* 0x4577f0: the corners in (top two first by height, 0.08 apart at least, 0x5b3e44, then each pair right
+   to left by x), their centre, the screen's normal (the top edge by the right side), its width and its
+   height (the right side's length in y and z), its area by 0.769 (0x5b3e40, at most 1), down the screen
+   (the normal by -x), the top's middle, a quarter down, and the bounds a splat stays within. */
+static void splats_corners(Splats *d, const float c[4][4])
+{
+    memcpy(d->c, c, sizeof d->c);
+    float (*q)[4] = d->c;
+    float gap = f32(0x5b3e44);
+    float t = q[0][1] + gap;
+    if (q[2][1] <= t) {
+        if (t < q[3][1]) swap4(q[0], q[3]);
+    } else {
+        swap4(q[0], q[2]);
+    }
+    if (q[1][1] + gap < q[3][1]) swap4(q[1], q[3]);
+    if (q[0][0] < q[1][0]) swap4(q[0], q[1]);
+    if (q[3][0] < q[2][0]) swap4(q[2], q[3]);
+    float sum[4] = {0, 0, 0, 1};   /* (0x53c200, 0x53c340: four-wide) */
+    for (int k = 0; k < 4; k++)
+        for (int j = 0; j < 4; j++) sum[j] += q[k][j];
+    for (int j = 0; j < 3; j++) d->centre[j] = sum[j] * 0.25f;
+    float e1[3] = {q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]};
+    float e2[3] = {q[1][0] - q[2][0], q[1][1] - q[2][1], q[1][2] - q[2][2]};
+    cross3(e1, e2, d->normal);
+    normalize3(d->normal);
+    d->w = q[0][0] - q[1][0];
+    float dy = q[1][1] - q[2][1], dz = q[1][2] - q[2][2];
+    d->h = sqrtf(dy * dy + dz * dz);   /* 0x532540 */
+    d->area = d->h * d->w * f32(0x5b3e40);
+    if (1.0f < d->area) d->area = 1.0f;
+    d->across[0] = -1.0f, d->across[1] = 0, d->across[2] = 0;
+    cross3(d->normal, d->across, d->down);
+    normalize3(d->down);
+    float half = f32(0x5b23f0), quarter = f32(0x5b2468);
+    float hy = d->down[1] * d->h;
+    d->ymax = hy * half + d->centre[1];
+    d->ymin = d->centre[1] - hy * half;
+    float hx = d->across[0] * d->w * half;
+    d->xmin = hx + d->centre[0];
+    d->xmax = d->centre[0] - hx;
+    float hx2 = d->down[0] * d->h, hz = d->down[2] * d->h;
+    d->top[0] = d->centre[0] - hx2 * half;
+    d->top[1] = d->ymin;
+    d->top[2] = d->centre[2] - hz * half;
+    d->mid[0] = d->centre[0] - hx2 * quarter;
+    d->mid[1] = d->centre[1] - hy * quarter;
+    d->mid[2] = d->centre[2] - hz * quarter;
+}
+
+static void splats_clear(Splats *d)   /* 0x457fb0 */
+{
+    for (int i = 0; i < NSPLATS; i++) {
+        d->active[i] = 0;
+        memset(d->dir[i], 0, sizeof d->dir[i]);
+        memset(d->want[i], 0, sizeof d->want[i]);
+        memset(d->side[i], 0, sizeof d->side[i]);
+        d->len[i] = d->width[i] = 0;
+        d->age[i] = 0;
+    }
+}
+
+/* 0x4582c0: a place at random across the screen (from its middle, the width) and down it (the height). */
+static void splat_place(Splats *d, int i)
+{
+    double a = (double)REAL_randf() * d->w - (double)d->w * f64(0x5b2778);
+    double b = (double)REAL_randf() * d->h;
+    float *v = d->verts[3 * i];
+    for (int j = 0; j < 3; j++) v[j] = (float)(b * d->down[j] + d->top[j]);
+    for (int j = 0; j < 3; j++) v[j] = (float)(a * d->across[j] + v[j]);
+}
+
+/* 0x4583c0: the way to run: out from a quarter down the screen's middle while the eye moves; else down
+   the screen, or up it while the camera is upside down. */
+static void splat_aim(Splats *d, int i)
+{
+    if (d->moving) {
+        const float *v = d->verts[3 * i];
+        for (int j = 0; j < 3; j++) d->want[i][j] = v[j] - d->mid[j];
+        normalize3(d->want[i]);
+    } else {
+        for (int j = 0; j < 3; j++) d->want[i][j] = d->upside ? d->down[j] : -d->down[j];
+    }
+}
+
+/* 0x4584a0: the way turned to the target (a sixtieth of the rest a step, 0x5b3e48, unless snap or it is
+   within 0.01 each, 0x5b27a8); then across it. None of it when it is there already. */
+static void splat_turn(Splats *d, int i, bool snap)
+{
+    float df[3] = {d->want[i][0] - d->dir[i][0], d->want[i][1] - d->dir[i][1], d->want[i][2] - d->dir[i][2]};
+    if (df[0] == 0 && df[1] == 0 && df[2] == 0) return;
+    float e = f32(0x5b27a8);
+    if (!snap && !(fabsf(df[0]) < e && fabsf(df[1]) < e && fabsf(df[2]) < e)) {
+        float k = f32(0x5b3e48);
+        for (int j = 0; j < 3; j++) d->dir[i][j] = (d->want[i][j] - d->dir[i][j]) * k + d->dir[i][j];
+    } else {
+        memcpy(d->dir[i], d->want[i], sizeof d->dir[i]);
+    }
+    cross3(d->dir[i], d->normal, d->side[i]);
+}
+
+/* 0x458360: a new splat: placed, aimed, age 0, white at a random alpha (0x537db0's top byte), turned. */
+static void splat_new(Splats *d, int i)
+{
+    splat_place(d, i);
+    splat_aim(d, i);
+    d->age[i] = 0;
+    uint32_t c = REAL_rand() | 0xffffffu;
+    d->col[3 * i] = d->col[3 * i + 1] = d->col[3 * i + 2] = c;
+    splat_turn(d, i, true);
+}
+
+/* 0x458620: the stage by age (0x5cee40, 0x18 each: from the age, a half length, a half width, a rate, an
+   alpha and its step a tick; the last stage still): length and width toward the stage's (the point moved
+   back along the way by half what the length grew), the alpha toward its by the step and the ticks. */
+static void splat_stage(Splats *d, int i, uint32_t ticks, float fticks)
+{
+    int k = 5;
+    uint32_t va = 0x5ceeb8;
+    do {
+        if (exe_u32(va - 0x18) <= (uint32_t)(int32_t)d->age[i]) break;
+        va -= 0x18;
+        k--;
+    } while (0x5cee40 < va);
+    if (k == 4) return;
+    uint32_t e = 0x5cee40 + 0x18u * (uint32_t)k;
+    float half = f32(0x5b23f0), rate = f32(e + 0xc);
+    float g = (f32(e + 4) * half - d->len[i]) * rate * fticks * half;
+    float *v = d->verts[3 * i];
+    for (int j = 0; j < 3; j++) v[j] = v[j] - (float)((double)(g * d->dir[i][j]) * f64(0x5b2778));
+    d->len[i] = g + d->len[i];
+    d->width[i] = (f32(e + 8) * half - d->width[i]) * rate * fticks * half + d->width[i];
+    uint32_t want = exe_u32(e + 0x10), step = exe_u32(e + 0x14), a = d->col[3 * i] >> 24;
+    if (want < a) {
+        a = a - step * ticks;
+        if (a < want) a = want;
+    } else if (a < want) {
+        a = step * ticks + a;
+        if (want < a) a = want;
+    } else {
+        return;
+    }
+    uint32_t c = (d->col[3 * i] & 0xffffffu) | a << 24;
+    d->col[3 * i] = d->col[3 * i + 1] = d->col[3 * i + 2] = c;
+}
+
+/* 0x458260: up to five more splats a step toward the count wanted, or the dead ones off the end. */
+static void splats_count(Splats *d)
+{
+    int want = d->target, n = d->n;
+    if (n < want) {
+        int to = n + 5 < want ? n + 5 : want;
+        for (int i = n; i < to; i++) {
+            d->active[i] = 1;
+            splat_new(d, i);
+            d->n++;
+        }
+    } else if (want < n) {
+        for (int i = n - 1; want <= i && !d->active[i]; i--) d->n--;
+    }
+}
+
+/* 0x4587a0: the eye's ground speed since the last step (the square root by halving the float's bits),
+   per second by the ticks (0x5cedec, ten and above as ten), at most 44.4 (0x5b3e4c), 3 at most 22.2
+   (0x5b2630), none while it snows; moving above 22.2 unless it snows; upside down when the camera's up
+   points down. Every splat aimed again when either changes; the live ones aged, staged, turned, and
+   made again (or left off past the count wanted, parked above the screen) once off the screen or all
+   but faded. */
+static void splats_move(Splats *d, uint32_t ticks)
+{
+    int n = d->n;
+    if (n < 1) return;
+    RCamera *cam = g_render->camera;
+    float fticks = (float)(int64_t)ticks;
+    const float *eye = cam->frame.eye;
+    float dx = eye[0] - d->lasteye[0], dz = eye[2] - d->lasteye[2];
+    memcpy(d->lasteye, eye, sizeof d->lasteye);
+    float d2 = dx * dx + dz * dz;
+    int32_t bits;
+    memcpy(&bits, &d2, 4);
+    bits = (bits >> 1) + 0x1fc00000;
+    float sp;
+    memcpy(&sp, &bits, 4);
+    int k = ticks < 0xb ? (int)ticks - 1 : 9;
+    sp *= f32(0x5cedec + 4u * (uint32_t)k);
+    if (f32(0x5b3e4c) < sp) sp = f32(0x5b3e4c);
+    float slow = f32(0x5b2630);
+    d->speed = sp <= slow ? 3.0f : sp;
+    if (d->snowing) d->speed = 0;
+    bool moving = !d->snowing && slow < sp;
+    bool upside = cam->frame.orient[4] <= 0;
+    for (int i = 0; i < d->n; i++)
+        if (!d->active[i] && d->n < d->target) d->active[i] = 1;
+    if (moving != d->moving || upside != d->upside) {
+        d->moving = moving;
+        d->upside = upside;
+        for (int i = 0; i < d->n; i++)
+            if (d->active[i]) splat_aim(d, i);
+    }
+    for (int i = 0; i < d->n; i++) {
+        if (d->active[i] != 1) continue;
+        d->age[i] = (int16_t)(d->age[i] + (int16_t)ticks);
+        splat_stage(d, i, ticks, fticks);
+        splat_turn(d, i, false);
+        float *v = d->verts[3 * i];
+        if (d->ymax < v[1] || v[1] < d->ymin || d->xmax < v[0] || v[0] < d->xmin || d->col[3 * i] < 0x0f000000u) {
+            if (i < d->target) {
+                splat_new(d, i);
+            } else {
+                d->active[i] = 0;
+                memcpy(v, d->top, 3 * sizeof(float));
+                v[1] = v[1] - d->h * f32(0x5b2400);
+            }
+        }
+    }
+}
+
+/* 0x457ea0: each splat's triangle: its point, and the two ends of its length across by its width. */
+static void splats_build(Splats *d)
+{
+    for (int i = 0; i < d->n; i++) {
+        float *a = d->verts[3 * i], *b = d->verts[3 * i + 1], *c = d->verts[3 * i + 2];
+        for (int j = 0; j < 3; j++) b[j] = d->dir[i][j] * d->len[i] + a[j];
+        memcpy(c, b, 3 * sizeof(float));
+        float lo = 0 - d->width[i], hi = 0 + d->width[i];   /* (the original's offsets table is zeros) */
+        for (int j = 0; j < 3; j++) {
+            b[j] = lo * d->side[i][j] + b[j];
+            c[j] = hi * d->side[i][j] + c[j];
+        }
+    }
+}
+
+/* 0x458190: the step: the sign flipped, the count wanted when the levels' sum (rain and snow, at most 1)
+   changed: 150 a level (0x5b248c, rounded) by the screen's area; snowing when the rain is at most half
+   and the snow at least; then the count, the move and the triangles. */
+static void splats_step(Splats *d, uint32_t ticks, float rain, float snow)
+{
+    d->sign = d->sign <= 0 ? 1.0f : -1.0f;
+    float level = rain + snow;
+    if (1.0f < level) level = 1.0f;
+    float half = f32(0x5b23f0);
+    d->snowing = rain <= half && !(snow < half);
+    if (level != d->level) {
+        d->level = level;
+        float m = level * f32(0x5b248c);
+        d->target = (int32_t)((double)lrintf(m) * (double)d->area);
+    }
+    splats_count(d);
+    splats_move(d, ticks);
+    splats_build(d);
+}
+
+/* 0x457670: none yet, white, w 1, the two triangles' texture corners by turns (0x458020), the default
+   screen (0x458b60's corners), the mesh (type 9, triangles, one stage) of SPLT. */
+static Splats *splats_new(Texture *tex)
+{
+    Splats *d = calloc(1, sizeof *d);
+    if (!d) return NULL;
+    d->sign = -1.0f;
+    d->dirty = true;
+    d->area = 1.0f;
+    float c[4][4] = {{1, 0, -0.55f, 1}, {-1, 0, -0.55f, 1}, {-1, 0.8f, -0.95f, 1}, {1, 0.8f, -0.95f, 1}};
+    c[0][1] = c[1][1] = f32u(0x3fb33334u);   /* (1.4, an ulp up) */
+    splats_corners(d, (const float (*)[4])c);
+    splats_clear(d);
+    static const float uv[2][3][2] = {{{1, 0}, {1, 1}, {0, 0}}, {{0, 1}, {0, 0}, {1, 1}}};
+    for (int i = 0; i < NSPLATS; i++) {
+        memcpy(d->uv[3 * i], uv[i & 1], sizeof uv[0]);
+        for (int k = 0; k < 3; k++) {
+            d->col[3 * i + k] = 0xffffffffu;
+            d->verts[3 * i + k][3] = 1.0f;
+        }
+    }
+    SkyBlend_ctor(&d->blend);
+    RMesh_ctor(&d->mesh, 9, 3, 1, NULL, 0);
+    RMesh_stage(&d->mesh, 0, tex, &d->blend, d->uv, d->col, 0);
+    return d;
+}
+
+static void splats_free(Splats *d)
+{
+    if (!d) return;
+    RMesh_dtor(&d->mesh);
+    free(d);
+}
+
 static void precip_free(Precip *p)
 {
     if (!p) return;
@@ -425,12 +775,14 @@ void Weather_Init(void)
     rain.tex = find(exe_u32(0x5ceeb8 + 0x10 + 4 * lv));
     if (!rain.tex) rain.tex = find(0x6e696172);   /* 'rain' */
     s_weather->rain = precip_new(&rain);
-    PENDING_NOTE(0x457670, "the lens drops (SPLT, 0x67e4 bytes)");
+    /* 'SPLT' from common.fsh (0x613e04) */
+    s_weather->splats = splats_new(g_rtex_common[0] ? RTexBank_find(g_rtex_common[0], 0, 0x544c5053) : NULL);
 }
 
 void Weather_Free(void)   /* 0x458a80 */
 {
     if (!s_weather) return;
+    splats_free(s_weather->splats);
     precip_free(s_weather->rain);
     precip_free(s_weather->snow);
     free(s_weather);
@@ -450,7 +802,7 @@ void Weather_Frame(void)
             float sl = Sky_SnowLevel(), rl = Sky_GlowLevel();
             if (snow) update(snow, dt, sl);
             if (rain) update(rain, dt, rl);
-            PENDING_NOTE(0x458190, "the lens drops' step");
+            if (s_weather->splats) splats_step(s_weather->splats, (uint32_t)dt, rl, sl);
         }
     } else {
         g_weather_time += 1.0f;
@@ -476,4 +828,31 @@ void Weather_Frame(void)
     RenderState_SetZFunc(rs, zfunc);
     cam->frame = saved;
     RCamera_Setup(cam);
+}
+
+/* 0x4590d0 (from R3DCar_v14 0x43a3c0, the car's matrix on the stack): the splats on the screen's four
+   corners, with z writes off, when there are any and the camera draws (+0x12c 2); taken again when new
+   (0x457d30), drawn in the in-car view (mode 1), 249 vertices at a time. */
+void Weather_DrawWindow(const float corners[4][4])
+{
+    Splats *d = s_weather ? s_weather->splats : NULL;
+    if (!d || !d->n || !g_render || !g_render->camera || g_render->camera->v12c != 2) return;
+    RenderState *rs = g_render->device->rs;
+    int zwrite = rs->state39;
+    RenderState_SetZWrite(rs, 0);
+    if (d->dirty) {
+        d->dirty = false;
+        splats_corners(d, corners);
+    }
+    if (g_racecam[0].mode == 1) {
+        int total = d->n * 3;
+        for (int k = 0; k < total; k += 249) {
+            int m = total - k < 249 ? total - k : 249;
+            RMesh_setUVs(&d->mesh, 0, d->uv[k]);
+            RMesh_setColours(&d->mesh, 0, &d->col[k]);
+            RMesh_setPositions(&d->mesh, d->verts[k], m);
+            RMesh_draw(&d->mesh, -1);
+        }
+    }
+    RenderState_SetZWrite(rs, zwrite);
 }
