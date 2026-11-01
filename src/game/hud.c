@@ -3651,6 +3651,89 @@ static HudVisual *menu_new(uint32_t wsize, uint32_t bsize, int title, int n, con
 
 static HudVisual *s_pause, *s_exit;   /* 0x60ca44, 0x60ca48 */
 
+/* ---- the question (HYesNoOverlay, 0x138 bytes, vtable 0x5b3554; 0x437370): "are you sure?" on a
+   billboard, up to two lines of hud.loc and the yes and no buttons, 1.4 of their height apart ---- */
+
+typedef struct {
+    HBillBoard bb;
+    HText *line[2];       /* +0x120, +0x124 */
+    HButton *yes, *no;    /* +0x128, +0x12c */
+    int32_t text[2];      /* +0x130, +0x134: hud.loc ids, -1 none */
+} HYesNo;
+
+static HudVisual *s_yesno;   /* 0x60c9ac */
+static bool s_quit_asked;    /* 0x60ca9c */
+
+static void yesno_settext(HudVisual *v, int a, int b)   /* 0x4375e0 */
+{
+    HYesNo *q = (HYesNo *)v;
+    if (q) q->text[0] = a, q->text[1] = b;
+}
+
+static void yesno_draw(HudVisual *v)   /* HYesNoOverlay_v1 0x437600 */
+{
+    HYesNo *q = (HYesNo *)v;
+    bb_draw(&q->bb);
+    if (v->state == 0 || v->state == 1 || v->state == 2) return;
+    for (int k = 0; k < 2; k++)
+        if (q->text[k] != -1) {
+            const char *s = LOC_string(HudConfig_loc(), q->text[k]);
+            text_print(q->line[k], s ? s : "", 1.0f, 1.0f);
+        }
+    button_draw(q->yes);
+    button_draw(q->no);
+}
+
+/* 0x1c yes, 0x1d no. HYesNoOverlay_v9 0x4376a0 */
+static int yesno_input(HudVisual *v, int x, int y, int click)
+{
+    (void)x, (void)y;
+    HYesNo *q = (HYesNo *)v;
+    if (q->yes) button_input(q->yes, click);
+    if (q->no) button_input(q->no, click);
+    if (v->state == 0) return 0;
+    if (q->yes && q->yes->clicked) return 0x1c;
+    if (q->no && q->no->clicked) return 0x1d;
+    return 0;
+}
+
+static void yesno_destroy(HudVisual *v)   /* HYesNoOverlay_v0 0x437570 */
+{
+    HYesNo *q = (HYesNo *)v;
+    text_free(q->line[0]);
+    text_free(q->line[1]);
+    button_free(q->yes);
+    button_free(q->no);
+    bb_free(&q->bb);
+    free(q);
+}
+
+static const HudVisualVtbl yesno_vt = {yesno_destroy, yesno_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, yesno_input};
+
+static HudVisual *yesno_new(void)
+{
+    HYesNo *q = calloc(1, sizeof *q);
+    if (!q) return NULL;
+    const uint8_t *loc = HudConfig_loc();
+    const char *t = LOC_string(loc, 0x46fe);
+    bb_init(&q->bb, &yesno_vt, exe_i32(0x5b3540), exe_i32(0x5b3544), "", t ? t : "", false, false, false);
+    int bw = exe_i32(0x5b3548), bh = exe_i32(0x5b354c);
+    float step = (float)((double)bh * exe_f64(0x5b2938));
+    int x = g_display.width / 2 - bw / 2;
+    float y0 = (float)(g_display.height / 2) - step * exe_f32(0x5b2404) * exe_f32(0x5b23f0);
+    int y = (int)y0;
+    for (int k = 0; k < 2; k++) {
+        q->line[k] = text_new(HudConfig_font(0x4c), 0xc0000000u, (uint32_t)HudConfig_i32(0x14), x, y, 0, 0, 0, false);
+        y = (int)((float)y + step);
+    }
+    const char *ys = LOC_string(loc, 0x46dd), *ns = LOC_string(loc, 0x46de);
+    q->yes = button_new(x, y, bw, bh, ys ? ys : "", true);
+    y = (int)((float)y + step);
+    q->no = button_new(x, y, bw, bh, ns ? ns : "", true);
+    q->text[0] = q->text[1] = -1;
+    return &q->bb.base;
+}
+
 void HUD_Init(void)
 {
     HUD_Free();
@@ -3698,6 +3781,10 @@ void HUD_Init(void)
     add(s_pause, false, false);
     static const int exit_ids[4] = {0x46b6, 0x46b7, 0x46b8, 0x46b9}, exit_actions[4] = {0x15, 4, 5, 0x18};
     s_exit = menu_new(0x5b2af0, 0x5b2af8, 0x46ba, 4, exit_ids, exit_actions);      /* 0x4218c0 */
+    s_yesno = yesno_new();   /* 0x437370 (0x60c9ac) */
+    add(s_yesno, false, false);
+    s_quit_asked = false;
+    g_race_quit = 0;   /* (0x657e34) */
     add(s_exit, false, false);
     nmodal = 0;
     wrongway = wrongway_new();   /* 0x436dd0 (drawn on its own) */
@@ -3801,17 +3888,39 @@ int HUD_HandleInput(int x, int y, bool click)
     case 3:   /* restart */
         if (g_race_mode == 4 || g_race_mode == 10 || g_race_mode == 2) return 0;
         close_modals(0);
-        PENDING_NOTE(0x426a40, "the restart's HUD reset (0x426a40 with 0)");
+        HUD_RaceStart();   /* 0x426a40 with 0 */
         break;
-    case 4:   /* (the original shows a message and the results first: 0x60c9ac, 0x46fb, then 0x1c's 4) */
-        PENDING_NOTE(0x425eb0, "the exit's message before quitting (0x437370, hud.loc 0x46fb)");
-        close_modals(0);
+    case 4:   /* exit to Windows: asked first (0x46fb) */
+        modal[0]->vt->setstate(modal[0], 2);
+        if (s_yesno && nmodal < 8) modal[nmodal++] = s_yesno;
+        yesno_settext(s_yesno, 0x46fb, -1);
+        s_quit_asked = true;
+        a = 0;
         break;
     case 5:
         close_modals(0);
+        g_race_quit = 1;   /* 0x657e34 */
         break;
     case 0x15:
         close_modals(0);
+        g_race_quit = 1;
+        break;
+    case 0x1c:   /* yes */
+        if (s_quit_asked) {
+            s_quit_asked = false;
+            g_race_quit = 1;
+            close_modals(0);
+            a = 4;
+        } else {
+            PENDING_NOTE(0x425eb0, "the other question's yes (0x60ca9d: 0x42e400, 0x42df90)");
+        }
+        break;
+    case 0x1d:   /* no: the exit's menu again */
+        if (s_quit_asked) {
+            s_quit_asked = false;
+            modal[0]->vt->setstate(modal[0], 2);
+            if (nmodal < 8) modal[nmodal++] = s_exit;
+        }
         break;
     case 0x18:   /* the exit's back: the pause again */
         s_exit->vt->setstate(s_exit, 2);
@@ -3867,6 +3976,7 @@ void HUD_Free(void)
     s_pause = s_exit = NULL;
     summary = mission = s_time = NULL;
     s_congrats = NULL;
+    s_yesno = NULL;
     s_records = NULL;
     s_standings = s_standing_congrats = s_info = NULL;
     if (wrongway) wrongway->vt->destroy(wrongway);

@@ -15,6 +15,7 @@
 
 int32_t g_race_laps;
 int32_t g_race_over;
+int32_t g_race_quit;
 int32_t g_race_local;
 int32_t g_race_inputs;
 int32_t g_hud_message;

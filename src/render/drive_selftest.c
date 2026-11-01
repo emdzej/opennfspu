@@ -288,6 +288,7 @@ static void race_menus(void)
                 HUD_Pause();             /* 0x4267c0 */
             }
         } else {
+            if (g_sim_tick < 0x21) g_race_quit = 1;   /* (0x415130: so early it's a quit) */
             g_drive_result = 1;          /* Race_End(1) */
         }
     }
@@ -306,7 +307,7 @@ static void race_menus(void)
     case 3:
         g_drive_result = 2;
         break;
-    case 4:   /* exit to windows (the original's confirmation message first: pending, hud.c) */
+    case 4:   /* exit to windows (after the HUD's question) */
         g_drive_result = 3;
         break;
     case 5:   /* exit to game menu */

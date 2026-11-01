@@ -7,6 +7,7 @@
 #include "game/options.h"
 #include "game/car.h"
 #include "game/race_setup.h"
+#include "game/race_progress.h"
 #include "game/mission.h"
 #include "game/car_drive.h"
 #include "front/fefactory.h"
@@ -106,7 +107,7 @@ bool app_frame(void)
                     FEApp_RaceWear(ids, wear, np);
                     char rn[32], rc[32];
                     int32_t best, time;
-                    if (DRIVE_PlayerResult(rn, rc, &best, &time)) FEApp_RaceRecord(rn, rc, best, time);
+                    if (!g_race_quit && DRIVE_PlayerResult(rn, rc, &best, &time)) FEApp_RaceRecord(rn, rc, best, time);   /* (0x4ed590 skips a quit race, 0x657e34) */
                     FEApp_RaceOver(places, times, clean, n);
                 }
                 DRIVE_Shutdown();

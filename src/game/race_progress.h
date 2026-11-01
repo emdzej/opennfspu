@@ -8,6 +8,7 @@
 
 extern int32_t g_race_laps;       /* 0x6573f0 */
 extern int32_t g_race_over;       /* 0x606a8c */
+extern int32_t g_race_quit;       /* 0x657e34: the race left from its menus (no records kept) */
 extern int32_t g_race_local;      /* 0x65741c: the local player's index */
 extern int32_t g_race_inputs;     /* 0x658084: the players giving input */
 extern int32_t g_hud_message;     /* 0x606850: the HUD's lap message's frames */
