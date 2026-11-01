@@ -2588,3 +2588,7 @@
 005012a0	FE_BuyCar	frontend	high	The dealer's car into the owned ones; messages 0x322 (money), 0x3d (80 cars)
 004ee230	FECar_Setup	frontend	high	A new owned car: lowest free id, the record at +4, colours +0x674.., state, stock parts
 00502870	FE_CareerYear	frontend	high	The career's year (0x5db75c, the save's Tournament first int)
+00502c10	Tournament_Rank	frontend	high	The player's rank in a tournament: points (+0x3d2), times (+0x3e4), earnings (+0x404, +0x424) over the races run
+00503080	Tournament_End	frontend	high	All races run and top three: completed once more; the first time the year advances (0x5b8670), the era when none is left
+00503720	Tournament_SetYear	frontend	high	The year (0x5db75c) and its era: to 1969 0x209, to 1988 0x20a, after 0x20b
+00503a00	Tournament_DebugWinAll	frontend	med	Every race of the era's tournaments won (8 points, the first prize)

@@ -18,6 +18,9 @@ extern int g_drive_opponents, g_drive_laps;
 extern int g_drive_result;
 /* Whether the race is paused (0x606a90). */
 extern bool g_drive_paused;
+/* The racers' places (0 not finished) and times as the results keep them, the local player first; their
+   count (at most 8). */
+int DRIVE_Results(int places[8], int times[8]);
 /* The local player's place when it finished, else 0. */
 int DRIVE_PlayerPlace(void);
 /* The race's end, for the front end to take over again. */

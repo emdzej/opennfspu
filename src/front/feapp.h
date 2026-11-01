@@ -26,8 +26,9 @@ FertControl *FEApp_Top(void);
 /* The front end's end before a race (FEApplication_Run's return; its 3D rooms let go, 0x65b928 cleared). */
 void FEApp_End(void);
 
-/* The race the front end set up is over: the player's place (0 not finished), for the career's. */
-void FEApp_RaceOver(int place);
+/* The race the front end set up is over: the racers' places (0 not finished) and times, the player
+   first, for the career's. */
+void FEApp_RaceOver(const int *places, const int *times, int n);
 
 /* Whether the front end is done: a race to start (PLAYGAME on a screen that can play) or the game to
    end (QUIT); the race it set up. */

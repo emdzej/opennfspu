@@ -204,9 +204,9 @@ bool FEApp_Init(const char *start)
     return FEApp_GotoScreen(start, true);
 }
 
-void FEApp_RaceOver(int place)
+void FEApp_RaceOver(const int *places, const int *times, int n)
 {
-    if (s_tour_race >= 0) FEData_TourResult(s_tour_race, place);
+    if (s_tour_race >= 0) FEData_TourResult(s_tour_race, places, times, n);
     s_tour_race = -1;
 }
 
@@ -376,13 +376,13 @@ static void callback(const char *cb)
             s_tour_race = FEData_TourRace();
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", c);
-            PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament");
+            PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
         } else {
             snprintf(s_track, sizeof s_track, "%s", FEData_Track());
             snprintf(s_car, sizeof s_car, "%s", FEData_Car());
         }
         s_laps = fe_int("num_laps", 1);
-        s_opponents = FEData_Opponents();
+        s_opponents = s_tour_race >= 0 ? 7 : FEData_Opponents();   /* (the standings' eight racers) */
         s_result = FE_PLAY;
     } else {
         char m[160];

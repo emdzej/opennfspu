@@ -176,6 +176,17 @@ static void read_controls(void)
 int g_drive_opponents, g_drive_laps;
 int g_drive_result;
 
+int DRIVE_Results(int places[8], int times[8])
+{
+    int n = 0;
+    for (int i = 0; ready && i < g_racers.n && n < 8; i++, n++) {
+        Car *c = g_racers.c[i];
+        places[n] = *CAR_I(c, 0xcd0) ? *CAR_I(c, 0xcd4) : 0;   /* (the results' copies) */
+        times[n] = *CAR_I(c, 0xcd8);
+    }
+    return n;
+}
+
 int DRIVE_PlayerPlace(void)
 {
     Car *c = g_cars[0];

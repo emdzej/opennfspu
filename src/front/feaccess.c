@@ -556,32 +556,102 @@ const char *FEAccess_CarFile(const FEAccessor *a)
     return NULL;
 }
 
-/* A career race's result into the save (the original's race-over update of the tournament pends; the
-   port's, on the race's fields as the debug "all won" 0x503a00 writes them: +0x3d0 run, +0x3d2 the place,
-   +0x424 what it earned, from the places' prizes at +0x3a8): the race marked run, the place's prize paid,
-   and once every race is run the tournament completed once more (+0xd3c) and its races open again. */
-void FEData_TourResult(int race, int place)
+/* The tournament's standings (0x502c10): each racer's points (+0x3d2, shorts), times (+0x3e4) and
+   earnings (+0x404 + +0x424) summed over the races run (+0x3d0); the player's rank among the eight (1 ..;
+   8 when none is run). The port ranks by points, then time (the original's order is a sort of these). */
+static int tour_rank(const uint8_t *r)
+{
+    int n = rec16(r, 0x39c), run = 0;
+    if (n > 10) n = 10;
+    int32_t pts[8] = {0}, tim[8] = {0};
+    for (int i = 0; i < n; i++) {
+        const uint8_t *x = r + 0xa4 * i;
+        if (!x[0x3d0]) continue;
+        run++;
+        for (int k = 0; k < 8; k++) {
+            pts[k] += rec16(x, 0x3d2 + 2 * k);
+            tim[k] += rec32(x, 0x3e4 + 4 * k);
+        }
+    }
+    if (!run) return 8;
+    int rank = 1;
+    for (int k = 1; k < 8; k++)
+        if (pts[k] > pts[0] || (pts[k] == pts[0] && tim[k] && tim[k] < tim[0])) rank++;
+    return rank;
+}
+
+/* A tournament's end (0x503080, for the era's tournaments): every race run and the player in the first
+   three of the standings, once more completed (+0xd3c); the first time, the year to the next of the table
+   0x5b8670; when the era has no tournament left not completed, the next era (0x209 .. 0x20b; 0x691e54 at
+   the last). Below the first three the races open again (the port's: the original's 0x503263 path). */
+static void tour_end(uint8_t *r)
+{
+    int n = rec16(r, 0x39c);
+    if (n > 10) n = 10;
+    for (int i = 0; i < n; i++) if (!r[0x3d0 + 0xa4 * i]) return;
+    Save *sv = FESave_Current();
+    SaveSection *ts = NULL;
+    for (int i = 0; sv && i < sv->nsec; i++) if (!strcmp(sv->sec[i].name, "Tournament")) ts = &sv->sec[i];
+    if (!ts) return;
+    int32_t head[7];
+    memcpy(head, ts->data, sizeof head);
+    if (rec32(r, 4) >= 0x20c || tour_rank(r) <= 3) {
+        int16_t t = (int16_t)(rec16(r, 0xd3c) + 1);
+        memcpy((uint8_t *)r + 0xd3c, &t, 2);
+        if (t == 1 && rec32(r, 4) < 0x20c) {
+            for (int i = 0; i + 1 < 17; i++)
+                if ((int32_t)exe_u32(0x5b8670 + 4u * (unsigned)i) == head[0]) {
+                    head[0] = (int32_t)exe_u32(0x5b8674 + 4u * (unsigned)i);
+                    break;
+                }
+            int tn = 0;
+            const uint8_t *all = tour_section(NULL, &tn);
+            bool left = false;
+            for (int i = 0; i < tn; i++) {
+                const uint8_t *q = all + 0xd40 * i;
+                if (rec32(q, 4) == head[3] && rec16(q, 0xe4) != 2 && rec16(q, 0xd3c) == 0) left = true;
+            }
+            if (!left) {
+                if (head[3] == 0x20b) head[6] = 1;
+                if (head[3] == 0x209) head[3] = 0x20a;
+                else head[3] = 0x20b;
+                PENDING_NOTE(0x4fcaa0, "the era's end (FEEndOfEra_Run: its screens and movies)");
+            }
+            memcpy(ts->data, head, sizeof head);
+        }
+    }
+    for (int i = 0; i < n; i++) {   /* the races open again (0x503080's clearing of their results) */
+        uint8_t *x = (uint8_t *)r + 0xa4 * i;
+        x[0x3d0] = 0;
+        memset(x + 0x3d2, 0, 16);
+        memset(x + 0x3e4, 0, 32);
+        memset(x + 0x404, 0, 32);
+        memset(x + 0x424, 0, 32);
+    }
+}
+
+/* A career race's results into the save (the original's race-over update pends; the port's, on the
+   race's fields the standings read): +0x3d0 run; for each of the eight racers its points (+0x3d2: 9 less
+   its place, 8 the winner's as the debug "all won" 0x503a00 gives), its time (+0x3e4) and its prize
+   (+0x424: the places' prizes from +0x3a8); the player's prize into the money; then the tournament's end
+   (0x503080). */
+void FEData_TourResult(int race, const int *places, const int *times, int n)
 {
     Save *sv = FESave_Current();
     uint8_t *r = (uint8_t *)FEData_Tournament();
     if (!sv || !r || race < 0) return;
     uint8_t *x = r + 0xa4 * race;
     x[0x3d0] = 1;
-    int16_t pl = (int16_t)(place ? place : 8);
-    memcpy(x + 0x3d2, &pl, 2);
-    int32_t won = 1 <= place && place <= 8 ? rec32(x, 0x3a8 + 4 * (place - 1)) : 0;
-    memcpy(x + 0x424, &won, 4);
-    sv->money += won;
-    int n = rec16(r, 0x39c);
-    if (n > 10) n = 10;
-    bool all = true;
-    for (int i = 0; i < n; i++) all &= r[0x3d0 + 0xa4 * i] != 0;
-    if (all) {
-        int16_t t = (int16_t)(rec16(r, 0xd3c) + 1);
-        memcpy(r + 0xd3c, &t, 2);
-        for (int i = 0; i < n; i++) r[0x3d0 + 0xa4 * i] = 0;
+    for (int k = 0; k < 8; k++) {
+        int p = k < n ? places[k] : 0;
+        int16_t pts = (int16_t)(1 <= p && p <= 8 ? 9 - p : 0);
+        int32_t t = k < n ? times[k] : 0, won = 1 <= p && p <= 8 ? rec32(x, 0x3a8 + 4 * (p - 1)) : 0;
+        memcpy(x + 0x3d2 + 2 * k, &pts, 2);
+        memcpy(x + 0x3e4 + 4 * k, &t, 4);
+        memcpy(x + 0x424 + 4 * k, &won, 4);
+        if (k == 0) sv->money += won;
     }
-    PENDING_NOTE(0x4fcaa0, "the tournament's own end (its prize money, the standings, the era's end)");
+    tour_end(r);
     FESave_Write();
 }
 

@@ -49,5 +49,5 @@ const uint8_t *FEData_Tournament(void);
 /* The chosen remaining race of the tournament (its index in the record, -1 none) and its track's file. */
 int FEData_TourRace(void);
 const char *FEData_TourTrack(void);
-/* That race run, the player placed (1 ..; 0 not finished). */
-void FEData_TourResult(int race, int place);
+/* That race run: the racers' places (0 not finished) and times, the player first. */
+void FEData_TourResult(int race, const int *places, const int *times, int n);
