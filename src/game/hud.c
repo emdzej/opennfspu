@@ -1222,6 +1222,159 @@ static HudVisual *gdamage_new(void)
     return &g->tray.base;
 }
 
+static void flat(const float q[16], uint32_t col);
+
+/* ---- the damage in words (HTextDamage, 0x114 bytes, vtable 0x5b3120; 0x42f880): a tray of the four
+   parts' condition (the engine, the tyres' zones, the body, the suspension), each as a percentage or a
+   bar, titled "damage" at its foot; shown by the second layout's +0x3c 2 or 3 ---- */
+
+typedef struct {
+    HTray tray;
+    HText *label[4];   /* +0xc4 .. +0xd0 */
+    HText *title;      /* +0xd4 */
+    HText *value[4];   /* +0xd8 .. +0xe4: right aligned */
+    char buf[4][5];    /* +0xe8: "100%" */
+    const char *name[4];   /* +0x104: hud.loc 0xd .. 0x10 */
+} HTextDamage;
+
+/* Row k's place: its left (or right, the values') at the tray's margin, a fifth of the height a row;
+   the title's (k 4) at the foot. 0x42ff30, 0x430000 */
+static void tdamage_row(HTextDamage *d, int k, bool right, int px, int py, int32_t out[2])
+{
+    int w = HudConfig_i32(0xac), h = HudConfig_i32(0xb0), m = HudConfig_i32(0x34);
+    out[0] = right ? w + px - m : m + px;
+    if (k == 4) {
+        const char *t = LOC_string(HudConfig_loc(), 0xc);
+        float a, b, c, th = 0;
+        if (d->title && d->title->font && d->title->font->font) text_extent(d->title, t ? t : "", &a, &b, &c, &th);
+        out[1] = py + (int)((float)(d->tray.h - HudConfig_i32(0x38)) - th);
+    } else {
+        out[1] = py + h * k / 5;
+    }
+}
+
+static void tdamage_setpos(HudVisual *v, int x, int y)   /* HTextDamage_v12 0x4307f0 */
+{
+    HTextDamage *d = (HTextDamage *)v;
+    int32_t px, py, at[2];
+    HudConfig_setpos(HUDPOS_TDAMAGE, x, y);   /* 0x420700 */
+    HudConfig_pos(HUDPOS_TDAMAGE, &px, &py);
+    tray_place(&d->tray, px, py);
+    for (int k = 0; k < 4; k++) {
+        tdamage_row(d, k, false, px, py, at);
+        if (d->label[k]) d->label[k]->x = at[0], d->label[k]->y = at[1];
+        tdamage_row(d, k, true, px, py, at);
+        if (d->value[k]) d->value[k]->x = at[0], d->value[k]->y = at[1];
+    }
+    tdamage_row(d, 4, false, px, py, at);
+    if (d->title) d->title->x = at[0], d->title->y = at[1];
+}
+
+/* The divider above the title, at half the inner margin. */
+static void tdamage_divider(HTextDamage *d)
+{
+    const char *t = LOC_string(HudConfig_loc(), 0xc);
+    float a, b, c, th = 0;
+    if (d->title && d->title->font && d->title->font->font) text_extent(d->title, t ? t : "", &a, &b, &c, &th);
+    float lo = (float)(d->tray.h - HudConfig_i32(0x38)) - th;
+    tray_setsize(&d->tray, HudConfig_i32(0xac), HudConfig_i32(0xb0), (int)(lo - (float)(HudConfig_i32(0x38) / 2)));
+}
+
+/* The layout again: the size, place and colours. HTextDamage_v2 0x430a00 */
+static void tdamage_reset(HudVisual *v)
+{
+    HTextDamage *d = (HTextDamage *)v;
+    tdamage_divider(d);
+    int32_t px, py;
+    HudConfig_pos(HUDPOS_TDAMAGE, &px, &py);
+    tdamage_setpos(v, px, py);
+    tray_colours(&d->tray);
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    for (int k = 0; k < 4; k++) {
+        if (d->label[k]) d->label[k]->colour = (uint32_t)HudConfig_i32(0x1c), d->label[k]->colour2 = c14;
+        if (d->value[k]) d->value[k]->colour = HudConfig_scheme(), d->value[k]->colour2 = c14;
+    }
+    if (d->title) d->title->colour = (uint32_t)HudConfig_i32(0x18), d->title->colour2 = c14;
+}
+
+/* HTextDamage_v1 0x4300d0 */
+static void tdamage_draw(HudVisual *v)
+{
+    HTextDamage *d = (HTextDamage *)v;
+    Car *car = local_car();
+    int kind = HudConfig_choicei32(0x3c);
+    if (!((kind == 2 || kind == 3) && always) || v->state == 0 || !car) return;   /* 0x41e8f0 */
+    tray_draw(&d->tray);
+    int val[4] = {(int)CarSim_EngineWear(car), (int)((*CAR_F(car, 0x4ec) + *CAR_F(car, 0x4e4)) * exe_f32(0x5b23f0)),
+                  (int)CarSim_BodyWear(car), (int)CarSim_SuspensionWear(car)};   /* 0x493810, 0x4938d0, 0x493c00, 0x493b30 */
+    for (int k = 0; k < 4; k++) text_print(d->label[k], d->name[k] ? d->name[k] : "", 1.0f, 1.0f);
+    PENDING_NOTE(0x434f00, "the pursuit's red damage title (game type 9)");
+    if (d->title) d->title->colour = (uint32_t)HudConfig_i32(0x18);
+    const char *t = LOC_string(HudConfig_loc(), 0xc);
+    text_print(d->title, t ? t : "", 1.0f, 1.0f);
+    if (g_hud_damage_display == 3) {
+        for (int k = 0; k < 4; k++) {
+            const char *s = exe_str(0x5ccc8c);   /* "0%" */
+            if (val[k] != 0) {
+                snprintf(d->buf[k], sizeof d->buf[k], "%d%s", val[k], exe_str(0x5ccc90));
+                s = d->buf[k];
+            }
+            text_print(d->value[k], s, 1.0f, 1.0f);
+        }
+        return;
+    }
+    /* The bars under the labels: the condition's share in the layout's +0x28, the rest in its +0x2c, as
+       thick as its +0x3c. */
+    int32_t px, py;
+    HudConfig_pos(HUDPOS_TDAMAGE, &px, &py);
+    int w = HudConfig_i32(0xac), h = HudConfig_i32(0xb0), m = HudConfig_i32(0x34), bar = HudConfig_i32(0x3c);
+    int len = w - 2 * m;
+    for (int k = 0; k < 4; k++) {
+        int x0 = px + m, y = py + h * k / 5;
+        float a, b, c, th = 0;
+        if (d->label[0] && d->label[0]->font && d->label[0]->font->font) text_extent(d->label[0], d->name[k] ? d->name[k] : "", &a, &b, &c, &th);
+        float top = (float)y + exe_f32(0x5b2404) + th, foot = (float)bar + (float)y + th + exe_f32(0x5b2404);
+        float split = (float)(x0 + val[k] * len / 100);
+        float q[16] = {(float)x0, top, 0, 1, split, top, 0, 1, split, foot, 0, 1, (float)x0, foot, 0, 1};
+        flat(q, (uint32_t)HudConfig_i32(0x28));   /* 0x419f70 */
+        if (val[k] != 100) {
+            float end = (float)(x0 + len);
+            float r[16] = {split, top, 0, 1, end, top, 0, 1, end, foot, 0, 1, split, foot, 0, 1};
+            flat(r, (uint32_t)HudConfig_i32(0x2c));
+        }
+    }
+}
+
+static void tdamage_destroy(HudVisual *v)   /* 0x42fe80 */
+{
+    HTextDamage *d = (HTextDamage *)v;
+    for (int k = 0; k < 4; k++) text_free(d->label[k]), text_free(d->value[k]);
+    text_free(d->title);
+    free(d);
+}
+
+static const HudVisualVtbl tdamage_vt = {tdamage_destroy, tdamage_draw, tdamage_reset, tray_setstate, tdamage_setpos, tray_progress, NULL, NULL};
+
+static HudVisual *tdamage_new(void)
+{
+    HTextDamage *d = calloc(1, sizeof *d);
+    if (!d) return NULL;
+    int32_t px, py;
+    HudConfig_pos(HUDPOS_TDAMAGE, &px, &py);
+    int w = HudConfig_i32(0xac), h = HudConfig_i32(0xb0);
+    tray_init(&d->tray, &tdamage_vt, px, py, w, h, 0, false, 0, false, false);   /* 0x433ef0 */
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    for (int k = 0; k < 4; k++) {
+        d->label[k] = text_new(HudConfig_font(100), (uint32_t)HudConfig_i32(0x1c), c14, 0, 0, 0, h / 5, 0, false);
+        d->value[k] = text_new(HudConfig_font(0x7c), HudConfig_scheme(), c14, 0, 0, 0, h / 5, 1, false);
+    }
+    d->title = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, w, h / 5, 0, false);
+    tdamage_setpos(&d->tray.base, px, py);
+    tdamage_divider(d);
+    for (int k = 0; k < 4; k++) d->name[k] = LOC_string(HudConfig_loc(), 0xd + k);
+    return &d->tray.base;
+}
+
 /* ---- the track map (HTrackMap, 0x150 bytes, vtable 0x5b3248; 0x431e50) ---- */
 
 /* Text drawn at once in the current view (0x431230 with its second argument: 0x536a30, 0x536710). */
@@ -3506,7 +3659,7 @@ void HUD_Init(void)
     add(s_time, true, false);
     s_cones_down = 0;
     add(time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4)), true, false);   /* 0x42a0f0 */
-    PENDING_NOTE(0x42f880, "HUD_Init's text damage (HTextDamage 0x42f880, the second layout's +0x3c 2 or 3)");
+    add(tdamage_new(), true, false);   /* 0x42f880 */
     add(position_new(), true, false);
     add(gdamage_new(), true, false);   /* 0x421e20 */
     add(speedometer_new(), true, false);

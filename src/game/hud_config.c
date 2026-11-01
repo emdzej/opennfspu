@@ -18,6 +18,7 @@ static const char *save_dir = "SaveData\\";
 HudDials g_hud_dials;
 int32_t g_hud_imperial;
 int32_t g_hud_splits = 1;   /* (the front end's default) */
+int32_t g_hud_damage_display = 1;   /* (fe.txt's) */
 
 static int loads;            /* 0x60c978 */
 static uint8_t *loc;         /* 0x60c974 */

@@ -17,6 +17,7 @@ enum {
     HUDPOS_GEAR = 0,     /* 0x420b30 (+0x188) */
     HUDPOS_SPEED = 1,    /* 0x420b40 */
     HUDPOS_TIME = 2,     /* 0x420b50 */
+    HUDPOS_TDAMAGE = 3,  /* 0x420b70 */
     HUDPOS_POSITION = 4, /* 0x420ba0 */
     HUDPOS_GDAMAGE = 5,  /* 0x420b90 */
     HUDPOS_TACHDIAL = 6, /* 0x420bb0 */
@@ -39,6 +40,7 @@ typedef struct {
     int32_t speedo_start, speedo_deg, speedo_units;  /* 0x657e14, 0x657e18, 0x657e1c */
 } HudDials;
 extern HudDials g_hud_dials;
+extern int32_t g_hud_damage_display;   /* 0x657dc8: DAMAGEDISPLAY (3 the parts' percentages, else bars) */
 extern int32_t g_hud_splits;     /* 0x657dd8: SPLITTIMES (1 the record, 2 the best lap, 3 the last) */
 extern int32_t g_hud_imperial;   /* 0x657dc0: miles (the front end's Display_SpeedUnits) */
 

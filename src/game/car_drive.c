@@ -216,6 +216,31 @@ static float wear_sum(Car *c, int16_t type)
 float CarSim_BrakeWear(Car *c) { return wear_sum(c, 2); }        /* 0x493980 */
 float CarSim_GearboxWear(Car *c) { return wear_sum(c, 3); }      /* 0x493a10 */
 
+/* The suspension's: the mean wear of its springs, shocks and sway bars (types 4, 5, 8). 0x493b30 */
+float CarSim_SuspensionWear(Car *c)
+{
+    double sum = K(0x5b23f8);
+    int n = 0;
+    for (int i = 0; i < CAR_NPARTS; i++) {
+        const uint8_t *part = c->p[CARP_PARTS + i];
+        int16_t t = part ? part_type(part) : 0;
+        if (t == 4 || t == 5 || t == 8) {
+            n++;
+            sum = part_wear(c, part) + sum;
+        }
+    }
+    if (n > 1) sum /= n;
+    return (float)sum;
+}
+
+/* The body's: its first nine zones summed, scaled. 0x493c00 */
+float CarSim_BodyWear(Car *c)
+{
+    double sum = K(0x5b23f8);
+    for (int k = 0; k < 9; k++) sum += *CAR_F(c, 0x4e4 + 4 * k);
+    return (float)(sum * K(0x5b49b0));
+}
+
 /* ---- the slopes ---- */
 
 void CarSim_SlopePull(Car *c)

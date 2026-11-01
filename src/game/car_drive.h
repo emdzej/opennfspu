@@ -24,6 +24,9 @@ void CarSim_Controls(Car *c);
 float CarSim_EngineWear(Car *c);
 float CarSim_BrakeWear(Car *c);
 float CarSim_GearboxWear(Car *c);
+/* The suspension's mean (types 4, 5, 8) and the body's (its nine zones, scaled). 0x493b30, 0x493c00 */
+float CarSim_SuspensionWear(Car *c);
+float CarSim_BodyWear(Car *c);
 /* Gravity's pull along slopes into the drive's forces (+0xd54 forward, +0xd4c sideways). 0x49eeb0 */
 void CarSim_SlopePull(Car *c);
 
