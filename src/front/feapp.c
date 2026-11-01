@@ -31,6 +31,7 @@ static int s_laps = 1, s_opponents;
 static char s_car[64] = "964";
 static int s_depth;
 static bool s_sound;
+static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
@@ -203,6 +204,12 @@ bool FEApp_Init(const char *start)
     return FEApp_GotoScreen(start, true);
 }
 
+void FEApp_RaceOver(int place)
+{
+    if (s_tour_race >= 0) FEData_TourResult(s_tour_race, place);
+    s_tour_race = -1;
+}
+
 void FEApp_End(void)
 {
     if (s_sound) {
@@ -299,16 +306,18 @@ const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 int FEApp_Opponents(void) { return s_opponents; }
 
-static bool can_play(void)
+static int play_mode(void)   /* (0x4d5df0: data.canplaygame: 1 a race of the choices, 2 the career's) */
 {
     FertControl *w = FEApp_Top();
-    if (!w || !w->screen) return false;
+    if (!w || !w->screen) return 0;
     for (int k = 0; k < w->screen->nparts; k++) {
         FertAttr *a = FertAttrList_find(&w->screen->parts[k]->attrs, "canplaygame");
-        if (a) return FertAttr_int(a) != 0;   /* (0x4d5df0: data.canplaygame) */
+        if (a) return FertAttr_int(a);
     }
-    return false;
+    return 0;
 }
+
+static bool can_play(void) { return play_mode() != 0; }
 
 /* The callbacks the bottom bar's buttons and the screens' controls name (0x50cd90 through the screen's
    callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, the screens' own pending. */
@@ -335,6 +344,10 @@ static void callback(const char *cb)
             snprintf(b, sizeof b, "front end: %s (the message box 0x512d00: pending)", FEStrings_Get(m));
             plat_log(b);
         }
+    } else if (!strcmp(cb, "TOURNREMAININC") || !strcmp(cb, "TOURNREMAINDEC")) {
+        /* the pre-race screen's arrows (FEPreRaceCallBackList): the tournament's next or last race left */
+        FEAccessor *a = FEAccess_Find("Tournament.RemainingTracks");
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[11] == 'I' ? 1 : -1));
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
         /* FEMainScreen_v63 0x510430: the career (Game.GameType 4, the car lists again), its tournaments when
            it was started (PlayerInfo's 0x691dd5), else its first screen, which starts it */
@@ -353,8 +366,21 @@ static void callback(const char *cb)
            accessors pending: fe.txt's as the original's defaults). */
         char v[64];
         (void)v;
-        snprintf(s_track, sizeof s_track, "%s", FEData_Track());
-        snprintf(s_car, sizeof s_car, "%s", FEData_Car());
+        s_tour_race = -1;
+        if (play_mode() == 2) {
+            /* the career's race: the tournament's next track, the player's chosen car (the race's laps and
+               opponents from the tournament: pending, the options') */
+            const char *t = FEData_TourTrack();
+            const char *c = FEAccess_CarFile(FEAccess_Find("OwnedCars.Car"));
+            if (!t || !c) return;
+            s_tour_race = FEData_TourRace();
+            snprintf(s_track, sizeof s_track, "%s", t);
+            snprintf(s_car, sizeof s_car, "%s", c);
+            PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament");
+        } else {
+            snprintf(s_track, sizeof s_track, "%s", FEData_Track());
+            snprintf(s_car, sizeof s_car, "%s", FEData_Car());
+        }
         s_laps = fe_int("num_laps", 1);
         s_opponents = FEData_Opponents();
         s_result = FE_PLAY;

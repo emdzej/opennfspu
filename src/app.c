@@ -77,6 +77,7 @@ bool app_frame(void)
                 DRIVE_Shutdown();
                 return false;
             } else if (g_drive_result == 1) {
+                FEApp_RaceOver(DRIVE_PlayerPlace());
                 DRIVE_Shutdown();
                 if (fe_start[0]) {
                     race_track[0] = 0;

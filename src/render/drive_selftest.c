@@ -175,6 +175,14 @@ static void read_controls(void)
 
 int g_drive_opponents, g_drive_laps;
 int g_drive_result;
+
+int DRIVE_PlayerPlace(void)
+{
+    Car *c = g_cars[0];
+    /* the results' copies the race-over keeps through the replay (+0xcd0 the finish, +0xcd4 the place) */
+    if (!ready || !c || *CAR_I(c, 0xcd0) == 0) return 0;
+    return *CAR_I(c, 0xcd4);
+}
 bool g_drive_paused;
 
 /* The pause key (Input_Action 8: Escape) and the menus' mouse (0x415130, HUD_HandleInput 0x425eb0 in

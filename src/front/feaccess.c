@@ -6,6 +6,7 @@
 #include "game/options.h"
 #include "front/fesave.h"
 #include "vfs.h"
+#include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +14,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -200,9 +201,51 @@ static void tourny_list(int type)
     }
 }
 
+static int s_remain[10], s_nremain;   /* 0x691e78: the tournament's races not run yet (their indices) */
+
+/* The races of the chosen tournament not run yet (0x504720): of its +0x39c races (at most 10, 0x502150),
+   0xa4 bytes each from +0x3a0 (+0x3a0 the track's id, +0x3a4 the prizes of the places, +0x3d0 run). */
+static void remain_list(void)
+{
+    const uint8_t *r = FEData_Tournament();
+    s_nremain = 0;
+    if (!r) return;
+    int n = rec16(r, 0x39c);
+    if (n > 10) n = 10;
+    for (int i = 0; i < n; i++)
+        if (!r[0x3d0 + 0xa4 * i]) s_remain[s_nremain++] = i;
+}
+
+/* The nfs5.trk record of a track id (0x4fb4b0; the first one if none has it). */
+static const uint8_t *track_by_id(int id)
+{
+    for (int i = 0; i < s_ntracks; i++)
+        if (rec16(s_trk + TRK_SIZE * s_tracks[i], 0) == id) return s_trk + TRK_SIZE * s_tracks[i];
+    return s_ntracks ? s_trk + TRK_SIZE * s_tracks[0] : NULL;
+}
+
+int FEData_TourRace(void)
+{
+    FEAccessor *a = FEAccess_Find("Tournament.RemainingTracks");
+    if (a) FEAccess_Count(a);
+    if (!a || a->pos >= s_nremain) return -1;
+    return s_remain[a->pos];
+}
+
+const char *FEData_TourTrack(void)
+{
+    const uint8_t *r = FEData_Tournament();
+    int race = FEData_TourRace();
+    const uint8_t *t = r && race >= 0 ? track_by_id(rec16(r, 0x3a0 + 0xa4 * race)) : NULL;
+    return t ? (const char *)t + 8 : NULL;
+}
+
+static void refresh(const FEAccessor *c);
+
 const uint8_t *FEData_Tournament(void)
 {
     FEAccessor *a = FEAccess_Find("Tournament.Tournament");
+    if (a) refresh(a);
     int n = 0;
     const uint8_t *t = tour_section(NULL, &n);
     if (!a || !t || a->pos >= s_ntourny) return NULL;
@@ -309,6 +352,7 @@ void FEData_Init(void)
     add("Tournament.Data", ACC_TDATA, 1, 0, 0);          /* FETournamentDataAccessor (0x5b81f0) */
     add_list("Tournament.EventType", 0x5b81a4, 0);          /* FETournamentEventTypeAccessor (0x506140) */
     add("Tournament.Tournament", ACC_TOURNY, 0, 0, 0);    /* FETournyAccessor (0x505bc0, vtable 0x5b88f0) */
+    add("Tournament.RemainingTracks", ACC_RTRACK, 0, 0, 0);   /* FETrackAccessor (0x4f9a90 with 0x504720) */
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -331,6 +375,12 @@ static int owned_count(void)
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_RTRACK) {
+        remain_list();
+        a->count = s_nremain;
+        if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
+        return;
+    }
     if (a->kind == ACC_TOURNY) {
         FEAccessor *e = FEAccess_Find("Tournament.EventType");
         tourny_list(e ? e->pos : 0);
@@ -399,6 +449,12 @@ const char *FEAccess_Text(const FEAccessor *a)
     }
     case ACC_TDATA:
         return "";
+    case ACC_RTRACK: {   /* the track's name (its record's string, +4) */
+        const uint8_t *r = FEData_Tournament();
+        const uint8_t *t = r ? track_by_id(rec16(r, 0x3a0 + 0xa4 * s_remain[a->pos])) : NULL;
+        const char *n = t ? FEStrings_Get(rec32(t, 4)) : NULL;
+        return n ? n : "";
+    }
     case ACC_TOURNY: {   /* SHORT: the name (+0x20) */
         const uint8_t *r = FEData_Tournament();
         const char *n = r ? FEStrings_Get(rec32(r, 0x20)) : NULL;
@@ -439,6 +495,7 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "ENTRYFEE")) return FE_MoneyText(rec32(r, 0xdc));
         if (!strcmp(arg, "PRIZEMONEY")) return FE_MoneyText(rec32(r, 0xec));
         if (!strcmp(arg, "TIMESCOMPLETED")) { snprintf(tb, sizeof tb, "%d", rec16(r, 0xd3c)); return tb; }
+        if (!strcmp(arg, "LOCATION")) return FEAccess_Text(FEAccess_Find("Tournament.RemainingTracks"));
         PENDING_NOTE(0x505cd0, "the tournament's difficulty and record time (the remaining tracks)");
         return "";
     }
@@ -497,6 +554,35 @@ const char *FEAccess_CarFile(const FEAccessor *a)
         return sv ? (const char *)sv->cars[a->pos].rec + 4 + 0x7f : NULL;
     }
     return NULL;
+}
+
+/* A career race's result into the save (the original's race-over update of the tournament pends; the
+   port's, on the race's fields as the debug "all won" 0x503a00 writes them: +0x3d0 run, +0x3d2 the place,
+   +0x424 what it earned, from the places' prizes at +0x3a8): the race marked run, the place's prize paid,
+   and once every race is run the tournament completed once more (+0xd3c) and its races open again. */
+void FEData_TourResult(int race, int place)
+{
+    Save *sv = FESave_Current();
+    uint8_t *r = (uint8_t *)FEData_Tournament();
+    if (!sv || !r || race < 0) return;
+    uint8_t *x = r + 0xa4 * race;
+    x[0x3d0] = 1;
+    int16_t pl = (int16_t)(place ? place : 8);
+    memcpy(x + 0x3d2, &pl, 2);
+    int32_t won = 1 <= place && place <= 8 ? rec32(x, 0x3a8 + 4 * (place - 1)) : 0;
+    memcpy(x + 0x424, &won, 4);
+    sv->money += won;
+    int n = rec16(r, 0x39c);
+    if (n > 10) n = 10;
+    bool all = true;
+    for (int i = 0; i < n; i++) all &= r[0x3d0 + 0xa4 * i] != 0;
+    if (all) {
+        int16_t t = (int16_t)(rec16(r, 0xd3c) + 1);
+        memcpy(r + 0xd3c, &t, 2);
+        for (int i = 0; i < n; i++) r[0x3d0 + 0xa4 * i] = 0;
+    }
+    PENDING_NOTE(0x4fcaa0, "the tournament's own end (its prize money, the standings, the era's end)");
+    FESave_Write();
 }
 
 /* Buying the dealer's car (FEDealershipCallbackList_v55 0x50e5f0 -> 0x5012a0): not with too little money

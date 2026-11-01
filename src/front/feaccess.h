@@ -46,3 +46,8 @@ int32_t FEData_PartValue(int32_t id);
 const uint8_t *FEAccess_CarRecord(const FEAccessor *a);
 /* The chosen tournament's record (0xd40 bytes in the save's Tournament section), NULL without one. */
 const uint8_t *FEData_Tournament(void);
+/* The chosen remaining race of the tournament (its index in the record, -1 none) and its track's file. */
+int FEData_TourRace(void);
+const char *FEData_TourTrack(void);
+/* That race run, the player placed (1 ..; 0 not finished). */
+void FEData_TourResult(int race, int place);
