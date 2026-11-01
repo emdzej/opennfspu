@@ -462,6 +462,7 @@ static void Car_MakeRenderer(Car *c)
     memcpy(r->spec.licence, d + 0x1c0, sizeof r->spec.licence);
     memcpy(r->spec.colours, d + 0x218, sizeof r->spec.colours);
     memcpy(r->spec.options, d + 0x32c, sizeof r->spec.options);
+    r->spec.slot1end = DESC_I(c, 0x50c);
     r->spec.racenumber = DESC_I(c, 0x510);
     r->spec.scheme = (uint32_t)DESC_I(c, 0x514);
     r->spec.stretch = DESC_I(c, 0x518);

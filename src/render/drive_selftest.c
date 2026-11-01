@@ -78,6 +78,7 @@ static void draw_cars(RCamera *c)
         float h = st->halfsize[1];
         for (int k = 0; k < 3; k++) st->pos[k] = p[k] - 2.0f * m[3 + k] * h;
         CarAnim_Update(r, car);            /* R3DCar_Animate 0x438370 */
+        R3DCar_ApplyMorphs(r);             /* R3DCar_v7 0x4382f0: 0x437f60 */
         CarLight_Update(&r->light, car);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
         r->lit = true;
         R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */

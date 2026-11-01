@@ -9,6 +9,7 @@
 #include "real/set3d.h"
 #include "real/shape.h"
 #include "render/car_pending.h"
+#include "pending.h"
 #include "render/carhalo.h"
 #include "render/carpages.h"
 #include "render/render.h"
@@ -403,6 +404,67 @@ void R3DCarLOD_Build(R3DCarLOD *lod, UData *root)
     free(refs);
 }
 
+void R3DCar_AnimReset(R3DCar *car, int slot, float v)
+{
+    R3DCarAnim *an = &car->anim[slot];
+    if (v < 0) v = 0;
+    if (an->frames < v) v = an->frames;
+    if ((float)(uint32_t)an->pos + an->t != v) {
+        an->pos = (int)lrintf(v - 0.5f);   /* (0x5b2778) */
+        an->t = v - (float)(uint32_t)an->pos;
+        an->dir = an->pos + 1;
+        an->on = 1;
+    }
+}
+
+/* A LOD's animated parts whose slot moved (0x43e050): the vertices between the slot's two frames (the
+   LOD's 'vt' record plus 0x10 per frame), the first frame's when the second is missing; as many as the
+   LOD's own record has. */
+static void lod_morph(R3DCarLOD *lod)
+{
+    R3DCar *car = lod->car;
+    for (uint32_t k = 0; k < lod->nparts; k++) {
+        R3DPart *p = &lod->parts[k];
+        if (!p->info[9] || !car->anim[p->info[9]].on || !p->verts) continue;
+        const R3DCarAnim *an = &car->anim[p->info[9]];
+        UData *r = cache_find(&p->cache[R3D_VT], p->article, kind_index(R3D_VT, lod->lod));
+        uint32_t n = r == p->end ? 0 : r->count;
+        UData *ra = cache_find(&p->cache[R3D_VT], p->article, kind_index(R3D_VT, (uint32_t)an->pos * 0x10 + lod->lod));
+        const float (*a)[4] = ra == p->end ? NULL : item_data(ra);
+        UData *rb = cache_find(&p->cache[R3D_VT], p->article, kind_index(R3D_VT, (uint32_t)an->dir * 0x10 + lod->lod));
+        const float (*b)[4] = rb == p->end ? NULL : item_data(rb);
+        if (!a) continue;
+        if (!b) {
+            memcpy(p->verts, a, (size_t)n * 16);
+            continue;
+        }
+        for (uint32_t i = 0; i < n; i++) {   /* 0x53c2a0, 0x53c340, 0x53c200 */
+            for (int j = 0; j < 4; j++) p->verts[i][j] = (b[i][j] - a[i][j]) * an->t + a[i][j];
+            p->verts[i][3] = 1.0f;
+        }
+    }
+}
+
+void R3DCar_ApplyMorphs(R3DCar *car)
+{
+    for (int i = 0; i < 8; i++)
+        if (car->anim[i].on) {
+            for (uint32_t l = 0; l < car->nlods; l++) lod_morph(car->lods[l]);
+            for (int j = 0; j < 8; j++) car->anim[j].on = 0;
+            return;
+        }
+}
+
+/* R3DCar_v20 0x43b040: slot 1 at its last frame when the car's description says so (+0x50c), then the
+   moved slots' parts. */
+static void car_postlod(R3DCar *car)
+{
+    PENDING_NOTE(0x43b040, "R3DCar_v20's slots kept over a reload (+0x608)");
+    const R3DCarSpec *sp = car->state ? car->state->spec : NULL;
+    R3DCar_AnimReset(car, 1, sp && sp->slot1end ? car->anim[1].frames : 0);
+    R3DCar_ApplyMorphs(car);
+}
+
 void R3DCarLOD_Free(R3DCarLOD *lod)
 {
     if (lod->parts) {
@@ -488,7 +550,7 @@ static void car_build_lods(R3DCar *car)
         R3DCarLOD_Build(l, car->root);
         car->lods[car->nlods++] = l;
     }
-    R3DCar_PendingPostLOD(car);                        /* slot 20 0x43b040 */
+    car_postlod(car);                                  /* slot 20 */
     car_size(car);
 }
 

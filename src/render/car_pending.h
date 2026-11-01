@@ -6,8 +6,6 @@
 /* R3DCar_LoadStyles' tail 0x437b00..: the stripe colour and the hood / trunk / headlight extents eased
    over time (the car's animation controller at +0x64, GetTickCount). */
 void R3DCar_PendingStyleExtents(R3DCar *car);
-/* R3DCar_v20 0x43b040: after the LODs (headlights, the animation slots' timings). */
-void R3DCar_PendingPostLOD(R3DCar *car);
 /* 0x44deb0 on the car's texture info (+0x480): whether textures load with the geometry (true here). */
 bool R3DCar_PendingTexturesWanted(R3DCar *car);
 /* 0x44d1f0 + 0x440870: the shared textures 'SPC1'..'SPC3' (race) / 'FEDU', 'FE  ', 'FESH' (front end). */

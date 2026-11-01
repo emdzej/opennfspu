@@ -33,6 +33,7 @@ typedef struct {
     char licence[32];            /* +0x1c0: the licence plate's text (8 characters are drawn) */
     uint32_t colours[4];         /* +0x218: the four chosen colours (0xAARRGGBB; +0x21c is the stripe's) */
     int options[CAR_NOPTIONS];   /* +0x32c: forced option values (-1 = the style's) */
+    int slot1end;                /* +0x50c: nonzero = animation slot 1 starts at its last frame */
     int racenumber;              /* +0x510: < 0 none */
     uint32_t scheme;             /* +0x514: the colour package (R3DCar_SetColours) */
     int stretch;                 /* +0x518: nonzero = the model is scaled by 0x5b37c8 */
@@ -82,6 +83,9 @@ typedef struct R3DCarLOD {
 } R3DCarLOD;
 
 /* Materials (R3DMaterial, R3DMaterialSet): render/rmaterial.h. */
+
+/* A timed path of an animation slot (0x1c bytes, see R3DCar.path). */
+typedef struct { uint32_t count, table, start, dur, a, b; float t; } R3DCarPath;
 
 /* An animation slot of the car (8 records of 0x14 bytes from +0x568; 0x4380c0 / 0x4380e0). */
 typedef struct { int pos; int dir; float t; float frames; uint8_t on; } R3DCarAnim;
@@ -140,6 +144,15 @@ typedef struct R3DCar {
     uint8_t headon;
     struct { uint32_t since, dur; float from, to; } headease;
     float road;
+    /* The animation slots' timed paths (8 records of 0x1c bytes from +0x484, R3DCar_Animate): the frames
+       in the path (0 = none), the path (an exe table of frame numbers, by its address), the start and
+       length (the original's CPU cycles, here milliseconds), the two frames between which the slot is
+       and how far. */
+    R3DCarPath path[8];
+    uint8_t handbrake;              /* +0x564: the hand on the handbrake (slot 4) */
+    uint8_t reverse;                /* +0x566: the lever in reverse (slot 6) */
+    /* the spoiler's ease (the +0x64 object's +0x170 .. +0x17c: start ms, length ms, from, to) */
+    struct { uint32_t since, dur; float from, to; } spoilerease;
 } R3DCar;
 
 /* Game state the renderer reads (globals of the original). */
@@ -170,6 +183,11 @@ void R3DCarLOD_Draw(R3DCarLOD *lod, EaglMatStack *model, uint8_t mask, bool cock
 /* The lights of the LOD's parts ('ef' type 5) that are on, each through its part's transform and hinge
    under m (and the mirrored twin a light may have), as halos (render/carhalo.h). R3DCarLOD_v3 0x43d730 */
 void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m);
+/* An animation slot to frame v (0 .. its frames): the two frames round it and how far, marked moved.
+   0x438000 */
+void R3DCar_AnimReset(R3DCar *car, int slot, float v);
+/* The animated parts of the slots moved since the last time, between their two frames (0x437f60). */
+void R3DCar_ApplyMorphs(R3DCar *car);
 void R3DCarLOD_Bounds(R3DCarLOD *lod, EaglMatStack *model, float mn[3], float mx[3]); /* R3DCarLOD_v4 0x43ddc0 */
 
 /* The object's draw: model matrix from the car state (0x4433c0), then the LOD dispatch (R3DObject_v14

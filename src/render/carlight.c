@@ -15,6 +15,7 @@
 #include "render/render.h"
 #include "render/rtex.h"
 #include "render/sky.h"
+#include "render/drive_selftest.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -219,6 +220,182 @@ void CarLight_Update(CarLight *l, Car *car)
     b[0x190] = 0;
 }
 
+static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
+
+/* The +0x64 object's eases (GetTickCount): from its start to its target over its length, the target
+   once past it (the length then cleared). */
+static float ease(uint32_t now, uint32_t *since, uint32_t *dur, float from, float to)
+{
+    if (*dur == 0) return to;
+    float t = (float)(now - *since) / (float)(int32_t)*dur;
+    if (1.0f < t) {
+        *dur = 0;
+        return to;
+    }
+    return (to - from) * t + from;
+}
+
+/* Slot 2, the spoiler: out over 2 s above 80 km/h (22.2 m/s), back in under 50 (13.9), each move only
+   once the last is done; above the speed it starts again every 2 s from where it is. */
+static void spoiler(R3DCar *r, Car *car, uint32_t now)
+{
+    float speed = *CAR_F(car, 0xec4);
+    bool restart = false;
+    if (f32(0x5b3698) < speed && r->spoilerease.dur <= now - r->spoilerease.since) {
+        float to = r->anim[2].frames;
+        bool mid = false;
+        if (r->spoilerease.dur) {
+            float t = (float)(now - r->spoilerease.since) / (float)(int32_t)r->spoilerease.dur;
+            if (t <= 1.0f) {
+                float old = r->spoilerease.to;
+                r->spoilerease.to = to;
+                r->spoilerease.from = (old - r->spoilerease.from) * t + r->spoilerease.from;
+                mid = true;
+            } else {
+                r->spoilerease.dur = 0;
+            }
+        }
+        if (!mid) {
+            r->spoilerease.from = r->spoilerease.to;
+            r->spoilerease.to = to;
+        }
+        restart = true;
+    } else if (speed < f32(0x5b3694) && r->spoilerease.dur <= now - r->spoilerease.since) {
+        r->spoilerease.from = ease(now, &r->spoilerease.since, &r->spoilerease.dur, r->spoilerease.from,
+                                   r->spoilerease.to);
+        r->spoilerease.to = 0;
+        restart = true;
+    }
+    if (restart) {
+        r->spoilerease.since = now;
+        r->spoilerease.dur = 2000;
+    }
+    R3DCar_AnimReset(r, 2, ease(now, &r->spoilerease.since, &r->spoilerease.dur, r->spoilerease.from,
+                                r->spoilerease.to));
+}
+
+/* The slots' timed paths (+0x484): along the path's frames over its length (the original counts CPU
+   cycles, rdtsc, with lengths of the CPU's clock 0x5ce908 times the seconds; here milliseconds), then
+   none. */
+static void paths_step(R3DCar *r, uint32_t now)
+{
+    for (int i = 0; i < 8; i++) {
+        R3DCarPath *p = &r->path[i];
+        if (!p->count || !p->table) continue;
+        uint32_t el = now - p->start;
+        if (el < p->dur) {
+            float x = (float)el / (float)(int32_t)p->dur * (float)(int32_t)(p->count - 1);
+            int ia = (int)lrintf(x - 0.5f), ib = (int)lrintf(x + 1.0f - 0.5f);
+            p->a = exe_u32(p->table + 4u * (uint32_t)ia);
+            p->b = exe_u32(p->table + 4u * (uint32_t)ib);
+            p->t = x - (float)ia;
+        } else {
+            p->table = 0;
+            p->count = 0;
+        }
+    }
+}
+
+static void path_start(R3DCar *r, int i, uint32_t count, uint32_t table, uint32_t now, uint32_t dur)
+{
+    R3DCarPath *p = &r->path[i];
+    p->count = count;
+    p->table = table;
+    p->start = now;
+    p->dur = dur;
+    if (table && 1 < count) {
+        p->a = exe_u32(table);
+        p->b = exe_u32(table + 4);
+    }
+    p->t = 0;
+}
+
+/* A slot along its path: the path's two frames and how far (marked moved when any differs). */
+static void path_follow(R3DCar *r, int i, float t)
+{
+    R3DCarAnim *an = &r->anim[i];
+    if (an->pos != (int)r->path[i].a) an->pos = (int)r->path[i].a, an->on = 1;
+    if (an->dir != (int)r->path[i].b) an->dir = (int)r->path[i].b, an->on = 1;
+    if (t != an->t) an->t = t, an->on = 1;
+}
+
+static int wheel_frame(float wheel)   /* the steering wheel's frame, 0 .. 9 */
+{
+    if (wheel < 0) return 0;
+    if (wheel <= f32(0x5b368c)) return (int)lrintf(wheel - 0.5f);
+    return 9;
+}
+
+/* Slot 4, the driver's hand: on the wheel at its frame; at a gear change (+0xd84, its length in 1/32 s
+   units of 2 s) along the path from the wheel's frame to the lever and back (0x5cd3ac .. 0x5cd4c0,
+   by the wheel's frame); to the handbrake (+0xd86) and back by the three-frame paths 0x5cd2bc /
+   0x5cd334 over 1/8 s; frame 19 while it holds the handbrake. */
+static void hand(R3DCar *r, Car *car, float wheel, uint32_t now)
+{
+    R3DCarPath *p = &r->path[4];
+    if (p->count && p->table) {
+        path_follow(r, 4, p->t);
+        return;
+    }
+    int8_t shift = (int8_t)car->b[0xd84];
+    if (0 < shift && *CAR_I(car, 0xb50) == 0 && !g_drive_paused /* 0x606a90 (0x606a98, the game's pause, is never set here) */) {
+        static const uint8_t counts[10] = {11, 11, 9, 9, 7, 7, 5, 5, 5, 5};
+        static const uint32_t tables[10] = {0x5cd3ac, 0x5cd3d8, 0x5cd404, 0x5cd428, 0x5cd44c,
+                                            0x5cd468, 0x5cd484, 0x5cd498, 0x5cd4ac, 0x5cd4c0};
+        int k = wheel_frame(wheel);
+        path_start(r, 4, counts[k], tables[k], now, (uint32_t)(shift * 2000 / 32));   /* (x 0x5b27b4) */
+    }
+    bool hb = car->b[0xd86] != 0;
+    if ((!p->count || !p->table) && hb != (r->handbrake != 0)) {
+        r->handbrake = hb;
+        int k = wheel_frame(wheel);
+        path_start(r, 4, 3, (hb ? 0x5cd2bcu : 0x5cd334u) + 0xcu * (uint32_t)k, now, 125);   /* 0x5b3688: 1/8 s */
+    }
+    if (!p->count || !p->table) R3DCar_AnimReset(r, 4, r->handbrake ? 19.0f : wheel);
+}
+
+/* Slot 6, the gear lever: by the lever's side-to-side (+0xe08, 0.1 a unit about frame 2, still within
+   0.1); into and out of reverse (+0xd82 0) along the paths 0x5cd568 / 0x5cd590 over 1/4 s; frame 7 in
+   reverse; pushed forward (+0xe04 < 0) between its frame and 5. */
+static void lever(R3DCar *r, Car *car, uint32_t now)
+{
+    float x = -*CAR_F(car, 0xe08);
+    if (fabsf(x) < f32(0x5b2604)) x = 0;
+    float v = f32(0x5b3594) * x + f32(0x5b2580);
+    R3DCarPath *p = &r->path[6];
+    float t;
+    if (!p->count || !p->table) {
+        bool rev = car->b[0xd82] == 0;
+        if ((r->reverse != 0) != rev) {
+            r->reverse = rev;
+            int k = v < 0 ? 0 : v <= f32(0x5b2404) ? (int)v : 4;
+            uint32_t at = (rev ? 0x5cd568u : 0x5cd590u) + 8u * (uint32_t)k;
+            path_start(r, 6, exe_u32(at), exe_u32(at + 4), now, 250);   /* 0x5b3684: 1/4 s */
+        }
+        if (p->count && p->table) return;
+        if (r->reverse) {
+            R3DCar_AnimReset(r, 6, 7.0f);
+            return;
+        }
+        float y = *CAR_F(car, 0xe04);
+        if (fabsf(y) < f32(0x5b2604) || 0 <= y) {
+            R3DCar_AnimReset(r, 6, v);
+            return;
+        }
+        R3DCarAnim *an = &r->anim[6];
+        int a = (int)lrintf(v - 0.5f);
+        if (an->pos != a) an->pos = a, an->on = 1;
+        if (an->dir != 5) an->dir = 5, an->on = 1;
+        t = -(f32(0x5b3598) * y);
+    } else {
+        t = p->t;
+        R3DCarAnim *an = &r->anim[6];
+        if (an->pos != (int)p->a) an->pos = (int)p->a, an->on = 1;
+        if (an->dir != (int)p->b) an->dir = (int)p->b, an->on = 1;
+    }
+    if (t != r->anim[6].t) r->anim[6].t = t, r->anim[6].on = 1;
+}
+
 /* ---- the car's hinges (R3DCar_Animate, slot 9, 0x438370: the race's part) ----
 
    Per wheel (the simulation's wheel records, 0xc4 bytes from +0x7f8): its spin (+0x48, negated) about x,
@@ -266,28 +443,35 @@ void CarAnim_Update(R3DCar *r, Car *car)
         h[0x12 + w][0] = 0;
     }
     h[0x16][1] = (float)g_sim_tick * 0.0078125f;   /* (TIMER_ticks x 0x5b273c; the port's clock is the simulation's) */
-    PENDING_NOTE(0x438370, "R3DCar_Animate's doors, lids, wipers and texture animations (+0x64's timers, 0x490)");
+    uint32_t now = app_ticks_ms();   /* GetTickCount */
+    PENDING_NOTE(0x438370, "R3DCar_Animate's hood and trunk hinges (8, 9: the +0x64 object's eases)");
+    h[0x11][0] = ease(now, &r->headease.since, &r->headease.dur, r->headease.from, r->headease.to);
+    spoiler(r, car, now);
+    if (DESC_I(car, 0x518)) {   /* slot 7 by the speed, none in reverse */
+        float v = 0;
+        if (car->b[0xd82]) {
+            v = *CAR_F(car, 0xec4) * f32(0x5b3690);
+            if (1.0f < v) v = 1.0f;
+        }
+        R3DCar_AnimReset(r, 7, v);
+    }
+    if (g_r3d_quality < 1) {   /* the cockpit's hand on the wheel's middle, the lever in neutral */
+        R3DCar_AnimReset(r, 4, 4.5f);
+        R3DCar_AnimReset(r, 5, 4.5f);
+        R3DCar_AnimReset(r, 6, 5.0f);
+        return;
+    }
+    paths_step(r, now);
+    float wheel = f32(0x5b3590) * h[5][2] + f32(0x5b369c);   /* the steering wheel's frame: 23 x turn + 4.5 */
+    R3DCar_AnimReset(r, 5, wheel);
+    hand(r, car, wheel, now);
+    lever(r, car, now);
 }
 
 /* ---- the lights' state (R3DCar_v6 0x439290) ---- */
 
-static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
-
 static void on(R3DCar *r, int id, bool v) { r->lighton[id] = v; }       /* 0x4435a0 */
 static void level(R3DCar *r, int id, float v) { r->lightlevel[id] = v; }   /* 0x4435d0 */
-
-/* The headlights' fade (the timed extents' clock, GetTickCount): from its start to its target over its
-   length, the target once past it (the length then cleared). */
-static float ease_now(R3DCar *r, uint32_t now)
-{
-    if (r->headease.dur == 0) return r->headease.to;
-    float t = (float)(now - r->headease.since) / (float)(int32_t)r->headease.dur;
-    if (1.0f < t) {
-        r->headease.dur = 0;
-        return r->headease.to;
-    }
-    return (r->headease.to - r->headease.from) * t + r->headease.from;
-}
 
 /* Ids: 0, 1 the headlights (by the car's lights switch, +0xd87 bit 0; their level the pop-ups' extent
    eased over a second, or 1), 2, 3 the brake lights (the brake, or in reverse the throttle), 4 .. 7 the
@@ -343,7 +527,7 @@ void R3DCar_SetLights(R3DCar *r, Car *c)
             r->headon = head;
             if (r->headease.dur <= now - r->headease.since) {
                 if (!head) {
-                    r->headease.from = ease_now(r, now);
+                    r->headease.from = ease(now, &r->headease.since, &r->headease.dur, r->headease.from, r->headease.to);
                     r->headease.to = 0;
                 } else {
                     float to = r->headease.to;
@@ -367,7 +551,7 @@ void R3DCar_SetLights(R3DCar *r, Car *c)
         if (r->headlightextent == 0) {
             lv = head ? 1.0f : 0.0f;
         } else {
-            lv = ease_now(r, now) / r->headlightextent;
+            lv = ease(now, &r->headease.since, &r->headease.dur, r->headease.from, r->headease.to) / r->headlightextent;
             if (!head && 0 < lv) {
                 on(r, 0, 1);
                 on(r, 1, 1);
