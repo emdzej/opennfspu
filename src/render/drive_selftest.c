@@ -377,6 +377,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         keep_wear();
         g_race_view = 2;
         g_replay_mode = 2;
+        World_Restart();   /* 0x471ac0 */
         Race_Restart(0x1c0 - 0x40);
         Input_Reset(true);
         if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;

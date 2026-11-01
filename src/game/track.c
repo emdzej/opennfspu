@@ -1,5 +1,6 @@
 /* Track loading (see track.h). */
 #include "game/track.h"
+#include "game/smack.h"
 #include "game/wgrid.h"
 #include "game/skid.h"
 #include "game/scene.h"
@@ -74,6 +75,21 @@ static void add_objects(BWorld *w, W3DObjectBundle *b)
     }
 }
 
+/* The bundle's knockable objects' bodies appended to the world's (0x488820): none once it holds more
+   than 124. */
+static void add_bodies(BWorld *w, W3DObjectBundle *b)
+{
+    const WAnimatable *a = b ? b->smack : NULL;
+    if (!a || !a->nbodies) return;
+    for (uint32_t i = 0; i < a->nbodies; i++) {
+        if (0x7c < w->nbodies) return;
+        WSmackBody **v = realloc(w->bodies, (w->nbodies + 1) * sizeof *v);
+        if (!v) return;
+        w->bodies = v;
+        w->bodies[w->nbodies++] = a->bodies[i];
+    }
+}
+
 /* The first part of 0x487940: every 'Arti' article of the root, given to the bundles in the original's
    order; each bundle goes into the bundle list (0x488e80) and its entries into the object list. */
 void BWorld_BuildBundles(BWorld *w)
@@ -122,6 +138,8 @@ void BWorld_BuildBundles(BWorld *w)
     for (int i = 0; i < w->nbundles; i++) WGrid_FileBundle(w->f10, w->bundles[i]);   /* 0x4892a0 */
     Track_LoadEdges(w);                      /* 0x488000 */
     BWorld_LoadVis(w);
+    add_bodies(w, w->scene);                 /* 0x488820 (0x478620) */
+    add_bodies(w, w->instances);
 }
 
 /* ------------------------------------------------------------------ the world */
@@ -140,6 +158,7 @@ void BWorld_free(BWorld *w)
     if (!w) return;
     for (int i = 0; i < w->nbundles; i++) W3DObjectBundle_delete(w->bundles[i]);
     WTree_delete(w->tree);                   /* 0x487850: 0x483780 */
+    free(w->bodies);
     WGrid_Free(w->f10);
     free(w->objects);
     free(w->vis);

@@ -46,6 +46,9 @@ typedef struct {
     /* the object list (0x487940) */
     WObjectRef *objects;
     uint32_t nobjects;
+    /* the knockable objects' bodies (+0x34, 0x488820): the scene bundle's, then the instance bundle's */
+    struct WSmackBody **bodies;
+    uint32_t nbodies;
     /* the camera animations (the vector at +0xc of the global 0x628938) */
     WCamAnim *cams;
     uint32_t ncams;

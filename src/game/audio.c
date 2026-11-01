@@ -1245,6 +1245,28 @@ static float rough_dist(const float *p, float x, float z)
     return a <= b ? a * 0.25f + b : b * 0.25f + a;   /* 0x5b2468 */
 }
 
+/* A knocked object's sound (0x4af210): the nearest one-shot sound element (kind 1) within 5 of p in the
+   ground plane (the rough distance) has its trigger set. */
+void Audio_HitSound(const float p[3])
+{
+    SceneList *l = Scene_List();
+    float best = 10000.0f;   /* 0x461c3c00 */
+    SceneElem *hit = NULL;
+    for (int i = 0; l && i < l->n; i++) {
+        SceneElem *e = l->e[i];
+        const float *at = (const float *)(const void *)(e->b + SCENE_POS);   /* (vt slot 0x38) */
+        float d = rough_dist(at, p[0], p[2]);
+        if (d <= 5.0f /* 0x5b2400 */ && d < best && is_audio(e)) {
+            ae_pos(e);   /* 0x4abf40 */
+            if (scene_i16(e, AE_KIND) == 1) {
+                best = d;
+                hit = e;
+            }
+        }
+    }
+    if (hit) hit->b[AE_TRIGGER] = 1;   /* 0x4abeb0 */
+}
+
 static void voice_free(int v)
 {
     ElemVoice *ev = &s_ev[v];

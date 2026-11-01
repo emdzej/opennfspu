@@ -4,6 +4,7 @@
 #include "game/track.h"
 #include "game/sim_math.h"
 #include "game/wgrid.h"
+#include "game/smack.h"
 #include "game/wtree.h"
 #include "game/world.h"
 #include "exe.h"
@@ -226,7 +227,9 @@ static void world_pass(RCamera *c)
 {
     if (!g_world) return;
     s_passes++;
-    PENDING_NOTE(0x4767a0, "the smacked objects' tick (the instance and scene bundles' +0x14)");
+    /* 0x488c30: the knockable objects' tick, the instance bundle's then the scene bundle's */
+    if (g_world->instances && g_world->instances->smack) WAnimatable_Tick(g_world->instances->smack);   /* 0x4767a0 */
+    if (g_world->scene && g_world->scene->smack) WAnimatable_Tick(g_world->scene->smack);
     if (!(s_passes & 7) && g_world->f10)
         for (int i = 0; i < g_world->nbundles; i++)
             if (g_world->bundles[i]->b5) WGrid_FileBundle(g_world->f10, g_world->bundles[i]);

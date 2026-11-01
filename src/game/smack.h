@@ -90,3 +90,9 @@ bool WAnimatable_Matrix(WAnimatable *a, int i, int piece, EaglMatrix *out);
 /* The hit kind of entry i struck at vel: 0 for an object with a body, else 2 - whether its canned
    pieces start (1, 2). 0x476760 */
 int WAnimatable_HitKind(WAnimatable *a, int i, const float vel[3]);
+/* The per-pass tick (0x4767a0, from the world's 0x488c30): a knocked object's sound once, a lit object's
+   colour taken again while it moves. */
+void WAnimatable_Tick(WAnimatable *a);
+/* The race's restart (0x476100): the knocked objects' records back to still (their traffic objects go
+   back to their placings with the race's cars). */
+void WAnimatable_Restart(WAnimatable *a);

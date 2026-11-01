@@ -368,8 +368,8 @@ void WSceneBundle_Add(uint32_t type, const float pos[3], const float mat[9])   /
 
 /* 0x482fc0: the article caches refilled (slot 10); unless kept, its collision object (0x474b20) and the
    triggerable objects (+0x34) put 10000 above where they are, out of the way (0x482d80): a type 7
-   trigger brings one back (WSceneBundle_Trigger). (The entries' flags from the draw and collision
-   objects, 0x489220, and the smackable state 0x475e10 at +0x14 aren't ported.) */
+   trigger brings one back (WSceneBundle_Trigger); its knockable objects' state at +0x14 (0x475e10) made
+   anew. (The entries' flags from the draw and collision objects, 0x489220, aren't ported.) */
 void WSceneBundle_Update(bool keep)
 {
     WSceneBundle *s = world_scene();
@@ -378,7 +378,8 @@ void WSceneBundle_Update(bool keep)
     b->vt->fillcache(b);
     PENDING_NOTE(0x489220, "the scene bundle's entry flags from its draw and collision objects");
     if (keep) return;
-    PENDING_NOTE(0x475e10, "the scene objects' smackable state");
+    WAnimatable_free(b->smack);
+    b->smack = WAnimatable_new(b);   /* 0x482d80: 0x475e10 */
     if (!b->collide) b->collide = PCollideArticleBundle_new(b);   /* 0x474b20 */
     for (uint32_t i = 0; i < b->count; i++) {
         WPlaced *p = &s->placed[i];
@@ -467,8 +468,8 @@ static int WInstanceBundle_load(W3DObjectBundle *b, UData **arts, int n)
 }
 
 /* The entry's matrix: the animated bundle's from its animation (WAnimBundle_v5 0x477740, the identity
-   without one), the scene bundle's from its placing (WSceneBundle_v5 0x4825b0: its smacked state, +0x14,
-   is never set there). */
+   without one), the scene bundle's from its knockable object's motion over its placing, or the placing
+   (WSceneBundle_v5 0x4825b0). */
 static void anim_matrix(W3DObjectBundle *b, int entry, float out[16])
 {
     WAnimEntry *e = ((WAnimBundle *)b)->anims;
@@ -480,8 +481,12 @@ static void anim_matrix(W3DObjectBundle *b, int entry, float out[16])
 
 static void scene_matrix(W3DObjectBundle *b, int entry, float out[16])
 {
-    const WPlaced *p = &((WSceneBundle *)b)->placed[entry];
     EaglMatrix m;
+    if (b->smack && WAnimatable_Matrix(b->smack, entry, 0, &m)) {   /* 0x476730, 0x476970 */
+        memcpy(out, m.m, sizeof m.m);
+        return;
+    }
+    const WPlaced *p = &((WSceneBundle *)b)->placed[entry];
     EAGL_MatFromRotTrans(&m, p->rot, p->pos);
     memcpy(out, m.m, sizeof m.m);
 }
@@ -577,6 +582,7 @@ void W3DObjectBundle_delete(W3DObjectBundle *b)
     if (!b) return;
     if (b->vt == &vt_scene) {
         WSceneBundle *s = (WSceneBundle *)b;
+        WAnimatable_free(b->smack);
         free(s->protos);
         free(s->proto);
         free(s->placed);
@@ -699,4 +705,19 @@ void World_VisitObject(W3DObjectBundle *b, int index, uint32_t flags, EaglView *
         d->base.vt->queue(&d->base, index, d2);
     } else if (d2 < exe_f32(0x5b47ac))
         d->base.vt->queue(&d->base, index, d2);
+}
+
+/* The world's restart (0x471ac0 -> 0x487d90): each bundle's knockable objects reset (0x476100), the
+   scene's triggerable objects put back above (0x482b60). */
+void World_Restart(void)
+{
+    if (!g_world) return;
+    for (int i = 0; i < g_world->nbundles; i++)
+        if (g_world->bundles[i]->smack) WAnimatable_Restart(g_world->bundles[i]->smack);
+    WSceneBundle *s = world_scene();
+    if (!s) return;
+    for (uint32_t i = 0; i < s->a.base.count; i++) {
+        WPlaced *p = &s->placed[i];
+        if (p->flag && p->pos[1] <= 8000.0f) p->pos[1] += 10000.0f;   /* 0x5b47d8, 0x5b2764 */
+    }
 }

@@ -24,19 +24,15 @@ static float s_ground_n[3];   /* 0x6559c8 */
 
 static void put_i(uint8_t *d, int off, int32_t v) { memcpy(d + off, &v, 4); }
 
-/* The bodies of the instance bundle (0x478620: the world's +0x34). */
+/* The world's bodies (+0x34: the scene bundle's, then the instance bundle's). */
 static WSmackBody *body(int i)
 {
-    if (!g_world || !g_world->instances || !g_world->instances->smack) return NULL;
-    const WAnimatable *a = g_world->instances->smack;
-    return 0 <= i && (uint32_t)i < a->nbodies ? a->bodies[i] : NULL;
+    return g_world && 0 <= i && (uint32_t)i < g_world->nbodies ? g_world->bodies[i] : NULL;
 }
 
 void Traffic_SmackDescs(void)   /* 0x4a15d0 */
 {
-    const WAnimatable *a = g_world && g_world->instances ? g_world->instances->smack : NULL;
-    g_ntrafficcars = a ? (int)a->nbodies : 0;
-    if (TRAFFIC_MAX < g_ntrafficcars) g_ntrafficcars = TRAFFIC_MAX;   /* (the original's room ends there) */
+    g_ntrafficcars = g_world ? (int)g_world->nbodies : 0;   /* (at most 125, under the descriptions' room) */
     for (int i = 0; i < g_ntrafficcars; i++) {
         uint8_t *d = g_trafficdesc[i];
         put_i(d, 0x580, i);

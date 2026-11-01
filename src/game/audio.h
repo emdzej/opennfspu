@@ -39,3 +39,5 @@ void Audio_SayLead(int s);
 void Audio_Thunder(int delay, int angle);
 /* The odd ticks' audio (0x4a7ef0), the listener at the race camera. */
 void Audio_Tick(void);
+/* A knocked object's sound at p: the nearest one-shot sound element within 5 triggered. 0x4af210 */
+void Audio_HitSound(const float p[3]);

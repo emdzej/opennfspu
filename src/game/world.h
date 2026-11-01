@@ -191,3 +191,6 @@ _Static_assert(sizeof(WPlaced) == 0x38 && sizeof(WVisWall) == 0x1c, "the placeme
 struct EaglView;
 void World_VisitObject(W3DObjectBundle *b, int index, uint32_t flags, struct EaglView *view, const float eye[3], float viewdist2,
                        const WVisWall *walls, const uint8_t *disabled, uint32_t nwalls);
+
+/* The world's part of the race's restart: the knockable objects and the scene's raised objects. 0x471ac0 */
+void World_Restart(void);

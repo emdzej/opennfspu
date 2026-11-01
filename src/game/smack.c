@@ -4,6 +4,7 @@
 #include "game/objdefs.h"
 #include "game/world.h"
 #include "game/wtree.h"
+#include "game/audio.h"
 #include "pending.h"
 #include "render/r3dcar.h"   /* EAGL_MatAxisAngle */
 #include <math.h>
@@ -267,6 +268,8 @@ int SmackAnim_Matrix(WSmackAnim *s, EaglMatrix *out)   /* 0x471140 */
 
 /* ---- the entries ---- */
 
+/* (the scene and instance bundles share their layout to +0x40, the placings: the original reads both
+   the same way) */
 static void entry_init(WAnimatable *a, int i, UData *article)   /* 0x476210 */
 {
     WInstanceBundle *in = (WInstanceBundle *)a->bundle;
@@ -393,4 +396,67 @@ int WAnimatable_HitKind(WAnimatable *a, int i, const float vel[3])   /* 0x476760
     if (e->pieces && e->def && ((const WObjectDef *)e->def)->collidetype != 3 && e->npieces)
         PENDING_NOTE(0x476310, "the animated objects' canned pieces (by the hit's speed)");
     return 2;   /* 0x476310 not started */
+}
+
+/* SmackAnim slot 4 (0x471330): moved within the last 64 ticks. */
+static bool smackanim_recent(const WSmackAnim *s) { return g_sim_tick - s->moved <= 0x40; }
+
+/* The current record's SmackAnim (its own, beside the first piece's) is only brought up to date by its
+   slot 1 here, for a lit object, and by the draw's marker once `sounded` is set: an unlit object's state
+   stays 0, so its sound here never plays (the car's hit sound, the kind at +0x44c, is what is heard). */
+void WAnimatable_Tick(WAnimatable *a)   /* 0x4767a0 */
+{
+    W3DObjectBundle *b = a->bundle;
+    for (uint32_t i = 0; i < b->count; i++) {
+        WSmackEntry *e = &a->e[i];
+        if (!e->cur.anim) continue;
+        int state = e->cur.anim->state;
+        if (state == 2) {
+            PENDING_NOTE(0x4766a0, "the knockable objects' finished pieces");
+        } else if (state == 1) {
+            if (!e->sounded) {
+                /* knocked off its place: its sound once (the flag is the current record's article) */
+                e->marked = 1;
+                e->sounded = e->cur.article ? 1 : 0;
+                float sp[4];
+                WArticleBundle_sphere((WArticleBundle *)b, (int)i, sp);   /* slot 3 */
+                Audio_HitSound(sp);   /* 0x4af210 */
+            }
+        } else {
+            e->sounded = 0;
+        }
+        if (e->dynlight && (e->colour == 0xffffffffu || state == 1) && smackanim_recent(e->cur.anim)) {
+            /* the light at its centre from the polygon under it (a fresh tracker, 0x473060), packed */
+            EaglMatrix m;
+            SmackAnim_Matrix(e->cur.anim, &m);   /* slot 1 (its result unused) */
+            WSurface t;
+            WSurface_Init(&t);
+            float sp[4], l[4];
+            WArticleBundle_sphere((WArticleBundle *)b, (int)i, sp);
+            WSurface_Light(&t, sp, l);   /* 0x474600 */
+            int32_t ca = (int32_t)(l[0] * -255.0f), cr = (int32_t)(l[1] * -255.0f), cg = (int32_t)(l[2] * -255.0f);
+            int32_t cb = (int32_t)(l[3] * 255.0f);   /* (0x5b38e8, 0x5b3710: the first three negated) */
+            uint32_t hi = (((uint32_t)ca << 8) + (uint32_t)cr) << 8;
+            hi = (hi + (uint32_t)cg) << 8;
+            e->colour = (uint32_t)cb - hi;
+        }
+    }
+}
+
+void WAnimatable_Restart(WAnimatable *a)   /* 0x476100 */
+{
+    for (uint32_t i = 0; i < a->bundle->count; i++) {
+        WSmackEntry *e = &a->e[i];
+        if (e->cur.anim) {
+            /* 0x4766a0: the playing pieces (only the canned ones play) dropped or stopped */
+            if (e->live) PENDING_NOTE(0x4766a0, "the knockable objects' canned pieces reset");
+            e->live = 0;
+            if (!e->cur.anim->b4 && !e->cur.body) {
+                PENDING_NOTE(0x476100, "a canned current record dropped for the first piece");
+            } else if (!e->cur.anim->b4) {
+                e->cur.anim->state = 0;   /* slot 7 (0x471360) */
+            }
+        }
+        e->sounded = 0;
+    }
 }
