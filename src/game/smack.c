@@ -259,10 +259,13 @@ int SmackAnim_Matrix(WSmackAnim *s, EaglMatrix *out)   /* 0x471140 */
     memcpy(s->lastpos, p, sizeof s->lastpos);
     s->moved = g_sim_tick;
     s->last = *out;
-    /* 0x4832c0: off its place by more than 0x5b2bc0 in x or z */
+    /* 0x4832c0: off its place by more than 0.01 in x or z */
     if (s->state != 1) {
-        double lim = (double)f32(0x5b2bc0);
-        if (lim < fabs((double)(b->pos0[0] - p[0])) || lim < fabs((double)(b->pos0[2] - p[2]))) s->state = 1;
+        double lim;   /* the double 0.01 at 0x5b2bc0 */
+        const uint8_t *q = exe_data(0x5b2bc0, 8);
+        if (q) memcpy(&lim, q, 8);
+        else lim = 0.01;
+        if (lim < fabs((double)b->pos0[0] - p[0]) || lim < fabs((double)b->pos0[2] - p[2])) s->state = 1;
     }
     return s->state;
 }
@@ -542,15 +545,15 @@ void WAnimatable_Tick(WAnimatable *a)   /* 0x4767a0 */
             pieces_done(e);   /* 0x4766a0 */
         } else if (state == 1) {
             if (!e->sounded) {
-                /* knocked off its place: its sound once (the flag is the current record's article) */
+                /* knocked off its place: its sound once, its markers fired (the draw's) */
                 e->marked = 1;
-                e->sounded = e->cur.article ? 1 : 0;
+                e->sounded = e->cur.article;
                 float sp[4];
                 WArticleBundle_sphere((WArticleBundle *)b, (int)i, sp);   /* slot 3 */
                 Audio_HitSound(sp);   /* 0x4af210 */
             }
         } else {
-            e->sounded = 0;
+            e->sounded = NULL;
         }
         if (e->dynlight && (e->colour == 0xffffffffu || state == 1) && anim_recent(&e->cur)) {
             /* the light at its centre from the polygon under it (a fresh tracker, 0x473060), packed */
@@ -584,6 +587,6 @@ void WAnimatable_Restart(WAnimatable *a)   /* 0x476100 */
                 anim_reset(&e->cur);   /* slot 7 */
             }
         }
-        e->sounded = 0;
+        e->sounded = NULL;
     }
 }

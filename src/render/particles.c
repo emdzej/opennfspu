@@ -520,23 +520,23 @@ void Particles_Draw(void)
         if (s_map[i].s->life == 100) PartSystem_Draw(s_map[i].s);
 }
 
-void Particles_Ask(const PartEmitter *e, float d2)
+static PartSystem *ask(const PartEmitter *e, float d2, bool movable)
 {
-    if (!s_ready || !g_render_particles) return;
+    if (!s_ready || !g_render_particles) return NULL;
     int i = 0;
     while (i < s_nmap && (uintptr_t)s_map[i].key < (uintptr_t)e) i++;
     PartSystem *s;
     if (i < s_nmap && s_map[i].key == e) {
         s = s_map[i].s;
     } else {
-        s = PartSystem_New(d2, e, false);   /* RGenericParticleCreator 0x454f50 */
-        if (!s) return;
+        s = PartSystem_New(d2, e, movable);   /* RGenericParticleCreator 0x454f50, the movable's 0x454f80 */
+        if (!s) return NULL;
         if (s_nmap == s_capmap) {
             int cap = s_capmap ? s_capmap * 2 : 64;
             PartEntry *m = realloc(s_map, (size_t)cap * sizeof *m);
             if (!m) {
                 PartSystem_Free(s);
-                return;
+                return NULL;
             }
             s_map = m;
             s_capmap = cap;
@@ -547,4 +547,10 @@ void Particles_Ask(const PartEmitter *e, float d2)
     }
     s->life = 100;
     s->dist2 = d2;
+    return s;
 }
+
+void Particles_Ask(const PartEmitter *e, float d2) { ask(e, d2, false); }
+PartSystem *Particles_AskMovable(const PartEmitter *e, float d2) { return ask(e, d2, true); }
+
+void PartSystem_Move(PartSystem *s, const float pos[4]) { memcpy(s->own.pos, pos, 16); }   /* slot 4, 0x455000 */

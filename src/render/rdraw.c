@@ -276,6 +276,31 @@ static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, 
     part_back(c, &p);
 }
 
+/* A knocked object's markers (0x450850): at the article's level by the queued distance, each 'ef' type 3
+   emitter a movable particle system (with the effects on) placed through the matrix (0x53a0a0: the
+   emitter's four floats, its fourth as w), fired anew when the object was just knocked. */
+static void markers(UData *art, const RListEntry *e, const EaglMatrix *m, bool fire)
+{
+    WArticleCache c = {art, UData_itemsend(art), {{0}}};
+    R3DPart p;
+    part_from(&p, &c);
+    const uint8_t *base = R3DPart_Item(&p, R3D_BASE, 0xffffffffu);
+    const uint8_t *lod = base ? lod_entry(base, e->key) : NULL;
+    if (!lod || !lod[1] || !g_render_particles) return;
+    uint32_t lo = rd16(lod + 4), hi = rd16(lod + 6);
+    for (const uint32_t *ef = first_item(&p, R3D_EF, lo, hi); ef; ef = next_item(&p, R3D_EF, hi)) {
+        if (ef[0] != 3) continue;
+        const PartEmitter *pe = (const PartEmitter *)(const void *)(ef + 2);
+        PartSystem *s = Particles_AskMovable(pe, (float)e->key);   /* 0x455020 */
+        if (!s) continue;
+        const float *v = pe->pos, *x = m->m;
+        float at[4];
+        for (int k = 0; k < 4; k++) at[k] = x[12 + k] * v[3] + x[8 + k] * v[2] + x[4 + k] * v[1] + v[0] * x[k];
+        PartSystem_Move(s, at);   /* slot 4 */
+        if (fire) PartSystem_Reset(s);   /* slot 3 */
+    }
+}
+
 /* Its draw (0x44fee0): nothing without a level of the entry's article at the queued distance; then the
    entry's matrix (the bundle's slot 5) and its article, or with the bundle's knockable state (+0x14) each
    live piece (one at least) under its own animation's matrix (else slot 5), its article (a canned
@@ -308,7 +333,13 @@ static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
         WArticleCache c = {pc->article, UData_itemsend(pc->article), {{0}}};
         draw_article(d, &c, e, &m, se->colour);
     }
-    if (se->sounded) PENDING_NOTE(0x450850, "the knocked objects' markers");
+    if (se->sounded) {
+        /* the markers of the current record's article under its placing (the motion left out) */
+        if (WAnimatable_HasAnim(a, index, -1)) WAnimatable_Matrix(a, index, -1, true, &m);
+        else d->bundle->vt->matrix(d->bundle, index, m.m);
+        markers(se->sounded, e, &m, se->marked);   /* 0x450850 */
+        a->e[index].marked = 0;
+    }
 }
 
 static void anim_special(RDrawObject *o, int index, const RListEntry *e) { (void)o, (void)index, (void)e; }   /* 0x44fe50 */

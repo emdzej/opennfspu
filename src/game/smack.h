@@ -61,7 +61,7 @@ typedef struct {
 typedef struct {
     const void *def;        /* +0x00: the WObjectDef */
     uint8_t marked;         /* +0x04 */
-    int32_t sounded;        /* +0x08 */
+    UData *sounded;         /* +0x08: the current record's article once its sound played (its markers') */
     uint32_t colour;        /* +0x0c: the light at it (packed; -1 to take again) */
     uint8_t dynlight;       /* +0x10 */
     int32_t live;           /* +0x14: the pieces playing */

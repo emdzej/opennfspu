@@ -102,3 +102,8 @@ void Particles_Draw(void);
 /* An 'ef' type 3 emitter in view at the squared distance d2 (RDrawArticleBundle_v3 0x450be0): its
    system made if new (RGenericParticleSystem, primed), kept for 100 more steps. 0x455020 */
 void Particles_Ask(const PartEmitter *e, float d2);
+/* The same with a movable system (its own copy of the emitter: 0x455020 with the movable creator
+   0x5b3cd8), NULL with the effects off. */
+PartSystem *Particles_AskMovable(const PartEmitter *e, float d2);
+/* The movable system's emitter placed at pos (x, y, z, w). Slot 4, 0x455000 */
+void PartSystem_Move(PartSystem *s, const float pos[4]);
