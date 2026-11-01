@@ -346,6 +346,12 @@ static void callback(const char *cb)
             (void)b;
             FEApp_Message(m);   /* 0x512d00 */
         }
+    } else if (!strcmp(cb, "SELLCAR")) {
+        /* FEGarageCallBackList_v57 0x50f590: not the only car (the message 0x3c); else its confirmation
+           panel (+0x2d8 slot 0x50) and the sale at the car's value: pending (0x4f83f0) */
+        Save *sv = FESave_Current();
+        if (!sv || sv->ncars <= 1) FEApp_Message(0x3c);
+        else PENDING_NOTE(0x50f590, "selling a car (its confirmation and its value 0x4f83f0)");
     } else if (!strcmp(cb, "TOURNREMAININC") || !strcmp(cb, "TOURNREMAINDEC")) {
         /* the pre-race screen's arrows (FEPreRaceCallBackList): the tournament's next or last race left */
         FEAccessor *a = FEAccess_Find("Tournament.RemainingTracks");
