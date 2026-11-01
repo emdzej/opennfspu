@@ -1441,7 +1441,7 @@ static void map_blips(HudArt *art, int s)
 static void map_world(HTrackMap *m)
 {
     View_Begin(g_render, m->camera);
-    EAGL_RSSet(0x28, 7);
+    RenderState_SetZFunc(g_render->device->rs, 7);
     bool road = HudConfig_choicei32(0x40) == 3;
     map_view(m, m->camera->view, HudConfig_choicei32(0x40) == 1 || road, road);
     static float v[0xfc][4];
@@ -1471,7 +1471,7 @@ static void map_world(HTrackMap *m)
         if (k) Hud2D_LinesNow(2 * k, &v[0][0], 0xffffffffu);
     }
     map_blips(m->blip, road ? 1 : (m->whole ? 0x3c : 0x14));
-    EAGL_RSSet(0x28, 3);
+    RenderState_SetZFunc(g_render->device->rs, 3);
     View_End(g_render);
 }
 
@@ -1480,7 +1480,7 @@ static void map_grid(HTrackMap *m)
 {
     int mw = HudConfig_i32(0xe4), mh = HudConfig_i32(0xe8), W = g_display.width, H = g_display.height;
     View_Begin(g_render, m->camera);
-    EAGL_RSSet(0x28, 3);
+    RenderState_SetZFunc(g_render->device->rs, 3);
     Hud2D_View(g_render);
     if (!HudConfig_notrays()) {
         float q[16] = {0, 0, 2.0f, 1, (float)W, 0, 2.0f, 1, (float)W, (float)H, 2.0f, 1, 0, (float)H, 2.0f, 1};
@@ -2687,7 +2687,7 @@ void HUD_Free(void)
 static void pass(RenderSystem *r, RCamera *c)
 {
     View_Begin(r, c);
-    EAGL_RSSet(0x28, 7);   /* 0x5375a0(7) */
+    RenderState_SetZFunc(g_render->device->rs, 7);
     Hud2D_View(r);         /* 0x4670c0 */
 }
 
@@ -2700,6 +2700,10 @@ static void end_pass(RenderSystem *r)
 void HUD_Draw(RenderSystem *r, RCamera *c)
 {
     if (hidden || !r || !c) return;
+    /* The render state's depth function and fog, saved, then fog off; both back at the end. */
+    RenderState *rs = r->device->rs;
+    int zfunc = rs->state28, fog = rs->state15;
+    RenderState_SetFogMode(rs, 0);
     pass(r, c);
     PENDING_NOTE(0x427ac0, "the HUD's map pass (0x657d5c, 0x427ac0)");
     end_pass(r);
@@ -2745,4 +2749,6 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         }
     }
     PENDING_NOTE(0x425910, "HUD_Draw's modal visuals, replay and network parts");
+    RenderState_SetZFunc(rs, zfunc);
+    RenderState_SetFogMode(rs, fog);
 }

@@ -214,6 +214,8 @@ void EAGL_RSProbe(uint32_t state);                              /* 0x540320 */
 void EAGL_RSApply(const int32_t values[6]);                     /* 0x5403c0: 6 states, only changes sent */
 /* The render-state object's cull mode ([1]+0x10) and depth-bias base ([1]+0x30) (*0x69ed0c). */
 void EAGL_RSSetDevice(int cull, int biasbase);
+/* The value last applied for one of the six states (0x5ded34 + 8 * i; the cull's is 0x5ded4c). */
+int32_t EAGL_RSValue(int i);
 void EAGL_RSReset(void);                                         /* 0x538860: send the whole table */
 
 /* ---- materials and layers ---- */

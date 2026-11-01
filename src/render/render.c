@@ -92,14 +92,21 @@ void RenderState_Send(RenderState *rs)
     EAGL_RSSetDevice(rs->cull, rs->biasbase);
 }
 
-/* The new cull is only stored: the original sends it at once only when 0x5ded4c is 1, which nothing sets
-   (it is 0 in the exe). The material layers' cull state reads it from here (EAGL_RSSetCull); the port's
-   EAGL keeps that value itself, hence EAGL_RSSetDevice. */
+void RenderState_SetZFunc(RenderState *rs, int zfunc)
+{
+    rs->state28 = zfunc;
+    EAGL_RSSet(0x28, (uintptr_t)zfunc);
+}
+
+/* The new cull is sent at once only while the material states' last cull value (0x5ded4c, the cull pair
+   of EAGL's table) is 1, i.e. culling is on; otherwise the next layer with culling on reads it (EAGL_RSSetCull,
+   through EAGL_RSSetDevice, the port's copy of the object's cull). */
 void RenderState_SetCull(RenderState *rs, int cull)
 {
     if (rs->cull != cull) {
         rs->cull = cull;
         EAGL_RSSetDevice(rs->cull, rs->biasbase);
+        if (EAGL_RSValue(3) == 1) EAGL_RSSet(2, (uintptr_t)cull);
     }
 }
 

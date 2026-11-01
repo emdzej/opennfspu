@@ -290,6 +290,12 @@ void EAGL_RSApply(const int32_t v[6])
         }
 }
 
+int32_t EAGL_RSValue(int i)
+{
+    rs_load();
+    return rs_value[i];
+}
+
 void EAGL_RSReset(void)
 {
     rs_load();

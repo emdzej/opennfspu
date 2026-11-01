@@ -75,6 +75,7 @@ typedef struct {
 } RenderState;
 RenderState *RenderState_ctor(RenderState *rs);          /* 0x537470 */
 void RenderState_Send(RenderState *rs);                  /* 0x5374d0 */
+void RenderState_SetZFunc(RenderState *rs, int zfunc);   /* 0x5375a0: setstate 0x28 (3 less-equal, 7 always) */
 void RenderState_SetCull(RenderState *rs, int cull);     /* 0x537600 */
 void RenderState_SetFogMode(RenderState *rs, int mode);          /* 0x537670: 0 off, 1 on, 4 exp, 8 exp2 */
 void RenderState_SetFogDensity(RenderState *rs, float density);  /* 0x537690 */
