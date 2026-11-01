@@ -9,7 +9,7 @@
 | File layer: the installed game folder or an ISO image of it, case-insensitive names | in place |
 | The original program read at run time (`Porsche.exe` 3.5, size and CRC-32 checked) | in place |
 | The 3D driver (THRASH, the original's Direct3D 7 path) on OpenGL ES 3.0, EAGL2 | in place |
-| Textures, car models with their texture pages and colours | in place (no environment maps, decals or licence plates yet) |
+| Textures, car models with their texture pages and colours | in place (the car lights: brake, reverse, indicators and hazards, headlights fading on, their halos and the glow on the road; no headlight beams or lit lamp textures, environment maps, decals or licence plates yet) |
 | Tracks: loading, scenes and start grids, the world draw, the sky's horizon | in progress (all objects tested instead of the visibility grid; the sky's dome with its clouds, the weather's blend along the road, fog and lightning; the animated objects (the autobahn's train, signs, saws, fish) on their keyframed paths; the scene's placed objects (the finish lines, the objects the triggers raise); the sun and its lens flare (with the LENSFLARE option), the lamps' glows; no knockable objects yet) |
 | Track road and collision: road nodes, the collision tree of polygons, road edges and roadside objects (cylinders, boxes), the ground under a point | in progress (no collisions with animated objects yet) |
 | Cameras | in progress (the race cameras: in the car, on the hood, the near and far chase cameras, the fixed and overhead ones, the crash camera, kept out of walls and under ceilings; no TV or replay cameras, no dashboard yet) |

@@ -74,3 +74,10 @@ void RBillBoard_CreateQuads(int n, const RBillBoard *in, float (*pos)[4], uint32
    layers as billboards, blinking, flickering, fading under fog, with a depth bias towards the eye, fog
    and z writes off while they draw. 0x451810 */
 void Sprite_DrawGlow(const float *g);
+/* The road's height under the race camera, each frame before the world (0x451f70). */
+void Sprite_CameraGround(void);
+/* A car light's glow on the road ('BLUR'): a quad across the view at the car's road height h + 0.1
+   (or the light's own height when it is above the eye) size wide, stretched away from the eye, alpha
+   a * 128 near and a * 64 far, in the light's colour, with a depth bias towards the eye and z writes
+   off. 0x451c30 */
+void Sprite_DrawCarGlow(const float *p, float h, float size, uint32_t colour, float a);

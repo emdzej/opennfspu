@@ -11,6 +11,8 @@
 #include "render/rtex.h"
 #include "render/sky_levels.h"
 #include "render/sky_tex.h"
+#include "game/camera.h"
+#include "game/wtree.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,7 +25,8 @@ static RMesh *s_mesh;                /* 0x61bcb0 */
 static SkyBlend *s_blend;            /* 0x61bcb4 */
 static float s_uv[8];                /* 0x61bc78: the quad's corners (0,0) (1,0) (1,1) (0,1) */
 static const int32_t *s_clock;       /* 0x61bcac: the race's tick counter */
-static Texture *s_blur;              /* 0x61bcb8 (the glows of 0x451c30, to come) */
+static Texture *s_blur;              /* 0x61bcb8: the cars' light glows (0x451c30) */
+static float s_camground;            /* 0x61bcbc: the road's height under the race camera, + 0.1 */
 
 enum { NAME_NULL = 0x6e756c6c };     /* 'null' */
 
@@ -364,4 +367,70 @@ void Sprite_DrawGlow(const float *g)
     }
     rs->state39 = z39;
     EAGL_RSSet(0x39, (uint32_t)z39);
+}
+
+/* 0x451f70: the race camera's surface tracker moved to its eye, the height there of the polygon's plane
+   plus 0.1; 0 off the road. */
+void Sprite_CameraGround(void)
+{
+    RaceCamera *c = &g_racecam[0];
+    WSurface_Update(&c->surf, c->eye, true);   /* 0x473fc0 */
+    if (c->surf.none) {
+        s_camground = 0;
+        return;
+    }
+    s_camground = (float)(WTree_PlaneHeight(WSurface_Normal(&c->surf), WSurface_Vertex(&c->surf, 0), c->eye) +
+                          (double)exe_f32(0x5b2604));   /* 0x489f90, 0.1 */
+}
+
+void Sprite_DrawCarGlow(const float *p, float h, float size, uint32_t colour, float a)
+{
+    if (!g_render_modalpha || !s_mesh) return;
+    RCamera *c = g_render->camera;
+    const float *eye = c->frame.eye, *right = c->frame.orient;
+    float dx = p[0] - eye[0], dz = p[2] - eye[2];
+    float up = -(p[1] - eye[1]), vy;
+    if (up < 0) {   /* (0x5b23f8: 0) the light above the eye */
+        vy = -up;
+        up = 0;
+    } else {
+        vy = h - s_camground;
+    }
+    float rx = right[0] * size, ry = right[1] * size, rz = right[2] * size;
+    float y = h + exe_f32(0x5b2604);   /* 0.1 above the road */
+    static float v[4][4];
+    v[0][0] = p[0] - rx, v[0][1] = y - ry, v[0][2] = p[2] - rz, v[0][3] = p[3];
+    v[1][0] = p[0] + rx, v[1][1] = y + ry, v[1][2] = p[2] + rz, v[1][3] = p[3];
+    float k = (float)((double)size * exe_f64(0x5b2b00));   /* 0.1 */
+    float ox = dx * k, oy = k * vy, oz = dz * k;
+    if (1.0f < up) {
+        /* (0x5f400000 less half the bits: a rough 1 / sqrt) */
+        uint32_t u;
+        memcpy(&u, &up, 4);
+        u = 0x5f400000u - (uint32_t)((int32_t)u >> 1);
+        float r;
+        memcpy(&r, &u, 4);
+        ox *= r;
+        oy *= r;
+        oz *= r;
+    }
+    v[2][0] = v[1][0] - ox, v[2][1] = v[1][1] - oy, v[2][2] = v[1][2] - oz, v[2][3] = p[3];
+    v[3][0] = v[0][0] - ox, v[3][1] = v[0][1] - oy, v[3][2] = v[0][2] - oz, v[3][3] = p[3];
+    uint32_t rgb = colour & 0xffffffu;
+    uint32_t far = (uint32_t)((int32_t)(a * exe_f32(0x5b24e4)) & 0xff) << 24 | rgb;    /* 64 */
+    uint32_t near = (uint32_t)((int32_t)(a * exe_f32(0x5b3880)) & 0xff) << 24 | rgb;   /* 128 */
+    static uint32_t col[4];
+    col[0] = col[1] = near;
+    col[2] = col[3] = far;
+    float ex = p[0] - eye[0], ey = p[1] - eye[1], ez = p[2] - eye[2];
+    s_blend->v[4] = (int32_t)lrintf(g_render->depthfactor * exe_f32(0x5b3d6c) / (ex * ex + ey * ey + ez * ez));   /* -25000 */
+    s_blend->v[0] = 1;   /* 0x5377a0 */
+    THRASH.fn.setstate(0x24, 0);
+    RMesh_setPositions(s_mesh, v, 4);
+    RMesh_setUVs(s_mesh, 0, s_uv);
+    RMesh_setColours(s_mesh, 0, col);
+    RMesh_setTexture(s_mesh, 0, s_blur, 0);
+    RMesh_setBlend(s_mesh, 0, s_blend);
+    RMesh_draw(s_mesh, -1);
+    THRASH.fn.setstate(0x24, 10);
 }

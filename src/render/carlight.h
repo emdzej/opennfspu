@@ -54,6 +54,9 @@ typedef struct {
    map's colours for its exterior, interior and light decals, the sun's direction (straight down under a
    roof), the slice's reflection textures, the road's axes for their projection. */
 void CarLight_Update(CarLight *l, Car *car);
+/* The car's lights on and their levels from the simulation's car (R3DCar_v6 0x439290; render/r3dcar.h's
+   lighton, lightlevel). */
+void R3DCar_SetLights(struct R3DCar *r, Car *c);
 
 /* The car's hinge angles from the simulation (R3DCar_Animate 0x438370's race part): wheels, steering wheel,
    needles, shadows. */

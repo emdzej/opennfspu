@@ -9,9 +9,12 @@
 #include "real/set3d.h"
 #include "real/shape.h"
 #include "render/car_pending.h"
+#include "render/carhalo.h"
 #include "render/carpages.h"
 #include "render/render.h"
 #include "support/ufile.h"
+#include "pending.h"
+#include "render/thrash.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -767,6 +770,125 @@ void R3DCarLOD_Draw(R3DCarLOD *lod, EaglMatStack *model, uint8_t mask, bool cock
     }
 }
 
+/* A hinge's turn about x, y and z (0x443e40: the car's hinge angles, turns) as one matrix; without x
+   for the second (the beam's). */
+static void hinge_rot(const R3DCar *car, int kind, EaglMatrix *all, EaglMatrix *yz)
+{
+    static const float none[3] = {0, 0, 0};
+    const float *a = car->hinge && kind < CAR_NHINGES ? car->hinge[kind] : none;
+    float deg = f32(0x5b25cc);   /* 360 */
+    EaglMatrix rx, ry, rz;
+    EAGL_MatAxisAngle(&rx, a[0] * deg, 1.0f, 0, 0);
+    EAGL_MatAxisAngle(&ry, a[1] * deg, 0, 1.0f, 0);
+    EAGL_MatAxisAngle(&rz, a[2] * deg, 0, 0, 1.0f);
+    *all = rx;
+    EAGL_MatPostMul(all, &ry);
+    EAGL_MatPostMul(all, &rz);
+    EAGL_MatIdentity(yz);
+    EAGL_MatPostMul(yz, &ry);
+    EAGL_MatPostMul(yz, &rz);
+}
+
+static void transpose4(const EaglMatrix *a, EaglMatrix *out)   /* 0x53a3c0 */
+{
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) out->m[r * 4 + c] = a->m[c * 4 + r];
+}
+
+/* The light's beam on the road at night (0x43d420, the light's flag +0x57 in a race): pending. */
+static void beam(const float *light, const EaglMatrix *m1, const EaglMatrix *m2)
+{
+    (void)light, (void)m1, (void)m2;
+    PENDING_NOTE(0x43d420, "the car lights' beams at night");
+}
+
+/* For every part whose LOD entry has effects, its 'ef' records of type 5: when the light of the part's
+   id (info +0xc) is on, through the part's transform (the one the LOD's number names, not the entry's
+   as the draw takes: the original's) and its hinge (info +7); when the record's flag 8 is set and the
+   light of its own id (+0x56) is on, its mirror image: x, the first axis and the second's x negated
+   (and +0x30's), through the transform's rotation transposed and its translation's x negated, with
+   the record's hinge (+0x55). R3DCarLOD_v3 0x43d730 */
+void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m)
+{
+    R3DCar *car = lod->car;
+    RenderState *rs = g_render && g_render->device ? g_render->device->rs : NULL;
+    if (rs) {
+        rs->state39 = 0;   /* 0x5375e0(0) */
+        EAGL_RSSet(0x39, 0);
+    }
+    THRASH.fn.setstate(0x24, 10);
+    uint32_t efid = kind_id(R3D_EF);
+    for (uint32_t k = 0; k < lod->nparts; k++) {
+        R3DPart *p = &lod->parts[k];
+        const uint8_t *info = p->info;
+        if (!p->entry[1]) continue;
+        UData *it = UData_finditem(p->article, efid, 0, 0xffff);   /* 0x43cc80 */
+        while (it != p->end) {
+            const uint8_t *ef = item_data(it);
+            if (!ef) break;
+            if (le32(ef) == 5) {
+                const float *light = (const float *)(ef + 8);
+                if (car->lighton[info[0xc] & 15]) {   /* 0x443590 */
+                    EaglMatrix m1 = *m, m2 = *m;
+                    const EaglMatrix *tr = part_transform(p, lod->lod);   /* 0x59efd0 */
+                    if (tr) {
+                        EaglMatrix t;
+                        EAGL_MatCopy(&t, tr);
+                        EAGL_MatPreMul(&m1, &t);
+                        m2 = m1;
+                        if (info[7]) {
+                            EaglMatrix r, ryz;
+                            hinge_rot(car, info[7], &r, &ryz);
+                            EAGL_MatPreMul(&m1, &r);
+                            EAGL_MatPreMul(&m2, &ryz);
+                        }
+                    }
+                    R3DCar_LightHalo(light, car->road, &m1, car->lightlevel[info[0xc] & 15]);   /* 0x4435c0 */
+                    if (!g_r3d_frontend && ef[0x57] && 0 < g_r3d_night) beam(light, &m1, &m2);
+                }
+                if ((ef[0x50] & 8) && car->lighton[ef[0x56] & 15]) {
+                    float twin[0x14];
+                    memcpy(twin, light, sizeof twin);
+                    twin[0] = -twin[0];
+                    twin[4] = -twin[4];
+                    twin[5] = -twin[5];
+                    twin[6] = -twin[6];
+                    twin[8] = -twin[8];
+                    twin[12] = -twin[12];
+                    EaglMatrix m1 = *m, m2 = *m;
+                    const EaglMatrix *tr = part_transform(p, lod->lod);
+                    if (tr) {
+                        EaglMatrix t, rot, mv;
+                        EAGL_MatCopy(&t, tr);
+                        float tx = -t.m[12], ty = t.m[13], tz = t.m[14];
+                        t.m[12] = t.m[13] = t.m[14] = 0;
+                        transpose4(&t, &rot);
+                        EAGL_MatTranslation(&mv, tx, ty, tz);
+                        EAGL_MatPreMul(&rot, &mv);
+                        EAGL_MatPreMul(&m1, &rot);
+                        m2 = m1;
+                        if (info[7]) {
+                            EaglMatrix r, ryz;
+                            hinge_rot(car, ((const uint8_t *)twin)[0x4d], &r, &ryz);
+                            EAGL_MatPreMul(&m1, &r);
+                            EAGL_MatPreMul(&m2, &ryz);
+                        }
+                    }
+                    R3DCar_LightHalo(twin, car->road, &m1, car->lightlevel[ef[0x56] & 15]);
+                    if (!g_r3d_frontend && ef[0x57] && 0 < g_r3d_night) beam(twin, &m1, &m2);
+                }
+            }
+            /* The next record while it is still an 'ef'. */
+            it++;
+            if (it == p->end || UData_key(it) != efid) it = p->end;
+        }
+    }
+    if (rs) {
+        rs->state39 = 1;   /* 0x5375e0(1) */
+        EAGL_RSSet(0x39, 1);
+    }
+}
+
 static int table(uint32_t va, int i) { return (int)exe_u32(va + 4u * (unsigned)i); }
 
 /* R3DObject_v14 0x444d30 (R3DCar_v14 adds the race's window reflections, pending): which LOD draws
@@ -826,10 +948,14 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
     }
     g_rlayer_spectex = car->globaltex;   /* (the light block's +0xdc: 0x440870) */
     car_draw_lods(car, model);
+    EaglMatrix world = *EAGL_StackTop(model);
     g_rlayer_lights = saved;
     g_rlayer_envtex = NULL;
     g_rlayer_spectex = NULL;
     g_rlayer_lighttex = NULL;
     EAGL_StackPop(model);
+    /* the race's draw (0x4431e0) then, the stack popped, LOD list index 0's lights under the car's
+       matrix (their corners are the world's) */
+    if (!g_r3d_frontend && car->nlods) R3DCarLOD_DrawLights(car->lods[0], &world);
     Render_SetCull(g_render);
 }

@@ -132,6 +132,14 @@ typedef struct R3DCar {
     /* port: the car's light block (the original's +0x2dc: render/carlight.h), and whether it was set */
     CarLight light;
     bool lit;
+    /* The lights' state (R3DCar_SetLights): on and level per light id (the original's +0x2d4 and +0x2d8
+       arrays), the headlights switch last seen (+0x567), their fade (the +0x64 object's +0x110 .. +0x11c:
+       start ms, length ms, from, to), and (port) the car's road height the glows sit at (its +0x41c). */
+    uint8_t lighton[16];
+    float lightlevel[16];
+    uint8_t headon;
+    struct { uint32_t since, dur; float from, to; } headease;
+    float road;
 } R3DCar;
 
 /* Game state the renderer reads (globals of the original). */
@@ -159,6 +167,9 @@ void R3DCarLOD_Free(R3DCarLOD *lod);                    /* R3DCarLOD_v5 0x43dff0
 /* Draws the parts whose view mask (Base + 0x4e) shares a bit of mask & 0xf0; cockpit = the driver's view
    (parts flagged for it, Base + 0x51; else those not flagged exterior-only, + 0x52). R3DCarLOD_v2 0x43c760 */
 void R3DCarLOD_Draw(R3DCarLOD *lod, EaglMatStack *model, uint8_t mask, bool cockpit);
+/* The lights of the LOD's parts ('ef' type 5) that are on, each through its part's transform and hinge
+   under m (and the mirrored twin a light may have), as halos (render/carhalo.h). R3DCarLOD_v3 0x43d730 */
+void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m);
 void R3DCarLOD_Bounds(R3DCarLOD *lod, EaglMatStack *model, float mn[3], float mx[3]); /* R3DCarLOD_v4 0x43ddc0 */
 
 /* The object's draw: model matrix from the car state (0x4433c0), then the LOD dispatch (R3DObject_v14

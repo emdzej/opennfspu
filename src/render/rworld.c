@@ -9,6 +9,7 @@
 #include "render/render_pending.h"
 #include "render/rlists.h"
 #include "render/sky.h"
+#include "render/sprite.h"
 
 /* RenderState setters (0x5375e0: +0x0c and state 0x39; 0x5375a0: +0x04 and state 0x28). */
 static void rs_set39(RenderState *rs, int v)
@@ -46,7 +47,7 @@ void (*g_render_cars)(RCamera *c);
 void Render_PendingWorld(RCamera *c)
 {
     PENDING_NOTE(0x452590, "Render_World: 0x452590");
-    PENDING_NOTE(0x451f70, "Render_World: 0x451f70");
+    Sprite_CameraGround();   /* 0x451f70 */
     if (c->v12c != 0) Sky_DrawBefore();   /* (and 0x657db4, 0x619799 clear: replay / front-end flags) */
     if (c->flags[2]) world_pass(c);                            /* +0x11a */
     if (c->flags[3]) PENDING_NOTE(0x534000, "THRASH_setstate_glue (+0x11b)");

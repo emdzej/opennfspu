@@ -80,6 +80,7 @@ static void draw_cars(RCamera *c)
         CarAnim_Update(r, car);            /* R3DCar_Animate 0x438370 */
         CarLight_Update(&r->light, car);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
         r->lit = true;
+        R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */
         R3DCar_Draw(r, &c->view->model);
     }
 }

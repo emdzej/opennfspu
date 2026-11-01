@@ -301,6 +301,15 @@ static void colourgrid_create(SkyTextures *t)
     }
 }
 
+/* The sky's (0x45dc40) glow level at the eye's node (0x45cec0): the colour keys' +0x18 mixed. 1 without
+   a sky (the original has one in every race). */
+float Sky_GlowLevel(void)
+{
+    if (!g_sky || !g_sky->colour) return 1.0f;
+    float w = SkyColour_weight(g_sky->colour, g_sky->region);   /* 0x45a420 */
+    return colour_mix(g_sky->colour, w, 0x18);                  /* 0x45a7a0 */
+}
+
 const int32_t *Sky_ColourCell(int a, int b) { return g_colourgrid[a * 7 + 0x18 + b]; }   /* 0x45cae0 */
 
 bool Sky_LightningActive(void) { return g_lightning && g_lightning->active; }

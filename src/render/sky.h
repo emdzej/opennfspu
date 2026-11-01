@@ -32,7 +32,10 @@ void SkyConfig_Upgrade(SkyConfig *c, int version);
 void Sky_CreateLight(int weather);
 void Sky_FreeLight(void);
 const uint8_t *Sky_LightSlot(void);              /* *0x627e1c: SKY_SLOT_SIZE bytes in the configuration */
-int Sky_SlotFor(int weather);                    /* the slot index the above picks (0x4598f0) */
+int Sky_SlotFor(int weather);
+/* How much the cars' light glows show at the eye's place along the road (the sky colour keys' +0x18).
+   0x45cec0 */
+float Sky_GlowLevel(void);                    /* the slot index the above picks (0x4598f0) */
 
 /* Sky\<name>.fsh (else Sky\default.fsh) as a file (global 0x627e50), and the sky objects made from it
    (pending). `reload` frees the previous one first. Sky_LoadFsh 0x45da90 */

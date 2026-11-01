@@ -8,6 +8,7 @@
 #include "game/track.h"
 #include "game/wtree.h"
 #include "pending.h"
+#include "app.h"
 #include "render/car_ini.h"
 #include "render/r3dcar.h"
 #include "game/race.h"
@@ -266,4 +267,137 @@ void CarAnim_Update(R3DCar *r, Car *car)
     }
     h[0x16][1] = (float)g_sim_tick * 0.0078125f;   /* (TIMER_ticks x 0x5b273c; the port's clock is the simulation's) */
     PENDING_NOTE(0x438370, "R3DCar_Animate's doors, lids, wipers and texture animations (+0x64's timers, 0x490)");
+}
+
+/* ---- the lights' state (R3DCar_v6 0x439290) ---- */
+
+static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
+
+static void on(R3DCar *r, int id, bool v) { r->lighton[id] = v; }       /* 0x4435a0 */
+static void level(R3DCar *r, int id, float v) { r->lightlevel[id] = v; }   /* 0x4435d0 */
+
+/* The headlights' fade (the timed extents' clock, GetTickCount): from its start to its target over its
+   length, the target once past it (the length then cleared). */
+static float ease_now(R3DCar *r, uint32_t now)
+{
+    if (r->headease.dur == 0) return r->headease.to;
+    float t = (float)(now - r->headease.since) / (float)(int32_t)r->headease.dur;
+    if (1.0f < t) {
+        r->headease.dur = 0;
+        return r->headease.to;
+    }
+    return (r->headease.to - r->headease.from) * t + r->headease.from;
+}
+
+/* Ids: 0, 1 the headlights (by the car's lights switch, +0xd87 bit 0; their level the pop-ups' extent
+   eased over a second, or 1), 2, 3 the brake lights (the brake, or in reverse the throttle), 4 .. 7 the
+   indicators (bits 3 and 4; both blinking on a wreck, state 3; every 64 ticks), 8 reversing (gear 0),
+   10, 11 the rear lights' halves (an indicator's blink, else the brake), 12, 13 always; 9 never. With the
+   headlights on the rear lights glow at 0.6 unbraked. The damage of a corner over 30 puts its lights
+   out. The front end's showroom: headlights 0.8, rear lights 0.6, reversing at 0. A switch while the
+   fade runs is let pass (the switch kept, the fade not restarted), as the original. */
+void R3DCar_SetLights(R3DCar *r, Car *c)
+{
+    r->road = *CAR_F(c, 0x41c);
+    uint8_t *b = c->b;
+    int last = 0xb;
+    if (g_r3d_frontend) {
+        on(r, 0, 1), level(r, 0, f32(0x5b359c));
+        on(r, 1, 1), level(r, 1, f32(0x5b359c));
+        on(r, 2, 1), level(r, 2, f32(0x5b35a4));
+        on(r, 3, 1), level(r, 3, f32(0x5b35a4));
+        on(r, 10, 1), level(r, 10, f32(0x5b35a4));
+        on(r, 11, 1), level(r, 11, f32(0x5b35a4));
+        on(r, 8, 1), level(r, 8, f32(0x5b35a0));
+        last = 9;
+    } else {
+        bool brake = (*CAR_I(c, 0xd98) == 0 ? b[0xd80] : b[0xd7f]) != 0;
+        on(r, 8, b[0xd82] == 0);
+        on(r, 2, brake);
+        on(r, 3, brake);
+        int32_t ticks = (int32_t)(uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+        uint32_t blink = (uint32_t)(ticks / (128 >> 1));   /* (the timer's rate 0x5deb48, 128, halved) */
+        uint32_t sw = (uint32_t)(int32_t)(int8_t)b[0xd87];
+        bool right = (sw >> 4) & 1, left = (sw >> 3) & 1;
+        uint32_t v4;
+        if (*CAR_I(c, 0xb50) == 3) {
+            left = right = true;
+            v4 = blink & 1;
+        } else {
+            v4 = left ? blink & 1 : 0;
+        }
+        on(r, 4, v4);
+        on(r, 6, left ? ~blink & 1 : 0);
+        on(r, 5, right ? blink & 1 : 0);
+        on(r, 7, right ? ~blink & 1 : 0);
+        on(r, 10, left ? blink & 1 : brake);
+        on(r, 11, right ? blink & 1 : brake);
+        uint8_t head = b[0xd87] & 1;
+        on(r, 0, head);
+        on(r, 1, head);
+        on(r, 9, 0);
+        on(r, 12, 1);
+        on(r, 13, 1);
+        uint32_t now = app_ticks_ms();   /* GetTickCount */
+        if (r->headon != head) {
+            r->headon = head;
+            if (r->headease.dur <= now - r->headease.since) {
+                if (!head) {
+                    r->headease.from = ease_now(r, now);
+                    r->headease.to = 0;
+                } else {
+                    float to = r->headease.to;
+                    if (r->headease.dur != 0) {
+                        float t = (float)(now - r->headease.since) / (float)(int32_t)r->headease.dur;
+                        if (t <= 1.0f) r->headease.from = (to - r->headease.from) * t + r->headease.from;
+                        else {
+                            r->headease.dur = 0;
+                            r->headease.from = to;
+                        }
+                    } else {
+                        r->headease.from = to;
+                    }
+                    r->headease.to = r->headlightextent;
+                }
+                r->headease.since = now;
+                r->headease.dur = 1000;
+            }
+        }
+        float lv;
+        if (r->headlightextent == 0) {
+            lv = head ? 1.0f : 0.0f;
+        } else {
+            lv = ease_now(r, now) / r->headlightextent;
+            if (!head && 0 < lv) {
+                on(r, 0, 1);
+                on(r, 1, 1);
+            }
+        }
+        level(r, 0, lv);
+        level(r, 1, lv);
+        if (!head || brake) {
+            level(r, 2, 1.0f);
+            level(r, 3, 1.0f);
+            level(r, 10, 1.0f);
+            level(r, 11, 1.0f);
+            last = -1;
+        } else {
+            level(r, 2, f32(0x5b35a8));
+            level(r, 3, f32(0x5b35a8));
+            level(r, 10, left ? 1.0f : f32(0x5b35a8));
+            level(r, 11, right ? 1.0f : f32(0x5b35a8));
+            on(r, 2, 1);
+            on(r, 3, 1);
+            if (!left) on(r, 10, 1);
+            if (right) last = -1;
+        }
+    }
+    if (0 <= last) on(r, last, 1);
+    float lim = f32(0x5b2408);   /* 30 */
+    if (lim < *CAR_F(c, 0x4e4)) on(r, 0, 0), on(r, 4, 0);
+    if (lim < *CAR_F(c, 0x4ec)) on(r, 1, 0), on(r, 5, 0);
+    if (lim < *CAR_F(c, 0x4f4)) on(r, 3, 0), on(r, 7, 0), on(r, 11, 0);
+    if (lim < *CAR_F(c, 0x4fc)) on(r, 2, 0), on(r, 6, 0), on(r, 10, 0);
+    if (lim < *CAR_F(c, 0x4f8)) on(r, 8, 0);
+    if (lim < *CAR_F(c, 0x504)) on(r, 12, 0), on(r, 13, 0);
 }
