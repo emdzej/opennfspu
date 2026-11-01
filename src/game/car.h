@@ -93,8 +93,8 @@ extern CarList g_humans;      /* 0x5e8c00, 0x5e8bfc: class 1 (flags 4); their in
 extern CarList g_opponents;   /* 0x5e8aec, 0x5e8e28: class 2, 4, 8 or 0x10 (flags 2) */
 extern CarList g_viewed;      /* 0x5e8b10, 0x5e8ab8: the humans (and the class-2 opponents with 0x657414) (flags 0x100) */
 extern CarList g_rivals;      /* 0x5e8bd4, 0x5e8bf8: class 2 (flags 8) */
-extern CarList g_cops;        /* 0x5e8b60, 0x5e8e24: class 4 (flags 0x10) */
-extern CarList g_chasers;     /* 0x5e8ac4, 0x5e8abc: class 8 or 0x10 (flags 0x20; 0x10 also 0x40) */
+extern CarList g_roadcars;    /* 0x5e8b60, 0x5e8e24: class 4, the road traffic ("Traffic", flags 0x10) */
+extern CarList g_chasers;     /* 0x5e8ac4, 0x5e8abc: the police, class 8 or 0x10 (flags 0x20; 0x10 also 0x40) */
 extern CarList g_ranked;      /* 0x5e8b88: the race's cars by their race distance less laps (0x417730), rank +0x528 */
 extern CarList g_ordered;     /* 0x5e8bac: by race distance (+0x550 the car swapped with, +0x554 when) */
 extern int32_t g_race_view_opponents;   /* 0x657414 (class-2 opponents viewed too) */

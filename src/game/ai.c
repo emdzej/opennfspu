@@ -106,7 +106,6 @@ void AI_Load(void)
     /* "%s%s%d.lsp" (0x5cbda8): the directory (0x65b2e4), the track, reversed or not. */
     snprintf(path, sizeof path, "GameData\\Track\\racer\\work\\%s%d.lsp", g_track_name, g_race_reverse);
     line = vfs_read_all(path, &line_size);
-    PENDING_NOTE(0x40ad40, "the AI's tuning, personalities, scripts and glue (tuning.bin, prsonal.bin, scripts.bin, glue.bin)");
     PENDING_NOTE(0x4a2ba0, "Track_Table: the track's AI speed zones and road width");
 }
 

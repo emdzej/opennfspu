@@ -33,7 +33,7 @@ static float exe_f32(uint32_t va)
 }
 #define K(va) exe_f32(va)   /* the float constant the original reads at va */
 
-CarList g_racers, g_humans, g_opponents, g_viewed, g_rivals, g_cops, g_chasers, g_ranked, g_ordered;
+CarList g_racers, g_humans, g_opponents, g_viewed, g_rivals, g_roadcars, g_chasers, g_ranked, g_ordered;
 int32_t g_race_view_opponents;
 static int g_created;   /* 0x5e8bd0 */
 
@@ -427,7 +427,7 @@ static void Car_AddToLists(Car *c)
     if (cls & 4) {
         list_add(&g_opponents, c);
         *f |= 2;
-        list_add(&g_cops, c);
+        list_add(&g_roadcars, c);
         *f |= 0x10;
     }
     if (cls & 0x18) {
@@ -516,7 +516,7 @@ void Car_Construct(void)
     Parts_Load();
     g_ncars = g_ntraffic = 0;   /* 0x5e8b58, 0x5e8b5c and the lists' counts */
     g_created = 0;
-    CarList *lists[] = {&g_racers, &g_humans, &g_opponents, &g_viewed, &g_rivals, &g_cops, &g_chasers, &g_ranked, &g_ordered};
+    CarList *lists[] = {&g_racers, &g_humans, &g_opponents, &g_viewed, &g_rivals, &g_roadcars, &g_chasers, &g_ranked, &g_ordered};
     for (size_t k = 0; k < sizeof lists / sizeof *lists; k++) lists[k]->n = 0;
     for (int i = 0; i < g_nracecars + g_ntrafficcars && i < CAR_MAX + TRAFFIC_MAX; i++) {
         Car *c = MEM_alloc(exe_str(0x5cc5b4), (int)sizeof(Car), 0);   /* "Car_tObj" (0x1254) */

@@ -7,6 +7,7 @@
 #include "eagl/eagl.h"
 #include "render/headlights.h"
 #include "game/ai.h"
+#include "game/ai_data.h"
 #include "game/car.h"
 #include "game/car_damage.h"
 #include "game/car_drive.h"
@@ -152,6 +153,7 @@ static bool load(const char *track, const char *carname)
     Input_Reset(false);
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
     AI_MakeControllers();  /* 0x406580 */
+    AI_LoadData();         /* 0x406950: the personalities, the traffic's configuration */
     {
         /* The race camera on the viewed car (--param follow=<car>), in its list's first mode or
            --param cam=<mode>. */
