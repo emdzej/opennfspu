@@ -46,6 +46,11 @@ void CarPage_init(CarPage *p);      /* the template of 0x4426c0: zero, bpp 0x613
 void CarPage_free(CarPage *p);      /* 0x447820 */
 /* The page's texture from a window's shape (and its damage copy when damage). 0x447850 */
 void CarPage_fromwindow(CarPage *p, Window *w, bool damage);
+/* A window over the page's texture's own pixels (+0x28), its damage copy drawn in first when it has one,
+   for drawing into the texture (NULL without a texture). 0x4479c0 */
+Window *CarPage_Lock(CarPage *p);
+/* The window let go and the texture sent again. 0x447a20 */
+void CarPage_Unlock(CarPage *p);
 /* The page shares a global page's texture (under the global page's name). 0x447a40 */
 void CarPage_share(CarPage *p, const CarPage *global);
 /* The page shares another page's texture under its own name. 0x447ac0 */

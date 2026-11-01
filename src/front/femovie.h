@@ -22,6 +22,9 @@ FEMovie *FEMovie_Load(const char *path, int x, int y, int w, int h, bool audio, 
 void FEMovie_Free(FEMovie *m);                          /* 0x4e1a30 */
 /* Its frame at the box offset by (ox, oy), in colour (the alpha its translucency). 0x4e2000 */
 void FEMovie_Draw(FEMovie *m, int32_t ox, int32_t oy, uint32_t colour);
+/* Its update into window win (slot 0, 0x4e1d80): the frames due decoded, the shown one drawn there. */
+struct Window;
+void FEMovie_Update(FEMovie *m, struct Window *win);
 bool FEMovie_Ended(const FEMovie *m);                   /* 0x4e2140: it came to its end once */
 bool FEMovie_Playing(const FEMovie *m);                 /* 0x4e1b50 */
 void FEMovie_Pause(FEMovie *m);                         /* 0x4e1b40 */

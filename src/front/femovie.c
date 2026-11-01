@@ -226,8 +226,9 @@ void FEMovie_Pause(FEMovie *m) { if (m) m->paused = true; }
 /* The movie's update into its window (slot 0, 0x4e1d80): the clock on by the ticks since the last one
    (only after a frame was shown and while playing); the frames due got, the 'MADe' ones among them
    skipped, at most one ahead without sound; at the end from the start again (and ended set); then the
-   sound started once, its volume the options' music level, and the frame onto the window. */
-static void update(FEMovie *m)
+   sound started once, its volume the options' music level, and the frame onto the window given (its
+   own, or the victory room's screen page). */
+static void update(FEMovie *m, Window *win)
 {
     if (m->failed || !m->cur) return;
     /* (0x5649e0: the game's window there and active: always the port's) */
@@ -274,18 +275,23 @@ static void update(FEMovie *m)
         if (0 <= m->player) SND_StreamSetVolume(m->player, vol);   /* 0x566c90 */
     }
     m->shown = true;
-    if (m->win) {
-        WINDOW_select(m->win);
+    if (win) {
+        WINDOW_select(win);
         MAD_blit(0, 0, m->cur, m->w, m->h, 0);   /* 0x56a6d0 (then THRASH_flushwindow: a memory window's none) */
         WINDOW_deselect();
     }
+}
+
+void FEMovie_Update(FEMovie *m, Window *win)
+{
+    if (m && !m->failed) update(m, win);
 }
 
 void FEMovie_Draw(FEMovie *m, int32_t ox, int32_t oy, uint32_t colour)
 {
     /* (0x4e2de0: FEMOVIESENABLED, 0x657e40, is 0 unless the keys set it) */
     if (!m || m->failed) return;
-    update(m);
+    update(m, m->win);
     if (!m->image || !m->image->tex || !m->win) return;
     Texture_reload(m->image->tex, m->win->shape);   /* 0x536280 */
     float x = (float)(m->x + ox), y = (float)(m->y + oy);

@@ -1,6 +1,10 @@
 /* The front end's 3D objects and rooms (fe3d.h). */
 #include "front/fe3d.h"
+#include "front/fe_parts.h"
+#include "front/femovie.h"
 #include "app.h"
+#include "exe.h"
+#include "real/window.h"
 #include "game/sim_math.h"
 #include "pending.h"
 #include "render/camera_math.h"
@@ -141,6 +145,8 @@ typedef struct {
     FE3DObject *wall;         /* +0x318: trackwall (the model +0x314 is "track") */
     float from[4], to[4];     /* +0x324, +0x330: the place (x y z) and x turn it zooms between */
     int32_t zoom_at;          /* +0x320: the tick the zoom started (-1 not yet) */
+    /* the victory room's */
+    FEMovie *movie;           /* +0x2f0 */
 } FE3DRoom;
 
 static FE3DRoom *s_room;
@@ -206,9 +212,14 @@ static FE3DRoom *victory_new(void)
 {
     static const float amb[3] = {75.0f, 75.0f, 75.0f}, dif[3] = {110.0f, 110.0f, 110.0f};
     FE3DRoom *r = spinning_new("ID_VICTORY", "victory", 5.2f, 32.0f, amb, dif, -0.98f, 0.2f, -1);
-    /* (its era's movie, er1pc-av.mad .. er4pc-av.mad by the career's year against the eras' 0x209 ..
-       0x20b, onto the model's part 5 each tick, FEVictory3DRoom_v1 0x4eaa80) */
-    PENDING_NOTE(0x4ea860, "the victory room's era movie on its screen (EA MAD)");
+    if (!r) return NULL;
+    /* Its movie, without sound or a texture of its own, played onto the model's screen. The original picks
+       the era's film by the career's year (0x502870) against the eras' (0x501f40 of 0x20b, 0x20a, 0x209:
+       er4pc-av, er3pc-av, er2pc-av), then always writes "%ser1pc-av.mad" over the name: every victory
+       shows the classic era's film. Kept. */
+    char path[100];
+    snprintf(path, sizeof path, exe_str(0x5da670), FE_DIR_MOVIES);
+    r->movie = FEMovie_Load(path, 0, 0, 0x100, 0x100, false, true);
     return r;
 }
 
@@ -300,6 +311,7 @@ static void room_free(FE3DRoom *r)
         FE3DObject_Free(r->seg[1]);
         FE3DObject_Free(r->seg[2]);
     }
+    FEMovie_Free(r->movie);   /* FEVictory3DRoom_v0 0x4eaa30 */
     FE3DObject_Free(r->model);
     FE3DObject_Free(r->car);
     free(r);
@@ -397,6 +409,13 @@ static void room_draw(FE3DRoom *r, EaglMatStack *model)
     if (r->dealer) {
         dealer_draw(r, model);
         return;
+    }
+    if (r->movie && r->model && 5 < r->model->car.npages) {
+        /* FEVictory3DRoom_v1 0x4eaa80: the movie's frame into the model's texture page 5, its screen
+           (0x4479c0, 0x443bb0) */
+        CarPage *p = &r->model->car.pages[5];
+        FEMovie_Update(r->movie, CarPage_Lock(p));
+        CarPage_Unlock(p);
     }
     int32_t t = ticks();
     if (r->model && r->hinge_axis >= 0) {

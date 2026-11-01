@@ -100,6 +100,27 @@ void CarPage_fromwindow(CarPage *p, Window *w, bool damage)
     }
 }
 
+Window *CarPage_Lock(CarPage *p)
+{
+    uint32_t format;
+    uint8_t *shape = NULL;
+    p->window = NULL;
+    if (p->texture && Texture_info(p->texture, &format, &shape) && shape) p->window = WINDOW_fromshape(shape, 0x10);
+    if (p->window && p->damage) {
+        WINDOW_select(p->window);
+        WINDOW_drawshape(p->damage->shape, 0, 0);   /* 0x53d2e0 */
+        WINDOW_deselect();
+    }
+    return p->window;
+}
+
+void CarPage_Unlock(CarPage *p)
+{
+    if (p->window) WINDOW_destroy(p->window);   /* 0x533cf0 */
+    p->window = NULL;
+    if (p->texture) Texture_invalidate(p->texture);   /* 0x535d60 */
+}
+
 /* What 0x447a40 and 0x447ac0 share: the source's record, the own set kept, the texture under the
    page's name in the own set's bank if it isn't there yet. */
 static void page_share(CarPage *p, const CarPage *src, const uint32_t *name)
