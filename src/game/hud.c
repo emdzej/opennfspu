@@ -1020,6 +1020,14 @@ static HudVisual *position_new(void)
     return &p->tray.base;
 }
 
+/* The damage trays' title colour: a Factory Driver mission's damage over its limit (0x434f00) turns it
+   yellow on the red scheme (0xccff0606), else red; otherwise the layout's +0x18. */
+static uint32_t damage_title_colour(void)
+{
+    if (g_race_mode == 9 && Mission_DamageOver(true)) return HudConfig_scheme() == 0xccff0606u ? 0xccffff00u : 0xccff0000u;
+    return (uint32_t)HudConfig_i32(0x18);
+}
+
 /* ---- the damage, drawn (HGraphicDamage, 0x1d0 bytes, vtable 0x5b2b84; 0x421e20) ---- */
 
 /* A getter returning a pair as instructions (mov eax, imm; mov edx, imm or mov edx, eax): its values read
@@ -1145,8 +1153,7 @@ static void gdamage_draw(HudVisual *v)
     }
     text_print(g->left, exe_str(0x5ccc8c), 1.0f, 1.0f);
     text_print(g->right, exe_str(0x5ccc84), 1.0f, 1.0f);
-    PENDING_NOTE(0x434f00, "the pursuit's red damage title (game type 9)");
-    if (g->title) g->title->colour = (uint32_t)HudConfig_i32(0x18);
+    if (g->title) g->title->colour = damage_title_colour();
     const char *t = LOC_string(HudConfig_loc(), 0xc);
     text_print(g->title, t ? t : "", 1.0f, 1.0f);
 }
@@ -1308,8 +1315,7 @@ static void tdamage_draw(HudVisual *v)
     int val[4] = {(int)CarSim_EngineWear(car), (int)((*CAR_F(car, 0x4ec) + *CAR_F(car, 0x4e4)) * exe_f32(0x5b23f0)),
                   (int)CarSim_BodyWear(car), (int)CarSim_SuspensionWear(car)};   /* 0x493810, 0x4938d0, 0x493c00, 0x493b30 */
     for (int k = 0; k < 4; k++) text_print(d->label[k], d->name[k] ? d->name[k] : "", 1.0f, 1.0f);
-    PENDING_NOTE(0x434f00, "the pursuit's red damage title (game type 9)");
-    if (d->title) d->title->colour = (uint32_t)HudConfig_i32(0x18);
+    if (d->title) d->title->colour = damage_title_colour();
     const char *t = LOC_string(HudConfig_loc(), 0xc);
     text_print(d->title, t ? t : "", 1.0f, 1.0f);
     if (g_hud_damage_display == 3) {
