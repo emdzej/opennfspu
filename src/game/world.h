@@ -94,7 +94,7 @@ struct W3DObjectBundle {
     uint32_t f14;                  /* +0x14 */
     uint32_t count;                /* +0x18 */
     WBundleEntry *entries;         /* +0x1c */
-    uint32_t f20;                  /* +0x20 */
+    struct WGridPlace *place;      /* +0x20: the moving entries' nodes and positions (0x489460) */
     uint32_t kind;                 /* +0x24: 'Arti' for article bundles */
     int serial;                    /* +0x28: from the counter at 0x5d0608 */
     void *world;                   /* +0x2c: the world's context (BWorld +0xc) */
@@ -147,7 +147,9 @@ W3DObjectBundle *WInstanceBundle_new(void *world);   /* 0x477fd0 */
 W3DObjectBundle *WAnimBundle_new(void *world);       /* 0x4776a0 */
 W3DObjectBundle *WMidGroundBundle_new(void *world);  /* 0x47cb40 */
 W3DObjectBundle *WStaticBundle_new(void *world);     /* 0x483350 */
-void W3DObjectBundle_delete(W3DObjectBundle *b);     /* vt->dtor(b, 1) */
+void W3DObjectBundle_delete(W3DObjectBundle *b);
+/* Slot 2: the entry's eight box corners (x, y, z, 1), moved by its matrix when transformed. 0x4892d0 */
+void W3DObjectBundle_Corners(W3DObjectBundle *b, int entry, float c[8][4]);     /* vt->dtor(b, 1) */
 void W3DObjectBundle_init(W3DObjectBundle *b, uint32_t kind, void *world);   /* 0x489090 */
 
 /* An article's Base item (through its cache slot), NULL without one. */
@@ -162,6 +164,7 @@ void WArticleBundle_box(WArticleBundle *b, int entry, float bmin[3], float bmax[
 void WVisWall_set(WVisWall *w, const float p0[3], const float p1[3]);
 /* Whether the sight line from a to b (x, z) crosses an enabled wall; `high` counts only walls whose first
    point is off the ground. 0x488ac0 */
+void WVis_Cull(const WVisWall *walls, uint8_t *disabled, uint32_t n, float x, float z, float r2);   /* 0x488a70 */
 bool WVis_blocked(const WVisWall *walls, const uint8_t *disabled, uint32_t n, const float a[3], const float b[3], bool high);
 /* Segment intersection in the ground plane: p and q are {x0, y0, z0, x1, y1, z1}; at (if not NULL) gets
    the point on p. 0x489bf0 */
@@ -184,7 +187,7 @@ _Static_assert(sizeof(WPlaced) == 0x38 && sizeof(WVisWall) == 0x1c, "the placeme
    frame, outside the view's sphere test, behind a visibility wall, or beyond the distance (far objects,
    the entry flags 0x400020: 700 m, or 600 m with 0x400000; others the camera's view distance, against
    their nearest point by the pass's square-root estimate); else handed to its draw object (slot 1) with
-   the squared distance. viewdist2 is the camera's (+0x128). */
+   the squared distance. flags are its grid record's (wgrid.h), viewdist2 the pass's (+0xa0). */
 struct EaglView;
-void World_VisitObject(W3DObjectBundle *b, int index, struct EaglView *view, const float eye[3], float viewdist2,
+void World_VisitObject(W3DObjectBundle *b, int index, uint32_t flags, struct EaglView *view, const float eye[3], float viewdist2,
                        const WVisWall *walls, const uint8_t *disabled, uint32_t nwalls);

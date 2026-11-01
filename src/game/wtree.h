@@ -81,6 +81,11 @@ struct WTreeObject {
    branch). */
 WTreeElem *WTreeCylinder_new(struct W3DObjectBundle *b, int entry, int32_t drivethru, int32_t defradius, float radius);
 WTreeElem *WTreeBox_new(struct W3DObjectBundle *b, int entry, const float corners[4][3], int32_t drivethru);
+/* The convex hull in the ground plane (x, z) of n points of 4 floats into out (room for n + 2): points
+   within sqrt(0x5c18e4) of their neighbour dropped, each point outside replacing the run of edges it
+   sees. Its count. 0x5a0230 */
+int WTree_Hull(int n, const float *p, float *out);
+
 /* The plan-view rectangle of an article's collision vertices: their hull (0x5a0230), the turn (in 0.1
    degree steps up to 90) whose bounds have the least area; the four corners (x, 0, z, 1). 0x474c40 */
 void WTree_ArticleRect(UData *article, int *nhull, float corners[16]);

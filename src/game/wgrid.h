@@ -10,9 +10,23 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+struct W3DObjectBundle;
+
+/* An object filed in a node (12 bytes): the bundle's entry and its flags (the entry's, & 0x4187fe for
+   the fixed bundles), ORed when the entry is filed there again. */
+typedef struct {
+    uint32_t flags;                 /* +0x00 */
+    struct W3DObjectBundle *bundle; /* +0x04 */
+    uint16_t index;                 /* +0x0a */
+} WGridRec;
+
 /* A node (0x20 bytes in the original, 0x10 for the leaves 0x47c160 makes, without the children). */
 typedef struct WGridNode {
-    uint16_t flags;                 /* +0x00: bit 0 = has children (the 0x20-byte kind) */
+    uint16_t flags;                 /* +0x00: bit 0 = has children (the 0x20-byte kind); the original keeps
+                                       the records' room in the bits above it (grown by 4, 0x47c7a0) */
+    uint16_t count;                 /* +0x02: the records */
+    WGridRec *recs;                 /* +0x04 */
+    uint16_t room;                  /* port: the records' room */
     uint32_t id;                    /* +0x08 */
     struct WGridNode *parent;       /* +0x0c */
     struct WGridNode *child[4];     /* +0x10 */
@@ -39,3 +53,15 @@ WGridNode *WGrid_Find(const WGrid *g, const float p[3], int maxlevel);
 void WGrid_Centre(const WGrid *g, const WGridNode *n, float out[3]);
 void WGrid_Box(const WGrid *g, const WGridNode *n, float mn[3], float mx[3]);
 static inline int WGrid_Level(const WGridNode *n) { return (int)(n->id >> 28); }
+
+/* The deepest node holding the sphere (x, y, z, r) whole: down while the sphere keeps off the node's
+   centre lines; the root for a sphere not wholly in the grid. 0x47bbb0 */
+WGridNode *WGrid_FindSphere(const WGrid *g, const float s[4]);
+
+/* Whether the convex polygon of n points (x, z) and the box (x, z) meet. 0x5a0540 */
+bool WGrid_PolyBox(int n, const float (*p)[4], const float mn[3], const float mx[3]);
+
+/* A bundle's entries filed in the nodes (0x4892a0 -> 0x489460): the fixed bundles' entries in the nodes
+   their box's hull covers (0x489860), the moving ones' (+5) in the node holding their sphere, again when
+   it moved (World_BuildBundles, then every 8th world pass 0x488c30). */
+void WGrid_FileBundle(WGrid *g, struct W3DObjectBundle *b);

@@ -118,6 +118,8 @@ void BWorld_BuildBundles(BWorld *w)
     w->f10 = WGrid_Build(w);   /* 0x47b5f0 (after the static bundle; the scene's placings are the original's by then) */
     W3DObjectBundle *lb = WLineBundle_new(w->r3d, w->f10);   /* 0x479890: the skid marks' cells */
     if (lb) add_objects(w, lb);
+    /* Every bundle's entries filed in the grid, in the bundles' order (0x482ae0's entry flags pending). */
+    for (int i = 0; i < w->nbundles; i++) WGrid_FileBundle(w->f10, w->bundles[i]);   /* 0x4892a0 */
     Track_LoadEdges(w);                      /* 0x488000 */
     BWorld_LoadVis(w);
 }

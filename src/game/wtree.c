@@ -730,7 +730,12 @@ void PCollideArticleBundle_Build(PCollideArticleBundle *c, WTreeElems *v, bool o
         if (def && def->collidetype == 2) {
             int nh;
             float rect[16], corners[4][3];
-            WTree_ArticleRect(article, &nh, rect);   /* 0x474c40 (then the entry's matrix, slot 5: identity) */
+            WTree_ArticleRect(article, &nh, rect);   /* 0x474c40 */
+            if (b->transformed && b->vt->matrix) {   /* (the entry's matrix, slot 5) */
+                EaglMatrix m;
+                b->vt->matrix(b, (int)i, m.m);
+                EAGL_MatTransform4(&m, 4, rect, 16, rect, 16);   /* 0x539cc0 */
+            }
             for (int k = 0; k < 4; k++) memcpy(corners[k], rect + 4 * k, 12);
             WTreeElems_push(v, WTreeBox_new(b, (int)i, corners, def->drivethru));
             continue;
@@ -850,9 +855,8 @@ static int box_collide(const WTreeObject *o, const float seg[6], float n[3], flo
 static const WTreeObjectVtbl cyl_ovt = {cyl_radius, cyl_collide, obj_hitkind};
 static const WTreeObjectVtbl box_ovt = {box_radius, box_collide, obj_hitkind};
 
-/* The entry's box corners, min and max mixed (the bundle's slot 2, 0x4892d0, from slot 4's Base box,
-   0x477ed0): their bounds are the Base box itself. No track bundle has entries with their own matrix
-   (slot 5). */
+/* The bounds of the entry's box corners (the bundle's slot 2, 0x4892d0: moved by the entry's matrix for
+   the transformed bundles). */
 static void obj_init(WTreeObject *o, W3DObjectBundle *b, int entry, int32_t drivethru, int32_t f20)   /* 0x4862b0 */
 {
     o->e.vt = &obj_vt;
@@ -862,10 +866,17 @@ static void obj_init(WTreeObject *o, W3DObjectBundle *b, int entry, int32_t driv
     o->bundle = b;
     o->f2c = 1;
     o->entry = (uint16_t)entry;
-    if (b->transformed) PENDING_NOTE(0x4893f0, "a bundle entry's own matrix (the objects' boxes)");
-    const WBase *bs = WArticleBundle_base((WArticleBundle *)b, entry);
-    memcpy(o->bmin, bs->bmin, 12);
-    memcpy(o->bmax, bs->bmax, 12);
+    float c[8][4];
+    W3DObjectBundle_Corners(b, entry, c);
+    for (int j = 0; j < 3; j++) {
+        o->bmin[j] = 1e9f;
+        o->bmax[j] = -1e9f;
+    }
+    for (int k = 0; k < 8; k++)
+        for (int j = 0; j < 3; j++) {
+            if (c[k][j] < o->bmin[j]) o->bmin[j] = c[k][j];
+            if (c[k][j] > o->bmax[j]) o->bmax[j] = c[k][j];
+        }
 }
 
 WTreeElem *WTreeCylinder_new(W3DObjectBundle *b, int entry, int32_t drivethru, int32_t defradius, float radius)   /* 0x486600 */
@@ -898,8 +909,9 @@ WTreeElem *WTreeBox_new(W3DObjectBundle *b, int entry, const float corners[4][3]
 /* The convex hull in the ground plane of n points (16 bytes each), into out (room for n + 2); points
    within sqrt(0x5c18e4) of their neighbour are dropped. Each new point outside replaces the run of
    edges it sees. Returns the hull's count. 0x5a0230 */
-static int hull_xz(int n, const float *p, float *out)
+int WTree_Hull(int n, const float *p, float *out)
 {
+    load_consts();
     float eps = exe_f32(0x5c18e4);
     memcpy(out, p, 16);
     int h = 1, left = n - 1;
@@ -979,7 +991,7 @@ void WTree_ArticleRect(UData *article, int *nhull, float c[16])
         free(pts);
         return;
     }
-    int m = hull_xz(n, vt, pts);
+    int m = WTree_Hull(n, vt, pts);
     *nhull = m;
     /* The point of the farthest pair found first; the centre is that point (the original averages it
        with itself). */

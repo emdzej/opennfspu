@@ -39,6 +39,7 @@ void SkidTrail_Step(SkidTrail *t, const float pos[3], float slip, int kind, cons
 /* The line bundle over the grid (0x479890) and its parts the draw object and the visibility pass use. */
 struct W3DObjectBundle *WLineBundle_new(void *world, struct WGrid *g);
 void WLineBundle_Sphere(struct W3DObjectBundle *b, int cell, float out[4]);   /* slot 3, 0x479f50 */
+void WLineBundle_Box(struct W3DObjectBundle *b, int cell, float mn[3], float mx[3]);   /* slot 4, 0x479f90 */
 void WLineBundle_DrawCell(struct W3DObjectBundle *b, int cell);               /* 0x479ff0 */
 /* The fading strips' step (World_Tick 0x479e20, the odd ticks) and every strip cleared (0x479d60). */
 void World_Tick(void);

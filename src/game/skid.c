@@ -187,7 +187,7 @@ keep:
             t->owner = owner;
             t->tex = NULL;
             if (g_render_skidmarks && g_rtex_common[0]) {
-                uint32_t sw = (name & 0xff0000u | name >> 16) >> 8 | (name & 0xff00u | name << 16) << 8;
+                uint32_t sw = ((name & 0xff0000u) | name >> 16) >> 8 | ((name & 0xff00u) | name << 16) << 8;
                 t->tex = RTexBank_find(g_rtex_common[0], 0, sw);
             }
             c->nfree--;
@@ -431,6 +431,17 @@ W3DObjectBundle *WLineBundle_new(void *world, WGrid *g)
 void WLineBundle_Sphere(W3DObjectBundle *b, int cell, float out[4])
 {
     memcpy(out, ((WLineBundle *)b)->cells[cell].sphere, 4 * sizeof(float));
+}
+
+/* Slot 4 (0x479f90): the cell's centre, 0.1 (0x5b2604) either way. */
+void WLineBundle_Box(W3DObjectBundle *b, int cell, float mn[3], float mx[3])
+{
+    const Cell *c = &((WLineBundle *)b)->cells[cell];
+    float e = f32(0x5b2604);
+    for (int j = 0; j < 3; j++) {
+        mn[j] = c->centre[j] - e;
+        mx[j] = c->centre[j] + e;
+    }
 }
 
 /* 0x478a30: a strip of more than one pair whose ends are both within 100 of the eye (x, z): its texture's

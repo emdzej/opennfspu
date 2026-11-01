@@ -1,5 +1,6 @@
 /* The track world's bundles and visibility walls (see world.h). */
 #include "game/world.h"
+#include "game/skid.h"
 #include "eagl/eagl.h"
 #include "exe.h"
 #include "game/anim.h"
@@ -12,6 +13,14 @@
 
 /* Constants the world code reads from the exe's data: the zero vector 0x5bb2b0, the identity rotation
    0x5bb2d0, 0.0 at 0x5b23f8 and 1.0 at 0x5b24a8. */
+static float exe_f32(uint32_t va)
+{
+    uint32_t u = exe_u32(va);
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
+
 static float vzero[3], rot_identity[9], f_zero, f_one;
 static bool consts_loaded;
 
@@ -85,7 +94,7 @@ static void W3DObjectBundle_ctor(W3DObjectBundle *b, uint32_t kind, void *world)
     b->f10 = b->f14 = 0;
     b->count = 0;
     b->entries = NULL;
-    b->f20 = 0;
+    b->place = NULL;
     b->kind = kind;
     b->serial = bundle_serial++;
     b->world = world;
@@ -449,7 +458,7 @@ static int WInstanceBundle_load(W3DObjectBundle *b, UData **arts, int n)
         arts[i] = NULL;
     }
     b->vt->buildcache(b);
-    b->draw = RDrawArticleBundle_new(b);          /* 0x450b10 */
+    b->draw = RDrawAnimArticleBundle_new(b);      /* 0x44fe30 */
     b->collide = PCollideArticleBundle_new(b);    /* 0x474b20 */
     return (int)b->count;
 }
@@ -474,8 +483,18 @@ static void scene_matrix(W3DObjectBundle *b, int entry, float out[16])
     memcpy(out, m.m, sizeof m.m);
 }
 
+/* WInstanceBundle_v5 0x478050: a smacked object's own matrix (0x476730, 0x476970: pending), else its
+   placing's. */
+static void instance_matrix(W3DObjectBundle *b, int entry, float out[16])
+{
+    const WPlaced *p = &((WInstanceBundle *)b)->placed[entry];
+    EaglMatrix m;
+    EAGL_MatFromRotTrans(&m, p->rot, p->pos);   /* 0x539a40 */
+    memcpy(out, m.m, sizeof m.m);
+}
+
 static const W3DObjectBundleVtbl vt_scene = VT5(WSceneBundle_load, scene_matrix);            /* 0x5b47e0 */
-static const W3DObjectBundleVtbl vt_instance = VT(WInstanceBundle_load);      /* 0x5b4718 */
+static const W3DObjectBundleVtbl vt_instance = VT5(WInstanceBundle_load, instance_matrix);   /* 0x5b4718 */
 static const W3DObjectBundleVtbl vt_anim = VT5(WAnimBundle_load, anim_matrix);              /* 0x5b46b8 */
 static const W3DObjectBundleVtbl vt_midground = VT(WMidGroundBundle_load);    /* 0x5b477c */
 static const W3DObjectBundleVtbl vt_static = VT(WStaticBundle_load);          /* 0x5b4814 */
@@ -499,10 +518,11 @@ W3DObjectBundle *WSceneBundle_new(void *world)   /* 0x482550: transformed */
 }
 W3DObjectBundle *WInstanceBundle_new(void *world)
 {
-    /* (0x477fd0 sets transformed and +5, and draws through the animated draw with the smackables' state
-       0x475d80 at +0x14: pending; the port keeps it untransformed on the article draw) */
-    PENDING_NOTE(0x475d80, "the instance bundle's smackable objects (their state, transforms and draw)");
-    return article_bundle(sizeof(WInstanceBundle), &vt_instance, world);
+    /* 0x477fd0: transformed and moving; the smackables' state 0x475d80 at +0x14 is pending */
+    PENDING_NOTE(0x475d80, "the instance bundle's smackable objects (their state and pieces)");
+    W3DObjectBundle *b = article_bundle(sizeof(WInstanceBundle), &vt_instance, world);
+    if (b) b->transformed = b->b5 = 1;
+    return b;
 }
 W3DObjectBundle *WAnimBundle_new(void *world)   /* 0x4776a0: transformed */
 {
@@ -513,6 +533,38 @@ W3DObjectBundle *WAnimBundle_new(void *world)   /* 0x4776a0: transformed */
 W3DObjectBundle *WMidGroundBundle_new(void *world) { return article_bundle(sizeof(WMidGroundBundle), &vt_midground, world); }
 W3DObjectBundle *WStaticBundle_new(void *world) { return article_bundle(sizeof(WStaticBundle), &vt_static, world); }
 W3DObjectBundle *WArticleBundle_new(void *world) { return article_bundle(sizeof(WArticleBundle), &vt_article, world); }
+
+/* Slot 2 (0x4892d0; the mid-ground's 0x47ced0, the line bundle's the generic one over its cell box
+   0x479f90): the entry's box corners, x, y, z, 1 from the least corner, x up, then y, back in x, then the
+   same at the greatest z, moved by the entry's matrix (slot 5) for the transformed bundles. The
+   mid-ground's box is spread from its centre by 2.25 (0x5b4774). */
+void W3DObjectBundle_Corners(W3DObjectBundle *b, int i, float c[8][4])
+{
+    float mn[3], mx[3];
+    if (b->kind == 0x3039) WLineBundle_Box(b, i, mn, mx);
+    else WArticleBundle_box((WArticleBundle *)b, i, mn, mx);
+    if (b->vt == &vt_midground) {
+        float k = exe_f32(0x5b4774);
+        for (int j = 0; j < 3; j++) {
+            float m = (mn[j] + mx[j]) * 0.5f;   /* (0x5b2778, a double half) */
+            float lo = (mn[j] - m) * k + m, hi = (mx[j] - m) * k + m;
+            mn[j] = lo < hi ? lo : hi;
+            mx[j] = lo < hi ? hi : lo;
+        }
+    }
+    static const uint8_t hi[8] = {0, 1, 3, 2, 4, 5, 7, 6};   /* bit 0 x, bit 1 y, bit 2 z */
+    for (int k = 0; k < 8; k++) {
+        c[k][0] = hi[k] & 1 ? mx[0] : mn[0];
+        c[k][1] = hi[k] & 2 ? mx[1] : mn[1];
+        c[k][2] = hi[k] & 4 ? mx[2] : mn[2];
+        c[k][3] = 1.0f;
+    }
+    if (b->transformed && b->vt->matrix) {
+        EaglMatrix m;
+        b->vt->matrix(b, i, m.m);
+        EAGL_MatTransform4(&m, 8, &c[0][0], 16, &c[0][0], 16);   /* 0x539cc0 */
+    }
+}
 
 void W3DObjectBundle_delete(W3DObjectBundle *b)
 {
@@ -530,6 +582,7 @@ void W3DObjectBundle_delete(W3DObjectBundle *b)
     } else if (b->vt == &vt_anim) {
         WAnim_free(((WAnimBundle *)b)->anims, b->count);   /* (WAnimBundle's dtor 0x4776d0) */
     }
+    free(b->place);
     b->vt->dtor(b, 1);
 }
 
@@ -572,6 +625,24 @@ bool World_SegmentsCross(const float p[6], const float q[6], float at[3])
 /* 0x488ac0. The sight line is a to a + (b - a) in the ground plane; a wall is {x, z} to {x + dx, z + dz}.
    Without `high` the wall is the first segment and any crossing blocks; with it the sight line is first
    and only walls with `high` set block. */
+/* 0x488a70: each wall off (0x487320) when it keeps outside the circle of r2 squared about (x, z): its
+   nearest point's distance squared, along the wall past an end by the wall's length, more than r2. */
+void WVis_Cull(const WVisWall *walls, uint8_t *disabled, uint32_t n, float x, float z, float r2)
+{
+    float one = exe_f32(0x5b24a8), zero = exe_f32(0x5b23f8);
+    for (uint32_t i = 0; i < n; i++) {
+        const WVisWall *w = &walls[i];
+        float px = x - w->x, pz = z - w->z;
+        float t = (px * w->dx + pz * w->dz) * w->inv_len2;
+        px -= t * w->dx;
+        pz -= t * w->dz;
+        float along;
+        if (t < one) along = t < zero ? t * t * w->len2 : zero;
+        else along = (t - one) * (t - one) * w->len2;
+        disabled[i] = !(px * px + pz * pz + along <= r2);
+    }
+}
+
 bool WVis_blocked(const WVisWall *walls, const uint8_t *disabled, uint32_t n, const float a[3], const float b[3], bool high)
 {
     float ex = (b[0] - a[0]) + a[0], ez = (b[2] - a[2]) + a[2];
@@ -589,15 +660,8 @@ bool WVis_blocked(const WVisWall *walls, const uint8_t *disabled, uint32_t n, co
 
 /* ------------------------------------------------------------------ the visibility pass */
 
-static float exe_f32(uint32_t va)
-{
-    uint32_t u = exe_u32(va);
-    float f;
-    memcpy(&f, &u, 4);
-    return f;
-}
 
-void World_VisitObject(W3DObjectBundle *b, int index, EaglView *view, const float eye[3], float viewdist2,
+void World_VisitObject(W3DObjectBundle *b, int index, uint32_t flags, EaglView *view, const float eye[3], float viewdist2,
                        const WVisWall *walls, const uint8_t *disabled, uint32_t nwalls)
 {
     RDrawBundle *d = b->draw;
@@ -606,7 +670,6 @@ void World_VisitObject(W3DObjectBundle *b, int index, EaglView *view, const floa
     float s[4];
     d->base.vt->sphere(&d->base, index, s);
     if (!EAGL_ViewSphereVisible(view, s, s[3])) return;
-    uint32_t flags = b->entries[index].flags;
     bool far = (flags & 0x400020) != 0;
     if (walls && WVis_blocked(walls, disabled, nwalls, s, eye, far)) return;
     float dx = s[0] - eye[0], dy = s[1] - eye[1], dz = s[2] - eye[2];
