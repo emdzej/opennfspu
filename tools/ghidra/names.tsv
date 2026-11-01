@@ -2595,3 +2595,6 @@
 00512d00	FEDialogOneItem_ctor	frontend	high	A one-button message (OK 0x2be) of a string, self-deleting
 00511c60	FEDialog_ctor	frontend	high	A dialog: 320 wide at 160, text wrapped at 300
 00512310	FEDialog_Draw	frontend	high	Gouraud body, four bevel edges, centred black text, drop shadow
+004f83f0	FECar_Value	frontend	high	An owned car's value: price x year factor x 0.01, mileage and damage tables, parts' worth, a floor of 5 per cent
+004eefd0	FECar_Damage	frontend	high	The installed parts' wear by type (6, 7 at half) over 9
+00517b00	FEPart_Worth	frontend	high	A part's price grown by the yearly rates since its year, less its wear

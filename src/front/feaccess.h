@@ -53,3 +53,6 @@ const char *FEData_TourTrack(void);
 void FEData_TourResult(int race, const int *places, const int *times, int n);
 /* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
 int FEData_TourLaps(void);
+#include "front/fesave.h"
+/* An owned car's value in a year (0x4f83f0). */
+int32_t FEData_CarValue(const SaveCar *c, int year);

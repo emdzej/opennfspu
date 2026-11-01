@@ -146,14 +146,87 @@ static void graphics(void)
 static int16_t rec16(const uint8_t *r, int off) { int16_t v; memcpy(&v, r + off, 2); return v; }
 static int32_t rec32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
 
-int32_t FEData_PartValue(int32_t id)   /* (0x49c3e0's record) */
+static const uint8_t *part_rec(int32_t id)   /* 0x49c3e0: an nfs5.prt record by its id */
 {
     static uint8_t *prt;
     static size_t nprt;
     if (!prt) prt = vfs_read_all("FEData\\Data\\nfs5.prt", &nprt);   /* (0x5d0c4c) */
     for (size_t i = 0; prt && (i + 1) * 0x168 <= nprt; i++)
-        if (rec16(prt + 0x168 * i, 0) == id) return rec32(prt + 0x168 * i, 0x164);
-    return 0;
+        if (rec16(prt + 0x168 * i, 0) == id) return prt + 0x168 * i;
+    return NULL;
+}
+
+int32_t FEData_PartValue(int32_t id)
+{
+    const uint8_t *p = part_rec(id);
+    return p ? rec32(p, 0x164) : 0;
+}
+
+static float recf(const uint8_t *r, int off) { float v; memcpy(&v, r + off, 4); return v; }
+
+/* A part's worth in a year (0x517b00): its price (+0x5c) grown by the yearly rates since its year (+0x46,
+   the table 0x5ba4a4, at most 0x3e years), less its wear (its saved value, 0 .. 100 per cent). */
+static int32_t part_worth(int32_t id, int32_t saved, int year)
+{
+    const uint8_t *p = part_rec(id);
+    if (!p) return 0;
+    int n = year - rec16(p, 0x46), sum = 0;
+    for (int i = 0; i < n && i < 0x3e; i++) sum += (int32_t)exe_u32(0x5ba4a4 + 4u * (unsigned)i);
+    int32_t price = rec32(p, 0x5c);
+    float wf;
+    memcpy(&wf, &saved, 4);
+    int w = (int)wf;
+    if (w > 100) w = 100;
+    if (w < 0) w = 0;
+    return (100 - w) * (price * sum / 100 + price) / 100;
+}
+
+/* The average wear (+0x164) of a car's installed parts of a type (+0x26; 0x4eebf0). */
+static float wear_of(const SaveCar *c, int type)
+{
+    float sum = 0;
+    int n = 0;
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+        const uint8_t *p = part_rec(c->parts[i][0]);
+        if (!p || rec16(p, 0x26) != type) continue;
+        float w;
+        memcpy(&w, &c->parts[i][1], 4);
+        sum += w;
+        n++;
+    }
+    return 1 < n ? sum / (float)n : sum;
+}
+
+/* A car's damage in per cent (0x4eefd0): its parts' wear by type, 6 and 7 at half, over 9 (0x5b74b8). */
+static float car_damage(const SaveCar *c)
+{
+    float a = (wear_of(c, 7) + wear_of(c, 6)) * 0.5f;
+    return (a + wear_of(c, 1) + wear_of(c, 10) + wear_of(c, 9) + wear_of(c, 8) + wear_of(c, 5) + wear_of(c, 4) +
+            wear_of(c, 3) + wear_of(c, 2)) * (1.0f / 9.0f);
+}
+
+/* An owned car's value (0x4f83f0), in the used car market's year (0x691b58): its price times that year's
+   factor (+0x20c of the car object, the factors from +0x218 by the year, x 0.01); its mileage's (+0x698,
+   the table 0x5b7c08) and its damage's (the table 0x5b7c48) per cents of that; its installed parts' worth
+   less its stock ones'; +0x69c per cent of it; at least a twentieth of it (0x5b7b04). */
+int32_t FEData_CarValue(const SaveCar *c, int year)
+{
+    const uint8_t *o = c->rec;
+    int foff = 4 * year - 0x1c60;
+    if (foff < 0 || foff + 4 > SAVE_CAR) return 0;
+    int32_t base = (int32_t)((double)(float)((float)rec32(o, 0x20c) * recf(o, foff)) * 0.01);
+    int32_t miles = rec32(o, 0x698), madj = 0, dadj = 0;
+    for (uint32_t t = 0x5b7c08; t < 0x5b7c44; t += 12)
+        if ((int32_t)exe_u32(t) <= miles && miles <= (int32_t)exe_u32(t + 4)) madj = (int32_t)exe_u32(t + 8) * base / 100;
+    int dmg = (int)car_damage(c);
+    for (uint32_t t = 0x5b7c48; t < 0x5b7c84; t += 12)
+        if ((int32_t)exe_u32(t) <= dmg && dmg <= (int32_t)exe_u32(t + 4)) dadj = (int32_t)exe_u32(t + 8) * base / 100;
+    int32_t inst = 0, stock = 0;
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) inst += part_worth(c->parts[i][0], c->parts[i][1], year);
+    for (int i = 0; i < c->ninstalled; i++) stock += part_worth(c->parts[i][0], c->parts[i][1], year);
+    int32_t v = (inst - stock) + (rec32(o, 0x69c) * base) / 100 + madj + dadj + base;
+    if ((float)v < (float)base * 0.05f) return (int32_t)((float)base * 0.05f);
+    return v;
 }
 
 /* The save's tournaments (its Tournament section: seven ints, then 0xd40 bytes a tournament). */
@@ -512,10 +585,7 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         Save *sv = FESave_Current();
         if (!sv || !a->count) return "";
         if (!strcmp(arg, "PURCHASEPRICE")) return FE_MoneyText(rec32(sv->cars[a->pos].rec, 0x6a4));
-        if (!strcmp(arg, "CURRENTVALUE")) {
-            PENDING_NOTE(0x4f83f0, "the owned car's value (mileage, damage and parts tables)");
-            return "";
-        }
+        if (!strcmp(arg, "CURRENTVALUE")) return FE_MoneyText(FEData_CarValue(&sv->cars[a->pos], sv->usedinfo));
         if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
     }
     if (!arg || !*arg || !strcmp(arg, "SHORT")) return FEAccess_Text(a);
