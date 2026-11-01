@@ -64,11 +64,16 @@ static void set_env(void)   /* the track viewer's light until the sky's is porte
     g_rlayer_lights = env;
 }
 
-/* The cars through their renderers, their states taken from the simulation. The port's R3DCar_Draw takes
-   its flips as the car viewer's y-down camera needs them: the car's right and up rows go to the renderer
-   negated (a half turn about its forward axis), and its centre down by the up row times the full height,
-   which draws the car upright with the winding the draw's cull flip expects. To fold into R3DCar_Draw
-   and the car viewer when the race's car draw (0x43f610) is ported. */
+/* The cars through their renderers, their states taken from the simulation. Port deviation: the original's
+   matrix (R3DObject_Draw 0x4433c0: scale (-1, 1, -1), the car's rows, scale (1, -1, 1), the place less the
+   up row times the half height) draws the models upside down here and mirrored (determinant -1, which
+   0x467ed0 flips the cull for); where the original makes up for its y is not found yet. The models' own
+   data says what the result must be: the driver sits at the model's x +0.4 and the eye (drivercampos) at
+   the car's x -0.38, z likewise, y up in both, so a model point (x, y, z) goes to the car's (-x, y, -z),
+   a proper turn. The rows go to R3DCar_Draw with their y column negated (its last scale puts it back),
+   the place so that its centre comes out as the original's, and the cull flipped back around the draw.
+   To fold into R3DCar_Draw and the front end's objects (fe3d.c's half turn) when the race's car draw
+   (0x43f610) is ported. */
 static void draw_cars(RCamera *c)
 {
     for (int i = 0; i < g_ncars; i++) {
@@ -77,15 +82,17 @@ static void draw_cars(RCamera *c)
         if (!r || !r->state) continue;
         const float *m = CAR_F(car, 0x364), *p = CAR_F(car, 0x330);
         R3DCarState *st = r->state;
-        for (int k = 0; k < 9; k++) st->rot[k] = k < 6 ? -m[k] : m[k];
+        for (int k = 0; k < 9; k++) st->rot[k] = k % 3 == 1 ? -m[k] : m[k];
         float h = st->halfsize[1];
-        for (int k = 0; k < 3; k++) st->pos[k] = p[k] - 2.0f * m[3 + k] * h;
+        for (int k = 0; k < 3; k++) st->pos[k] = p[k] - m[3 + k] * h + st->rot[3 + k] * h;
         CarAnim_Update(r, car);            /* R3DCar_Animate 0x438370 */
         R3DCar_ApplyMorphs(r);             /* R3DCar_v7 0x4382f0: 0x437f60 */
         CarLight_Update(&r->light, car);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
         r->lit = true;
         R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */
+        Render_SetCull(g_render);
         R3DCar_Draw(r, &c->view->model);
+        Render_SetCull(g_render);
         /* R3DCar_v7's particles: not the viewed car's in the in-car and hood views. */
         if (*CAR_I(car, CAR_INDEX) != g_camera_car || (g_racecam[0].mode != 0 && g_racecam[0].mode != 1))
             CarParticles_Update(r->particles, true);   /* 0x43eeb0 */

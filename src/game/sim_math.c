@@ -29,6 +29,39 @@ static void sincos_turns(float t, float *s, float *c)
     *c = (float)cos((double)t * two_pi());
 }
 
+void Mat3_TurnX(float m[9], float t)
+{
+    float s, c, a[9];
+    memcpy(a, m, sizeof a);
+    sincos_turns(t, &s, &c);
+    for (int k = 0; k < 3; k++) {
+        m[3 + k] = a[6 + k] * s + a[3 + k] * c;
+        m[6 + k] = a[6 + k] * c - a[3 + k] * s;
+    }
+}
+
+void Mat3_TurnY(float m[9], float t)
+{
+    float s, c, a[9];
+    memcpy(a, m, sizeof a);
+    sincos_turns(t, &s, &c);
+    for (int k = 0; k < 3; k++) {
+        m[k] = c * a[k] - a[6 + k] * s;
+        m[6 + k] = s * a[k] + a[6 + k] * c;
+    }
+}
+
+void Mat3_TurnZ(float m[9], float t)
+{
+    float s, c, a[9];
+    memcpy(a, m, sizeof a);
+    sincos_turns(t, &s, &c);
+    for (int k = 0; k < 3; k++) {
+        m[k] = c * a[k] + a[3 + k] * s;
+        m[3 + k] = a[3 + k] * c - s * a[k];
+    }
+}
+
 void Vec3_AddArray(int n, const float *src, const float add[3], float *dst)
 {
     for (; n > 0; n--, src += 3, dst += 3) {

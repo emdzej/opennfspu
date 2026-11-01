@@ -3,6 +3,7 @@
    r3dcar.h and docs/re/cars.md. Names the game looks up in its files (section and key names, file name
    formats) and its tables are read from the exe by address. */
 #include "render/r3dcar.h"
+#include "game/camera.h"
 #include "render/rlayers.h"
 #include "exe.h"
 #include "real/mem.h"
@@ -952,9 +953,16 @@ static void car_draw_lods(R3DCar *car, EaglMatStack *model)
 {
     RLayers_ResetCache();   /* 0x44a090 */
     if (car->nlods == 0) return;
-    /* The player's car in the cockpit camera (the camera's car is this one and its view flag is set)
-       draws LOD list index 1's interior (0x10) and 0's cockpit-visible parts (0x40) instead: pending
-       with the cameras. */
+    /* The camera's car (0x465c40) in a view inside it (the camera's flag 8, 0x627f43): LOD list index 1's
+       interior (0x10) and 0's parts seen from inside (0x40), and unless a look key is held (0x5e99ac,
+       0x5e99b0, 0x5e99b4) at a detail level above 0, the detail's LOD (0x5cdb1c) shadow and decals (0x80). */
+    if (!g_r3d_frontend && car->state->index == g_camera_car && (g_racecam[0].flags2 >> 3 & 1)) {
+        if (car->nlods > 1) R3DCarLOD_Draw(car->lods[1], model, 0x10, true);
+        R3DCarLOD_Draw(car->lods[0], model, 0x40, true);
+        if (g_look[3] == 0 && g_look[1] == 0 && g_look[2] == 0 && 0 < g_r3d_quality)
+            R3DCarLOD_Draw(car->lods[table(0x5cdb1c, g_r3d_quality)], model, 0x80, true);
+        return;
+    }
     if (car->interior) {
         R3DCarLOD_Draw(car->lods[car->cockpitlod], model, 0x30, false);
         return;

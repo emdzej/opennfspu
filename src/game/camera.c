@@ -54,8 +54,17 @@ static const float *car_pos(const Car *c) { return CAR_F((Car *)c, 0x330); }
 static const float *car_rows(const Car *c) { return CAR_F((Car *)c, 0x364); }   /* right, up, forward */
 
 /* The mode's entry: its offset and its flags word. */
+/* Mode 1's offset is the camera's car's driver's eye once a race sets the cameras up (0x463f70 writes
+   it into the table, 0x5cf620). */
+static float s_driver_eye[3];
+static bool s_driver_set;
+
 static void mode_offset(int m, float out[3])
 {
+    if (m == 1 && s_driver_set) {
+        memcpy(out, s_driver_eye, sizeof s_driver_eye);
+        return;
+    }
     for (int k = 0; k < 3; k++) out[k] = K(0x5cf610 + 0x10 * (uint32_t)m + 4 * (uint32_t)k);
 }
 static uint32_t mode_flags(int m) { return exe_u32(0x5cf61c + 0x10 * (uint32_t)m); }
@@ -296,7 +305,7 @@ static void look_turn(int p)
     Mat3_Mul(m, c->orient, c->orient);
 }
 
-/* In the car (mode 0, 0x461c10): the car's orientation, the eye at the offset in its frame, the look-at
+/* On the hood (mode 0, 0x461c10): the car's orientation, the eye at the offset in its frame, the look-at
    point from it. */
 static void mode_incar(int p)
 {
@@ -312,7 +321,7 @@ static void mode_incar(int p)
     for (int k = 0; k < 3; k++) c->eye[k] = w[k] + car_pos(c->car)[k];
 }
 
-/* On the hood (mode 1, 0x4618f0): as in the car, with the tilt's turns; the offset eases (a fifth across
+/* The driver's seat (mode 1, 0x4618f0): as on the hood, with the tilt's turns (the driver's); the offset eases (a fifth across
    and up, half along) unless looking aside. Looking back puts the eye on the car's axis. */
 static void mode_hood(int p)
 {
@@ -326,7 +335,9 @@ static void mode_hood(int p)
     look_turn(p);
     bool aside = g_look[3] || g_look[1];
     if (!aside && (c->tilt[0] != 0 || c->tilt[1] != 0 || c->tilt[2] != 0)) {
-        PENDING_NOTE(0x556130, "the hood camera's tilt (0x556130, 0x556200, 0x5562c0)");
+        Mat3_TurnX(c->orient, c->tilt[0] * K(0x5b3e84));   /* 0x556130 */
+        Mat3_TurnY(c->orient, c->tilt[1] * K(0x5b3e84));   /* 0x556200 */
+        Mat3_TurnZ(c->orient, c->tilt[2] * K(0x5b3e84));   /* 0x5562c0 */
     }
     if (g_look[2]) o[0] = 0;
     vec_mat(o, car_rows(c->car), w);
@@ -580,6 +591,14 @@ void Camera_Init(int p, Car *car, int mode)
     memset(c, 0, sizeof *c);
     WSurface_Init(&c->surf);
     c->car = c->base = car;
+    /* 0x463f70: the driver's eye (drivercampos) as mode 1's offset and the driver's turns (drivercamrot)
+       as the first camera's tilt, from the camera's car. */
+    const R3DCar *r = car ? car->p[CARP_R3D] : NULL;
+    if (r && r->state) {
+        memcpy(s_driver_eye, r->state->drivercampos, sizeof s_driver_eye);
+        s_driver_set = true;
+        if (p == 0) memcpy(c->tilt, r->state->drivercamrot, sizeof c->tilt);
+    }
     c->mode = (int16_t)mode;
     Camera_SetMode(p, mode);
 }

@@ -46,6 +46,7 @@ typedef struct {
     float rot[9];                /* +0x364: rows; row 1 (+0x370) is the car's up */
     float halfsize[3];           /* +0x3a8: half the bounding box (0x444fc0) */
     float radius;                /* +0x3b4 */
+    int32_t index;               /* +0x520: the car's (CAR_INDEX), the camera's car's draws its interior */
     uint32_t flags;              /* +0x52c: 0x10 = sizes and the wheels' LOD from LOD list index 0 (not 4) */
     R3DCarSpec *spec;            /* +0x558 */
     int style;                   /* +0x568 */

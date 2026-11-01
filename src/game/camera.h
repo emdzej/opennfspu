@@ -1,7 +1,8 @@
 /* The race cameras ([camera], 0x460f50-0x465d00): one per player (0x627e80, 0x10c bytes each), placed
    by its mode each frame (Camera_Update 0x463af0) and turned into the race view's frame (0x464e40, by
    the view's update Camera_Track 0x461060). The modes (the table at 0x5cf610: an offset in the car's
-   frame and six flags): 0 in the car, 1 on the hood, 2 .. 4 the near chase cameras, 5 .. 7 the far
+   frame and six flags): 0 on the hood (forward of the car's centre), 1 the driver's seat (its offset and tilt the car's
+   drivercampos and drivercamrot), 2 .. 4 the near chase cameras, 5 .. 7 the far
    ones, 8, 9 and 15 fixed on the car, 13 overhead; the replay's TV cameras (10 .. 12, 14, 17 .. 19) are
    pending. A car that leaves the ground with a mode flagged so gets the crash camera (0x461450). */
 #pragma once

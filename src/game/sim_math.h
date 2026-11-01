@@ -9,6 +9,11 @@ void Vec3_AddArray(int n, const float *src, const float add[3], float *dst);   /
 void Mat3_RotX(float m[9], float turns);                                        /* 0x532310 */
 void Mat3_RotY(float m[9], float turns);                                        /* 0x532370 */
 void Mat3_RotZ(float m[9], float turns);                                        /* 0x5323d0 */
+/* A matrix's rows turned in place about its own x (rows 1 and 2), y (rows 0 and 2) or z (rows 0 and 1).
+   0x556130, 0x556200, 0x5562c0 */
+void Mat3_TurnX(float m[9], float turns);
+void Mat3_TurnY(float m[9], float turns);
+void Mat3_TurnZ(float m[9], float turns);
 void Mat3_Transpose(const float m[9], float out[9]);                            /* 0x532770 */
 /* Four rounds of m = m * (I + c1 E + c2 E^2 + c3 E^3) with E = m^T m - I (the coefficients at 0x5d1040). 0x4a45f0 */
 void Mat3_Orthonormalize(float m[9]);

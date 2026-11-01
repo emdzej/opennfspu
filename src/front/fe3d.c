@@ -91,22 +91,24 @@ void FE3DObject_RotZ(FE3DObject *o, float turns)
     Mat3_Mul(a, r, o->state.rot);
 }
 
-/* Port deviation: with the front end's identity camera and its objects' identity orientations, the port
-   draws the models upside down (the positions are right): the race's cars carry a half turn about their
-   forward axis in their orientation (up row 0, -1, 0) that the front end's don't, and where the original
-   makes up for it is not found yet. Until it is, each object is drawn with that half turn added, about the
-   point the original's draw puts at its position (R3DObject_Draw 0x4433c0: pos - up * half height). */
+/* Port deviation: with the original's matrix (R3DObject_Draw 0x4433c0) the port draws the models upside
+   down and mirrored, and where the original makes up for its y is not found yet. As the race's cars
+   (drive_selftest.c draw_cars): a model point (x, y, z) goes to the object's (-x, y, -z), which is where
+   the models' own data puts the driver against the driver's eye; the rows with their y column negated
+   (R3DCar_Draw's last scale puts it back), the place so that the centre comes out as the original's
+   (pos - up * half height), and the cull flipped back around the draw (the result is no mirror). */
 void FE3DObject_Draw(FE3DObject *o, EaglMatStack *model)
 {
     R3DCarState *st = &o->state;
     float rot[9], pos[3];
     memcpy(rot, st->rot, sizeof rot);
     memcpy(pos, st->pos, sizeof pos);
-    static const float half[9] = {-1, 0, 0, 0, -1, 0, 0, 0, 1};
-    Mat3_Mul(half, rot, st->rot);
+    for (int k = 0; k < 9; k++) st->rot[k] = k % 3 == 1 ? -rot[k] : rot[k];
     float h = st->halfsize[1];
     for (int i = 0; i < 3; i++) st->pos[i] = pos[i] - rot[3 + i] * h + st->rot[3 + i] * h;
+    Render_SetCull(g_render);
     R3DCar_Draw(&o->car, model);
+    Render_SetCull(g_render);
     memcpy(st->rot, rot, sizeof rot);
     memcpy(st->pos, pos, sizeof pos);
 }
