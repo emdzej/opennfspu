@@ -13,7 +13,7 @@
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_CAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -21,6 +21,7 @@ struct FEAccessor {
     int pos, count, min;
     uint32_t list;   /* ACC_LIST: the exe's zero-ended string ids (FEListAccessor 0x4bb260) */
     uint32_t key;    /* the option it keeps (its key's address), 0 none */
+    int owned;       /* ACC_MERGED: the owned cars it counted last */
 };
 
 enum { NACC = 64 };
@@ -241,7 +242,9 @@ void FEData_Init(void)
     int cp = 0;
     for (int i = 0; i < s_ncars; i++)
         if (!strcasecmp(car_file(i), "964")) cp = i;
-    add("zMergedList.Car", ACC_CAR, s_ncars, 0, cp);
+    /* FEMergedCarListAccessor (0x4f3c40, vtable 0x5b773c): the owned cars, then the generic ones
+       (0x4f3f10: a position below the first list's count is its) */
+    add("zMergedList.Car", ACC_MERGED, s_ncars, 0, cp);
     audio();
     display();
     graphics();
@@ -263,9 +266,25 @@ FEAccessor *FEAccess_Find(const char *path)
     return NULL;
 }
 
+static int owned_count(void)
+{
+    Save *sv = FESave_Current();
+    return sv ? sv->ncars : 0;
+}
+
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_MERGED) {
+        int o = owned_count();
+        if (o != a->owned) {   /* (the same car kept chosen when the owned list changes) */
+            a->pos += o - a->owned;
+            if (a->pos < 0) a->pos = 0;
+            a->owned = o;
+        }
+        a->count = o + s_ncars;
+        return;
+    }
     if (a->kind != ACC_OWNED) return;
     Save *sv = FESave_Current();
     a->count = sv ? sv->ncars : 0;
@@ -277,6 +296,7 @@ int FEAccess_Pos(const FEAccessor *a) { return a->pos; }
 
 void FEAccess_SetPos(FEAccessor *a, int pos)
 {
+    refresh(a);
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
@@ -304,6 +324,11 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_DEALER:
         snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x34);
         return b;
+    case ACC_MERGED: {
+        const uint8_t *r = FEAccess_CarRecord(a);
+        snprintf(b, sizeof b, "%s", r ? (const char *)r + 0x34 : "");
+        return b;
+    }
     case ACC_OWNED: {
         Save *sv = FESave_Current();
         snprintf(b, sizeof b, "%s", sv ? (const char *)sv->cars[a->pos].rec + 4 + 0x34 : "");
@@ -362,6 +387,11 @@ const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
     if (!a) return NULL;
     refresh(a);
     if (!a->count) return NULL;
+    if (a->kind == ACC_MERGED) {
+        Save *sv = FESave_Current();
+        if (a->pos < a->owned && sv) return sv->cars[a->pos].rec + 4;
+        return s_car + CAR_SIZE * s_cars[a->pos - a->owned];
+    }
     if (a->kind == ACC_CAR) return s_car + CAR_SIZE * s_cars[a->pos];
     if (a->kind == ACC_DEALER) return s_car + CAR_SIZE * s_dealer[a->pos];
     if (a->kind == ACC_OWNED) {
@@ -376,6 +406,10 @@ const char *FEAccess_CarFile(const FEAccessor *a)
     if (!a) return NULL;
     refresh(a);
     if (!a->count) return NULL;
+    if (a->kind == ACC_MERGED) {
+        const uint8_t *r = FEAccess_CarRecord(a);
+        return r ? (const char *)r + 0x7f : NULL;
+    }
     if (a->kind == ACC_CAR) return car_file(a->pos);
     if (a->kind == ACC_DEALER) return (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x7f;
     if (a->kind == ACC_OWNED) {
@@ -459,8 +493,8 @@ const char *FEData_Track(void)
 
 const char *FEData_Car(void)
 {
-    FEAccessor *a = FEAccess_Find("zMergedList.Car");
-    return a && a->count ? car_file(a->pos) : "964";
+    const char *f = FEAccess_CarFile(FEAccess_Find("zMergedList.Car"));
+    return f ? f : "964";
 }
 
 int FEData_Opponents(void)
