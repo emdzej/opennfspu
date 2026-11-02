@@ -80,3 +80,5 @@ typedef struct {
 void FEGlint_Init(FEGlint *g, uint32_t colour, int w, int h, int mode);   /* 0x51f620 */
 /* At (x, y) at fade a; allow: a new run may start (0x51f660). */
 void FEGlint_Draw(FEGlint *g, int x, int y, int a, bool allow);
+/* NFS5.GlintyRectangle's draw (FEGlintyBoxControl_v15 0x521e60). */
+void FEGlintyBox_Draw(FertControl *c, int32_t ox, int32_t oy);

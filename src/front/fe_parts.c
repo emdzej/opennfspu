@@ -451,6 +451,7 @@ static void draw_at(FertControl *w, int32_t ox, int32_t oy)
         if (FE_ControlDrawHook && FE_ControlDrawHook(c, ox, oy)) continue;
         if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) continue;   /* (none of its parts is drawn plainly: femovie.c) */
         if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
+        else if (!strcmp(c->id, "NFS5.GlintyRectangle")) FEGlintyBox_Draw(c, ox, oy);
         else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
         else FEControl_Draw(c, ox, oy);
     }
@@ -749,9 +750,9 @@ static int data_int(const FertControl *c, const char *name, int def)
     return def;
 }
 
-/* The GoTo buttons' glints (FEGoToButton_v21 0x4c8b10: a glinty box of data.width by data.height in
-   black, its mode data.glintybox; +0x160 the button seen), one a button, the least lately drawn given
-   up for a new one. */
+/* The controls' glinty boxes (FEGoToButton_v21 0x4c8b10: data.width by data.height in black, its mode
+   data.glintybox, +0x160 the button seen; FEGlintyBoxControl_v21 0x521db0: data.width by data.height in
+   data.col, its mode data.animate), one a control, the least lately drawn given up for a new one. */
 typedef struct {
     const FertControl *c;
     FEGlint g;
@@ -761,7 +762,7 @@ typedef struct {
 static GoToGlint s_goto_glint[64];
 static uint32_t s_goto_frame;
 
-static GoToGlint *goto_glint(const FertControl *c, int mode)
+static GoToGlint *ctl_glint(const FertControl *c, uint32_t colour, int w, int h, int mode)
 {
     s_goto_frame++;
     GoToGlint *e = NULL, *old = &s_goto_glint[0];
@@ -773,7 +774,7 @@ static GoToGlint *goto_glint(const FertControl *c, int mode)
         e = old;
         e->c = c;
         e->seen = false;
-        FEGlint_Init(&e->g, 0xff000000u, data_int(c, "width", 0), data_int(c, "height", 0), mode);
+        FEGlint_Init(&e->g, colour, w, h, mode);
         e->g.start--;   /* (made with the layout, before its first draw) */
     }
     e->used = s_goto_frame;
@@ -812,7 +813,7 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
     uint32_t k = (uint32_t)a << 24;
     FE2D_Rect(x, y, 1.0f, (float)(data_int(c, "stemleftheight", 0) + (r[3] - r[1])), k);
     FE2D_Rect(x + w, y, 1.0f, (float)(data_int(c, "stemrightheight", 0) + (r[3] - r[1])), k);
-    GoToGlint *gg = goto_glint(c, mode);
+    GoToGlint *gg = ctl_glint(c, 0xff000000u, data_int(c, "width", 0), data_int(c, "height", 0), mode);
     if (!gg) return;
     /* +0x160, seen: set when disabled, or once its transition is over (0x4c83f0: the port has none);
        a run may start then, and later only while hovered, pressed or focused (0x4c7860, 0x4c7920,
@@ -826,6 +827,20 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
         allow = (c->feflags & (4 | 8 | 0x40)) != 0;
     }
     FEGlint_Draw(&gg->g, (int)x, (int)y, a, allow && !disabled_now);
+}
+
+static uint32_t data_colour(const FertControl *c, const char *name);
+
+/* A glinty rectangle (FEGlintyBoxControl_v15 0x521e60): only its glinty box, at its place, a run free to
+   start whenever its transition is over (0x4c83f0: the port's always are). */
+void FEGlintyBox_Draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return;
+    int32_t pos[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, pos);
+    GoToGlint *gg = ctl_glint(c, data_colour(c, "col"), data_int(c, "width", 0), data_int(c, "height", 0), data_int(c, "animate", 0));
+    if (gg) FEGlint_Draw(&gg->g, pos[0] + ox, pos[1] + oy, 0xff, true);   /* (0x4c8410: the fade) */
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name)
