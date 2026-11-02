@@ -1151,10 +1151,9 @@ static const char *overlay_layout(const char *id)
     if (!strcmp(id, "ID_DARKOVAL")) return "screendarkoval";
     if (!strcmp(id, "ID_FULLOVAL")) return "screenfulloval";
     if (!strcmp(id, "ID_MOVIEOVAL")) return "screenmovieoval";
-    if (!strcmp(id, "ID_OPTIONOVAL")) {
-        PENDING_NOTE(0x4e1010, "the in-race options' lighter oval (screenoptionovallite)");
-        return "screenoptionoval";
-    }
+    /* (the lighter screenoptionovallite is for FEApplication_Run's mode 1, the race's options, RaceLoop's
+       HUD action 1: no HUD visual returns 1, 0x425eb0's visuals' slot 9, so the race never opens them) */
+    if (!strcmp(id, "ID_OPTIONOVAL")) return "screenoptionoval";
     return NULL;
 }
 
