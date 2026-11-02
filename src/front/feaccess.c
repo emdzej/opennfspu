@@ -473,6 +473,15 @@ static void remain_list(void)
         if (!r[0x3d0 + 0xa4 * i]) s_remain[s_nremain++] = i;
 }
 
+bool FEData_TrackLinear(const char *track)
+{
+    for (int i = 0; i < s_ntracks; i++) {
+        const uint8_t *r = s_trk + TRK_SIZE * s_tracks[i];
+        if (!strcasecmp((const char *)r + 8, track)) return rec16(r, 0x6e) != 1;
+    }
+    return false;
+}
+
 /* The nfs5.trk record of a track id (0x4fb4b0; the first one if none has it). */
 static const uint8_t *track_by_id(int id)
 {
@@ -1569,6 +1578,12 @@ void FEAccess_SetRange(FEAccessor *a, int lo, int hi)   /* 0x4ba0d0 */
     a->min = lo;
     a->count = hi - lo + 1;
     if (a->pos >= a->count) a->pos = 0;   /* (0x4bbef0: a place past the end back to 0) */
+}
+
+int FEAccess_ItemId(const FEAccessor *a)
+{
+    if (!a || a->kind != ACC_LIST || !a->list) return 0;
+    return (int)exe_u32(a->list + 4u * (uint32_t)a->pos);
 }
 
 const char *FEAccess_Text(const FEAccessor *a)
@@ -2772,6 +2787,15 @@ int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[
             start[++n] = ko_get(KO_PLACE + 4 * i) - 1;
         }
     return n;
+}
+
+int FEData_KnockoutDirection(void)
+{
+    /* (0x4fb630 for the knockout: its race's Track<n>.Direction, none before it is on) */
+    if (!FEData_KnockoutOn()) return 0;
+    char nm[32];
+    snprintf(nm, sizeof nm, "Track%d.Direction", ko_get(KO_RACE) + 1);
+    return FEAccess_ItemId(FEAccess_Find(nm));
 }
 
 int FEData_KnockoutTraffic(void)

@@ -57,6 +57,9 @@ int FEApp_Parts(int32_t ids[20]);
 /* The raced owned car's settings (as FEData_OwnedSetup); false for a car not owned. */
 bool FEApp_Setup(float set[17]);
 int FEApp_Laps(void);
+/* The race driven backwards (REVERSE 0x657430) and mirrored (MIRROR 0x65742c), 0x4fb630's. */
+bool FEApp_Reverse(void);
+bool FEApp_Mirror(void);
 int FEApp_Opponents(void);
 /* The race's traffic count (0x4fb630's fifth) and the career race's own traffic cars (0 slots: the
    track's models). */

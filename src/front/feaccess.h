@@ -30,6 +30,8 @@ int FEAccess_Int(const FEAccessor *a);
 void FEAccess_SetRange(FEAccessor *a, int lo, int hi);
 /* The text of the current item. */
 const char *FEAccess_Text(const FEAccessor *a);
+/* A list accessor's current item's string id (FELocalizedTextAccessor's v0x6c); 0 for other kinds. */
+int FEAccess_ItemId(const FEAccessor *a);
 
 /* Its text for a control's argument (slot 5, 0x4bc0e0): SHORT the item's, PERCENT the position in
    per cent, another argument itself (the kinds' own arguments pend). */
@@ -159,6 +161,8 @@ bool FEData_KnockoutOn(void);
    in, their personalities and the grid: start[0] the player's, 0 the front); its results (0x4ddb10). */
 void FEData_KnockoutStart(void);
 int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8]);
+/* Its race's Track<n>.Direction's string id (0x19a .. 0x19d), 0 before the knockout is on. */
+int FEData_KnockoutDirection(void);
 /* Knockout racer i's (pers[] above) personality and car (0x4ddc00: OpponentCar.Car's car i - 1). */
 void FEData_KnockoutOpponent(int racer, RaceOpponent *o);
 /* The knockout race's traffic count (its Track<n>.Traffic, 0x4fb630). */
@@ -175,6 +179,9 @@ void FEData_KnockoutResult(const int *places, int np);
 const uint8_t *FEData_PartRecord(int32_t id);
 const uint8_t *FEData_CarById(int id);
 const uint8_t *FEData_TrackById(int id);
+/* Whether the race's track (by its nfs5.trk name, +8) is point-to-point: LINEAR_TRACK, 0x4ec480's option
+   0x1d, its record's +0x6e not 1 (looped). An unknown name is looped. */
+bool FEData_TrackLinear(const char *track);
 /* A new car object of an nfs5.car record (0x4eda40): its colours in the object's order (+0x674 ..),
    its stripe package and race number, its stock parts fitted. */
 void FEData_NewCar(SaveCar *c, const uint8_t *r, const int32_t col[4], int32_t stripe, int32_t racenum);

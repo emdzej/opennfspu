@@ -8,6 +8,7 @@
 #include "game/car.h"
 #include "game/race_setup.h"
 #include "game/race_car.h"
+#include "render/r3dcar.h"
 #include "game/race_progress.h"
 #include "game/mission.h"
 #include "game/car_drive.h"
@@ -174,10 +175,12 @@ bool app_frame(void)
                     g_race_rally = FE_Cheat(0);   /* RALLY (0x19) */
                     g_race_heavy = FE_Cheat(8);   /* HEAVY (0x1a) */
                     g_race_derby = FE_Cheat(7);
+                    g_race_linear = FEData_TrackLinear(race_track);   /* LINEAR_TRACK (0x4ec480's 0x1d) */
                     if (g_race_derby) {
                         snprintf(race_track, sizeof race_track, "%s", exe_str(0x5da6d0));   /* "Skidpad" */
                         g_drive_race_type = 3;
-                        PENDING_NOTE(0x4ecc60, "the derby's LINEAR_TRACK 0, DAMAGE 1, NOCOLLISION 0 (the port's options)");
+                        g_race_linear = 0;   /* (its LINEAR_TRACK 0) */
+                        PENDING_NOTE(0x4ecc60, "the derby's DAMAGE 1, NOCOLLISION 0 (the port's options)");
                     }
                     /* (0x4ec590: Fuzzyfuz gives the quick race four police cars; a mission with police two) */
                     g_drive_cops = FE_Cheat(5) && FEApp_GameType() == 0 ? 4 : FEApp_GameType() == 9 ? FEApp_Cops() : 0;
@@ -186,6 +189,8 @@ bool app_frame(void)
                         memset(g_lap_records, 0, sizeof g_lap_records);
                     }
                     g_drive_laps = FEApp_Laps();
+                    g_race_reverse = FEApp_Reverse();   /* (0x4ecc60's REVERSE and MIRROR) */
+                    g_r3d_mirror = FEApp_Mirror();
                     g_drive_opponents = FEApp_Opponents();
                     g_drive_traffic = FEApp_Traffic(g_race_traffic_slots);
                     g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;

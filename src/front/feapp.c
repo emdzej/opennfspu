@@ -46,6 +46,7 @@ static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu,
 static FEResult s_result;
 static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents, s_traffic, s_cops;
+static bool s_reverse, s_mirror;      /* 0x4fb630's third and fourth: the race's REVERSE and MIRROR */
 static int16_t s_traffic_slots[7];   /* the career race's own traffic cars (0x4ec590's +0x382) */
 static char s_car[64] = "964";
 static int s_depth;
@@ -585,6 +586,16 @@ int FEApp_OpponentCars(RaceOpponent out[8])
 const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
+bool FEApp_Reverse(void) { return s_reverse; }
+bool FEApp_Mirror(void) { return s_mirror; }
+
+/* A direction's string id (Track<n>.Direction: 0x19a forward, 0x19b reversed, 0x19c mirrored, 0x19d
+   both) into the race's flags (0x4fb630). */
+static void set_direction(int id)
+{
+    s_reverse = id == 0x19b || id == 0x19d;
+    s_mirror = id == 0x19c || id == 0x19d;
+}
 int FEApp_Opponents(void) { return s_opponents; }
 int FEApp_Cops(void) { return s_cops; }
 
@@ -867,6 +878,7 @@ static void callback(const char *cb)
         s_traffic = 5;   /* (0x4fb630 for the test drives, types 6 .. 8) */
         memset(s_traffic_slots, 0, sizeof s_traffic_slots);
         s_testdrive_type = cb[9] == 'U' ? 7 : cb[9] == 'N' ? 6 : 8;
+        set_direction(0);   /* (0x4fb630's types 6 .. 8: forward) */
         s_result = FE_PLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
         s_testdrive = false;
@@ -876,6 +888,7 @@ static void callback(const char *cb)
         s_skill = 1.0f;
         s_nopp = -1;
         s_factory_race = false;
+        set_direction(0);
         if (!can_play()) return;
         /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
            accessors pending: fe.txt's as the original's defaults). */
@@ -900,6 +913,12 @@ static void callback(const char *cb)
                 return;
             }
             s_tour_race = FEData_TourRace();   /* (before the laps: they're its) */
+            {
+                /* (0x4fb630's types 4, 5: the race's reverse +0x3a4 and mirror +0x3a5) */
+                const uint8_t *tr = FEData_Tournament();
+                s_reverse = tr && s_tour_race >= 0 && tr[0x3a4 + 0xa4 * s_tour_race] != 0;
+                s_mirror = tr && s_tour_race >= 0 && tr[0x3a5 + 0xa4 * s_tour_race] != 0;
+            }
             s_owned_race = FEData_OwnedIndex("OwnedCars.Car");
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", c);
@@ -914,6 +933,7 @@ static void callback(const char *cb)
             if (!FEData_KnockoutOn()) FEData_KnockoutStart();
             int laps = 1;
             s_ngrid = FEData_KnockoutRace(s_track, sizeof s_track, &laps, s_grid_pers, s_grid_start);
+            set_direction(FEData_KnockoutDirection());
             /* (0x4ddc00: each racer still in in its own car, of its personality) */
             for (int i = 0; i < s_ngrid; i++) FEData_KnockoutOpponent(s_grid_pers[i], &s_opp[i]);
             s_nopp = s_ngrid;
@@ -935,7 +955,12 @@ static void callback(const char *cb)
             const SaveCar *fc = FEFactory_Car();
             const uint8_t *m = FEFactory_Mission();
             if (!t || !fc || !m) return;
-            PENDING_NOTE(0x4fb630, "the mission's reverse direction (+0x28 == 2)");
+            {
+                int16_t dir;   /* (reversed when its +0x28 is 2; never mirrored) */
+                memcpy(&dir, m + 0x28, 2);
+                s_reverse = dir == 2;
+                s_mirror = false;
+            }
             {
                 int16_t lvl;   /* (its traffic level +0x54: 0x5db440's count) */
                 memcpy(&lvl, m + 0x54, 2);
@@ -979,6 +1004,7 @@ static void callback(const char *cb)
         if (s_tour_race < 0 && (s_gametype == 0 || s_gametype == 1)) {
             FEAccessor *ta = FEAccess_Find("Track1.Traffic");
             s_traffic = ta ? FEAccess_Pos(ta) : 0;
+            set_direction(FEAccess_ItemId(FEAccess_Find("Track1.Direction")));   /* (types 0, 1, 3) */
         }
         s_opponents = s_tour_race >= 0 ? 7 : s_gametype == 1 ? FEData_KOOpponents() : FEData_Opponents();   /* (the standings' eight racers) */
         if (s_tour_race < 0) s_nopp = FEData_RaceOpponents(s_opponents, s_opp);   /* (0x4eb230) */
