@@ -1,5 +1,6 @@
 /* The front end's application (feapp.h). */
 #include "front/feapp.h"
+#include "render/rtex.h"
 #include "front/femovie.h"
 #include "front/fecarlogo.h"
 #include "front/fetrackmap.h"
@@ -313,6 +314,7 @@ bool FEApp_Init(const char *start)
     }
     s_result = FE_RUNNING;
     g_r3d_frontend = 1;
+    Render_LoadCommonFsh(g_render->textures);   /* 0x448a40 (FEApplication_Run's, then R3DCar_LoadCommon) */
     /* The sound (GameMain's Audio_Init 0x4a6610 before the front end; the port's race closes it at its
        end, so it opens again here) and the menus' music. */
     FEApp_Sound();
@@ -417,6 +419,7 @@ void FEApp_End(void)
     FEEndOfEra_Free();
     FEShowcase_Load(NULL); /* 0x5081e0 (the port's: the race's memory) */
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
+    Render_FreeCommonFsh();   /* 0x448af0 */
     g_r3d_frontend = 0;
 }
 

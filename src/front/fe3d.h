@@ -6,9 +6,9 @@
 
    Ported so far: the garage (FEGarage3DRoom, ID_GARAGE: a spinning room, FESpinning3DRoom 0x4e9570, of
    the model "garage"), its car (set by the screen's FECar3DControl of position type 0, 0x4bf9a0), their
-   placement, spin and light (0x4e9690, 0x4e7b60). The dealership, factory, track select and victory
-   rooms, the car's floor shadow (FEGarage3DRoom_v15's 'FESH' texture and matrix) and the car's opening
-   doors pend.
+   placement, spin and light (0x4e9690, 0x4e7b60), the car's floor shadow (FEGarage3DRoom_v15 0x4e9380);
+   the dealership, factory, track select and victory rooms. The dealership's slide between cars and the
+   car's opening doors pend.
 
    docs/re/frontend.md has the rooms' notes and the port's one deviation in their draw. */
 #pragma once

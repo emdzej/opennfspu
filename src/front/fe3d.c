@@ -10,6 +10,8 @@
 #include "render/camera_math.h"
 #include "render/carpages.h"
 #include "render/render.h"
+#include "render/rtex.h"
+#include "render/r3dcar.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -149,6 +151,7 @@ typedef struct {
     int32_t zoom_at;          /* +0x320: the tick the zoom started (-1 not yet) */
     /* the victory room's */
     FEMovie *movie;           /* +0x2f0 */
+    bool garage;              /* FEGarage3DRoom (its v15's shadow) */
 } FE3DRoom;
 
 static FE3DRoom *s_room;
@@ -177,7 +180,7 @@ static FE3DRoom *garage_new(void)
     r->hinge_axis = 2;
     r->model = FE3DObject_New(2, "garage", none, 0, -1, 0, NULL);   /* 0x4e9570 */
     FE3DObject_SetPos(r->model, r->pos[0], r->pos[1], r->pos[2]);
-    PENDING_NOTE(0x4e9380, "FEGarage3DRoom_v15: the car's floor shadow ('FESH' and its matrix)");
+    r->garage = true;
     return r;
 }
 
@@ -325,8 +328,7 @@ static void light(FE3DRoom *r, FE3DObject *o, bool car)
     if (!o) return;
     float fade = 1.0f;   /* 1 - the room's fade (0x4e0930) / 0x200 */
     CarLight *l = &o->car.light;
-    float *f = l->f;
-    memset(f, 0, sizeof l->f);
+    float *f = l->f;   /* (the rest as it was: the garage's shadow record, +0x14c, stays) */
     f[0x8c / 4] = f[0x90 / 4] = f[0x94 / 4] = 1.0f;
     f[0xcc / 4] = 10.0f;
     f[0x98 / 4] = f[0x9c / 4] = 1.0f;
@@ -402,8 +404,41 @@ static void dealer_draw(FE3DRoom *r, EaglMatStack *model)
     }
 }
 
+/* FEGarage3DRoom_v15 0x4e9380: with a car, its floor shadow on the room model: the shadow-map layer's
+   rows (the model's light block +0x164 .., a record at 0x690a18) projecting the floor onto common.fsh's
+   'FESH' (0x613e04) from the car's place (last frame's), turned with the room's spin (-360 degrees a
+   turn, 0x5b45b4) and scaled to the car's box (its full width and length), centred; without one no
+   texture. (The car's +0x700 is cleared too: not read by the ported draw.) */
+static void garage_shadow(FE3DRoom *r)
+{
+    if (!r->model) return;
+    if (!r->car) {
+        r->model->car.light.lighttex = NULL;   /* 0x440840(0) */
+        return;
+    }
+    const R3DCarState *st = &r->car->state;
+    EaglMatrix m, n;
+    EAGL_MatIdentity(&m);
+    EAGL_MatTranslation(&n, -st->pos[0], 0, -st->pos[2]);
+    EAGL_MatPostMul(&m, &n);
+    EAGL_MatAxisAngle(&n, r->rot[1] * -360.0f, 0, 1.0f, 0);
+    EAGL_MatPostMul(&m, &n);
+    EAGL_MatScale(&n, 1.0f / (st->halfsize[0] + st->halfsize[0]), 1.0f, 1.0f / (st->halfsize[2] + st->halfsize[2]), 1.0f);
+    EAGL_MatPostMul(&m, &n);
+    EAGL_MatTranslation(&n, 0.5f, 0, 0.5f);
+    EAGL_MatPostMul(&m, &n);
+    /* the record's rows (+0x18 ..): u by the matrix's first column, v by its third (0x440850 copies
+       the record, the rest of it as it was, zero) */
+    static float rec[16];   /* 0x690a18 */
+    rec[6] = m.m[0], rec[7] = m.m[4], rec[8] = m.m[8], rec[10] = m.m[12];
+    rec[11] = m.m[2], rec[12] = m.m[6], rec[13] = m.m[10], rec[15] = m.m[14];
+    memcpy(&r->model->car.light.f[0x14c / 4], rec, sizeof rec);
+    r->model->car.light.lighttex = g_rtex_common[0] ? RTexBank_find(g_rtex_common[0], 0, 0x48534546) : NULL;   /* 'FESH' (0x44d1f0) */
+}
+
 static void room_draw(FE3DRoom *r, EaglMatStack *model)
 {
+    if (r->garage) garage_shadow(r);
     if (r->track) {
         track_draw(r, model);
         return;
