@@ -40,6 +40,7 @@
 #include "render/render_pending.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
+#include "exe.h"
 #include "game/audio.h"
 #include "game/camera.h"
 #include "render/noise.h"
@@ -100,6 +101,74 @@ static void car_entry_draw(RDrawObject *o, int index, const RListEntry *e)
 
 static const RDrawVtbl car_draw_vtbl = {NULL, NULL, car_entry_draw, NULL, NULL, NULL, NULL};
 
+/* R3DCar_v13 (0x439ec0): whether the car is drawn and its level of detail (+0x2c0). Not drawn: a car
+   without its +0x7f flag, the viewed car in camera mode 0; a view inside the viewed car keeps the level.
+   Else from the detail's table (0x5cd5b8: one less in a replay, one more for a human car at detail 0;
+   0 for flag 0x10's cars), the LODs that have parts (the first empty one's number, else 7) and the size on
+   screen of the car's box: three corners (x, y, z), (-2x, y, z), (x, y, -z) of its half size (+0x3a8)
+   about its centre (R3DCar_v5 0x43a340) through its rotation, projected; the two edges' lengths
+   (the halved-exponent square root) times 640 / the screen's width. 3 or less: not drawn. Port: the
+   machine's memory isn't low (MEM_info 0x53c140 under 40 MB adds one); the transform is EAGL_MatTransform4's
+   (the original's 0x539e60 sums in its own order). */
+static float exe_f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
+
+static float sqrt_bits(float v)
+{
+    int32_t i;
+    memcpy(&i, &v, 4);
+    i = (i >> 1) + 0x1fc00000;
+    memcpy(&v, &i, 4);
+    return v;
+}
+
+static bool car_lod(R3DCar *r, Car *car, EaglView *view)
+{
+    if (!car->b[0x7f]) return false;
+    if (*CAR_I(car, CAR_INDEX) == g_camera_car) {
+        if (g_racecam[0].mode == 0) return false;   /* (0x465630) */
+        if (g_racecam[0].flags2 & 8) goto lower;
+    }
+    {
+        int q = g_r3d_quality, low = 0;
+        int base = (int)exe_u32(0x5cd5b8 + 4 * (uint32_t)q) + low;
+        uint32_t fl = (uint32_t)*CAR_I(car, CAR_FLAGS);
+        if (g_race_view < 2 || q == 0 || low) {
+            if (q == 0 && (fl & 8) && !low) base++;
+        } else {
+            base--;
+        }
+        if (fl & 0x10) base = (!low || q != 0) ? 0 : 1;
+        int levels = 7;
+        for (uint32_t k = 0; k < r->nlods; k++)
+            if (r->lods[k]->nparts == 0) { levels = (int)k + 1; break; }
+        levels -= base;
+        const float *pos = CAR_F(car, 0x330), *up = CAR_F(car, 0x370), *hs = CAR_F(car, 0x3a8);
+        float t[3] = {pos[0] - up[0] * hs[1], pos[1] - up[1] * hs[1], pos[2] - up[2] * hs[1]};
+        EaglMatrix m;
+        EAGL_MatFromRotTrans(&m, CAR_F(car, 0x364), t);
+        float pts[12] = {hs[0], hs[1], hs[2], 1, hs[0] * exe_f32(0x5b2628), hs[1], hs[2], 1, hs[0], hs[1], -hs[2], 1};
+        float w[12], sc[3][4];
+        EAGL_MatTransform4(&m, 3, pts, 16, w, 16);
+        for (int k = 0; k < 3; k++) EAGL_ViewProject(view, 1, w + 4 * k, sc[k]);
+        float d1 = (sc[1][0] - sc[0][0]) * (sc[1][0] - sc[0][0]) + (sc[1][1] - sc[0][1]) * (sc[1][1] - sc[0][1]);
+        float d2 = (sc[2][0] - sc[0][0]) * (sc[2][0] - sc[0][0]) + (sc[2][1] - sc[0][1]) * (sc[2][1] - sc[0][1]);
+        float size = exe_f32(0x5b2a8c) / (float)g_renderopts.width * (sqrt_bits(d1) + sqrt_bits(d2));
+        if (size <= exe_f32(0x5b2600)) return false;
+        float f = exe_f32(0x5b24a8) - sqrt_bits(size) * 0.09765625f;
+        if (f < exe_f32(0x5b23f8)) f = exe_f32(0x5b23f8);
+        f *= (float)(levels - 1);
+        if (!(fl & 0x10)) f = (f + exe_f32(0x5b24a8)) * exe_f32(0x5b23f0) * f;
+        f -= 0.5f;   /* (the double at 0x5b2778) */
+        int lod = base + (int)rintf(f);
+        int cap = 7 + (q < 2 ? -1 : -2);   /* (R3DCar_LODCount 0x43acd0: 7) */
+        if (lod < cap) cap = lod < 0 ? 0 : lod;
+        r->curlod = cap;
+    }
+lower:
+    if (0 < r->curlod) PENDING_NOTE(0x43e5a0, "the LODs below the drawn one (R3DCarLOD 0x43e5a0)");
+    return true;
+}
+
 /* 0x443540 (the view's +0x11b: alpha reference 10, then 0x442fd0 for each car): its render ticks; the
    viewed car not in its own mirror (the camera's flag 0x10) and, unless the camera's flag 8 says so, the
    car's sphere (+0x330, radius +0x3b4) in the view; then queued into the opaque list (0x466950) by its
@@ -129,7 +198,7 @@ static void draw_cars(RCamera *c)
             nocull = (g_racecam[0].flags2 & 8) != 0;
         }
         if (!nocull && !EAGL_ViewSphereVisible(c->view, p, *CAR_F(car, 0x3b4))) continue;
-        PENDING_NOTE(0x439ec0, "R3DCar_v13: the car's test at its distance before it's queued");
+        if (!car_lod(r, car, c->view)) continue;   /* R3DCar_v13 0x439ec0 */
         const float *eye = c->frame.eye;
         float dx = p[0] - eye[0], dy = p[1] - eye[1], dz = p[2] - eye[2];
         s_cardraw[i] = (CarDrawObject){{&car_draw_vtbl}, r};
