@@ -155,8 +155,7 @@ static void go_ring(H321Go *g, int frame, int step)
 static void go_draw(HudVisual *v)
 {
     H321Go *g = (H321Go *)v;
-    if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8) return;
-    PENDING_NOTE(0x426a20, "the HUD's pause check (0x426a20)");
+    if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8 || HUD_ModalShown()) return;   /* 0x426a20 */
     int32_t t = g_sim_tick;
     if (exe_i32(0x5b27d8) <= t && t <= exe_i32(0x5b27e4) && g_race_view == 0) {
         if (v->state != 3) v->state = 3;   /* 0x4343f0 */
