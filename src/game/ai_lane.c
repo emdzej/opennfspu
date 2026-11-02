@@ -16,7 +16,6 @@
 #include "game/race_progress.h"
 #include "game/road.h"
 #include "game/sim_rand.h"
-#include "pending.h"
 #include "render/r3dcar.h"
 #include <math.h>
 #include <string.h>
@@ -369,12 +368,25 @@ static void edges(Car *c)
     if (lane + 1 < lo || hi < lane + 1) s_score[2] = subk(s_score[2], 0x5b2428);
 }
 
-/* A racer's lane by its place (0x402f00): racing in a race of laps, its own lane unless an edge, by its
-   place's distance behind. */
+/* A racer's lane by its place (0x402f00): in a race of laps, once its distance from the road's first node
+   (0x40e7a0, either way round) reaches its place in the order times 0x5b2410, its own lane gains 0x5b248c
+   when it is an edge lane, else the neighbour towards the nearer edge does. (The count walked is the race's
+   cars, the order's index past it when not found.) */
 static void racer_lane(Car *c)
 {
     if (!(I(CAR_FLAGS) & 1) || I(0xb50) <= 1) return;
-    PENDING_NOTE(0x402f00, "a racer's lane by its place");
+    int len = g_road->nnodes, d = car_node(c);
+    if (0 < d && len / 2 < d) d -= len;
+    else if (d < 0 && d < -(len / 2)) d += len;
+    double from = (double)d * (double)K(0x5b2460);
+    if (from <= (double)K(0x5b23f8)) from = -from;
+    int place = 0;
+    while (place < g_ncars && g_ordered.c[place] != c) place++;
+    if (from < (double)place * (double)K(0x5b2410)) return;
+    int n = car_node(c), lane = I(0x1020);
+    if (lane == 6 - node_i(n, 0x38) || lane == node_i(n, 0x3c) + 7) s_score[1] = addk(s_score[1], 0x5b248c);
+    else if (6 < lane) s_score[2] = addk(s_score[2], 0x5b248c);
+    else s_score[0] = addk(s_score[0], 0x5b248c);
 }
 
 /* The first human within 0x5b25cc (0x407c80). */
