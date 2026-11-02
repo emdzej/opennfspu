@@ -368,12 +368,14 @@ static void race_actions(void)
             if (Input_Action(ACT_VIEWDISTANCE, true))   /* 0x44f0f0 */
                 g_renderopts.adjustableviewdistance = (g_renderopts.adjustableviewdistance + 1) % 4;
             if (Input_Action(ACT_HORIZON, true)) PENDING_NOTE(0x45da50, "the horizon key (the sky's +0x60)");
-            if (Input_Action(ACT_TOGGLEHUD, true) || Input_Action(ACT_CYCLEMAP, true) ||
-                Input_Action(ACT_ZOOMINMAP, true) || Input_Action(ACT_TOGGLEREARVIEW, true) ||
-                Input_Action(ACT_TOGGLEMAP, true) || Input_Action(ACT_ZOOMOUTMAP, true) ||
-                Input_Action(ACT_HUDTRANSPARENCY, true))
-                PENDING_NOTE(0x427370, "the HUD's keys (0x427370, 0x426700, 0x4275c0, 0x427510, 0x427320, 0x4275f0, 0x427590)");
+            if (Input_Action(ACT_TOGGLEHUD, true)) HUD_ToggleHud();             /* 0x427370 */
+            if (Input_Action(ACT_CYCLEMAP, true)) HUD_CycleMap();               /* 0x426700 */
+            if (Input_Action(ACT_ZOOMINMAP, true)) HUD_ZoomMap(true);           /* 0x4275c0 */
             /* (I_CYCLEHUD's pause: its test, 0x427a80, is never true) */
+            if (Input_Action(ACT_TOGGLEREARVIEW, true)) HUD_ToggleRearView();   /* 0x427510 */
+            if (Input_Action(ACT_TOGGLEMAP, true)) HUD_ToggleMap();             /* 0x427320 */
+            if (Input_Action(ACT_ZOOMOUTMAP, true)) HUD_ZoomMap(false);         /* 0x4275f0 */
+            if (Input_Action(ACT_HUDTRANSPARENCY, true)) HUD_ToggleTrays();     /* 0x427590 */
             if (Input_Action(ACT_SFX, true)) PENDING_NOTE(0x4ab2b0, "the sound effects' key");
             if (Input_Action(ACT_MUSIC, true)) PENDING_NOTE(0x4ad560, "the music's key");
             if (Input_Action(ACT_CYCLECAMERA, true) && g_replay_mode < 2) Camera_NextMode(0);   /* 0x465920 */

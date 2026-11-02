@@ -27,9 +27,10 @@ Without parameters, `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--a
   `yaw=<degrees>` turns the camera, `at=<x>,<y>,<z>` puts it elsewhere;
 - `--param drive=<track>` drives a car from the race's grid there (`car=<name>`, default `964`) with the controls fe.txt binds, as
   the original reads them (by default the arrow keys, space the handbrake, A and Z the gears, R back on the road, C the
-  camera, B looking back, Escape the pause menu, F1 the pause menu hidden, F11 the view distance; a short and a long press of
-  the same key can be two commands). Joysticks and pads don't drive yet (their bindings wait for the controller setup), nor
-  do the HUD's, the sound's and the horizon's keys work yet. `cam=<mode>` picks the camera (0 hood, 1 driver's seat, 2-4 near chase, 5-7 far chase, 8, 9, 13), `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid). A race starts with the track's fly-in camera before the countdown, as the original; `start=<tick>` starts it later with the camera straight in its mode (the hash tests use 384).
+  camera, B looking back, Escape the pause menu, F1 the pause menu hidden, F11 the view distance, F5 the HUD, F6 the mirror, F7 the map, Tab
+  its modes, keypad minus and plus its zoom, F8 the trays; a short and a long press of the same key can be two commands).
+  Joysticks and pads don't drive yet (their bindings wait for the controller setup), nor do the sound's and the horizon's
+  keys work yet. `cam=<mode>` picks the camera (0 hood, 1 driver's seat, 2-4 near chase, 5-7 far chase, 8, 9, 13), `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid). A race starts with the track's fly-in camera before the countdown, as the original; `start=<tick>` starts it later with the camera straight in its mode (the hash tests use 384).
 
 Nothing on this page is a promise of dates. Progress is tracked in the
 [repository](https://github.com/emdzej/opennfspu).

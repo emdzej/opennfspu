@@ -41,6 +41,15 @@ void HUD_RaceStart(void);
 void HUD_DrawOverlay(RenderSystem *r, RCamera *c);
 /* Whether the rear-view mirror is on and fully shown (its view is then drawn). 0x427560 */
 bool HUD_RearViewShown(void);
+/* The HUD's keys, none while a modal visual is up: the HUD shown or hidden (0x427370), the map
+   (0x427320), the mirror (0x427510), the map's modes (0x426700), its zoom (0x4275c0, 0x4275f0), the
+   trays (0x427590). */
+void HUD_ToggleHud(void);
+void HUD_ToggleMap(void);
+void HUD_ToggleRearView(void);
+void HUD_CycleMap(void);
+void HUD_ZoomMap(bool in);
+void HUD_ToggleTrays(void);
 /* The HUD hidden or shown again while a modal visual is up. 0x425710 */
 void HUD_TogglePauseMenu(void);
 /* Whether a modal visual (a race screen, the pause menu) is up. 0x426a20 */

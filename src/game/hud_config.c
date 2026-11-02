@@ -165,6 +165,12 @@ void HudConfig_setpos(int k, int32_t x, int32_t y)
     pos[k][1] = y;
 }
 
+void HudConfig_setlookf(int off, float v)
+{
+    uint8_t *l = (uint8_t *)HudConfig_look();
+    if (l) memcpy(l + off, &v, 4);
+}
+
 void HudConfig_setchoice(int off, int32_t v)
 {
     uint8_t *c = (uint8_t *)HudConfig_choice();

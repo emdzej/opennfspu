@@ -66,4 +66,6 @@ void HudConfig_setpos(int k, int32_t x, int32_t y);  /* 0x420680 .. 0x420800 */
 /* A choice set (0x420e30 .. 0x421030; +0x58, the translucency, also sets the trays' alpha, 0x420f50), and
    the layouts written back for the player (0x41ea70). */
 void HudConfig_setchoice(int off, int32_t v);
+/* A float of the first record (the map's keys' +0x44, 0x41e690). */
+void HudConfig_setlookf(int off, float v);
 void HudConfig_Save(const char *player);

@@ -53,6 +53,7 @@ static HudVisual *s_time;    /* 0x60ca1c */
 static HudVisual *s_multitime;   /* 0x60ca40 */
 static int s_cones_down;     /* 0x60ca04: the traffic objects knocked, last counted */
 static bool always;          /* 0x60c970: draw the front visuals whatever their state */
+static HudVisual *s_mapv;    /* 0x60ca34: the track map */
 
 static void add(HudVisual *v, bool front, bool last)
 {
@@ -4268,7 +4269,8 @@ void HUD_Init(void)
     add(speedometer_new(), true, false);
     add(tach_new(), true, false);
     add(tachdigital_new(), true, false);
-    add(map_new(), true, true);   /* 0x431e50 (drawn last) */
+    s_mapv = map_new();   /* 0x431e50 (0x60ca34) */
+    add(s_mapv, true, true);   /* (drawn last) */
     PENDING_NOTE(0x428490, "HLeader (0x60ca38): the network race leader's picture (draws only in a network session)");
     add(rearview_new(), true, true);   /* 0x42c470 (0x60ca3c) */
     add(countdown_new(), false, false);
@@ -4324,6 +4326,139 @@ void HUD_TogglePauseMenu(void)
 {
     if (nmodal > 0) hidden = !hidden;
 }
+/* ---- the HUD's keys (RaceLoop's I_TOGGLEHUD .. I_HUDTRANSPARENCY), none while a modal visual is up ---- */
+
+static bool s_map_saved;      /* 0x60c821: the map's mode kept while it's off */
+static int32_t s_map_mode;    /* 0x60c824 */
+
+static void map_on(void)      /* 0x41e6b0: the kept mode back, else the first */
+{
+    if (s_map_saved) {
+        s_map_saved = false;
+        HudConfig_setchoice(0x40, s_map_mode);
+    } else {
+        HudConfig_setchoice(0x40, 1);
+    }
+}
+
+static void map_off(void)     /* 0x41e700 */
+{
+    s_map_saved = true;
+    s_map_mode = HudConfig_choicei32(0x40);
+    HudConfig_setchoice(0x40, 0);
+}
+
+static void set_state(HudVisual *v, int32_t s)
+{
+    if (v && v->vt->setstate) v->vt->setstate(v, s);
+}
+
+/* The HUD shown or hidden: the map and the mirror as they were, the other front visuals sliding in or
+   out. 0x427370 */
+void HUD_ToggleHud(void)
+{
+    static bool map_was, rear_was, init_map, init_rear;   /* 0x60c9a8, 0x60c9f8 (0x60ca01: set once) */
+    if (!init_rear) {
+        init_rear = true;
+        rear_was = HudConfig_choicei32(0x5c) != 0;   /* 0x41e9c0 */
+    }
+    if (!init_map) {
+        init_map = true;
+        map_was = HudConfig_choicei32(0x40) != 0;    /* 0x41e7d0 */
+    }
+    if (nmodal) return;
+    HudVisual *rear = s_rearview ? &s_rearview->tray.base : NULL;
+    if (!always) {
+        always = true;   /* 0x41e730 */
+        if (map_was) {
+            map_on();
+            set_state(s_mapv, 1);
+        }
+        if (rear_was) {
+            HudConfig_setchoice(0x5c, 1);   /* 0x41e750 */
+            set_state(rear, 1);
+        }
+        for (int i = 0; i < nlist; i++)
+            if (list[i].front && !list[i].last) set_state(list[i].v, 1);
+    } else {
+        always = false;  /* 0x41e740 */
+        map_was = HudConfig_choicei32(0x40) != 0;
+        if (map_was) {
+            map_off();
+            set_state(s_mapv, 2);
+        }
+        rear_was = HudConfig_choicei32(0x5c) != 0;
+        if (rear_was) {
+            HudConfig_setchoice(0x5c, 0);   /* 0x41e770 */
+            set_state(rear, 2);
+        }
+        for (int i = 0; i < nlist; i++)
+            if (list[i].front && !list[i].last && list[i].v->state != 2) set_state(list[i].v, 2);   /* (slot 6) */
+    }
+}
+
+/* The map off, or on again while the HUD shows. 0x427320 */
+void HUD_ToggleMap(void)
+{
+    if (nmodal) return;
+    if (HudConfig_choicei32(0x40) != 0) {
+        map_off();
+        set_state(s_mapv, 2);
+    } else if (always) {
+        map_on();
+        set_state(s_mapv, 1);
+    }
+}
+
+/* The mirror off, or on again while the HUD shows. 0x427510 */
+void HUD_ToggleRearView(void)
+{
+    if (nmodal) return;
+    HudVisual *rear = s_rearview ? &s_rearview->tray.base : NULL;
+    if (HudConfig_choicei32(0x5c) != 0) {
+        HudConfig_setchoice(0x5c, 0);   /* 0x41e770 */
+        set_state(rear, 2);
+    } else if (always) {
+        HudConfig_setchoice(0x5c, 1);   /* 0x41e750 */
+        set_state(rear, 1);
+    }
+}
+
+/* The map's modes in turn: 3 (turned with the road) to 2 at the look's +0x44 20, 1 to 3, else 1 at 4.
+   0x426700 */
+void HUD_CycleMap(void)
+{
+    if (nmodal) return;
+    int32_t m = HudConfig_choicei32(0x40);
+    if (m == 3) {
+        HudConfig_setchoice(0x40, 2);    /* 0x41e850 */
+        HudConfig_setlookf(0x44, 20.0f); /* 0x41e690 */
+    } else if (m == 1) {
+        HudConfig_setchoice(0x40, 3);    /* 0x41e810 */
+    } else {
+        HudConfig_setchoice(0x40, 1);    /* 0x41e830 */
+        HudConfig_setlookf(0x44, 4.0f);
+    }
+}
+
+/* The map's zoom (+0x44: 1 .. 4) in or out, the map laid out again. 0x4275c0, 0x4275f0 */
+void HUD_ZoomMap(bool in)
+{
+    if (nmodal) return;
+    int32_t z = HudConfig_choicei32(0x44);
+    if (in) z = z == 0 ? 2 : z + 1 > 4 ? 4 : z + 1;   /* 0x41e640 */
+    else z = z - 1 < 2 ? 1 : z - 1;                   /* 0x41e600 */
+    HudConfig_setchoice(0x44, z);
+    if (s_mapv && s_mapv->vt->reset) s_mapv->vt->reset(s_mapv);   /* (slot 2) */
+}
+
+/* The trays on or off. 0x427590 */
+void HUD_ToggleTrays(void)
+{
+    if (nmodal) return;
+    HudConfig_trays(HudConfig_notrays());   /* 0x41e560 / 0x41e5b0 */
+}
+
 
 static void push_modal(HudVisual *v)
 {
