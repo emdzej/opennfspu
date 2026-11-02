@@ -1092,7 +1092,8 @@ static void gdamage_setpos(HudVisual *v, int x, int y)
         g->title->x = px + in;
         g->title->y = (int)((float)(HudConfig_i32(0xc0) - top) - d + (float)py);
     }
-    PENDING_NOTE(0x493c30, "the damage's percentage text (made, never drawn)");
+    /* (the car's damage as a percentage string, the ten values summed times 0x5b49b4 (0x493c30) and '%'
+       appended, is built on the stack here and not used) */
     int bx = px + ax, by = py + ay;
     if (g->outline) HudArt_place(g->outline, bx, by);
     for (int i = 0; i < 6; i++) {
@@ -1847,7 +1848,7 @@ static HudVisual *map_new(void)
     tray_init(&m->tray, &map_vt, x, y, w, h, 0, true, 0, true, false);
     map_build(m);
     m->grid[0] = m->grid[1] = (uint32_t)HudConfig_i32(0x30);   /* 0x420470 */
-    PENDING_NOTE(0x431e50, "the map's debug texts (0x60d4d4)");
+    PENDING_NOTE(0x431e50, "the map's debug text (0x60d4d4; drawn with HCheat's map flags)");
     uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
     m->label = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, w, 0, 0, false);
     m->lap = text_new(HudConfig_font(0x4c), HudConfig_scheme(), c14, 0, 0, w, 0, 0, false);
@@ -3003,6 +3004,8 @@ typedef struct {
     int32_t units;                         /* +0xa9a4 */
     int32_t hx, hy, cx, cy;                /* +0xa9b0 .. +0xa9bc: half its size, its centre */
     int32_t style;                         /* +0xa9c0: the needle's (0: with a cap) */
+    HText *value, *label;                  /* HTach +0xa9c4, +0xa9c8: placed, never drawn */
+    char text[4];                          /* HTach +0xa9cc: the label's string, empty */
     float redline;                         /* HTach +0xa9d0: the share of the revs below the red line */
 } HDial;
 
@@ -3046,9 +3049,11 @@ static void dial_draw(HDial *d, int n)
     if (d->style == 0) HudArt_draw(d->cap);
 }
 
-static void dial_destroy(HudVisual *v)   /* 0x4215a0 */
+static void dial_destroy(HudVisual *v)   /* 0x4215a0 (HTach's 0x42f4a0 its two texts first) */
 {
     HDial *d = (HDial *)v;
+    text_free(d->label);
+    text_free(d->value);
     HudArt_free(d->face);
     HudArt_free(d->back);
     HudArt_free(d->needle);
@@ -3137,7 +3142,13 @@ static void tach_setpos(HudVisual *v, int x, int y)
     HudConfig_setpos(HUDPOS_TACHDIAL, x, y);
     HudConfig_pos(HUDPOS_TACHDIAL, &px, &py);
     dial_setpos(v, px, py);
-    PENDING_NOTE(0x42f4f0, "the tachometer's two texts (+0xa9c4, +0xa9c8; placed, never drawn)");
+    /* the label centred on the dial less the record's +0x34, at 7/10 of its height; the value at the
+       label string's extent, below it by +0x38 */
+    float ex = 0, ey, ew, eh;
+    if (d->label && d->label->font && d->label->font->font) text_extent(d->label, d->text, &ex, &ey, &ew, &eh);
+    int ly = y + HudConfig_i32(0xc8) * 7 / 10;
+    if (d->label) d->label->x = x + HudConfig_i32(0xc4) / 2 - HudConfig_i32(0x34), d->label->y = ly;
+    if (d->value) d->value->x = (int)ex, d->value->y = ly + HudConfig_i32(0x38);
 }
 
 static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL, NULL, NULL};
@@ -3168,7 +3179,10 @@ static HudVisual *tach_new(void)
     dial_init(d, &tach_vt, exe_str(0x5ccf94), 0, exe_str(exe_u32(0x5ccfcc + 4u * (unsigned)night)), o->tach, needle, 5, needle, st,
               HUDPOS_TACHDIAL, HudConfig_i32(0xc4), HudConfig_i32(0xc8), exe_i32(0x5ccfe0 + 8u * (unsigned)st),
               exe_i32(0x5ccfe4 + 8u * (unsigned)st), o->pivot, (float)o->tach_start, (float)o->tach_deg * exe_f32(0x5b3060), o->tach_units);
-    PENDING_NOTE(0x42f300, "the tachometer's texts (0xa9c4, 0xa9c8)");
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    d->label = text_new(HudConfig_font(0x4c), HudConfig_scheme(), c14, 0, 0, 0, 0, 1, false);   /* 0x430e50 */
+    d->value = text_new(HudConfig_font(0x64), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, 0, 0, 0, false);
+    d->text[0] = 0;
     int32_t x, y;
     HudConfig_pos(HUDPOS_TACHDIAL, &x, &y);
     tach_setpos(&d->tray.base, x, y);
@@ -3424,6 +3438,7 @@ typedef struct {
     HudArt *full, *ring, *outline;      /* +0x10, +0x14 (congrats1), +0x18 */
     HudArt *place[3];                   /* +0x1c, +0x20, +0x24: congrats3 1, congrats4 0, congrats4 1 */
     HudArt *spin[8];                    /* +0x28 .. +0x44 (the career's) */
+    HText *text;                        /* +0x48: made, never drawn */
     int32_t w, h, x0, y0;               /* +0x4c .. +0x58: the screen and its centre */
     int32_t x, y;                       /* +0x5c, +0x60 */
     int32_t sx, sy;                     /* +0x64, +0x68: where the slide starts */
@@ -3692,6 +3707,7 @@ static void congrats_destroy(HudVisual *v)   /* HCongrats_v0 0x41cf70 */
     HudArt *all[6] = {g->full, g->ring, g->outline, g->place[0], g->place[1], g->place[2]};
     for (int i = 0; i < 6; i++) HudArt_free(all[i]);
     for (int i = 0; i < 8; i++) HudArt_free(g->spin[i]);
+    text_free(g->text);
     free(g);
 }
 
@@ -3721,7 +3737,7 @@ static HudVisual *congrats_new(void)
     for (int i = 0; i < 3; i++) g->place[i] = made[i];
     for (int i = 0; i < 8; i++) g->spin[i] = made[3 + i];
     g->full = made[11], g->ring = made[12], g->outline = made[13];
-    PENDING_NOTE(0x430e50, "HCongrats' text (made, never drawn)");
+    g->text = text_new(HudConfig_font(0x4c), 0x80fab400u, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);   /* 0x430e50 */
     congrats_reset(g);
     return &g->base;
 }
