@@ -19,6 +19,7 @@ typedef struct {
     int (*progress)(HudVisual *v);                /* slot 14: of the fade, 0..100 (0x434950) */
     bool (*done)(HudVisual *v);                   /* slot 3: a modal visual finished (it leaves the modal list) */
     int (*input)(HudVisual *v, int x, int y, int click);   /* slot 9: the mouse; the action chosen (0 none) */
+    bool (*hidden)(HudVisual *v);                 /* slot 10: kept from showing (NULL: never; 0x50d420) */
 } HudVisualVtbl;
 
 struct HudVisual {
@@ -36,6 +37,8 @@ void HUD_Free(void);
 void HUD_RaceOver(void);
 /* The race's start (0x426a40 with 0): the cars' damage kept for the career's safe-driving bonus. */
 void HUD_RaceStart(void);
+/* Whether the rear-view mirror is on and fully shown (its view is then drawn). 0x427560 */
+bool HUD_RearViewShown(void);
 /* Whether a modal visual (a race screen, the pause menu) is up. 0x426a20 */
 bool HUD_ModalShown(void);
 /* Every visual hidden, the modal list emptied (the replay's start). 0x425740 */

@@ -216,3 +216,8 @@ typedef struct {
 RaceViews *RaceViews_ctor(RaceViews *v);                 /* 0x468da0 */
 void Render_MainViews(RaceViews *v);                     /* 0x468ae0 */
 void Render_Frame(RaceViews *v);                         /* 0x468900 */
+/* The rear-view mirror's camera (type 1: the car's eye looking back) over a rectangle of the screen
+   (fractions), made again at each call. 0x469110 */
+void Render_SetRearView(float x0, float y0, float x1, float y1, float znear, float zfar);
+/* The mirror's view, drawn over the HUD when the HUD shows it. 0x468be0 */
+void Render_RearView(void);

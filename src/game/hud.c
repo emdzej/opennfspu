@@ -182,7 +182,7 @@ static void go_draw(HudVisual *v)
     if (v->state != 0) v->state = 0;
 }
 
-static const HudVisualVtbl go_vt = {go_destroy, go_draw, NULL, NULL, NULL, NULL, NULL, NULL};   /* 0x5b27ec */
+static const HudVisualVtbl go_vt = {go_destroy, go_draw, NULL, NULL, NULL, NULL, NULL, NULL, NULL};   /* 0x5b27ec */
 
 static HudVisual *countdown_new(void)
 {
@@ -596,7 +596,7 @@ static void gear_reset(HudVisual *v)
     combo_reset(c);
 }
 
-static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *gear_new(void)
 {
@@ -679,8 +679,8 @@ static void figures_reset(HudVisual *v, int size_off, bool choice)
 static void speed_reset(HudVisual *v) { figures_reset(v, 0x9c, false); }
 static void tachdigital_reset(HudVisual *v) { figures_reset(v, 0x14, true); }
 
-static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
-static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *figures_new(const HudVisualVtbl *vt, int place, int w, int h, bool keep)
 {
@@ -793,8 +793,8 @@ static void multitime_draw(HudVisual *v)
 static void time_reset(HudVisual *v) { figures_reset(v, 0xa4, false); }        /* 0x431760 */
 static void multitime_reset(HudVisual *v) { figures_reset(v, 0x0, true); }     /* 0x42a290 */
 
-static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
-static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
 {
@@ -980,7 +980,7 @@ static void position_destroy(HudVisual *v)   /* 0x42ad40 */
     free(p);
 }
 
-static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *position_new(void)
 {
@@ -1182,7 +1182,7 @@ static void gdamage_reset(HudVisual *v)
     tray_colours(&g->tray);
 }
 
-static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *gdamage_new(void)
 {
@@ -1364,7 +1364,7 @@ static void tdamage_destroy(HudVisual *v)   /* 0x42fe80 */
     free(d);
 }
 
-static const HudVisualVtbl tdamage_vt = {tdamage_destroy, tdamage_draw, tdamage_reset, tray_setstate, tdamage_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl tdamage_vt = {tdamage_destroy, tdamage_draw, tdamage_reset, tray_setstate, tdamage_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *tdamage_new(void)
 {
@@ -1794,7 +1794,10 @@ static void map_destroy(HudVisual *v)   /* 0x4320f0 */
     free(m);
 }
 
-static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL, NULL};
+/* Kept hidden but with its layout's +0x40 on and the HUD shown. 0x433360 */
+static bool map_hidden(HudVisual *v) { (void)v; return !(HudConfig_choicei32(0x40) != 0 && always); }   /* 0x41e7d0, 0x41e7c0 */
+
+static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL, NULL, map_hidden};
 
 static HudVisual *map_new(void)
 {
@@ -2302,7 +2305,7 @@ static void summary_destroy(HudVisual *v)   /* 0x42bfa0 */
     free(s);
 }
 
-static const HudVisualVtbl summary_vt = {summary_destroy, summary_draw, NULL, summary_setstate, bb_setpos, NULL, bb_done, NULL};
+static const HudVisualVtbl summary_vt = {summary_destroy, summary_draw, NULL, summary_setstate, bb_setpos, NULL, bb_done, NULL, NULL};
 
 static HudVisual *summary_new(const char *title)
 {
@@ -2421,7 +2424,7 @@ static void records_destroy(HudVisual *v)   /* HTrackRecords_v0 0x4338e0 */
     free(r);
 }
 
-static const HudVisualVtbl records_vt = {records_destroy, records_draw, records_update, records_setstate, bb_setpos, NULL, bb_done, NULL};
+static const HudVisualVtbl records_vt = {records_destroy, records_draw, records_update, records_setstate, bb_setpos, NULL, bb_done, NULL, NULL};
 
 static HudVisual *records_new(void)
 {
@@ -2691,7 +2694,7 @@ static void standings_destroy(HudVisual *v)   /* HTournamentStandings_v0 0x43199
     free(s);
 }
 
-static const HudVisualVtbl standings_vt = {standings_destroy, standings_draw, standings_update, standings_setstate, bb_setpos, NULL, bb_done, NULL};
+static const HudVisualVtbl standings_vt = {standings_destroy, standings_draw, standings_update, standings_setstate, bb_setpos, NULL, bb_done, NULL, NULL};
 
 static HudVisual *standings_new(void)
 {
@@ -2750,7 +2753,7 @@ static void info_destroy(HudVisual *v)   /* HInfo_v0 0x428350 */
     free(m);
 }
 
-static const HudVisualVtbl info_vt = {info_destroy, info_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, NULL};
+static const HudVisualVtbl info_vt = {info_destroy, info_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, NULL, NULL};
 
 static HudVisual *info_new(bool keyhints)
 {
@@ -2908,7 +2911,7 @@ static void ms_destroy(HudVisual *v)   /* 0x428c20 */
     free(m);
 }
 
-static const HudVisualVtbl mission_vt = {ms_destroy, ms_draw, NULL, ms_setstate, bb_setpos, NULL, bb_done, ms_input};
+static const HudVisualVtbl mission_vt = {ms_destroy, ms_draw, NULL, ms_setstate, bb_setpos, NULL, bb_done, ms_input, NULL};
 
 static HudVisual *mission_new(void)
 {
@@ -3090,8 +3093,8 @@ static void tach_setpos(HudVisual *v, int x, int y)
     PENDING_NOTE(0x42f4f0, "the tachometer's two texts (+0xa9c4, +0xa9c8; placed, never drawn)");
 }
 
-static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL, NULL};
-static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL, NULL};
+static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL, NULL, NULL};
 
 static HudVisual *speedometer_new(void)
 {
@@ -3201,7 +3204,7 @@ static void wrongway_destroy(HudVisual *v)   /* 0x436e50 */
     free(v);
 }
 
-static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL, NULL, NULL};
+static const HudVisualVtbl wrongway_vt = {wrongway_destroy, wrongway_draw, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 static HudVisual *wrongway;   /* 0x60ca0c */
 
@@ -3215,6 +3218,85 @@ static HudVisual *wrongway_new(void)
     wrongway_layout(w);
     return &w->base;
 }
+
+/* ---- the rear-view mirror (HRearview, 0xd4 bytes, vtable 0x5b2e98; 0x42c470): a tray at the layout's
+   place 10 and size (+0xfc, +0x100), the mirror's camera over it (Render_SetRearView), its frame once
+   the tray has stopped; the view itself is drawn after the HUD (0x468be0) ---- */
+
+typedef struct {
+    HTray tray;
+    int32_t rx, ry, rw, rh;   /* +0xc4: the HRenderVisual (0x436670: its place and size) */
+    int32_t lastx, lasty;     /* +0xcc */
+} HRearview;
+
+static HRearview *s_rearview;   /* 0x60ca3c */
+
+/* Shown by the second layout's +0x5c. 0x42c6a0 */
+static void rearview_draw(HudVisual *v)
+{
+    HRearview *r = (HRearview *)v;
+    if (g_race_view == 2 || g_race_view == 3) return;
+    if (HudConfig_choicei32(0x5c) == 0 && !(v->state == 1 || v->state == 2)) return;   /* 0x41e9c0, 0x42a370 */
+    if (v->state == 0) return;   /* 0x42a310 */
+    tray_draw(&r->tray);   /* 0x434070 */
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_REARVIEW, &x, &y);   /* 0x420bf0 */
+    if (r->lastx == x && r->lasty == y)
+        frame(x, y, HudConfig_i32(0xfc), HudConfig_i32(0x100), 0, exe_i32(0x5cce30));   /* 0x435980 (style 0x60cb34: 0) */
+    r->lastx = x, r->lasty = y;
+}
+
+/* Its place, the render visual's, the mirror's camera over the rectangle (z 1 .. 65000). 0x42c5e0 */
+static void rearview_setpos(HudVisual *v, int x, int y)
+{
+    HRearview *r = (HRearview *)v;
+    HudConfig_setpos(HUDPOS_REARVIEW, x, y);   /* 0x4207c0 */
+    int32_t px, py;
+    HudConfig_pos(HUDPOS_REARVIEW, &px, &py);
+    tray_place(&r->tray, px, py);   /* 0x434240 */
+    r->rx = px, r->ry = py;         /* (slot 3: 0x4366f0) */
+    float W = (float)g_display.width, H = (float)g_display.height;
+    float nx = (float)px / W, ny = (float)py / H;   /* 0x420c30 */
+    float sw = (float)HudConfig_i32(0xfc) / W, sh = (float)HudConfig_i32(0x100) / H;   /* 0x4209d0 */
+    Render_SetRearView(nx, ny, sw + nx, sh + ny, 1.0f, 65000.0f);   /* 0x469110 */
+}
+
+static void rearview_reset(HudVisual *v)   /* 0x42c730 */
+{
+    HRearview *r = (HRearview *)v;
+    tray_setsize(&r->tray, HudConfig_i32(0xfc), HudConfig_i32(0x100), 0);   /* 0x420a50, 0x434000 */
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_REARVIEW, &x, &y);
+    v->vt->setpos(v, x, y);
+    tray_colours(&r->tray);   /* 0x434550 */
+}
+
+/* Kept hidden but with its layout's +0x5c on and the HUD shown. 0x42c760 */
+static bool rearview_hidden(HudVisual *v) { (void)v; return !(HudConfig_choicei32(0x5c) != 0 && always); }
+
+static void rearview_destroy(HudVisual *v)   /* 0x42c5a0 */
+{
+    if ((HRearview *)v == s_rearview) s_rearview = NULL;
+    free(v);
+}
+
+static const HudVisualVtbl rearview_vt = {rearview_destroy, rearview_draw, rearview_reset, tray_setstate, rearview_setpos, tray_progress, NULL, NULL, rearview_hidden};
+
+static HudVisual *rearview_new(void)   /* 0x42c470 */
+{
+    HRearview *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_REARVIEW, &x, &y);
+    int w = HudConfig_i32(0xfc), h = HudConfig_i32(0x100);
+    tray_init(&r->tray, &rearview_vt, x, y, w, h, 0, true, 0, true, false);   /* 0x433ef0 */
+    r->rw = w, r->rh = h;
+    rearview_setpos(&r->tray.base, x, y);
+    s_rearview = r;
+    return &r->tray.base;
+}
+
+bool HUD_RearViewShown(void) { return always && s_rearview && s_rearview->tray.base.state == 3; }   /* 0x427560 */
 
 /* ---- the lap's announcements (0x427790) ---- */
 
@@ -3566,7 +3648,7 @@ static void congrats_destroy(HudVisual *v)   /* HCongrats_v0 0x41cf70 */
     free(g);
 }
 
-static const HudVisualVtbl congrats_vt = {congrats_destroy, congrats_draw, NULL, congrats_setstate, NULL, NULL, congrats_done, NULL};
+static const HudVisualVtbl congrats_vt = {congrats_destroy, congrats_draw, NULL, congrats_setstate, NULL, NULL, congrats_done, NULL, NULL};
 
 /* 0x41cb10: the arts centred (at the place, still 0, the constructor gives them), sized by the tables at
    0x5b29b8; the text (0x430e50, 0x80fab400) it makes is never drawn. */
@@ -3642,7 +3724,7 @@ static void menu_destroy(HudVisual *v)   /* 0x42a550 */
     free(m);
 }
 
-static const HudVisualVtbl menu_vt = {menu_destroy, menu_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, menu_input};
+static const HudVisualVtbl menu_vt = {menu_destroy, menu_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, menu_input, NULL};
 
 /* The billboard (w, h) titled by hud.loc's title id, n buttons of (bw, bh) by their ids, 1.6 of their
    height apart, centred on the screen. */
@@ -3727,7 +3809,7 @@ static void yesno_destroy(HudVisual *v)   /* HYesNoOverlay_v0 0x437570 */
     free(q);
 }
 
-static const HudVisualVtbl yesno_vt = {yesno_destroy, yesno_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, yesno_input};
+static const HudVisualVtbl yesno_vt = {yesno_destroy, yesno_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, yesno_input, NULL};
 
 static HudVisual *yesno_new(void)
 {
@@ -3889,7 +3971,7 @@ static void replaysave_destroy(HudVisual *v)   /* HReplaySave_v0 0x42e1b0 */
     free(r);
 }
 
-static const HudVisualVtbl replaysave_vt = {replaysave_destroy, replaysave_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, replaysave_input};
+static const HudVisualVtbl replaysave_vt = {replaysave_destroy, replaysave_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, replaysave_input, NULL};
 
 static HudVisual *replaysave_new(void)   /* 0x42dfc0 */
 {
@@ -4177,7 +4259,8 @@ void HUD_Init(void)
     add(tach_new(), true, false);
     add(tachdigital_new(), true, false);
     add(map_new(), true, true);   /* 0x431e50 (drawn last) */
-    PENDING_NOTE(0x424420, "HUD_Init's other visuals (gauges, lap, position, time, map, messages)");
+    PENDING_NOTE(0x428490, "HLeader (the leader's picture, 0x60ca38)");
+    add(rearview_new(), true, true);   /* 0x42c470 (0x60ca3c) */
     add(countdown_new(), false, false);
     s_congrats = congrats_new();   /* 0x41cb10 (0x60ca64) */
     add(s_congrats, false, false);
@@ -4536,7 +4619,8 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         if (0x1c0 < g_sim_tick && (g_race_view == 0 || g_race_view == 1))
             for (int i = 0; i < nlist; i++) {
                 HudEntry *e = &list[i];
-                if (e->front && (always || e->v->state == 2) && e->v->state == 0 && e->v->vt->setstate) e->v->vt->setstate(e->v, 1);
+                if (e->front && (always || e->v->state == 2) && !(e->v->vt->hidden && e->v->vt->hidden(e->v)) && e->v->state == 0 && e->v->vt->setstate)
+                    e->v->vt->setstate(e->v, 1);
             }
     } else {
         /* The first modal visual finished (hidden, or done): the next shows. The front visuals settled

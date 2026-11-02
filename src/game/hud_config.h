@@ -24,6 +24,8 @@ enum {
     HUDPOS_SPEEDO = 7,   /* 0x420bc0 */
     HUDPOS_MULTITIME = 11, /* 0x420b60: the second record's +0x0c */
     HUDPOS_MAP = 8,      /* 0x420bd0 */
+    HUDPOS_LEADER = 9,   /* 0x420be0 */
+    HUDPOS_REARVIEW = 10, /* 0x420bf0 */
     HUDPOS_TACH = 12,    /* 0x420b80: the second record's +0x20 */
     HUDPOS_COUNT = 13,
 };

@@ -98,6 +98,7 @@ static void draw_cars(RCamera *c)
         CarLight_Update(&r->light, car);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
         r->lit = true;
         R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */
+        if (*CAR_I(car, CAR_INDEX) == g_camera_car && (g_racecam[0].flags2 & 0x10)) continue;   /* (0x442fd0: not in its own mirror) */
         Render_SetCull(g_render);
         R3DCar_Draw(r, &c->view->model);
         Render_SetCull(g_render);

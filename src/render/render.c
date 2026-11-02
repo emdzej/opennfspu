@@ -531,6 +531,46 @@ void Render_MainViews(RaceViews *rv)
     Render_PendingAfterViews();                          /* 0x44fd70 */
 }
 
+/* ---- the rear-view mirror (0x628144) ---- */
+
+static RCamera *s_rear;   /* 0x628144 */
+
+static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }
+
+void Render_SetRearView(float x0, float y0, float x1, float y1, float znear, float zfar)   /* 0x469110 */
+{
+    if (s_rear) RCamera_Free(s_rear);
+    s_rear = g_render ? Render_CreateCamera(g_render, 1, x0, y0, x1, y1, 0xff77bbffu, znear, zfar) : NULL;   /* 0x467230 */
+}
+
+/* 0x468be0: with the HUD's mirror shown (and not in a replay's TV views), the world behind the car into
+   its rectangle: a third of the view distance (50 at least), the race camera's mirror flag set meanwhile
+   (the sky's mirrored colours; the viewed car left out) and the cull the other way round. */
+void Render_RearView(void)
+{
+    if (g_race_view == 2 || g_race_view == 3 || !HUD_RearViewShown() || !s_rear) return;   /* 0x427560 */
+    RCamera *c = s_rear;
+    g_render->v64 = 1;
+    c->flags[0] = 0;
+    c->flags[1] = 3;
+    c->flags[2] = c->flags[3] = c->flags[4] = 1;
+    c->v12c = 1;
+    c->range = 200.0f;
+    float d = g_render_viewdist * f32(0x5b2680);
+    c->viewdist = f32(0x5b251c) <= d ? d : 50.0f;
+    c->viewdist2 = c->viewdist * c->viewdist;
+    Camera_ToView(c->update[1], c, c->update[0]);        /* 0x461060 */
+    g_racecam[0].flags2 |= 0x10;
+    RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 2 : 1);   /* 0x537600 */
+    c->clear = Sky_ClearColour(true);                    /* 0x459940, 0x466da0 */
+    if (c->view) c->view->background = c->clear;
+    View_Begin(g_render, c);
+    Render_PendingWorld(c);                              /* 0x468a20 */
+    View_End(g_render);
+    Render_PendingAfterViews();                          /* 0x44fd70 */
+    g_racecam[0].flags2 &= (uint8_t)~0x10;
+}
+
 /* ---- the view distance along the track (0x61bc38: Track_LoadKeyframes 0x44fa10, 0x44fb80) ----
 
    <track>_forward.key (_backwards.key for the reversed track): a version (1), a count, then pairs of a
@@ -666,7 +706,8 @@ void Render_Frame(RaceViews *rv)
     View_Begin(g_render, rv->overlay);
     View_End(g_render);
     HUD_Draw(g_render, rv->overlay);                     /* 0x425910 */
-    Render_PendingHud(rv->overlay);                      /* 0x468be0, HUD_DrawOverlay */
+    Render_RearView();                                   /* 0x468be0 */
+    Render_PendingHud(rv->overlay);                      /* HUD_DrawOverlay 0x4257d0 */
     View_Begin(g_render, rv->overlay);
     View_End(g_render);
     Render_EndFrame(g_render);
