@@ -1,6 +1,7 @@
 /* The sky's pieces (the Sky object's layers): the base class SkyLevel_Base (vtable 0x5b3e70; ctor
    0x45a960), the horizon (SkyHorizon, vtable 0x5b3e54, 0x58 bytes) and the levels made from
-   Sky\<name>.txt: SkyLevel_BasicSky (render/sky_basic.c); _MultiSky and _FreeClouds are pending. */
+   Sky\<name>.txt: SkyLevel_BasicSky and _MultiSky (render/sky_basic.c); _FreeClouds (0x45be40) isn't ported: no
+   shipped sky text has one (render/sky_draw.c). */
 #pragma once
 #include "render/rmesh.h"
 #include "render/sky.h"

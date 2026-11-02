@@ -85,6 +85,8 @@ static uint8_t nearest(const uint32_t *pal, uint32_t argb)
     return (uint8_t)pick;
 }
 
+uint8_t RGB_nearest(uint32_t argb) { return nearest(NULL, argb); }   /* 0x572d40 (no inverse table) */
+
 /* RGB_colourmatch 0x537c40: an ARGB colour in the current window's format. 8 bits and below: the nearest
    palette entry (0x572d40; its inverse table 0x69e0ac is never made); 15: 1555 with the alpha bit, 0 for
    0 (0x572d0b); 16: 4444 for the 'm' type (0x572db0), else 565 (0x572ce0); 24 and up: as it is; others 0. */

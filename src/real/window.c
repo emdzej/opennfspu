@@ -480,6 +480,177 @@ static void over1555(uint16_t *d, uint32_t c)
     *d = (uint16_t)(((c & 0xf80000) >> 9) + (c >> 3 & 0x1f) + ((c & 0xf800) >> 6) + 0x8000);
 }
 
+/* A channel of a premultiplied colour over one of the pixel's: the pixel's times inv (16.16), rounded
+   by its bit 15, plus the colour's; 0xff when that comes to 0x100 or more (0x562330, 0x5738d0). */
+static uint32_t over_channel(uint32_t px, uint32_t c, int32_t inv)
+{
+    int64_t m = (int64_t)(int32_t)px * inv;
+    uint32_t lo = (uint32_t)m, v = (lo >> 16) + (uint32_t)(m >> 32) * 0x10000 + (lo >> 15 & 1) + c;
+    return v < 0x100 ? v : 0xff;
+}
+
+/* A premultiplied 8888 colour over an 8-bit pixel: none at alpha 0; at 0xff the colour itself, else its
+   palette colour's channels times 0x10000 - alpha * 0x101; the nearest palette entry (0x572d40). 0x562330 */
+static void over8(uint8_t *d, uint32_t c)
+{
+    uint32_t a = c >> 24;
+    if (a == 0) return;
+    if (a != 0xff) {
+        int32_t inv = 0x10000 - (int32_t)(a << 8 | a);
+        uint32_t pal = REAL_syspalette[*d];
+        uint32_t r = over_channel(pal >> 16 & 0xff, c >> 16 & 0xff, inv);
+        uint32_t g = over_channel(pal >> 8 & 0xff, c >> 8 & 0xff, inv);
+        uint32_t b = over_channel(pal & 0xff, c & 0xff, inv);
+        c = 0xff000000u | r << 16 | g << 8 | b;
+    }
+    *d = RGB_nearest(c);
+}
+
+void WINDOW_putpixel(int x, int y, uint32_t colour)
+{
+    if (through_driver()) {   /* (a 1 x 1 quad through the driver, 0x56dbd0) */
+        intptr_t blend = THRASH.fn.getstate(10), tex = THRASH.fn.getstate(1);
+        THRASH.fn.setstate(10, 0);
+        THRASH.fn.settexture(0);
+        driver_quad((float)x, (float)y, 1.0f, 1.0f, RGB_pixelcolour(colour));
+        THRASH.fn.setstate(10, (uintptr_t)blend);
+        THRASH.fn.settexture((ThrashTexture)tex);
+        return;
+    }
+    const int32_t *c = WINDOW_cur.clip;
+    if (x < c[0] || x >= c[2] || y < c[1] || y >= c[3]) return;
+    uint8_t *d = WINDOW_cur.pixels + WINDOW_offset(x, y);
+    switch (WINDOW_cur.depth) {
+    case 4:
+        *d = x & 1 ? (uint8_t)((*d & 0xf) | colour << 4) : (uint8_t)((*d & 0xf0) | (colour & 0xff));
+        break;
+    case 8: *d = (uint8_t)colour; break;
+    case 15:
+    case 16: {
+        uint16_t v = (uint16_t)colour;
+        memcpy(d, &v, 2);
+        break;
+    }
+    case 24:   /* (0x56e0b1: three bytes) */
+        d[0] = (uint8_t)colour;
+        d[1] = (uint8_t)(colour >> 8);
+        d[2] = (uint8_t)(colour >> 16);
+        break;
+    case 32: memcpy(d, &colour, 4); break;
+    default: break;
+    }
+}
+
+/* (0x5deba0 is never set: the premultiplied blend, not the plain one of its bit 0) */
+void WINDOW_plot(int x, int y, uint32_t argb)
+{
+    const int32_t *c = WINDOW_cur.clip;
+    if (x < c[0] || x >= c[2] || y < c[1] || y >= c[3]) return;
+    if (WINDOW_cur.type == 0x78 && WINDOW_cur.pixels) {
+        uint16_t v;
+        uint8_t *d = WINDOW_cur.pixels + WINDOW_offset(x, y);
+        memcpy(&v, d, 2);
+        over565(&v, argb);
+        memcpy(d, &v, 2);
+        return;
+    }
+    uint32_t a = argb >> 24;
+    if (a == 0) return;
+    if (a != 0xff) {
+        int32_t inv = 0x10000 - (int32_t)(a << 8);
+        uint32_t px = RGB_pixelcolour(WINDOW_getpixel(x, y)), pa = px >> 24;
+        if (pa != 0) {
+            uint32_t na = 0xff - (0xff - pa) * (0xff - a) / 0xff;
+            uint32_t r = over_channel(px >> 16 & 0xff, argb >> 16 & 0xff, inv);
+            uint32_t g = over_channel(px >> 8 & 0xff, argb >> 8 & 0xff, inv);
+            uint32_t b = over_channel(px & 0xff, argb & 0xff, inv);
+            argb = na << 24 | r << 16 | g << 8 | b;
+        }
+    }
+    WINDOW_putpixel(x, y, RGB_colourmatch(argb));
+}
+
+/* One row of the filtered draw (0x562170): each pixel the sampled texel of the 8888 shape (its row's
+   offset from the table 0x6b1b60, 0x58caa0) over the window: 565 and 1555 and 8 bits in place, others
+   through the plot. The sample (0x58ca6f) is one of 64 kernels by the eighths of the position (the table
+   0x5e1e60); at the step of 1 the one caller uses, every position is whole and kernel 0 returns the
+   texel. The port has that one; a fraction takes the texel under it. */
+static void filtered_row(const uint8_t *shape, int rowbytes, uint32_t u, uint32_t v, int32_t du, int x, int y, int w)
+{
+    if (w <= 0) return;
+    const uint8_t *row = shape + 0x10 + (int32_t)(v >> 16) * rowbytes;
+    uint8_t *d = WINDOW_cur.pixels ? WINDOW_cur.pixels + WINDOW_offset(x, y) : NULL;
+    for (; w != 0; w--, u += (uint32_t)du, x++) {
+        uint32_t c;
+        memcpy(&c, row + (int32_t)(u >> 16) * 4, 4);
+        uint16_t px;
+        switch (WINDOW_cur.type) {
+        case 0x78:
+            memcpy(&px, d, 2);
+            over565(&px, c);
+            memcpy(d, &px, 2);
+            d += 2;
+            break;
+        case 0x7e:
+            memcpy(&px, d, 2);
+            over1555(&px, c);
+            memcpy(d, &px, 2);
+            d += 2;
+            break;
+        case 0x7b: over8(d++, c); break;
+        default: WINDOW_plot(x, y, c); break;
+        }
+    }
+}
+
+void WINDOW_drawfiltered(const uint8_t *shape, int x, int y, int w, int h)
+{
+    uint8_t *conv = NULL;
+    if (SHAPE_typevalid(shape) != 0x20) {
+        conv = SHAPE_converttype(shape, DEPTH_bpptotype(32), 0, 1);   /* 0x534e10 */
+        if (!conv) return;
+        shape = conv;
+    }
+    int sw = (int16_t)(shape[4] | shape[5] << 8), sh = (int16_t)(shape[6] | shape[7] << 8);
+    int32_t ratio = (int32_t)(((int64_t)w << 16) / sw), mag = ratio < 0 ? -ratio : ratio;
+    if (w < 2) w = 2;
+    if (h < 2) h = 2;
+    if (0x28f < mag) {
+        int rowbytes = SHAPE_rowbytes(shape);
+        int32_t inv = (int32_t)(((int64_t)1 << 32) / mag);   /* 0x562f30 */
+        uint32_t lo = (uint32_t)(inv / 2 - 0x8000);
+        if ((int32_t)lo < 0) lo = 0;
+        uint32_t xhi = (uint32_t)sw * 0x10000u - lo - 0x10000u, yhi = (uint32_t)sh * 0x10000u - lo - 0x10000u;
+        uint32_t u0 = lo, u1 = xhi, v0 = lo, v1 = yhi;
+        if (ratio < 0) {   /* (mirrored: from the right, and the rows from the bottom) */
+            u0 = xhi;
+            u1 = lo;
+            v0 = yhi;
+            v1 = lo;
+        }
+        int32_t du = (int32_t)(u1 - u0) / (w - 1), dv = (int32_t)(v1 - v0) / (h - 1);
+        const int32_t *c = WINDOW_cur.clip;
+        int k = c[0] - x;
+        if (0 < k) {
+            x += k;
+            u0 += (uint32_t)(k * du);
+            w -= k;
+        }
+        k = x - c[2] + w;
+        if (0 < k) w -= k;
+        k = c[1] - y;
+        if (0 < k) {
+            y += k;
+            v0 += (uint32_t)(k * dv);
+            h -= k;
+        }
+        k = y - c[3] + h;
+        if (0 < k) h -= k;
+        for (; 0 < h; h--, y++, v0 += (uint32_t)dv) filtered_row(shape, rowbytes, u0, v0, du, x, y, w);
+    }
+    if (conv) MEM_purge(conv);
+}
+
 /* 0x53fb80: over an 8-bit pixel, its palette colour times 255 - alpha (/ 256) plus the faded colour's,
    each channel a byte that wraps, then the nearest palette entry. */
 static void fade8(void *dst, const void *src, int n)
@@ -582,7 +753,10 @@ void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha)
    centres; an 8-bit shape on a 15- or 16-bit window through its palette (0x58af95), any other converted
    to the window's type first and copied (0x58ae13). The translucent row drawers of 0x5deb14 aren't
    ported (it is never set where the port draws). 0x5628c0 */
-void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h)
+/* The scaled draw of 0x5628c0 and 0x561c90: the same steps and clip; the keyed one converts with the
+   other kernel table and leaves the transparent pixels (index 0xff, a 0 colour) as they are (its rows
+   0x58ab5e and 0x58afdf against 0x58ae13 and 0x58af95). */
+static void scaled(const uint8_t *shape, int x, int y, int w, int h, bool key)
 {
     if (!w || !h) return;
     int sw = (int16_t)(shape[4] | shape[5] << 8), sh = (int16_t)(shape[6] | shape[7] << 8);
@@ -599,7 +773,7 @@ void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h)
                     clut[i] = clut[i] ? (uint16_t)((clut[i] >> 1 & 0xffe0) | (clut[i] & 0x1f) | 0x8000) : 0;
             }
         } else {
-            converted = SHAPE_converttype(shape, WINDOW_cur.type, 0, 0);
+            converted = SHAPE_converttype(shape, WINDOW_cur.type, 0, key);
             if (!converted) return;
             shape = converted;
         }
@@ -637,8 +811,21 @@ void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h)
             for (int i = 0, xa = xacc; i < w; i++, xa += xstep) {
                 int col = xa >> 16;
                 if (paletted) {
+                    if (key && s[col] == 0xff) continue;
                     uint16_t v = clut[s[col]];
                     memcpy(row + i * 2, &v, 2);
+                } else if (key) {   /* (8 bits: index 0xff; 16: a 0 word; else a 0 dword) */
+                    if (bytes == 1) {
+                        if (s[col] != 0xff) row[i] = s[col];
+                    } else if (bytes == 2) {
+                        uint16_t v;
+                        memcpy(&v, s + col * 2, 2);
+                        if (v) memcpy(row + i * 2, &v, 2);
+                    } else {
+                        uint32_t v;
+                        memcpy(&v, s + col * 4, 4);
+                        if (v) memcpy(row + i * 4, &v, 4);
+                    }
                 } else {
                     memcpy(row + i * bytes, s + col * bytes, (size_t)bytes);
                 }
@@ -647,6 +834,9 @@ void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h)
     }
     if (converted) MEM_purge(converted);
 }
+
+void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h) { scaled(shape, x, y, w, h, false); }
+void WINDOW_drawscaledkey(const uint8_t *shape, int x, int y, int w, int h) { scaled(shape, x, y, w, h, true); }
 
 /* ---- pixels read back and the TGA writer (0x570b00, 0x535230, 0x534010) ---- */
 

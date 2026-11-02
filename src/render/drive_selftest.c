@@ -17,6 +17,7 @@
 #include "game/mission.h"
 #include "game/race.h"
 #include "game/hud.h"
+#include "game/loadscreen.h"
 #include "game/input.h"
 #include "game/controls.h"
 #include "game/music.h"
@@ -221,58 +222,102 @@ static void draw_cars(RCamera *c)
     }
 }
 
-static bool load(const char *track, const char *carname)
+/* The race's load, a step a frame: the original's loads at once between the loading screen's steps
+   (LoadingScreen 0x4a4850, each with a flip), which a frame of the port's shows one by one. The steps
+   follow GameMain 0x4b6840 (the race's set-up, Race_Configure 0x4b4b70, then step 0) and GameStartup
+   0x4b65a0: the texture quality, 1 and 2, Render_RaceInit 0x468ef0 (3 after the common art), 4 and 5,
+   Track_Load, 6, (the collision sounds) 7, Race_SelectTrackDefaults 0x414dd0 (8 before the cars, 9
+   after them), and the race's start; 10 ends the screen. 0 for another frame, 1 done, -1 failed. */
+static int s_loadstep;
+static int load(const char *track, const char *carname)
 {
-    snprintf(g_track_name, sizeof g_track_name, "%s", track);
-    g_race_type = g_drive_race_type;    /* (its option 0x10, RACE_TYPE: the world's scenes follow it) */
-    Replay_Apply();   /* (a replay file's race: GameStartup's 0x413830, the track and the race type its) */
-    {
-        char st[8];
-        if (plat_param("skilltest", st, sizeof st)) {   /* --param skilltest=<n>: <track>_st<n>.scn as a race type 4 */
-            g_race_type = 4;
-            g_skill_test = atoi(st);
-        }
-    }
-    /* GameStartup 0x4b65a0: the texture quality for the machine (0x44de80) before the track's textures.
-       The original measures the machine; the port's is one above every threshold (1 GHz, 256 MB, 64 MB
-       of video memory): level 3. Until the first race the front end runs at
-       the level's initial 0, as the original's does. */
-    RTex_detectquality(&RTex_machine);
-    Track_Load();
-    if (!g_world || !g_world->root) return false;
-    Render_LoadViewKeys(g_track_name);  /* 0x44f9b0 */
-    Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
-    /* Render_RaceInit 0x468ef0: the device's render states kept (0x62814c, 0x38 bytes) for the race's end */
-    RenderState *drs = g_render && g_render->device ? g_render->device->rs : NULL;
-    free(g_racerstate);
-    g_racerstate = drs ? malloc(sizeof *g_racerstate) : NULL;
-    if (g_racerstate) *g_racerstate = *drs;
-    Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
-    Sprites_Init();                     /* 0x451360 */
-    Particles_Init();                   /* 0x455180 */
-    DynLights_Init();                   /* 0x455e30 */
-    Sky_LoadFsh(g_track_name, false);
-    Weather_Init();                     /* 0x458a50 */
-    SpriteBank_Load();                  /* 0x452090 */
-    CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
-    Headlights_Load();                  /* 0x452460 */
-    RaceViews_ctor(&views);
-    plat_param("driver", g_race_driver_name, sizeof g_race_driver_name);   /* --param driver=<name>: the player's name */
-    if (!RaceSetup_SingleCar(carname)) return false;
     char v[8];
-    int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : g_drive_opponents;   /* --param opponents=<n> */
-    g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
-    if (0 < opponents) RaceSetup_Opponents(opponents);
-    int cops = plat_param("cops", v, sizeof v) ? atoi(v) : g_drive_cops;   /* --param cops=<n> */
-    if (0 < cops) RaceSetup_Cops(cops, g_track_name);   /* (0x4ec590: before the traffic) */
-    int traffic = plat_param("traffic", v, sizeof v) ? atoi(v) : g_drive_traffic;   /* --param traffic=<n> */
-    if (0 < traffic) RaceSetup_Traffic(traffic, g_track_name);   /* (0x4ec590) */
-    if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
-    if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
-    Replay_Apply();   /* (the file's descriptions and settings over the set-up's) */
-    Traffic_SmackDescs();   /* 0x4a15d0 (Race_SelectTrackDefaults 0x414dd0) */
-    Car_Construct();
-    if (g_ncars < 1) return false;
+    switch (s_loadstep++) {
+    case 0:
+        snprintf(g_track_name, sizeof g_track_name, "%s", track);
+        g_race_type = g_drive_race_type;    /* (its option 0x10, RACE_TYPE: the world's scenes follow it) */
+        Replay_Apply();   /* (a replay file's race: GameStartup's 0x413830, the track and the race type its) */
+        {
+            char st[8];
+            if (plat_param("skilltest", st, sizeof st)) {   /* --param skilltest=<n>: <track>_st<n>.scn as a race type 4 */
+                g_race_type = 4;
+                g_skill_test = atoi(st);
+            }
+        }
+        plat_param("driver", g_race_driver_name, sizeof g_race_driver_name);   /* --param driver=<name>: the player's name */
+        if (!RaceSetup_SingleCar(carname)) return -1;
+        {
+            int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : g_drive_opponents;   /* --param opponents=<n> */
+            g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
+            if (0 < opponents) RaceSetup_Opponents(opponents);
+            int cops = plat_param("cops", v, sizeof v) ? atoi(v) : g_drive_cops;   /* --param cops=<n> */
+            if (0 < cops) RaceSetup_Cops(cops, g_track_name);   /* (0x4ec590: before the traffic) */
+            int traffic = plat_param("traffic", v, sizeof v) ? atoi(v) : g_drive_traffic;   /* --param traffic=<n> */
+            if (0 < traffic) RaceSetup_Traffic(traffic, g_track_name);   /* (0x4ec590) */
+        }
+        if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
+        if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
+        Replay_Apply();   /* (the file's descriptions and settings over the set-up's) */
+        LoadingScreen(0);
+        return 0;
+    case 1:
+        /* GameStartup 0x4b65a0: the texture quality for the machine (0x44de80) before the track's textures.
+           The original measures the machine; the port's is one above every threshold (1 GHz, 256 MB, 64 MB
+           of video memory): level 3. Until the first race the front end runs at
+           the level's initial 0, as the original's does. */
+        RTex_detectquality(&RTex_machine);
+        LoadingScreen(1);
+        return 0;
+    case 2:
+        LoadingScreen(2);
+        return 0;
+    case 3: {
+        /* Render_RaceInit 0x468ef0: the device's render states kept (0x62814c, 0x38 bytes) for the race's end */
+        RenderState *drs = g_render && g_render->device ? g_render->device->rs : NULL;
+        free(g_racerstate);
+        g_racerstate = drs ? malloc(sizeof *g_racerstate) : NULL;
+        if (g_racerstate) *g_racerstate = *drs;
+        Render_LoadViewKeys(g_track_name);  /* 0x44f9b0 */
+        Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
+        LoadingScreen(3);
+        return 0;
+    }
+    case 4:
+        Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
+        Sprites_Init();                     /* 0x451360 */
+        Particles_Init();                   /* 0x455180 */
+        DynLights_Init();                   /* 0x455e30 */
+        Sky_LoadFsh(g_track_name, false);
+        Weather_Init();                     /* 0x458a50 */
+        SpriteBank_Load();                  /* 0x452090 */
+        LoadingScreen(4);
+        return 0;
+    case 5:
+        LoadingScreen(5);
+        return 0;
+    case 6:
+        Track_Load();
+        if (!g_world || !g_world->root) return -1;
+        LoadingScreen(6);
+        return 0;
+    case 7:
+        LoadingScreen(7);   /* (after the collision sounds, which the port loads with the race's sounds below) */
+        return 0;
+    case 8:
+        CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
+        Headlights_Load();                  /* 0x452460 */
+        RaceViews_ctor(&views);
+        Traffic_SmackDescs();   /* 0x4a15d0 (Race_SelectTrackDefaults 0x414dd0) */
+        LoadingScreen(8);
+        return 0;
+    case 9:
+        Car_Construct();
+        if (g_ncars < 1) return -1;
+        LoadingScreen(9);
+        return 0;
+    default:
+        break;
+    }
     Headlights_SetCar(g_cars[0]);   /* 0x452550 (the viewed car's) */
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
     /* The race from its first tick (0x414ed0) with the fly-in; --param start=<tick> (a port test aid)
@@ -318,7 +363,8 @@ static bool load(const char *track, const char *carname)
     else HUD_RaceStart();   /* (RaceLoop's 0x426a40 with 0) */
     set_env();
     plat_set_frame_rate(60.0);
-    return true;
+    LoadingScreen(10);
+    return 1;
 }
 
 /* The controls sampled (Input_Sample 0x412e90: fe.txt's bindings, controls.c) into the local
@@ -585,8 +631,10 @@ bool DRIVE_selftest(const char *track, const char *car)
 {
     if (!g_render || failed) return false;
     if (!ready) {
+        int r = load(track, car && car[0] ? car : "964");
+        if (r < 0) { failed = true; return false; }
+        if (r == 0) return true;
         ready = true;
-        if (!load(track, car && car[0] ? car : "964")) { failed = true; return false; }
     }
     Car *c = g_cars[0];
     App_WaitActive();   /* 0x4b0d70 (RaceLoop) */
@@ -785,6 +833,7 @@ void DRIVE_Shutdown(void)
     g_replay_mode = 0;
     ticks_due = 0;
     ready = failed = false;
+    s_loadstep = 0;
     g_drive_paused = false;
     g_drive_result = 0;
     s_replay_again = false;

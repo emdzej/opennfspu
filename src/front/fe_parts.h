@@ -18,6 +18,7 @@
 #define FE_DIR_LOCALE "FEData\\Locale\\"
 #define FE_DIR_LAYOUTS "FEData\\Layouts\\"
 #define FE_DIR_CHRON "FEData\\Chron\\"       /* 0x65b33c: the chronicle's */
+#define FE_DIR_TRACKART "FEData\\TrackArt\\"   /* 0x65b350: the tracks' art */
 
 /* A font by its path, loaded once and counted (0x4e2fb0: the path lowercased; the file whole and a
    drawer made from it, its texture state 1 off); its release (0x4e31d0). NULL if it can't be read. */

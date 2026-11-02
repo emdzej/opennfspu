@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FE_DIR_TRACKART "FEData\\TrackArt\\"   /* 0x65b350 */
 #define MAXRACES 50
 
 typedef struct {

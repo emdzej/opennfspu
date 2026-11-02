@@ -1,6 +1,7 @@
 /* EA real library shapes, see shape.h. */
 #include "real/shape.h"
 #include "exe.h"
+#include "real/depthconv.h"
 #include "real/file.h"
 #include "real/locatbig.h"
 #include "real/mem.h"
@@ -82,4 +83,27 @@ const char *SHAPE_name(const uint8_t *rec)
         rec += (int32_t)h >> 8;
     }
     return NULL;
+}
+
+void SHAPE_horizflip(uint8_t *rec)
+{
+    if (rec[0] & 0x80)
+        REAL_abort(exe_str(0x5bcd70), 0x35, exe_str(0x5bcd30), rec[0]);   /* "...CAN NOT FLIP PACKED SHAPES..." */
+    int w = (int16_t)(rec[4] | rec[5] << 8), h = (int16_t)(rec[6] | rec[7] << 8);
+    int bits = SHAPE_typevalid(rec), rowbytes = SHAPE_rowbytes(rec);
+    if (bits < 8) REAL_abort(exe_str(0x5bcd70), 0x3d, exe_str(0x5bcd00), bits);   /* "...CAN NOT FLIP %d BIT SHAPES." */
+    int n = (int)((unsigned)(bits + 1) & ~1u) / 8;   /* (15 -> 2 bytes) */
+    uint8_t *row = rec + 0x10;
+    for (; 0 < h; h--, row += rowbytes) {
+        uint8_t *l = row, *r = row + (w - 1) * n;   /* (0x56e058, 0x56e0b1: the pixels n bytes each) */
+        for (; l < r; l += n, r -= n) {
+            uint8_t t[4];
+            memcpy(t, l, (size_t)n);
+            memcpy(l, r, (size_t)n);
+            memcpy(r, t, (size_t)n);
+        }
+    }
+    int16_t xc = (int16_t)((int16_t)w - (int16_t)(rec[8] | rec[9] << 8));   /* the centre mirrored */
+    rec[8] = (uint8_t)xc;
+    rec[9] = (uint8_t)((uint16_t)xc >> 8);
 }

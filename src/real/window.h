@@ -80,6 +80,16 @@ void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha);
 /* A shape scaled to w x h at (x, y) on the current window (a negative size mirrors). 0x5628c0 */
 void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h);
 
+/* The same with the shape's transparent pixels (index 0xff, a 0 colour) left. 0x561c90 */
+void WINDOW_drawscaledkey(const uint8_t *shape, int x, int y, int w, int h);
+/* The shape as 8888 scaled to w x h at (x, y) through the filter, each pixel blended over the window by
+   its alpha. 0x5625e0 */
+void WINDOW_drawfiltered(const uint8_t *shape, int x, int y, int w, int h);
+/* A pixel value of the window's format at (x, y), clipped (a driver window: a 1 x 1 quad). 0x556670 */
+void WINDOW_putpixel(int x, int y, uint32_t colour);
+/* A premultiplied ARGB colour blended over the pixel at (x, y), clipped. 0x5738d0 */
+void WINDOW_plot(int x, int y, uint32_t argb);
+
 /* The current window's pixel at (x, y) in its format, 0 outside its clip (a driver window through a lock
    of its surface). 0x570b00 */
 uint32_t WINDOW_getpixel(int x, int y);

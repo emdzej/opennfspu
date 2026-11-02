@@ -26,3 +26,6 @@ int SHAPE_typevalid(const uint8_t *rec);
 const uint8_t *SHAPE_clut(const uint8_t *rec);
 /* The name a shape's 'o' record carries in its chain (its text at +8), NULL if none. 0x56a6a0 */
 const char *SHAPE_name(const uint8_t *rec);
+/* Mirrors an unpacked shape of 8 bits and up left to right in place, its x centre too (packed or
+   smaller ones abort). SHAPE_horizflip 0x5627a0 (\real\cmn\hflip.c) */
+void SHAPE_horizflip(uint8_t *rec);

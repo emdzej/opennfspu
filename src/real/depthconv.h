@@ -70,6 +70,8 @@ DepthKernel DEPTH_rowkernel(const uint8_t *shape, uint32_t target, int variant);
    cleared, pixels not; NULL for bad sizes or depths. createshape 0x574a20 (\real\cmn\creates.c) */
 uint8_t *SHAPE_create(int width, int height, int bpp, unsigned memflags);
 
+/* The system palette's entry nearest an ARGB colour (its inverse table 0x69e0ac is never made). 0x572d40 */
+uint8_t RGB_nearest(uint32_t argb);
 /* RGB_colourmatch 0x537c40: an ARGB colour as a pixel of the current window (WINDOW_cur): the nearest
    palette entry at 8 bits and below (0x537ba0), 1555, 4444 or 565 at 15 and 16, itself at 24 and 32. */
 uint32_t RGB_colourmatch(uint32_t argb);
