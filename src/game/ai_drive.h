@@ -11,5 +11,12 @@ void AI_DriveTask(void *car);
 /* The AI's speed factor for a car at speed v (0x408210): 0 while its engine is cut (+0xedc), the
    traffic's falling with speed, the personality's and the catch-up's. */
 float AI_SpeedFactor(Car *c, float v);
-/* The car's mood with any of the bits (the driver's +0xe3c, 0x40acc0): -1 none. */
+/* The drivers' moods (+0xe3c): the events others give them (0 hit by, 1 passed, 2/3 alongside ahead or
+   behind, 4/5 swapped places, 6 hooted at) through their personality's script into moods for a time.
+   The mood with any of the bits is its car's index, -1 none. */
 int AI_Mood(Car *c, uint32_t bits);
+int AI_MoodTime(Car *c);
+void AI_MoodsReset(Car *c);
+void AI_MoodsInit(Car *c, int script);
+void AI_MoodNote(Car *c, int car, int event, int tick);
+void AI_MoodsTick(Car *c, int dt);

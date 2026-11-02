@@ -65,13 +65,92 @@ static Car *car_by_index(int i)
     return NULL;
 }
 
-int AI_Mood(Car *c, uint32_t bits)
+/* ---- the drivers' moods (+0xe3c, 0x40 bytes) ----
+   +0x00 the pending event (7 none) and +0x04 its car, +0x08 the current event and +0x0c its car,
+   +0x10 its script step, +0x14 the moods' bits, +0x18 the time left, +0x1c the script (the port: the
+   personality's index into g_ai_scripts), +0x20 seven events' steps, +0x3c the last note's tick. */
+#define M(off) (*CAR_I(c, 0xe3c + (off)))
+
+void AI_MoodsReset(Car *c)   /* 0x40ab60 */
 {
-    (void)c;
-    (void)bits;
-    PENDING_NOTE(0x40acc0, "the drivers' moods (+0xe3c): none");
-    return -1;
+    M(8) = 7;
+    M(0) = 7;
+    M(0x14) = 1;
+    for (int i = 0; i < 7; i++) M(0x20 + 4 * i) = -1;
+    M(0x3c) = 0;
 }
+
+void AI_MoodsInit(Car *c, int script)   /* 0x40ab30 */
+{
+    M(0x1c) = script;
+    AI_MoodsReset(c);
+}
+
+void AI_MoodNote(Car *c, int car, int event, int tick)   /* 0x40ab90 */
+{
+    if (M(0x3c) < tick - 0x500)
+        for (int i = 0; i < 7; i++) M(0x20 + 4 * i) = -1;
+    M(0x3c) = tick;
+    if (M(8) == 7 && event < M(0)) {
+        M(0) = event;
+        M(4) = car;
+    }
+}
+
+/* The script's next mood for a pending event (0x40abe0): its steps (four action bytes, four durations
+   per event) on to the first with a duration, the actions' bits gathered; none if they are only 1's.
+   Then the time left counts down. */
+void AI_MoodsTick(Car *c, int dt)
+{
+    int sc = M(0x1c);
+    const uint8_t *script = g_ai_scripts[0 <= sc && sc < AI_NPERS ? sc : 0][0];
+    if (M(8) == 7 && M(0) != 7) {
+        M(8) = M(0);
+        int ev = M(8);
+        M(0) = 7;
+        M(0xc) = M(4);
+        M(0x18) = 0;
+        M(0x10) = M(0x20 + 4 * ev);
+        M(0x14) = 1;
+        for (int guard = 0;; guard++) {   /* (the original loops until a duration; the guard is the port's) */
+            int nx = M(0x10) + 1;
+            if (nx < 4 && 1 << (script[M(0x10) + ev * 8 + 1] & 31) != 2) {
+                M(0x10) = nx;
+                M(0x20 + 4 * ev) += 1;
+            }
+            ev = M(8);
+            const uint8_t *st = script + ev * 8 + M(0x10);
+            M(0x14) |= 1 << (st[0] & 31);
+            int d = (int8_t)st[4];
+            bool done = false;
+            if (d != 0) {
+                M(0x18) = d << 4;
+                done = true;
+            }
+            if (M(0x14) == 1) {
+                M(8) = 7;
+                M(0) = 7;
+                break;
+            }
+            if (done || 64 <= guard) break;
+        }
+    }
+    if (M(8) != 7) {
+        if (M(0x18) < 1) {
+            M(8) = 7;
+            M(0) = 7;
+            return;
+        }
+        M(0x18) -= dt;
+    }
+}
+
+int AI_Mood(Car *c, uint32_t bits)   /* 0x40acc0 */
+{
+    return M(8) != 7 && ((uint32_t)M(0x14) & bits) ? M(0xc) : -1;
+}
+
+int AI_MoodTime(Car *c) { return M(8) != 7 ? M(0x18) : 0; }   /* 0x40ace0 */
 
 /* The catch-up factor (0x40af50): early in a race against several rivals, a lone human behind this car
    speeds it by its place among the rivals. */

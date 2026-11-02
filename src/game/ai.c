@@ -12,6 +12,7 @@
 #include "game/wtree.h"
 #include "game/ai_data.h"
 #include "game/ai_lane.h"
+#include "game/ai_drive.h"
 #include "game/race_progress.h"
 #include "render/camera_math.h"
 #include "pending.h"
@@ -667,12 +668,12 @@ static void set_state(AiHigh *h, AiState s)
     h->state = s;
 }
 
-/* The car's low-level driver (+0xe3c: the personality's scripts, 0x40abe0), not ported. Then the state. 0x40b530 */
+/* The driver's moods by the AI's ticks (0x40abe0), then the state. 0x40b530 */
 static void state_tick(AiState *s)
 {
     Car *c = s->car;
     if (c->b[0x7f] && !(*CAR_I(c, CAR_FLAGS) & 4) && *(int16_t *)(void *)(c->b + 0x41a) == 0)
-        PENDING_NOTE(0x40abe0, "the AI's scripted driving moods (+0xe3c)");
+        AI_MoodsTick(c, g_ai_ticks);
     s->vt->tick(s);
 }
 

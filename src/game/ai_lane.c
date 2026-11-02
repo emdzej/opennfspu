@@ -17,6 +17,7 @@
 #include "game/road.h"
 #include "game/sim_rand.h"
 #include "pending.h"
+#include "render/r3dcar.h"
 #include <math.h>
 #include <string.h>
 
@@ -124,7 +125,39 @@ static void moods(Car *c)
         const int8_t *h = horn[g_sim_tick >> 3 & 3];
         Audio_Horn(c, h[0], h[1], h[2]);
     }
-    PENDING_NOTE(0x4013d0, "the moods' lanes (0x200 away from a car, 0x20 beside it)");
+    m = AI_Mood(c, 0x200);   /* away from a car far behind or ahead: a side by the mood's time */
+    if (m != -1 && 0 <= m && m < g_ncars && K(0x5b240c) < absf(AI_Gap(c, g_cars[m]))) {
+        int t = AI_MoodTime(c);
+        if (((t + (t >> 31 & 0x1f)) >> 5 & 1) == 0) s_score[2] = addk(s_score[2], 0x5b2408);
+        else s_score[0] = addk(s_score[0], 0x5b2408);
+    }
+    m = AI_Mood(c, 0x20);   /* beside a car ahead: toward its lane */
+    if (m != -1 && 0 <= m && m < g_ncars) {
+        Car *o = g_cars[m];
+        if ((float)I(0xeb0) * AI_Ahead(c, o) < K(0x5b2404)) {
+            if (I(0x1020) < *CAR_I(o, 0x1020)) s_score[2] = addk(s_score[2], 0x5b2400);
+            else if (*CAR_I(o, 0x1020) < I(0x1020)) s_score[0] = addk(s_score[0], 0x5b2400);
+        }
+    }
+}
+
+/* The driver's notes of a human about (0x401580): hit by it (0), passed by it (1), alongside in its
+   lane ahead or behind (2, 3), swapped places with it (4, 5), hooted at near by day (6). */
+static void notes(Car *c, Car *o)
+{
+    float g = absf(AI_Gap(c, o));
+    if (progress_dist(c) < K(0x5b2414)) return;
+    int oi = *CAR_I(o, CAR_INDEX), t = g_sim_tick;
+    if (t - *CAR_I(o, 0x45c) < 0xf && *CAR_I(o, 0x454) != 0 && *CAR_I(o, 0x454) == I(CAR_INDEX) + 1) AI_MoodNote(c, oi, 0, t);
+    bool skip = false;
+    if ((float)I(0xeb0) * *CAR_F(o, 0xec0) + K(0x5b2410) < (float)I(0xeb0) * F(0xec0)) {
+        if (K(0x5b240c) <= g) skip = true;
+        else AI_MoodNote(c, oi, 1, t);
+    }
+    if (!skip && g < K(0x5b240c) && *CAR_I(o, 0x1020) == I(0x1020))
+        AI_MoodNote(c, oi, progress_dist(o) <= progress_dist(c) ? 3 : 2, t);
+    if (o->p[CARP_SWAPPED] == c && t - I(0x554) < 0xf) AI_MoodNote(c, oi, progress_dist(c) <= progress_dist(o) ? 5 : 4, t);
+    if (g < K(0x5b2408) && o->b[0xd86] && g_r3d_night == 0) AI_MoodNote(c, oi, 6, t);
 }
 
 /* The cars ahead in the three lanes (0x401f20): the ranking walked in the car's direction, the first
@@ -377,8 +410,7 @@ void AI_LaneDrive(Car *c)
     moods(c);
     for (int i = 0; i < g_ncars; i++) {
         Car *o = g_cars[i];
-        if (o != c && o->b[0x7f] && (*CAR_I(o, CAR_FLAGS) & 4))
-            PENDING_NOTE(0x401580, "the drivers' notes of the humans about (their moods' events)");
+        if (o != c && o->b[0x7f] && (*CAR_I(o, CAR_FLAGS) & 4)) notes(c, o);
     }
     racer_lane(c);
     Car *h = human_near(c);

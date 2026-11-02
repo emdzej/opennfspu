@@ -12,6 +12,7 @@
 #include "game/sim_rand.h"
 #include "game/race_car.h"
 #include "game/ai.h"
+#include "game/ai_drive.h"
 #include "game/race_progress.h"
 #include "exe.h"
 #include "game/car.h"
@@ -97,10 +98,10 @@ void Race_Restart(int32_t start)
     /* 0x406780 frees the controllers, 0x406770 clears the cops' chase slots (0x40b510) and makes them
        again (0x406580). */
     AI_MakeControllers();
-    /* 0x406a40: the drivers' moods reset (0x40ab60 on each race car's +0xe3c, not ported), the leaders
-       the first human and the first rival until the ranking's first tick (the lists' first slots, as
-       they are), the cops' targets (0x5e6658 ..) cleared. */
-    PENDING_NOTE(0x406a40, "the AI drivers' moods (+0xe3c) and the cops' targets");
+    /* 0x406a40: the drivers' moods reset, the leaders the first human and the first rival until the
+       ranking's first tick (the lists' first slots, as they are); the lane driver's cars (0x5e6658 ..)
+       it clears are cleared at each of its steps here. */
+    for (int i = 0; i < g_ncars; i++) AI_MoodsReset(g_cars[i]);   /* 0x40ab60 */
     g_lead_human = g_first_human = g_humans.c[0];
     g_first_rival = g_last_rival = g_rivals.c[0];
     Race_ResetRanking();

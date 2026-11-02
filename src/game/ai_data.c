@@ -2,6 +2,7 @@
 #include "game/ai_data.h"
 #include "exe.h"
 #include "game/race_car.h"
+#include "game/ai_drive.h"
 #include "pending.h"
 #include "vfs.h"
 #include <math.h>
@@ -146,8 +147,8 @@ static void load_personalities(void)
     for (int i = 0; i < g_ncars; i++) {
         Car *c = g_cars[i];
         *CAR_I(c, 0xe34) %= 5;
+        AI_MoodsInit(c, *CAR_I(c, 0xe34));   /* 0x40ab30: the personality's script */
     }
-    PENDING_NOTE(0x40ab30, "the drivers' scripts into their moods (+0xe3c)");
 }
 
 /* The opponents' squares table (0x40aa10): i * i / k / 2, halved again as a byte, for i up to 127; k the
@@ -177,7 +178,7 @@ void AI_LoadData(void)
 {
     PENDING_NOTE(0x40ad40, "the AI's tuning (tuning.bin)");
     traffic_config();
-    PENDING_NOTE(0x40ab60, "the drivers' moods reset (+0xe3c)");
+    for (int i = 0; i < g_ncars; i++) AI_MoodsReset(g_cars[i]);   /* 0x40ab60 */
     load_personalities();
     PENDING_NOTE(0x4032b0, "the cops' objects' reset (0x5e66bc ..)");
     memset(s_has_squares, 0, sizeof s_has_squares);
