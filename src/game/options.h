@@ -15,6 +15,8 @@ int Options_Get(const char *key, int def);
 /* By the key's text at its address in the exe (the triples' operands). */
 int Options_Int(uint32_t key, int def);
 void Options_SetInt(uint32_t key, int v);
+/* A key's value text set (the key's line, or a new one). */
+void Options_SetStr(const char *name, const char *v);
 /* The lines back to the user's fe.txt (only after a change). */
 void Options_Save(void);
 /* The globals the race reads, from the options (Options_Parse's targets the port has): the HUD's split

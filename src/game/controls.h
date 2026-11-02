@@ -10,6 +10,7 @@
    device << 16 | the direction (0..7, eighths). */
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* The interface keys (the ring's bits, I_* in order from 0x1ee). */
@@ -26,6 +27,12 @@ enum {
 void Controls_Load(void);
 /* A binding by its id (0x14e..0x21d, at 0x5e9130 + 4 id); 0 unbound. */
 uint32_t Controls_Binding(int id);
+/* A binding's option text (Options_Dump 0x4b6010: "Key,SC_UP"); an id's option name (C1_GAS ..), its
+   binding as the options give it (no defaults over it), and the option set. */
+void Controls_Format(uint32_t b, char *out, size_t cap);
+const char *Controls_OptionName(int id);
+uint32_t Controls_Option(int id);
+void Controls_SetOption(int id, uint32_t b);
 /* An option value's binding: the type's name, ',', the value (0x4b5220, 0x4b5040). */
 uint32_t Controls_Parse(const char *text);
 /* The input devices as DirectInput lists them (the keyboard, the mouse, the pads): count, name, type
@@ -33,6 +40,8 @@ uint32_t Controls_Parse(const char *text);
 int Controls_Devices(void);
 const char *Controls_DeviceName(int n);
 int Controls_DeviceType(int n);
+/* A device polled (getstate 6): its record, 0x104 bytes (the type, then its state); NULL none. */
+const uint8_t *Controls_DeviceState(int n);
 /* The players' packets (g_input_packet the first's) and the interface ring's next. 0x412e90 */
 void Input_Sample(void);
 /* The samples taken (0x5e99b8) and the race loop's cursor into the ring (0x606ac8). */

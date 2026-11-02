@@ -26,6 +26,16 @@ int main(void)
     CHECK(Controls_Parse("pov,0,2") == (2u << 8 | 5));
     CHECK(Controls_Parse("nonsense,12") == 12u << 8);      /* an unknown type is Null's */
     CHECK(Controls_Parse("key,SC_NOSUCH") == 3);           /* an unknown name 0 */
+    {
+        char t[96];   /* Options_Dump's text back through the parser */
+        static const uint32_t b[] = {0x4803, 0x103, (5u << 8 | 2), ((1u << 20 | 2u << 16 | 0x80u << 8 | 0xffu) << 8 | 1), (2u << 8 | 5)};
+        for (size_t i = 0; i < sizeof b / sizeof b[0]; i++) {
+            Controls_Format(b[i], t, sizeof t);
+            CHECK(Controls_Parse(t) == b[i]);
+        }
+        Controls_Format(0x4803, t, sizeof t);
+        CHECK(!strcmp(t, "Key,SC_UP"));
+    }
     Controls_Load();
     uint32_t gas = Controls_Binding(0x152);                /* C1_GAS */
     printf("C1_GAS %#x C1_LEFT %#x C1_HANDBRAKE %#x C1_SHIFTUP %#x I_CYCLECAMERA %#x\n", gas,

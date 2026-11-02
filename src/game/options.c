@@ -81,12 +81,11 @@ int Options_Get(const char *key, int def)
 
 int Options_Int(uint32_t key, int def) { return Options_Get(exe_str(key), def); }
 
-void Options_SetInt(uint32_t key, int v)
+void Options_SetStr(const char *name, const char *v)
 {
-    const char *name = exe_str(key);
     if (!name || !*name) return;
     char b[160];
-    snprintf(b, sizeof b, "%s = %d", name, v);
+    snprintf(b, sizeof b, "%s = %s", name, v);
     for (char *c = b; *c && *c != ' '; c++) *c = (char)tolower((unsigned char)*c);
     int i = find(name, NULL);
     if (i >= 0) {
@@ -97,6 +96,13 @@ void Options_SetInt(uint32_t key, int v)
         add_line(b, strlen(b));
     }
     s_dirty = true;
+}
+
+void Options_SetInt(uint32_t key, int v)
+{
+    char b[16];
+    snprintf(b, sizeof b, "%d", v);
+    Options_SetStr(exe_str(key), b);
 }
 
 void Options_Save(void)

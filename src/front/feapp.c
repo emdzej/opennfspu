@@ -5,6 +5,7 @@
 #include "front/fecarlogo.h"
 #include "front/fetrackmap.h"
 #include "front/fehudpreview.h"
+#include "front/fectrl.h"
 #include "front/feshowcase.h"
 #include "front/fechronicle.h"
 #include "front/feendofera.h"
@@ -541,6 +542,8 @@ static void refresh_state(FertControl *c)
     else if (f & 4) n = "hover";
     FertControl_setState(c, n);
 }
+
+void FEApp_RefreshState(FertControl *c) { refresh_state(c); }
 
 static void on_enter(FertControl *c)   /* 0x4c7760 */
 {
@@ -1164,6 +1167,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && picture_click(target)) break;
+        if (target && type == 4 && FECtrl_Click(target)) break;
         if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
         if (target && type == 8) on_up(target);
         break;
@@ -1206,6 +1210,14 @@ static void poll(void)   /* 0x529530 */
             s_dialog.done = hit;
         }
         return;
+    }
+    {
+        FertControl *cs = FECtrl_Waiting(w);
+        if (cs) {
+            uint8_t k[16];
+            int nk = plat_key_presses(k, 16);
+            FECtrl_Keys(cs, k, nk);
+        }
     }
     {
         FertControl *in = focused_input(w);
@@ -2278,6 +2290,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (FECarLogo_Draw(c, ox, oy)) return true;
     if (FETrackMap_Draw(c, ox, oy)) return true;
     if (FEHudPreview_Draw(c, ox, oy)) return true;
+    if (FECtrl_Draw(c, ox, oy)) return true;
     if (FEShowcase_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
@@ -3055,6 +3068,7 @@ void FEApp_Frame(void)
         }
         screen_update(w);
         update_watches(w);
+        FECtrl_Tick(w);   /* (the controller setups' ticks) */
         update_all(w);   /* (the controls' ticks) */
         hover_pointer(w);
         FEWindow_Draw(w);

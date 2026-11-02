@@ -149,6 +149,7 @@ static void use_device(uint32_t n)
 }
 
 int Controls_Devices(void) { return s_ndevices; }
+const uint8_t *Controls_DeviceState(int n) { return n >= 0 && n < s_ndevices ? getstate(n) : NULL; }
 const char *Controls_DeviceName(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].name : ""; }
 int Controls_DeviceType(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].type : 0; }
 
@@ -307,6 +308,48 @@ static void find_names(void)
         s_names[(at - 0x5d2d7c) / 12] = v;
         a += 9;
     }
+}
+
+/* Options_Dump's text of a binding (0x4b6010): the type's name, ',', then Analog's four fields
+   (device, the axis but its bit 2, low, high), Button's and Pov's two, a key's SC_ name (else its number),
+   another's value. */
+void Controls_Format(uint32_t b, char *out, size_t cap)
+{
+    uint32_t t = b & 0xff;
+    const char *tn = t < 6 ? exe_str(exe_u32(0x5cc5c8 + 12 * t)) : "";
+    int32_t v = (int32_t)b >> 8;
+    if (t == 1) {
+        snprintf(out, cap, "%s,%d, %d, %d, %d", tn, (int32_t)b >> 28, (int32_t)b >> 24 & 3, (int)(b >> 16 & 0xff), (int)(b >> 8 & 0xff));
+    } else if (t == 2 || t == 5) {
+        snprintf(out, cap, "%s,%d, %d", tn, (int32_t)b >> 24, (int)(b >> 8 & 0xffff));
+    } else if (t == 3 || t == 4) {
+        uint32_t e = 0x5d63a0;
+        for (; exe_u32(e); e += 8)
+            if ((int32_t)exe_u32(e + 4) == v && !strncasecmp(exe_str(exe_u32(e)), "SC_", 3)) break;
+        if (exe_u32(e)) snprintf(out, cap, "%s,%s", tn, exe_str(exe_u32(e)));
+        else snprintf(out, cap, "%s,%d", tn, v);
+    } else {
+        snprintf(out, cap, "%s,%d", tn, v);
+    }
+}
+
+const char *Controls_OptionName(int id)
+{
+    find_names();
+    return id >= FIRST && id < FIRST + NBIND && s_names[id - FIRST] ? exe_str(s_names[id - FIRST]) : NULL;
+}
+
+uint32_t Controls_Option(int id)
+{
+    const char *n = Controls_OptionName(id), *v = n ? Options_Str(n) : NULL;
+    return v ? Controls_Parse(v) : 0;
+}
+
+void Controls_SetOption(int id, uint32_t b)
+{
+    char t[96];
+    Controls_Format(b, t, sizeof t);
+    Options_SetStr(Controls_OptionName(id), t);
 }
 
 uint32_t Controls_Binding(int id) { return id >= FIRST && id < FIRST + NBIND ? s_bind[id - FIRST] : 0; }

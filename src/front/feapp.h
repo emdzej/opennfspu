@@ -26,6 +26,8 @@ void FEApp_Back(void);
 /* One pass of the pump and a frame. */
 void FEApp_Frame(void);
 FertControl *FEApp_Top(void);
+/* A control's state by its flags again (0x4c7e70). */
+void FEApp_RefreshState(FertControl *c);
 
 /* The front end's end before a race (FEApplication_Run's return; its 3D rooms let go, 0x65b928 cleared). */
 void FEApp_End(void);
