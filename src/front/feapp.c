@@ -1096,8 +1096,8 @@ static void callback(const char *cb)
     } else if (!strcmp(cb, "TESTDRIVEUSED") || !strcmp(cb, "TESTDRIVENEW") || !strcmp(cb, "TESTDRIVECARSETUP")) {
         /* FECallBackList_v48 .. _v50 (0x50c9f0 ..): a test drive (0x699fc8 1, the type 0x5dc1b8 7 used, 6 new,
            8 the car setup's), then PLAYGAME (slot 0xd4): Track1.Track's track, the car of the screen's
-           accessor, alone. (The race's own type for a test drive, from 0x690aac through 0x4ee430, pends: the
-           port runs it as a race of the options' laps; no wear and no result are kept.) */
+           accessor, alone: 0x4fb630's types 6 .. 8, one lap forward, traffic 5; the race type 0 (0x4eab10)
+           and the game type the test drive's (0x4ee430's 0x30). No wear and no result are kept. */
         const char *acc = cb[9] == 'U' ? "UsedCar.Car" : cb[9] == 'N' ? "DealerCar.Car" : "OwnedCars.Car";
         FEAccessor *ca = FEAccess_Find(acc);
         const char *c = FEAccess_CarFile(ca);
@@ -1107,7 +1107,7 @@ static void callback(const char *cb)
         snprintf(s_track, sizeof s_track, "%s", FEData_Track());
         snprintf(s_car, sizeof s_car, "%s", c);
         s_havecol = FEAccess_CarColours(ca, s_colours);
-        s_laps = fe_int("num_laps", 1);
+        s_laps = 1;
         s_opponents = 0;
         s_ngrid = -1;
         s_skill = 1.0f;

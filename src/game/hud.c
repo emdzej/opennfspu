@@ -4687,7 +4687,7 @@ int HUD_HandleInput(int x, int y, int event)
     }
     /* The race over (its replay): with no modal's action, the replay panel's. 7 restart (the results'
        screens not shown again, the next song), 0xe the race's screens again, 0xf the save's
-       question (HReplaySave, pending). */
+       question (HReplaySave). */
     if (g_race_view != 2 || a != 0 || !s_replay) return a;
     a = s_replay->vt->input(s_replay, x, y, c);
     if (a == 7) {
