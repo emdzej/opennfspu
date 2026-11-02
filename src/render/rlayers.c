@@ -7,8 +7,6 @@
 #include "render/thrash.h"
 #include "app.h"
 #include "exe.h"
-#include "pending.h"
-#include "platform.h"
 #include "real/real.h"
 #include <math.h>
 #include <stdlib.h>
@@ -106,17 +104,7 @@ static const RLayerClass *cls_of(const EaglLayer *l) { return ((const RLayer *)l
 
 static EaglLayer *v_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
 {
-    const RLayerClass *c = cls_of(l);
-    if (c->exec) return c->exec(l, s0, s1);
-    /* Not ported yet: the layer passes, as one that changes nothing. */
-    static bool noted[NCLASSES];
-    int i = (int)(c - classes);
-    if (!noted[i]) {
-        noted[i] = true;
-        PENDING_NOTE(0x449a90, "RLayers (a game layer class; see the next line)");
-        plat_log(c->name);
-    }
-    return l->next;
+    return cls_of(l)->exec(l, s0, s1);
 }
 
 static void v_destroy(EaglLayer *l, int free_it)

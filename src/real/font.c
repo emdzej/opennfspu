@@ -1,7 +1,6 @@
 /* EA real library: fonts (see font.h). */
 #include "real/font.h"
 #include "exe.h"
-#include "pending.h"
 #include "real/depthconv.h"
 #include "real/set3d.h"
 #include "real/real.h"
@@ -287,7 +286,8 @@ static FontDtex *dtex_create(int w, int h, uint32_t type)   /* 0x571940 */
     case 1: case 0x7a: t->format = 1; t->bits = 4; break;
     case 5: case 0x7d: t->format = 6; t->bits = 8; break;
     default:
-        PENDING_NOTE(0x571940, "FONT - Invalid shape type, font data not supported by DTEX font driver");
+        REAL_abort("\\real\\cmn\\fontdtex.c", 300, "FONT - Invalid shape type, font data not supported by DTEX font driver\n");
+        t->format = 0;
         t->bits = 8;
     }
     dtex_pages(t);
@@ -911,7 +911,7 @@ FontMesh *FONT_makemesh(Font *f, float x, float y, const char *s)
 void FONT_drawmesh(const FontMesh *m)
 {
     if (!m) {
-        PENDING_NOTE(0x53e230, "FONT_drawmesh - NULL mesh");
+        REAL_abort("\\real\\patch3\\cmn\\fontdraw.c", 0x396, "FONT_drawmesh - NULL mesh\n");
         return;
     }
     if (m->nverts <= 0) return;
