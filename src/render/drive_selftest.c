@@ -585,6 +585,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         if (!load(track, car && car[0] ? car : "964")) { failed = true; return false; }
     }
     Car *c = g_cars[0];
+    App_WaitActive();   /* 0x4b0d70 (RaceLoop) */
     race_menus();
     if (g_replay_mode == 2 && !g_drive_paused) {
         /* RaceLoop's replay part: its quit ends the race; its pause stops it (the cameras updated once,

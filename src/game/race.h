@@ -11,6 +11,7 @@ extern int32_t g_race_countdown;  /* 0x656858: the countdown's step (its ticks f
    seed, the AI's controllers; 0x411100: the cars' lists in their order, each car set up again), at tick
    start (port: the drive view's start; the original's is 0). */
 void Race_Restart(int32_t start);
+void App_WaitActive(void);   /* 0x4b0d70 */
 extern int32_t g_race_seed;       /* 0x657a34: the front end's rand_seed */
 extern int32_t g_race_view;       /* 0x657424: 0 racing, 1 .., 2 the replay */
 

@@ -1,5 +1,6 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "real/systask.h"
 #include "game/skid.h"
 #include "game/track.h"
 #include "render/headlights.h"
@@ -56,9 +57,26 @@ static void R3DCar_TickAll(void)
     }
 }
 
+/* The application's activation (0x6573e0 .. 0x6573e2): set by the WM_ACTIVATEAPP hook 0x4b0cb0 when the
+   window loses the focus (inactive, and the display to give back) and cleared when it comes back. gasm
+   0.16 reports no focus changes (a hidden browser tab or a minimised runner simply stops calling the
+   frame), so nothing sets them and 0x4b0b40's two branches don't run: the release (the 2D window
+   deselected, the sounds paused 0x4aaf20, the input devices freed 0x568860, the driver flushed and its
+   state 0x6c set) and the restore (state 0x6c cleared, the device's mode set again, the back buffer
+   cleared and flipped three times, the input devices again 0x5683b0, DTEX on and the textures sent
+   again 0x535e10/0x536110, the sounds resumed 0x4aafd0). */
+static bool s_inactive;   /* 0x6573e0 */
+
+/* 0x4b0d70, at the top of each race-loop iteration and of the front end's loops: the synchronous tasks
+   run (0x536450), and while the window is inactive they go on every 10 ms. */
+void App_WaitActive(void)
+{
+    SYNCTASK_run(0);
+    while (s_inactive) SYNCTASK_run(0);   /* (with 0x55f4f0's 10 ms sleep) */
+}
+
 void Sim_Step(void)
 {
-    PENDING_NOTE(0x4b0d70, "the window's deactivation (0x6573e0: the sound paused, the display given back)");
     if (!g_race_started) {
         /* The countdown's steps at the ticks of 0x5cc7c4 (not in the free modes 6, 7, 8). */
         int32_t at = (int32_t)exe_u32(0x5cc7c4 + 4u * (uint32_t)(uint8_t)g_race_countdown);
