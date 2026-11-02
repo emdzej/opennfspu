@@ -9,6 +9,3 @@ EaglLayer *EAGL_PendingLayerEnvColour(EaglLayer *l, EaglStream *s0, EaglStream *
 EaglLayer *EAGL_PendingLayerNormals(EaglLayer *l, EaglStream *s0, EaglStream *s1);
 EaglLayer *EAGL_PendingLayerIndexUV(EaglLayer *l, EaglStream *s0, EaglStream *s1);
 
-/* The orthographic clipper (0x549610, views with projection 1). */
-void EAGL_ClipOrtho(int i0, int i1, int i2, uint32_t codes, float guardband, const float *verts,
-                    int diffuse, int specular, int uv, int uv2, float znear, float zfar, float **out, int *nout);

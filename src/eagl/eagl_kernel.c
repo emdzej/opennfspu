@@ -393,8 +393,9 @@ void EAGL_DrawQuads(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
 /* ---- lines (0x548120) ---- */
 
 /* Pairs of vertices: the attributes of the lines not rejected, the positions projected, a line by index
-   pairs through THRASH's line mesh with the draw's texture. The lines crossing a clip plane are left out
-   (the original clips them, not ported). */
+   pairs through THRASH's line mesh with the draw's texture. A line crossing a clip plane is clipped as
+   the triangle (0, 1, 0) and the first two vertices of the result go after the draw's vertices
+   (projected and indexed only for a transformed draw). */
 void EAGL_DrawLines(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
                     int sd, int ss, int su)
 {
@@ -418,10 +419,38 @@ void EAGL_DrawLines(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
         }
     }
     static int idx[0x400];
-    int count = 0;
+    int count = 0, extra = n;
+    EaglClipFn clip = (f & EAGL_CF_ORTHO) ? EAGL_ClipOrtho : EAGL_ClipPerspective;
+    int uv2 = f & EAGL_CF_UV2;
     for (int q = 0; q < nlines && count < 0x200; q++) {
         if (!inside && (c->primcodes[q][0] != 0 || c->primcodes[q][1] != 0)) {
-            if (c->primcodes[q][0] == 0) PENDING_NOTE(0x548120, "EAGL_DrawLines: the lines crossing a clip plane");
+            if (c->primcodes[q][0] != 0) continue;
+            float *poly;
+            int cnt;
+            clip(0, 1, 0, c->primcodes[q][1], c->guardband, v + 2 * q * VSTRIDE, has_d, has_s, has_uv, uv2, c->znear,
+                 c->zfar, &poly, &cnt);
+            if (cnt <= 2) continue;
+            float *out = v + extra * VSTRIDE;
+            if (moved) {
+                project_to(c, poly, out);
+                project_to(c, poly + VSTRIDE, out + VSTRIDE);
+                out[3] = poly[3];
+                out[VSTRIDE + 3] = poly[VSTRIDE + 3];
+                idx[2 * count] = extra;
+                idx[2 * count + 1] = extra + 1;
+                count++;
+            }
+            if (has_d) out[4] = poly[4], out[VSTRIDE + 4] = poly[VSTRIDE + 4];
+            if (has_s) out[5] = poly[5], out[VSTRIDE + 5] = poly[VSTRIDE + 5];
+            if (has_uv) {
+                out[6] = poly[6], out[7] = poly[7];
+                out[VSTRIDE + 6] = poly[VSTRIDE + 6], out[VSTRIDE + 7] = poly[VSTRIDE + 7];
+            }
+            if (uv2) {   /* (the second vertex's at +0x12, as the original writes them) */
+                out[8] = poly[8], out[9] = poly[9];
+                out[0x12] = poly[0x12], out[0x13] = poly[0x13];
+            }
+            extra += 2;
             continue;
         }
         if (moved) {
@@ -744,6 +773,133 @@ void EAGL_ClipPerspective(int i0, int i1, int i2, uint32_t codes, float gb, cons
     for (int p = 0; p < 6; p++) {
         if (!(codes >> p & 1) || n == 0) continue;
         n = clip_plane(p, cur, n, other, gb, zn, zf, d, s, uv, uv2);
+        float *t = cur;
+        cur = other;
+        other = t;
+    }
+    *out = cur;
+    *nout = n;
+}
+
+/* ---- the orthographic clipper (0x549610) ---- */
+
+/* The same passes in the view's own units: near z = 0, far z = 1, the sides at +-guardband (not scaled
+   by z), every crossing with w = 1. Vertices of 8 floats whatever the draw's stride (0x20 in the
+   original too), in two buffers of their own (0x6bc5c0, 0x6bc700); a second texture coordinate set
+   lands in the next vertex, as in the perspective clipper. */
+enum { OSTRIDE = 8 };
+static float oclipbuf[2 * 10 * OSTRIDE + 2];
+
+static void plane_sides_ortho(int p, const float *v, float gb, float *lhs, float *rhs)
+{
+    switch (p) {
+    case P_NEAR: *lhs = v[2]; *rhs = 0; break;      /* (0x5b23f8) */
+    case P_FAR: *lhs = 1.0f; *rhs = v[2]; break;    /* (0x5b24a8) */
+    case P_TOP: *lhs = gb; *rhs = v[1]; break;
+    case P_BOTTOM: *lhs = gb; *rhs = -v[1]; break;
+    case P_LEFT: *lhs = gb; *rhs = -v[0]; break;
+    default: *lhs = gb; *rhs = v[0]; break;
+    }
+}
+
+static void intersect_ortho(int p, const float *cur, const float *prev, float *o, float gb, int d, int s, int uv, int uv2)
+{
+    float t;
+    switch (p) {
+    case P_NEAR:
+        t = prev[2] / (prev[2] - cur[2]);
+        o[2] = 0;
+        o[0] = (cur[0] - prev[0]) * t + prev[0];
+        o[1] = (cur[1] - prev[1]) * t + prev[1];
+        break;
+    case P_FAR:
+        t = (prev[2] - 1.0f) / (prev[2] - cur[2]);
+        o[2] = 1.0f;
+        o[0] = (cur[0] - prev[0]) * t + prev[0];
+        o[1] = (cur[1] - prev[1]) * t + prev[1];
+        break;
+    case P_TOP:
+        t = (prev[1] - gb) / (prev[1] - cur[1]);
+        o[2] = (cur[2] - prev[2]) * t + prev[2];
+        o[1] = gb;
+        o[0] = (cur[0] - prev[0]) * t + prev[0];
+        break;
+    case P_BOTTOM:
+        t = (gb + prev[1]) / (prev[1] - cur[1]);
+        o[2] = (cur[2] - prev[2]) * t + prev[2];
+        o[1] = -gb;
+        o[0] = (cur[0] - prev[0]) * t + prev[0];
+        break;
+    case P_LEFT:
+        t = (gb + prev[0]) / (prev[0] - cur[0]);
+        o[0] = -gb;
+        o[2] = (cur[2] - prev[2]) * t + prev[2];
+        o[1] = (cur[1] - prev[1]) * t + prev[1];
+        break;
+    default:
+        t = (prev[0] - gb) / (prev[0] - cur[0]);
+        o[0] = gb;
+        o[2] = (cur[2] - prev[2]) * t + prev[2];
+        o[1] = (cur[1] - prev[1]) * t + prev[1];
+        break;
+    }
+    o[3] = 1.0f;
+    if (d) o[4] = ufloat(lerp_colour(ubits(prev[4]), ubits(cur[4]), t));
+    if (s) o[5] = ufloat(lerp_colour(ubits(prev[5]), ubits(cur[5]), t));
+    if (uv) {
+        o[6] = (cur[6] - prev[6]) * t + prev[6];
+        o[7] = (cur[7] - prev[7]) * t + prev[7];
+    }
+    if (uv2) {
+        o[8] = (cur[8] - prev[8]) * t + prev[8];
+        o[9] = (cur[9] - prev[9]) * t + prev[9];
+    }
+}
+
+static int clip_plane_ortho(int p, const float *in, int n, float *out, float gb, int d, int s, int uv, int uv2)
+{
+    const float *prev = in + (n - 1) * OSTRIDE;
+    int m = 0;
+    for (int i = 0; i < n; i++, in += OSTRIDE) {
+        const float *cur = in;
+        float cl, cr, pl, pr;
+        plane_sides_ortho(p, cur, gb, &cl, &cr);
+        plane_sides_ortho(p, prev, gb, &pl, &pr);
+        if (cl <= cr) {
+            if (cr <= cl) {
+                memcpy(out + m * OSTRIDE, cur, OSTRIDE * sizeof *out);
+                m++;
+            } else if (pr < pl) {
+                intersect_ortho(p, cur, prev, out + m * OSTRIDE, gb, d, s, uv, uv2);
+                m++;
+            }
+        } else {
+            if (pl < pr) {
+                intersect_ortho(p, cur, prev, out + m * OSTRIDE, gb, d, s, uv, uv2);
+                m++;
+            }
+            memcpy(out + m * OSTRIDE, cur, OSTRIDE * sizeof *out);
+            m++;
+        }
+        prev = cur;
+    }
+    return m;
+}
+
+void EAGL_ClipOrtho(int i0, int i1, int i2, uint32_t codes, float gb, const float *verts,
+                    int d, int s, int uv, int uv2, float zn, float zf, float **out, int *nout)
+{
+    (void)zn;
+    (void)zf;
+    float *a = oclipbuf, *b = oclipbuf + 10 * OSTRIDE;
+    memcpy(a, verts + i0 * OSTRIDE, OSTRIDE * sizeof(float));
+    memcpy(a + OSTRIDE, verts + i1 * OSTRIDE, OSTRIDE * sizeof(float));
+    memcpy(a + 2 * OSTRIDE, verts + i2 * OSTRIDE, OSTRIDE * sizeof(float));
+    float *cur = a, *other = b;
+    int n = 3;
+    for (int p = 0; p < 6; p++) {
+        if (!(codes >> p & 1) || n == 0) continue;
+        n = clip_plane_ortho(p, cur, n, other, gb, d, s, uv, uv2);
         float *t = cur;
         cur = other;
         other = t;

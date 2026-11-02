@@ -317,6 +317,10 @@ typedef void (*EaglClipFn)(int i0, int i1, int i2, uint32_t codes, float guardba
 void EAGL_ClipPerspective(int i0, int i1, int i2, uint32_t codes, float guardband, const float *verts,
                           int diffuse, int specular, int uv, int uv2, float znear, float zfar,
                           float **out, int *nout);                               /* 0x54bd90 */
+/* The same for orthographic views (projection 1): near z 0, far z 1, the sides at +-guardband. */
+void EAGL_ClipOrtho(int i0, int i1, int i2, uint32_t codes, float guardband, const float *verts,
+                    int diffuse, int specular, int uv, int uv2, float znear, float zfar,
+                    float **out, int *nout);                                     /* 0x549610 */
 void EAGL_SortTriangles(EaglContext *c);                                         /* 0x5490e0 */
 
 /* Port addition: draws a test scene through EAGL (view, material, layers, the list kernel) and THRASH. */

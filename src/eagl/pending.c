@@ -19,13 +19,3 @@ EaglLayer *EAGL_PendingLayerIndexUV(EaglLayer *l, EaglStream *s0, EaglStream *s1
     PENDING_NOTE(0x574880, "EAGL layer 0xf (indexed uv)");
     return l->next;
 }
-
-void EAGL_ClipOrtho(int i0, int i1, int i2, uint32_t codes, float guardband, const float *verts,
-                    int diffuse, int specular, int uv, int uv2, float znear, float zfar, float **out, int *nout)
-{
-    PENDING_NOTE(0x549610, "EAGL_ClipOrtho");
-    *out = NULL;
-    *nout = 0;
-}
-
-
