@@ -1184,12 +1184,26 @@ static void gdamage_destroy(HudVisual *v)   /* 0x4223b0 */
     free(g);
 }
 
-/* Its colours again (the texts'). 0x422cc0 */
+/* The layout again (0x422cc0): the tray at the layout's size (0x4208c0) with its divider above the
+   title by the tray's height before it, as the constructor's; at the layout's place (slot 12 with
+   0x420b90); the tray's colours; the texts' colours (0x420510 the scheme, 0x4204b0, 0x4204d0). */
 static void gdamage_reset(HudVisual *v)
 {
     HGraphicDamage *g = (HGraphicDamage *)v;
-    PENDING_NOTE(0x422cc0, "HGraphicDamage's reset (the layout changed)");
+    int w = HudConfig_i32(0xbc), h = HudConfig_i32(0xc0);
+    const char *t = LOC_string(HudConfig_loc(), 0xc);
+    float a, b, c, d = 0;
+    if (g->title && g->title->font && g->title->font->font) text_extent(g->title, t ? t : "", &a, &b, &c, &d);
+    float lo = (float)(g->tray.h - HudConfig_i32(0x38)) - d;
+    tray_setsize(&g->tray, w, h, (int)(lo - (float)(HudConfig_i32(0x38) / 2)));
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_GDAMAGE, &x, &y);
+    gdamage_setpos(v, x, y);
     tray_colours(&g->tray);
+    uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
+    if (g->right) g->right->colour = HudConfig_scheme(), g->right->colour2 = c14;
+    if (g->left) g->left->colour = HudConfig_scheme(), g->left->colour2 = c14;
+    if (g->title) g->title->colour = (uint32_t)HudConfig_i32(0x18), g->title->colour2 = c14;
 }
 
 static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL, NULL, NULL};
