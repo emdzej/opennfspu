@@ -2,6 +2,7 @@
    read from the exe at runtime (exe_str), and destinations at the original object offsets. */
 #include "game/audio.h"
 #include "game/scene.h"
+#include "game/sim_math.h"
 #include "exe.h"
 #include "game/track.h"
 #include "game/car.h"
@@ -87,8 +88,33 @@ static void read_pos_mat(SceneElem *e, CrtFile *f, uint32_t matfmt)
 
 /* ------------------------------------------------------------------------------------- CAudioElem */
 
-/* ctor 0x4ab3c0: the defaults; 0x4abf60 also fills a table of circle points (0x6568f0) from the radius,
-   the editor's display of the element, which the port doesn't draw. */
+/* 0x4abf60: the element's circle as 12 segments of 30 degrees from the radius (+0x8c) in the ground
+   plane (each 9 floats: a zero point, the end at angle a + 30, the start at a), the global 0x6568f0 the
+   scene editor draws; the game never reads it. */
+static float s_audio_circle[12][9];   /* 0x6568f0 */
+
+static void audio_circle(const SceneElem *e)
+{
+    float r;
+    memcpy(&r, e->b + 0x8c, 4);
+    uint32_t kb = exe_u32(0x5b3e84);   /* 1/360 */
+    float k;
+    memcpy(&k, &kb, 4);
+    for (int i = 0; i < 12; i++) {
+        float *p = s_audio_circle[i], s, c;
+        p[0] = p[1] = p[2] = 0;
+        Math_SinCosTurns((float)(30 * i + 30) * k, &s, &c);
+        p[3] = c * r;
+        p[4] = 0;
+        p[5] = s * r;
+        Math_SinCosTurns((float)(30 * i) * k, &s, &c);
+        p[6] = c * r;
+        p[7] = 0;
+        p[8] = s * r;
+    }
+}
+
+/* ctor 0x4ab3c0: the defaults, the circle table from the radius. */
 static void audio_init(SceneElem *e)
 {
     base_init(e);
@@ -98,7 +124,7 @@ static void audio_init(SceneElem *e)
     scene_set_i16(e, 0x88, 0);
     scene_set_i16(e, 0x8a, -1);
     put_f32(e, 0x8c, 100.0f);
-    PENDING_NOTE(0x4abf60, "CAudioElem circle table (editor display)");
+    audio_circle(e);   /* 0x4abf60 */
     scene_set_i16(e, 0xa0, -1);
     put_i32(e, 0x90, 0);
     scene_set_i16(e, 0x94, 0);
