@@ -7,7 +7,6 @@
 #include "exe.h"
 #include "real/window.h"
 #include "game/sim_math.h"
-#include "pending.h"
 #include "render/camera_math.h"
 #include "render/carpages.h"
 #include "render/render.h"
@@ -623,7 +622,8 @@ void FE3D_SetRoom(const char *id)
     else if (!strcmp(id, "ID_TRACK")) s_room = track_new();
     else if (!strcmp(id, "ID_FACTORY")) s_room = factory_new();
     else if (!strcmp(id, "ID_VICTORY")) s_room = victory_new();
-    else if (*id) PENDING_NOTE(0x4e6f10, "a room of another id");
+    /* (0x4e6f10 finds the id's maker in its map; for another id it calls a null one, a crash: no layout
+       names one, the port makes none) */
 }
 
 void FE3D_SetIndex(int index, int count)
