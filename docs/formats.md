@@ -203,6 +203,40 @@ Identified with FFmpeg's EA demuxer, which reads these files as they are (`ffpro
   The exe checks `'BNKl'` in `0x4af6d0`.
 - **CRDl** (`.cct/.clt/.ect/.elt` next to the banks): curve tables (engine sound by rpm/load?), to decode.
 
+## Replays (`.rpl`)
+
+A replay (`SaveData/replay.rpl` and the named ones the race-over replay saves, `Replay_WriteFinalTick`
+0x414680) is 0x1ce28 bytes, little-endian:
+
+| Offset | Size | What |
+|---|---|---|
+| 0x0000 | 0x3e24 | the race's settings block, a copy of 0x6573e8 |
+| 0x3e24 | 4 | the tick the recording stopped at (0x606a80; 0 unless the buffer filled) |
+| 0x3e28 | 0x19000 | the recorded controls (0x5ed848) |
+
+The settings block holds the option globals at their offsets from 0x6573e8:
+
+- +0x00 the game type, +0x04 the race type, +0x08 the laps, +0x0c the skill;
+- +0x10 RALLY, +0x14 HEAVY, +0x18 DERBY;
+- +0x34 the local player, +0x3c the view (2 in a file: a replay);
+- +0x44 MIRROR, +0x48 REVERSE, +0x5c the track's name (32 bytes), +0xac LINEAR_TRACK;
+- +0xb0 the track's records (race and lap times, names and cars);
+- +0x2f0 .. +0x420 the career tournament's points, prizes and times;
+- +0x424 .. +0x458 the mission's messages and limits;
+- +0x644 DAMAGE, +0x64c RAND_SEED, +0x898 the skill test's scene;
+- +0xc98 the race cars' count, +0xc9c the players';
+- from +0xca4 nine car descriptions of 0x580 bytes (FILENAME +0x228, SPECNAME +0x268, DRIVERNAME +0x17c,
+  CLASS +0x08, the grid slot +0x174, the colours +0x218, the cameras +0x208, the parts +0x28).
+
+The controls come in blocks of eight packets per player, one block every sixteen ticks:
+- the steering raw: 8 bytes, the value + 0x40, bit 7 the first assist (+0x14);
+- the throttle, the brake and the flags, each run-length packed. A count byte (the packed length) comes
+  first, then the bytes, with `0xff, n, value` for a run of three or more. Bit 7 of the throttle and the
+  brake is the second and third assist.
+
+A zero count byte ends the stream. Loading a replay from the front end gives the race the block back,
+except the player's display settings (0x413830).
+
 ## Inventory of the rest
 
 | Ext | Count | Magic / kind | What it seems to be |
@@ -232,7 +266,7 @@ Identified with FFmpeg's EA demuxer, which reads these files as they are (`ffpro
 | `csv` | 9 | text | AI personalities, scripts, spreadsheets |
 | `dat` | 5 | binary | particles, flares, car part tables (`Render/`) |
 | `car`, `prt`, `trn`, `per`, `fac` | 1 each | binary (`FEData/Data/nfs5.*`) | front-end databases: cars, parts, tracks, persons, factory |
-| `sav`, `trk`, `rpl`, `lst`, `hud` | | binary (`SaveData/`) | saves, records, replay, players, HUD config |
+| `sav`, `trk`, `rpl`, `lst`, `hud` | | binary (`SaveData/`) | saves, records, replay (see above), players, HUD config |
 | `eng` | 1 | binary | dash text strings |
 
 Developer leftovers to ignore: `vssver.scc` (SourceSafe), `FEData/Backup/V3.2.zip`, `*.xls`, `*.h`.
