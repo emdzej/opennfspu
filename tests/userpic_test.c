@@ -1,4 +1,4 @@
-/* The player's own picture decoders (front/feuserpic.c): small BMP, TGA and PCX files made here, read
+/* The player's own picture decoders (front/feuserpic.c): small BMP, TGA, PCX and JPEG files made here, read
    back pixel for pixel. Needs no game data. */
 #include "front/feuserpic.h"
 #include <stdio.h>
@@ -74,8 +74,29 @@ int main(void)
             }
     check("pcx", pcx, p, ".pcx");
 
+    /* a grey baseline JPEG, 16 x 8: two blocks, flat 64 and 192 (DC only, quantiser 1). The DC table
+       codes category 10 as 00 and 11 as 01; the AC table only EOB, as 0 */
+    static const uint8_t head[] = {
+        0xff, 0xd8, 0xff, 0xdb, 0, 67, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 0xff, 0xc0, 0, 11, 8, 0, 8, 0, 16, 1, 1, 0x11, 0, 0xff, 0xc4, 0, 21, 0x00, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 10, 11, 0xff, 0xc4, 0, 20, 0x10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00,
+        0xff, 0xda, 0, 8, 1, 1, 0x00, 0, 63, 0};
+    /* 00 0111111111 0 (-512: 64), 01 10000000000 0 (+1024: 192), padded with ones */
+    static const uint8_t scan[] = {0x1f, 0xf3, 0x00, 0x1f, 0xff, 0xd9};
+    uint8_t jpg[sizeof head + sizeof scan];
+    memcpy(jpg, head, sizeof head), memcpy(jpg + sizeof head, scan, sizeof scan);
     int w, h;
     uint8_t *rgb;
+    bool ok = FEUserPic_Decode(jpg, sizeof jpg, ".JPG", &w, &h, &rgb);
+    CHECK(ok && w == 16 && h == 8);
+    int bad = 0;
+    for (int i = 0; ok && i < 16 * 8 * 3; i++)
+        if (rgb[i] != (i / 3 % 16 < 8 ? 64 : 192)) bad++;
+    CHECK(bad == 0);
+    printf("jpg: %s\n", ok && !bad ? "ok" : "bad");
+    free(rgb);
+
     CHECK(!FEUserPic_Decode(bmp, 10, ".bmp", &w, &h, &rgb));
     printf(fails ? "userpic_test: %d failures\n" : "userpic_test: ok\n", fails);
     return fails ? 1 : 0;

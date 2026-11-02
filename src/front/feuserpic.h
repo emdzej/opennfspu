@@ -8,8 +8,8 @@
 
 #include "front/fe2d.h"
 
-/* An image file's pixels, 8-bit RGB top-down (malloc'd): BMP, TGA and PCX as gimme reads them; false for
-   a format it can't read here (JPEG and TIFF: pending) or a bad file. */
+/* An image file's pixels, 8-bit RGB top-down (malloc'd): BMP, TGA, PCX and baseline JPEG as gimme reads
+   them; false for a format it can't read here (TIFF: pending; progressive JPEG) or a bad file. */
 bool FEUserPic_Decode(const uint8_t *d, size_t n, const char *ext, int *w, int *h, uint8_t **rgb);
 
 typedef enum { USERPIC_NONE, USERPIC_SHOWN, USERPIC_FAILED } UserPicState;
