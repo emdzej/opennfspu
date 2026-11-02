@@ -2883,12 +2883,17 @@ void FEData_TourForfeit(void)
     FESave_Write();
 }
 
-/* A career race's results into the save (the original's race-over update pends; the port's, on the
-   race's fields the standings read): +0x3d0 run; for each of the eight racers its points (+0x3d2: 9 less
-   its place, 8 the winner's as the debug "all won" 0x503a00 gives), its time (+0x3e4) and its prize
-   (+0x424: the places' prizes from +0x3a8), a clean car's safe-driving bonus (+0x404); the player's
-   prize and bonus into the money; then the tournament's end
-   (0x503080). */
+static void money_add(Save *sv, int32_t v)   /* 0x500890 */
+{
+    if (v > 999999999) v = 999999999;
+    if (v < -999999999) v = -999999999;
+    sv->money += v;
+}
+
+/* A career race's results into the save (0x4ed590 -> 0x502f10 for each racer): +0x3d0 run; for each of
+   the eight racers its points (+0x3d2: 9 less its place, 8 the winner's as the debug "all won" 0x503a00
+   gives), its time (+0x3e4) and its prize (+0x424: the places' prizes from +0x3a8), a clean car's
+   safe-driving bonus (+0x404); then the car, the money and the tournament's end below. */
 static float exe_f32(uint32_t va)
 {
     uint32_t v = exe_u32(va);
@@ -2917,10 +2922,28 @@ void FEData_TourResult(int race, const int *places, const int *times, const bool
             int32_t b = rec32(x, 0x3c8), safe = p == 1 ? b : p == 2 ? (int32_t)((float)b * exe_f32(0x5b23f0))
                                                    : p == 3 ? (int32_t)((float)b * exe_f32(0x5b2468)) : 0;
             memcpy(x + 0x404 + 4 * k, &safe, 4);
-            if (k == 0) sv->money += safe;
-        }
-        if (k == 0) sv->money += won;
+            }
     }
+    /* 0x4ed590's career race: the raced car (0x690adc, OwnedCars.Car's) one more for each racer placed
+       first (+0x69c: a per cent on its value, 0x4f83f0), 3000 on its mileage (+0x698); into the money
+       (0x500890, each clamped to +-999999999) the player's prize (+0x424, 0x504cf0) and safe-driving
+       bonus (+0x404, 0x504d50), and with every race run (0x504c80) the tournament's prize for the
+       player's standing (0x504d20: +0xe8 + 4 x the place, 0x502c10); then its end (0x503080) */
+    SaveCar *car = acc_car(FEAccess_Find("OwnedCars.Car"));
+    if (car) {
+        for (int k = 0; k < n; k++)
+            if (places[k] == 1) {
+                int32_t w = rec32(car->rec, 0x69c) + 1;
+                memcpy(car->rec + 0x69c, &w, 4);
+            }
+        int32_t m = rec32(car->rec, 0x698) + 3000;
+        memcpy(car->rec + 0x698, &m, 4);
+    }
+    money_add(sv, rec32(x, 0x424));
+    money_add(sv, rec32(x, 0x404));
+    int left = 0, nr = rec16(r, 0x39c);
+    for (int i = 0; i < nr && i < 10; i++) left += !r[0x3d0 + 0xa4 * i];
+    if (left == 0) money_add(sv, rec32(r, 0xe8 + 4 * tour_rank(r)));
     tour_end(r);
     FESave_Write();
 }
