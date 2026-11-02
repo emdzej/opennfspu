@@ -149,6 +149,7 @@ static void use_device(uint32_t n)
 }
 
 int Controls_Devices(void) { return s_ndevices; }
+bool Controls_KeyDown(int scan) { return s_key[scan & 0xff] != 0; }   /* 0x532d80 */
 const uint8_t *Controls_DeviceState(int n) { return n >= 0 && n < s_ndevices ? getstate(n) : NULL; }
 const char *Controls_DeviceName(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].name : ""; }
 /* Getstate 2's axes (+8: a bit each of the 8): a gasm pad reports all eight. */

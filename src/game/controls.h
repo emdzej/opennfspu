@@ -44,6 +44,8 @@ int Controls_DeviceType(int n);
 uint32_t Controls_DeviceAxes(int n);
 /* A device polled (getstate 6): its record, 0x104 bytes (the type, then its state); NULL none. */
 const uint8_t *Controls_DeviceState(int n);
+/* Whether the key with scan code scan is down in the key table (0x5de028; 0x532d80). */
+bool Controls_KeyDown(int scan);
 /* The players' packets (g_input_packet the first's) and the interface ring's next. 0x412e90 */
 void Input_Sample(void);
 /* The samples taken (0x5e99b8) and the race loop's cursor into the ring (0x606ac8). */

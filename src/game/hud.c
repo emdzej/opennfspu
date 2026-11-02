@@ -1,5 +1,6 @@
 /* The race HUD (see hud.h). */
 #include "game/hud.h"
+#include "game/controls.h"
 #include "real/mouse.h"
 #include "exe.h"
 #include "game/car.h"
@@ -2919,8 +2920,17 @@ static int ms_input(HudVisual *v, int x, int y, int click)
     (void)x, (void)y;
     if (m->retry) button_input(m->retry, click);   /* 0x41b320 */
     if (v->state != 0 && g_mission_pass == 0 && m->retry && m->retry->clicked) return 3;
-    PENDING_NOTE(0x42a330, "the billboards' key (0x19)");
-    return 0;
+    /* 0x42a330: Space (the key table's 0x39) going down while the summary is up (+8): 0x19, which closes
+       the top modal; the key's last state at 0x60c7fc. */
+    static bool held;
+    int a = 0;
+    if (Controls_KeyDown(0x39)) {
+        if (!held && v->flag) a = 0x19;
+        held = true;
+    } else {
+        held = false;
+    }
+    return a;
 }
 
 static void ms_destroy(HudVisual *v)   /* 0x428c20 */
@@ -4632,6 +4642,9 @@ int HUD_HandleInput(int x, int y, int event)
     case 0x18:   /* the exit's back: the pause again */
         s_exit->vt->setstate(s_exit, 2);
         if (nmodal < 8) modal[nmodal++] = s_pause;
+        break;
+    case 0x19:   /* (the mission summary's Space) the top modal closed */
+        modal[0]->vt->setstate(modal[0], 2);
         break;
     case 0x1a:   /* the pause's quit: the exit's menu */
         s_pause->vt->setstate(s_pause, 2);
