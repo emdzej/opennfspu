@@ -173,6 +173,20 @@ static float ease_now(R3DCarEase *e, uint32_t now)   /* 0x437ef0 */
     return e->to;
 }
 
+/* A lid to `to` over a second from where it is, unless it's still moving (0x439930 .. 0x439b00). */
+static void lid(R3DCarEase *e, float to)
+{
+    uint32_t now = app_ticks_ms();   /* GetTickCount */
+    if (now - e->since < e->dur) return;
+    e->from = ease_now(e, now);
+    e->to = to;
+    e->since = now;
+    e->dur = 1000;
+}
+
+void R3DCar_Hood(R3DCar *car, bool open) { lid(&car->hoodease, open ? car->hoodextent : 0); }      /* 0x439930, 0x4399d0 */
+void R3DCar_Trunk(R3DCar *car, bool open) { lid(&car->trunkease, open ? car->trunkextent : 0); }   /* 0x439a60, 0x439b00 */
+
 static void style_extent(R3DCarEase *e, float extent, uint32_t now)
 {
     if (ease_now(e, now) == 0) {

@@ -13,6 +13,7 @@
 #include "front/feaccess.h"
 #include "front/fe3d.h"
 #include "front/fesave.h"
+#include "front/fecar3d.h"
 #include "front/femarket.h"
 #include "front/fefactory.h"
 #include "support/crt.h"
@@ -1116,6 +1117,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
             if (h) on_enter(h);
         }
         FEChronicle_Move(h, x, y);
+        if (h) FECar3D_Move(h, x, y);
         break;
     }
     case 4:
@@ -1128,6 +1130,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         s_parent = w;
         if (target && type == 4 && FEChronicle_Down(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 8 && FEChronicle_Up(target)) break;
+        if (target && type == 4 && FECar3D_Click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && picture_click(target)) break;
@@ -1233,6 +1236,8 @@ static void sync_room(FertControl *w)
     const char *car = NULL;
     uint32_t col[4];
     bool havecol = false;
+    FertControl *ctl = NULL;
+    FEAccessor *ctl_acc = NULL;
     for (int i = 0; w && i < w->nchildren; i++) {
         FertControl *c = w->children[i];
         if (strcmp(c->id, "NFS5.3DCAR")) continue;
@@ -1242,8 +1247,15 @@ static void sync_room(FertControl *w)
         car = FEAccess_CarFile(acc);
         havecol = FEAccess_CarColours(acc, col);
         if (acc) FE3D_SetIndex(FEAccess_Pos(acc), FEAccess_Count(acc));
+        ctl = c, ctl_acc = acc;
     }
     FE3D_SetCar(car, havecol ? col : NULL);
+    /* its doors, lids and roof, the camera into the car, the damage shown (FECar3DControl_v1 0x4c0100) */
+    float dmg[10];
+    const char *ds = ctl ? data_str(ctl, "damage") : NULL;
+    bool show = ds && atoi(ds) != 0 && FEAccess_CarDamage(ctl_acc, dmg);
+    FECar3D_SetWindow(w);
+    FECar3D_Tick(ctl, show ? dmg : NULL);
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name)

@@ -205,6 +205,10 @@ void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m);
 /* An animation slot to frame v (0 .. its frames): the two frames round it and how far, marked moved.
    0x438000 */
 void R3DCar_AnimReset(R3DCar *car, int slot, float v);
+/* The hood (hinge 8) and the trunk (9) opened to the car's extent or closed, over a second from where
+   they are, unless still moving (the showroom's: 0x439930, 0x4399d0; 0x439a60, 0x439b00). */
+void R3DCar_Hood(R3DCar *car, bool open);
+void R3DCar_Trunk(R3DCar *car, bool open);
 /* The animated parts of the slots moved since the last time, between their two frames (0x437f60). */
 void R3DCar_ApplyMorphs(R3DCar *car);
 /* The dents (0x438160): when a zone's damage (0x438210: capped per zone, by another table for the

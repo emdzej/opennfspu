@@ -396,19 +396,34 @@ static void lever(R3DCar *r, Car *car, uint32_t now)
     if (t != r->anim[6].t) r->anim[6].t = t, r->anim[6].on = 1;
 }
 
-/* ---- the car's hinges (R3DCar_Animate, slot 9, 0x438370: the race's part) ----
+/* ---- the car's hinges (R3DCar_Animate, slot 9, 0x438370) ----
 
    Per wheel (the simulation's wheel records, 0xc4 bytes from +0x7f8): its spin (+0x48, negated) about x,
    its steering (+0x74, or in a replay the recorded +0xac8 / +0xacc of the front pair) x 1/216 (negated in
    the mirror) about y, its +0x30 about z. The steering wheel (5) turns by the fronts' sum, within +-4.5/23;
    the rev counter's needle (0xb) by the description's scale (+0x528) x rpm / 1000 + its zero (+0x524), the
    speedometer's (0xc) by +0x530 x speed x 0.144 + +0x52c; the four shadows (0x12 .. 0x15) take their
-   wheel's angles without the spin; 0x16 turns with the clock (1/128 a tick). */
+   wheel's angles without the spin; 0x16 turns with the clock (1/128 a tick). In the front end's showroom
+   (car NULL) only the lids, the headlights and the timed paths. */
 void CarAnim_Update(R3DCar *r, Car *car)
 {
     float (*h)[3] = r->hinge;
-    if (!h || g_r3d_frontend) {
-        PENDING_NOTE(0x438370, "R3DCar_Animate's showroom part (the timed doors, lids, roof)");
+    if (!h) return;
+    if (g_r3d_frontend) {
+        /* The showroom's: hinge 0x10 from +0x57c .. +0x588 and +0x74, which nothing writes (0); the
+           lids and the pop-up headlights eased; then the low detail's hand and lever, or the timed paths */
+        uint32_t now = app_ticks_ms();   /* GetTickCount */
+        h[0x10][0] = 0;
+        h[8][0] = ease(now, &r->hoodease.since, &r->hoodease.dur, r->hoodease.from, r->hoodease.to);
+        h[0x11][0] = ease(now, &r->headease.since, &r->headease.dur, r->headease.from, r->headease.to);
+        h[9][0] = ease(now, &r->trunkease.since, &r->trunkease.dur, r->trunkease.from, r->trunkease.to);
+        if (g_r3d_quality < 1) {
+            R3DCar_AnimReset(r, 4, 4.5f);
+            R3DCar_AnimReset(r, 5, 4.5f);
+            R3DCar_AnimReset(r, 6, 5.0f);
+            return;
+        }
+        paths_step(r, now);
         return;
     }
     float k = g_r3d_mirror ? -0.0046296297f : 0.0046296297f;   /* 1/216 */

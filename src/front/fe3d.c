@@ -1,5 +1,6 @@
 /* The front end's 3D objects and rooms (fe3d.h). */
 #include "front/fe3d.h"
+#include "render/carlight.h"
 #include "front/fe_parts.h"
 #include "front/femovie.h"
 #include "app.h"
@@ -43,6 +44,7 @@ FE3DObject *FE3DObject_New(int kind, const char *name, const uint32_t colours[4]
     o->spec.racenumber = racenumber;   /* +0x510 */
     o->spec.scheme = scheme;
     o->state.spec = &o->spec;
+    o->state.damage = o->damage;
     R3DCar_Init(&o->car, &o->state);   /* R3DCar_ctor(state, 0x32, 0x14, 3) */
     /* (a room's 20 flags at +0x2d4 set, a car's +0x700: not read by the ported draw) */
     /* The colours before the load, as the race's CarSpecs_Load does: the port composes the pages with them
@@ -109,6 +111,9 @@ void FE3DObject_Draw(FE3DObject *o, EaglMatStack *model)
     float h = st->halfsize[1];
     for (int i = 0; i < 3; i++) st->pos[i] = pos[i] - rot[3 + i] * h + st->rot[3 + i] * h;
     Render_SetCull(g_render);
+    CarAnim_Update(&o->car, NULL);   /* (0x4d1030's 0x442fd0: slot 9, R3DCar_Animate) */
+    R3DCar_Dents(&o->car, false);    /* (and after its draw slot 7, R3DCar_v7 0x4382f0: here before, as */
+    R3DCar_ApplyMorphs(&o->car);     /*  the race's cars) */
     R3DCar_Draw(&o->car, model);
     Render_SetCull(g_render);
     memcpy(st->rot, rot, sizeof rot);
@@ -676,4 +681,19 @@ void FE3D_Free(void)
     s_carfile[0] = 0;
     RCamera_Free(s_camera);
     s_camera = NULL;
+}
+
+float FE3D_CarYaw(void) { return s_room ? s_room->rot[1] : 0; }
+void FE3D_SetZoom(float f)
+{
+    if (s_room) s_room->zoom = f;
+}
+R3DCar *FE3D_Car(void) { return s_room && s_room->car ? &s_room->car->car : NULL; }
+void FE3D_SetCarDamage(const float d[10])
+{
+    if (s_room && s_room->car) memcpy(s_room->car->damage, d, sizeof s_room->car->damage);
+}
+void FE3D_CarHinge(int kind, float x, float y, float z)
+{
+    if (s_room && s_room->car) hinge(s_room->car, kind, x, y, z);
 }

@@ -635,6 +635,16 @@ static void record_colours(const uint8_t *r, int ci, int ii, uint32_t out[4])
     for (int i = 0; i < 4; i++) out[i] |= 0xff000000u;   /* (0x4bfbb0: | 0xff000000) */
 }
 
+bool FEAccess_CarDamage(const FEAccessor *a, float out[10])
+{
+    if (!a || a->kind != ACC_OWNED) return false;
+    refresh(a);
+    const SaveCar *oc = a->count ? acc_car(a) : NULL;
+    if (!oc) return false;
+    memcpy(out, oc->rec + 0x6a8, 10 * sizeof *out);   /* (the car object's ten zones) */
+    return true;
+}
+
 bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4])
 {
     if (!a) return false;

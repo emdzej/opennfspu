@@ -87,6 +87,9 @@ int32_t FEData_CarValue(const SaveCar *c, int year);
 float FEData_CarDamage(const SaveCar *c);
 /* A car accessor's current car's colours in the description's order (+0x218: body, the slots 0x7c, 0x80,
    interior): an owned car's own, else its record's (the dealer's chosen colour and interior). */
+/* An owned car accessor's car's ten damage zones (the car object's +0x6a8: FECar3DControl_v1 0x4c0100's
+   with "damage"); false for another accessor. */
+bool FEAccess_CarDamage(const FEAccessor *a, float out[10]);
 bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 /* The repair screen's quick fix of the owned car (0x50e9f0): 0 done, else the message's string id. */
 int FEData_QuickFix(void);

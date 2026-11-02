@@ -7,8 +7,8 @@
    Ported so far: the garage (FEGarage3DRoom, ID_GARAGE: a spinning room, FESpinning3DRoom 0x4e9570, of
    the model "garage"), its car (set by the screen's FECar3DControl of position type 0, 0x4bf9a0), their
    placement, spin and light (0x4e9690, 0x4e7b60), the car's floor shadow (FEGarage3DRoom_v15 0x4e9380);
-   the dealership, factory, track select and victory rooms. The dealership's slide between cars and the
-   car's opening doors pend.
+   the dealership, factory, track select and victory rooms. The car control's doors, lids and roof are in
+   fecar3d.c.
 
    docs/re/frontend.md has the rooms' notes and the port's one deviation in their draw. */
 #pragma once
@@ -23,6 +23,7 @@ typedef struct FE3DObject {
     R3DCar car;               /* +0x10 */
     int kind;                 /* +0x14: 0 a car, 2 a room model */
     char name[64];
+    float damage[10];         /* (the car object's +0x4e4: the ten damage zones the state points at) */
 } FE3DObject;
 
 /* 0x4d0bb0: the model name of its kind's folder; the four colours (body, stripe, interior, wheels), the
@@ -47,3 +48,13 @@ void FE3D_SetIndex(int index, int count);
 /* The room's tick and draw in the front end's 3D camera (0x4d2980's first view); whether a room drew. */
 bool FE3D_Draw(void);
 void FE3D_Free(void);
+
+/* For the screen's 3D car control (FECar3DControl): the room's car's yaw in turns (slot 45, 0x4e7f30:
+   +0x288; the dealership's 0x4e8300), the room camera's zoom towards its close-up place (slot 46,
+   0x4e6ea0: +0x2e8, 0 .. 1), the room car (NULL none) and its damage zones (0x4d1450). */
+float FE3D_CarYaw(void);
+void FE3D_SetZoom(float f);
+R3DCar *FE3D_Car(void);
+void FE3D_SetCarDamage(const float d[10]);
+/* A hinge of the room car (0x443e60). */
+void FE3D_CarHinge(int kind, float x, float y, float z);
