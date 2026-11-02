@@ -760,6 +760,58 @@ static int length(const Font *f, const char *s)
     return n;
 }
 
+/* 0x5717c0: the font's DTEX texture made (the image's size and type) if it has none, then its pixels
+   in the font's palette; whether that worked. */
+static int font_texture(Font *f)
+{
+    if (!f->tex) {
+        const uint8_t *im = f->image;
+        f->driver = FONT_DRIVER_DTEX;
+        f->tex = dtex_create((int16_t)rdn(im + 4, 2), (int16_t)rdn(im + 6, 2), im[0]);
+        f->dirty = 1;
+        if (!f->tex) return 0;
+    }
+    make_palette(f);   /* 0x594730 */
+    int ok = dtex_update(f->tex, f->image + 0x10, f->palette);
+    f->dirty = !ok;
+    return ok;
+}
+
+/* The system font (0x69eb90): the FNTF in the executable at 0x5dfd8c (a 4-bit 128 x 91 glyph image),
+   opened once with the index list for 400 glyphs (0x53c650). The debug frame-rate text draws
+   with it (0x569cf0). */
+static Font *g_sysfont;      /* 0x69eb90 */
+
+Font *FONT_sysfont(void)
+{
+    if (!g_sysfont) {
+        index_room(0);   /* 0x53d5b0 */
+        const uint8_t *h = exe_data(0x5dfd8c, 0x20);
+        if (!h) return NULL;
+        const uint8_t *im = h + rdn(h + 0x1c, 4);
+        int bits = im[0] == 0x7a ? 4 : 8;
+        size_t len = (size_t)rdn(h + 0x1c, 4) + 0x10 +
+                     (size_t)((int16_t)rdn(im + 4, 2) * bits + 7) / 8 * (size_t)(int16_t)rdn(im + 6, 2);
+        g_sysfont = FONT_open(exe_data(0x5dfd8c, len));
+    }
+    return g_sysfont;
+}
+
+/* FONT_init 0x5365e0, once: the DTEX driver current (0x53c640, 0x5dfb60), the system font and its texture.
+   The device's texel-centre test (0x556a50) decides whether the font's text moves by half a pixel (states
+   0x14, 0x15 = -0.5); the port's driver samples at D3D's centres, the test's no-offset answer. (The
+   original also wraps the font with a texture-state record, 0x2c bytes, vtable 0x5bb708, freed with the
+   device: nothing reads it.) */
+void FONT_init(void)
+{
+    static bool done;   /* 0x69de40 */
+    if (done) return;
+    FONT_setdriver(FONT_DRIVER_DTEX);
+    Font *f = FONT_sysfont();
+    done = true;
+    if (f) font_texture(f);
+}
+
 /* The quads with the font's texture: made or recoloured first. 0x53d7b0 (0x5717c0) */
 static void draw_quads(Font *f, int nverts, float *v)
 {
@@ -782,18 +834,7 @@ static void draw_quads(Font *f, int nverts, float *v)
         soft_draw(nverts >> 2, v);
         return;
     }
-    if (f->dirty || !f->tex) {
-        if (!f->tex) {
-            const uint8_t *im = f->image;
-            f->driver = FONT_DRIVER_DTEX;
-            f->tex = dtex_create((int16_t)rdn(im + 4, 2), (int16_t)rdn(im + 6, 2), im[0]);
-            f->dirty = 1;
-        }
-        if (f->tex) {
-            make_palette(f);   /* 0x594730 */
-            f->dirty = !dtex_update(f->tex, f->image + 0x10, f->palette);
-        }
-    }
+    if (f->dirty || !f->tex) font_texture(f);
     if (f->tex && (!g_batch || g_last != (void *)f->tex)) {
         dtex_settexture(f->tex);
         g_last = f->tex;

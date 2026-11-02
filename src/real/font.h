@@ -65,6 +65,8 @@ typedef struct {
 } FontMesh;
 
 Font *FONT_open(const void *file);                                 /* 0x53c430 */
+Font *FONT_sysfont(void);                                          /* 0x53c650: the exe's font (0x69eb90) */
+void FONT_init(void);                                              /* 0x5365e0 */
 void FONT_close(Font *f);
 void FONT_setstate(Font *f, int state, uint32_t v);                /* 0x53e330 */
 void FONT_setstatef(Font *f, int state, float v);                  /* 0x53e600 */

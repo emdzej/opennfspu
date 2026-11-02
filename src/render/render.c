@@ -13,6 +13,7 @@
 #include "game/camera.h"
 #include "game/hud.h"
 #include "exe.h"
+#include "real/font.h"
 #include "platform.h"
 #include "pending.h"
 #include "real/real.h"
@@ -166,7 +167,7 @@ static bool dev_open(RDevice *d)
     d->caps = d->about ? ((const uint32_t *)(const void *)d->about)[0x40 / 4] : 0;
     RenderState *rs = malloc(sizeof *rs);
     d->rs = rs ? RenderState_ctor(rs) : NULL;
-    PENDING_NOTE(0x5365e0, "FONT_init (the device's font)");
+    FONT_init();   /* 0x5365e0 */
     EAGL_ContextCreate();
     EAGL_ContextInit(g_eagl, d->mode);
     EAGL_RSReset();
