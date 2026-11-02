@@ -836,7 +836,10 @@ static void place_block(Car *c, int n, int dir, const int32_t pos[3], const int3
 }
 
 /* ---- turning round (AIState_GotoSlice, vtable 0x5b2720: 0x40e1a0): toward node +8 ---- */
-static void goto_tick(AiState *s)   /* 0x40e230 (its +0xc speed caps: the police pass 0) */
+/* 0x40e230: the way to node +8 by its gap's sign, the speed target and the lanes; with +0xc set (the
+   police pass 0) the target speed (+0xeb8) capped by the distance left: 4 under 0x5b240c, then the
+   steps 0x5b2470, 0x5b2410, 0x5b26d4 (from 0x5b248c), 0x5b2484 from 0x5b25c4 on, either way. */
+static void goto_tick(AiState *s)
 {
     Car *c = s->car;
     float g = -node_gap(car_node(c), ow(s, 8)->i);   /* 0x40e800 */
@@ -845,7 +848,24 @@ static void goto_tick(AiState *s)   /* 0x40e230 (its +0xc speed caps: the police
     AI_LaneReset(c);
     AI_LaneScore(c);
     AI_LaneChoose(c);
-    if (ow(s, 0xc)->i) PENDING_NOTE(0x40e230, "the turn's speed caps (+0xc)");
+    if (!ow(s, 0xc)->i) return;
+    float d = g < K(0x5b23f8) ? -g : g;
+    float cap = K(0x5b2404);
+    if (K(0x5b240c) <= d) {
+        cap = K(0x5b2470);
+        if (K(0x5b251c) <= d) {
+            cap = K(0x5b2410);
+            if (K(0x5b248c) <= d) cap = d < K(0x5b25c4) ? K(0x5b26d4) : K(0x5b2484);
+        }
+    }
+    float *t = CAR_F(c, 0xeb8);
+    if (*t < K(0x5b23f8)) {
+        cap = -cap;
+        if (cap < *t) cap = *t;
+    } else if (*t < cap) {
+        return;
+    }
+    *t = cap;
 }
 static void goto_done(AiState *s) { (void)s; }
 static bool goto_ready(AiState *s) { (void)s; return false; }
