@@ -165,7 +165,15 @@ static bool car_lod(R3DCar *r, Car *car, EaglView *view)
         r->curlod = cap;
     }
 lower:
-    if (0 < r->curlod) PENDING_NOTE(0x43e5a0, "the LODs below the drawn one (R3DCarLOD 0x43e5a0)");
+    /* 0x43e5a0 for each level below the drawn one: for its wheel slots that have an article (+0x14), the
+       slot's offset height (+0x6d0, R3DCar_WheelPos 0x438140) from the car's wheel record (+0x820, 0xc4
+       apart; the wheels in the order 0x5b36f0, mirrored 0x5b3700). A car drawn at level 0 keeps its. */
+    for (int k = 0; k < r->curlod && k < (int)r->nlods; k++)
+        for (int w = 0; w < 4; w++) {
+            if (!r->lods[k]->slot[w]) continue;
+            uint32_t wheel = exe_u32((g_r3d_mirror ? 0x5b3700u : 0x5b36f0u) + 4u * (uint32_t)w);
+            r->wheelpos[w][1] = *CAR_F(car, 0x820 + 0xc4 * (int)wheel);
+        }
     return true;
 }
 
