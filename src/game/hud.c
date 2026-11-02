@@ -1848,7 +1848,9 @@ static HudVisual *map_new(void)
     tray_init(&m->tray, &map_vt, x, y, w, h, 0, true, 0, true, false);
     map_build(m);
     m->grid[0] = m->grid[1] = (uint32_t)HudConfig_i32(0x30);   /* 0x420470 */
-    PENDING_NOTE(0x431e50, "the map's debug text (0x60d4d4; drawn with HCheat's map flags)");
+    /* (The original also makes a text anchor here, 0x60d4d4 by 0x430e50, for the debug lines "Show Slice"
+       and "Show XYZ" over the map, which its +0x108/+0x109 flags turn on: only the cheat menu sets them,
+       and nothing opens that, see HUD_DrawOverlay.) */
     uint32_t c14 = (uint32_t)HudConfig_i32(0x14);
     m->label = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, w, 0, 0, false);
     m->lap = text_new(HudConfig_font(0x4c), HudConfig_scheme(), c14, 0, 0, w, 0, 0, false);
@@ -4833,7 +4835,11 @@ static void letterbox(void)
 
 /* The overlay (0x4257d0): the mouse's pointer, at the mouse for 128 ticks after it moves, all the time
    with a modal visual up or in the replay's view. (Then the cheat menu's two map flags, HCheat's +0x170
-   and +0x171 onto the map's +0x108 and +0x109: the cheat menu isn't ported.) The depth function is
+   and +0x171 onto the map's +0x108 and +0x109. HUD_Init makes the cheat menu, HCheat 0x41b770: a
+   billboard of 20 buttons, finish in 1st..8th place, the tournament, the era, pass or fail the mission,
+   one lap more, the map's two flags, damage...; it goes into the visual list as a plain entry, which no
+   path ever sets showing, so in this build it never draws nor reads input and its flags stay 0. Not
+   ported for that.) The depth function is
    left at 7, as the original leaves it. */
 void HUD_DrawOverlay(RenderSystem *r, RCamera *c)
 {
