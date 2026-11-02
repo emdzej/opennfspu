@@ -45,3 +45,5 @@ AiState AIi_Normal(Car *c);       /* 0x40b630 */
 AiState AIi_Idle(Car *c);         /* 0x40cad0's state, holding the car's offset */
 AiState AIi_Purgatory(Car *c);    /* 0x40de30 */
 Car *AIi_CarByIndex(int i);
+void AIi_SpeedTarget(Car *c);    /* 0x40afd0 */
+void AIi_Place(Car *c);          /* 0x4076f0 (its second argument 0) */

@@ -1,6 +1,7 @@
 /* The AI (see ai.h). */
 #include "game/ai.h"
 #include "game/ai_internal.h"
+#include "game/ai_police.h"
 #include "game/track_table.h"
 #include "exe.h"
 #include "game/car_drive.h"
@@ -491,7 +492,7 @@ static const AiStateVtbl none_vt = {none_tick, no_done, not_ready};
    followed car's speed when coming the other way (the first band's 22.2 is stored and not taken: the
    original's slip); by the car's own factor (+0xeec), at least 13.4 under it and 8.9 (both when
    forward), by +0x1018, at least 8.9; signed by the direction. */
-static void speed_target(Car *c)
+void AIi_SpeedTarget(Car *c)
 {
     uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
     *CAR_F(c, 0xeb8) = 0;
@@ -530,13 +531,13 @@ static void speed_target(Car *c)
    lane driver (0x401000, 0x401060, 0x4012b0). 0x40b600 */
 static void normal_tick(AiState *s)
 {
-    speed_target(s->car);   /* 0x40afd0 */
+    AIi_SpeedTarget(s->car);   /* 0x40afd0 */
     AI_LaneDrive(s->car);   /* 0x401000, 0x401060, 0x4012b0 */
 }
 static const AiStateVtbl normal_vt = {normal_tick, no_done, not_ready};
 static void normal_init(AiState *s, Car *c)   /* 0x40b630 */
 {
-    *s = (AiState){&normal_vt, c, 0, 0};
+    *s = (AiState){.vt = &normal_vt, .car = c, .target = 0, .hold = 0};
     memset(c->b + 0x1064, 0, 16);
     c->b[0x7f] = 1;
 }
@@ -557,7 +558,7 @@ static void idle_tick(AiState *s)
         *CAR_F(c, 0xeb4) = s->target;
         return;
     }
-    speed_target(c);
+    AIi_SpeedTarget(c);
     *CAR_F(c, 0xeb8) = *CAR_F(c, 0xeb8) * K(0x5b2468);
     *CAR_F(c, 0xeb4) = s->target;
 }
@@ -616,7 +617,7 @@ static void purgatory_done(AiState *s)
 static const AiStateVtbl purgatory_vt = {purgatory_tick, purgatory_done, purgatory_ready};
 static void purgatory_init(AiState *s, Car *c)   /* 0x40de30 */
 {
-    *s = (AiState){&none_vt, c, 0, 0};
+    *s = (AiState){.vt = &none_vt, .car = c, .target = 0, .hold = 0};
     float off[3] = {0, (float)*CAR_I(c, CAR_INDEX) * K(0x5b241c), 0};
     CarSim_Place(c, 0, off, 1);
     c->b[0x7f] = 0;
@@ -640,7 +641,7 @@ AiState AIi_Normal(Car *c)
     normal_init(&s, c);
     return s;
 }
-AiState AIi_Idle(Car *c) { return (AiState){&idle_vt, c, 0, 1}; }
+AiState AIi_Idle(Car *c) { return (AiState){.vt = &idle_vt, .car = c, .target = 0, .hold = 1}; }
 AiState AIi_Purgatory(Car *c)
 {
     AiState s;
@@ -668,11 +669,11 @@ void AIi_StateTick(AiState *s)
 static void opponent_tick(AiHigh *h)
 {
     if (h->phase != 0) {
-        if (h->phase == 2) PENDING_NOTE(0x405dd0, "the opponent's catch-up (0x405dd0, 0x4057a0)");
+        /* (phase 2 would run the heat 0x405dd0 and 0x4057a0 first: never, the phase is 0xb) */
         AIi_StateTick(&h->state);
         return;
     }
-    h->state = (AiState){&racing_vt, h->car, 0, 0};
+    h->state = (AiState){.vt = &racing_vt, .car = h->car, .target = 0, .hold = 0};
     *CAR_I(h->car, 0xda8) = 1;
     h->car->b[0x7f] = 1;
     h->phase = 0xb;
@@ -735,7 +736,7 @@ static void come_back_lane(Car *c)
 
 /* On the road there (0x4076f0): active, placed at its node and offset, moving along it at its speed,
    turned by the angle (0 here), the drive's fields reset (0x406d30), its offset, extent and lanes. */
-static void come_back_place(Car *c)
+void AIi_Place(Car *c)
 {
     c->b[0x7f] = 1;
     *CAR_F(c, 0x1074) = *CAR_F(c, 0xeb4);
@@ -788,9 +789,9 @@ static void come_back(Car *c)   /* 0x407880 */
     *CAR_I(c, 0xeec) = (int32_t)pace[SimRand_Next() & 3];
     come_back_node(c);
     come_back_lane(c);
-    speed_target(c);
+    AIi_SpeedTarget(c);
     *CAR_F(c, 0xec0) = *CAR_F(c, 0xeb8);
-    come_back_place(c);
+    AIi_Place(c);
     memset(c->b + 0x4e4, 0, 10 * 4);
 }
 
@@ -845,7 +846,7 @@ static void traffic_tick(AiHigh *h)
             AIi_SetState(h, s);
             h->phase = 1;
         } else {
-            AIi_SetState(h, (AiState){&idle_vt, c, 0, 1});
+            AIi_SetState(h, (AiState){.vt = &idle_vt, .car = c, .target = 0, .hold = 1});
             h->phase = 3;
         }
         CarSim_Place(c, 0, off, 1);
@@ -879,7 +880,7 @@ static void traffic_tick(AiHigh *h)
             if (r < 8) {
                 int16_t n;
                 memcpy(&n, c->b + 8, 2);
-                AIi_SetState(h, (AiState){&idle_vt, c, 0, 1});
+                AIi_SetState(h, (AiState){.vt = &idle_vt, .car = c, .target = 0, .hold = 1});
                 h->phase = 3;
                 if (r != 0) {
                     float t = *CAR_I(c, 0xeb0) == 1 ? node_f(n, 0x4c) * (float)node_i(n, 0x3c) : node_f(n, 0x48) * (float)node_i(n, 0x38);
@@ -916,6 +917,7 @@ static void traffic_tick(AiHigh *h)
 void AI_MakeControllers(void)
 {
     s_purgatory = 0;   /* (0x40b4f0, 0x40b510: the pool and the count cleared) */
+    int cops = 0;
     for (int i = 0; i < g_ncars; i++) {
         free(ctl[i]);
         ctl[i] = NULL;
@@ -924,18 +926,20 @@ void AI_MakeControllers(void)
         AiHigh *h = calloc(1, sizeof *h);
         if (!h) continue;
         h->car = c;
-        h->state = (AiState){&none_vt, c, 0, 0};
+        h->state = (AiState){.vt = &none_vt, .car = c, .target = 0, .hold = 0};
         HW(h, 0x14).i = car_node(c);
         if (f & 4) {
             h->kind = 1;   /* AIHigh_Human (0x405740) */
-            PENDING_NOTE(0x405740, "the human's AI controller (AIHigh_Human: its catch-up)");
+            Police_PursuedInit(h);
         } else if (f & 8) {
             h->kind = 2;   /* AIHigh_Opponent (0x4059a0) */
+            Police_PursuedInit(h);
             h->always = 1;
         } else if (f & 0x10) {
             h->kind = 3;   /* AIHigh_Traffic (0x4064f0) */
         } else if (f & 0x20) {
-            PENDING_NOTE(0x403e90, "the police's AI controller (AIHigh_Cop)");
+            h->kind = 4;   /* AIHigh_Cop (0x403e90) */
+            Police_Init(h, cops++);
         }
         ctl[i] = h;
     }
@@ -949,7 +953,11 @@ void AI_TickAll(void)
         Car *c = g_cars[i];
         if (!h->always && !Sim_TaskRate(1, 0, *CAR_F(c, 0x78), *CAR_I(c, 0), &ai_rate, &g_ai_ticks, &ai_dt, *CAR_I(c, 0x10b8) != 0))
             continue;
-        if (h->kind == 2) opponent_tick(h);
+        if (h->kind == 1) {
+            Police_PursuedTick(h);   /* AIHigh_Human 0x405720 */
+            AIi_StateTick(&h->state);
+        } else if (h->kind == 2) opponent_tick(h);
+        else if (h->kind == 4) Police_Tick(h);
         else if (h->kind == 3) traffic_tick(h);
     }
 }

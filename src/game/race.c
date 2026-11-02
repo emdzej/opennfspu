@@ -13,6 +13,7 @@
 #include "game/race_car.h"
 #include "game/ai.h"
 #include "game/ai_drive.h"
+#include "game/ai_police.h"
 #include "game/race_progress.h"
 #include "exe.h"
 #include "game/car.h"
@@ -87,7 +88,7 @@ void Race_Restart(int32_t start)
     g_sim_tick = start;
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x4a4560 */
     Render_SeedRand((uint32_t)g_race_seed);   /* 0x44fbd0 */
-    PENDING_NOTE(0x4030b0, "the cops' script read again (0x40e410 on the pursuit's .cop)");
+    Police_ResetScript();                     /* 0x4030b0 */
     g_race_demo = 0;                       /* 0x406a30 */
     for (int i = 0; i < g_ncars; i++) {
         g_ranked.c[i] = g_cars[i];   /* 0x411100 */

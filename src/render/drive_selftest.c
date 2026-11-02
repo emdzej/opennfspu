@@ -7,6 +7,7 @@
 #include "eagl/eagl.h"
 #include "render/headlights.h"
 #include "game/ai.h"
+#include "game/ai_police.h"
 #include "game/ai_data.h"
 #include "game/car.h"
 #include "game/car_damage.h"
@@ -156,6 +157,7 @@ static bool load(const char *track, const char *carname)
     AI_Load();             /* the racing line (0x4031f0) */
     Input_Reset(false);
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
+    Police_LoadScript();   /* AI_LoadCopScript 0x403040 */
     AI_MakeControllers();  /* 0x406580 */
     AI_LoadData();         /* 0x406950: the personalities, the traffic's configuration */
     {
@@ -421,6 +423,7 @@ void DRIVE_Shutdown(void)
     if (!ready) return;
     HUD_Free();        /* 0x4252f0 */
     AI_Free();
+    Police_FreeScript();    /* 0x4030d0 */
     Audio_Shutdown();  /* 0x4a8850 */
     for (int i = 0; i < g_ncars; i++) {
         R3DCar *r = g_cars[i] ? g_cars[i]->p[CARP_R3D] : NULL;
