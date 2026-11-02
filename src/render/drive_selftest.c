@@ -52,6 +52,7 @@ static bool ready, failed;
 static RaceViews views;
 static float env[64];
 static double ticks_due;
+static int s_start;   /* the race's first tick (--param start) */
 
 static void set_env(void)   /* the track viewer's light until the sky's is ported */
 {
@@ -149,7 +150,12 @@ static bool load(const char *track, const char *carname)
     if (g_ncars < 1) return false;
     Headlights_SetCar(g_cars[0]);   /* 0x452550 (the viewed car's) */
     /* The race's set-up: the grid slots behind the start line, on the road (0x410790). */
-    g_sim_tick = 0x1c0 - 0x40;   /* a second before the countdown's end */
+    /* The race from its first tick (0x414ed0) with the fly-in; --param start=<tick> (a port test aid)
+       starts it later, the camera straight in its mode (the hash tests use 384, a second before the
+       countdown's end). */
+    s_start = plat_param("start", v, sizeof v) ? atoi(v) : 0;
+    if (s_start < 0) s_start = 0;
+    g_sim_tick = s_start;
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
     Render_SeedRand((uint32_t)g_race_seed);   /* (0x44fbd0) */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
@@ -167,7 +173,7 @@ static bool load(const char *track, const char *carname)
         if (follow < 0 || follow >= g_ncars) follow = 0;
         g_camera_car = follow;
         int mode = plat_param("cam", v, sizeof v) ? atoi(v) : DESC_I(g_cars[follow], 0x208);
-        Camera_Init(0, g_cars[follow], mode);
+        Camera_Init(0, g_cars[follow], s_start == 0 ? 0xe : mode);   /* (0x463f70: mode 14, the fly-in) */
     }
     /* The race's sounds (GameStartup 0x4b65a0: Audio_Init 0x4a6610, the player's engine 0x4a8aa0 ->
        0x4ac9e0 from its description's SOUNDNAME). */
@@ -387,7 +393,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         g_race_view = 2;
         g_replay_mode = 2;
         World_Restart();   /* 0x471ac0 */
-        Race_Restart(0x1c0 - 0x40);
+        Race_Restart(s_start);
         Input_Reset(true);
         Camera_ReplayStart();   /* 0x413ec0 */
         if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;

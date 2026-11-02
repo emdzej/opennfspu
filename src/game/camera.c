@@ -11,7 +11,9 @@
 #include "game/sim_math.h"
 #include "game/world.h"
 #include "pending.h"
+#include "game/anim.h"
 #include "game/scene.h"
+#include "game/track.h"
 #include "render/camera_math.h"
 #include "render/drive_selftest.h"
 #include "render/particles.h"
@@ -845,6 +847,78 @@ void Camera_ReplayStart(void)
     s_replay_speed = 2;
 }
 
+/* ---- the race's start (mode 14) ---- */
+
+static uint32_t s_camanim;   /* 0x62893c: the track's camera animation played last */
+
+/* The track's next camera animation (0x4719b0 with 0: each race the next of the 'CmAn' items, round),
+   started now: its keys at 1/28 s each (0x3d124925), no loop, no turn (CamAnim, vtable 0x5b4634). */
+static QuatAnim *camanim_next(void)
+{
+    if (!g_world || g_world->ncams == 0) return NULL;
+    s_camanim = (s_camanim + 1) % g_world->ncams;
+    const WCamAnim *w = &g_world->cams[s_camanim];
+    uint32_t u = 0x3d124925u;
+    float rate;
+    memcpy(&rate, &u, 4);
+    QuatAnim *a = QuatAnim_new(w->b, w->keys, 0, 0, rate, 0);
+    if (!a) return NULL;
+    a->state = 1;
+    a->start = g_sim_tick;
+    return a;
+}
+
+/* The fly-in (0x462df0): the animation's frame taken in the car's (its place offset in the car's axes,
+   its turn after the car's, a quarter turn about x and squared up, 0x4a45f0); played out, the camera
+   goes to the player's first camera (the race car's description's +0x208), or in the replay to the
+   scene cameras (mode 10 without them, or in game type 9), and the cameras are updated again at once
+   (the original's recursive call). */
+static void mode_flyin(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    if (!c->f20) c->f20 = camanim_next();
+    if (c->f20) {
+        EaglMatrix m;
+        if (QuatAnim_Matrix(c->f20, &m) != 2) {   /* (CamAnim's slot 1: QuatAnim's, started) */
+            float rot[9], t[3], w[3];
+            EAGL_MatToRotTrans(&m, rot, t);
+            vec_mat(t, car_rows(c->car), w);
+            for (int k = 0; k < 3; k++) c->eye[k] = car_pos(c->car)[k] + w[k];
+            Mat3_Mul(rot, car_rows(c->car), c->orient);   /* 0x5321e0 */
+            EaglMatrix x;
+            EAGL_MatAxisAngle(&x, 90.0f, 1.0f, 0, 0);
+            EAGL_MatToRotTrans(&x, rot, t);
+            Mat3_Mul(rot, c->orient, c->orient);
+            Mat3_Orthonormalize(c->orient);
+            return;
+        }
+    }
+    if (g_replay_mode == 2) {
+        if (Scene_CameraCount() != 0) {
+            if (g_race_mode == 9) set_mode_fresh(p, 10);
+            else
+                for (int k = 0; k < g_humans.n; k++) {
+                    *CAR_I(g_humans.c[k], 0x10e4) = Scene_FirstCamera(g_race_reverse != 0);
+                    scene_camera(*CAR_I(g_humans.c[k], 0x10e4));
+                }
+            s_tvmode = 0x14;
+        } else {
+            clear_shake();
+            s_hold = 0;
+            if (!(c->flags & 1)) set_mode_fresh(p, 10);
+        }
+    } else {
+        clear_shake();
+        s_hold = 0;
+        if (!(c->flags & 1)) set_mode_fresh(p, p < g_ncars ? DESC_I(g_cars[p], 0x208) : 2);
+    }
+    if (c->f20) {
+        QuatAnim_free(c->f20);
+        c->f20 = NULL;
+    }
+    Camera_Update();
+}
+
 /* ---- the modes' state ---- */
 
 /* The replay wander's state (0x6280e0 .. 0x628100) cleared. */
@@ -985,7 +1059,7 @@ void Camera_Update(void)
         case 10: mode_circle(p); break;
         case 0xb: mode_tv(p); break;
         case 0xc: mode_rise(p); break;
-        case 0xe: PENDING_NOTE(0x462df0, "camera mode 14"); break;
+        case 0xe: mode_flyin(p); break;
         case 0x11: PENDING_NOTE(0x463910, "camera mode 17"); break;
         case 0x12: case 0x13: PENDING_NOTE(0x463a20, "camera modes 18, 19"); break;
         default: break;

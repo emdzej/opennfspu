@@ -26,7 +26,7 @@ Without parameters, `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--a
 - `--param track=<name>` shows a track from its start line (`alps`, `autobahn`, `canyon`, `monaco1`, ...),
   `yaw=<degrees>` turns the camera, `at=<x>,<y>,<z>` puts it elsewhere;
 - `--param drive=<track>` drives a car from the race's grid there (`car=<name>`, default `964`): arrow keys or WASD, space the
-  handbrake, R puts the car back on the road; on a pad left/right, A throttle, B brake, X handbrake, Y back on the road. `cam=<mode>` picks the camera (0 hood, 1 driver's seat, 2-4 near chase, 5-7 far chase, 8, 9, 13), C changes it and B looks back, `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid).
+  handbrake, R puts the car back on the road; on a pad left/right, A throttle, B brake, X handbrake, Y back on the road. `cam=<mode>` picks the camera (0 hood, 1 driver's seat, 2-4 near chase, 5-7 far chase, 8, 9, 13), C changes it and B looks back, `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid). A race starts with the track's fly-in camera before the countdown, as the original; `start=<tick>` starts it later with the camera straight in its mode (the hash tests use 384).
 
 Nothing on this page is a promise of dates. Progress is tracked in the
 [repository](https://github.com/emdzej/opennfspu).
