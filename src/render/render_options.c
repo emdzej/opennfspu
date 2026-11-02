@@ -42,4 +42,5 @@ void RenderOptions_Load(void)
     if (plat_param("carchrome", v, sizeof v)) g_renderopts.carchrome = atoi(v);   /* (a viewer aid: the reflections) */
     if (plat_param("lensflare", v, sizeof v)) g_renderopts.lensflare = atoi(v);   /* (and the sun's flare) */
     if (plat_param("cardetail", v, sizeof v)) g_renderopts.cardetail = atoi(v);   /* (and the cars' detail: their dents) */
+    if (plat_param("widescreen", v, sizeof v)) g_renderopts.widescreen = atoi(v);   /* (and the letterbox) */
 }

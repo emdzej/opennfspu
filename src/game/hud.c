@@ -4280,6 +4280,18 @@ static void end_pass(RenderSystem *r)
     View_End(r);
 }
 
+/* The widescreen option's bars (0x427ac0): black, the height's 0.15 (0x5b2638) plus 2 (0x5b2580) at the
+   top and the bottom, at depth 65000. */
+static void letterbox(void)
+{
+    float w = (float)g_display.width, h = (float)g_display.height;
+    float b = (float)(int)((double)h * exe_f32(0x5b2638) + exe_f32(0x5b2580));   /* (x87: one rounding) */
+    float top[16] = {0, 0, 65000, 1, w, 0, 65000, 1, w, b, 65000, 1, 0, b, 65000, 1};
+    float bot[16] = {0, h - b, 65000, 1, w, h - b, 65000, 1, w, h, 65000, 1, 0, h, 65000, 1};
+    flat(top, 0xff000000u);
+    flat(bot, 0xff000000u);
+}
+
 void HUD_Draw(RenderSystem *r, RCamera *c)
 {
     if (hidden || !r || !c) return;
@@ -4288,7 +4300,7 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
     int zfunc = rs->state28, fog = rs->state15;
     RenderState_SetFogMode(rs, 0);
     pass(r, c);
-    PENDING_NOTE(0x427ac0, "the HUD's map pass (0x657d5c, 0x427ac0)");
+    if (g_renderopts.widescreen) letterbox();   /* 0x427ac0 */
     end_pass(r);
     /* The front visuals, once the race has started. */
     pass(r, c);
