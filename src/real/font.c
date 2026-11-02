@@ -2,6 +2,7 @@
 #include "real/font.h"
 #include "exe.h"
 #include "pending.h"
+#include "real/depthconv.h"
 #include "real/set3d.h"
 #include "real/real.h"
 #include "real/window.h"
@@ -392,6 +393,7 @@ struct FontSoft {
     int32_t width, height;   /* +0x00 */
     int depth;               /* +0x08: the current window's when the palette was made */
     const uint8_t *pixels;   /* +0x0c: the image's 4-bit pixels (the font's own) */
+    uint8_t *table8;         /* +0x10: for 8-bit windows, each colour over each palette entry (0x53c930) */
     uint32_t colours[16];    /* +0x14: the palette */
     uint32_t pre[16];        /* +0x54: times its alpha (0x53cac0) */
     uint32_t p565[16];       /* +0x94: those as 565 under the alpha (0x53cb60) */
@@ -416,6 +418,31 @@ static FontSoft *soft_create(int w, int h)   /* 0x53c880 */
     return t;
 }
 
+/* 0x53c930: for each of the 16 premultiplied colours (b g r a) and each system palette entry, the entry
+   when the colour's alpha is 0, else the nearest match (RGB_colourmatch) of the entry's channels times
+   255 - alpha (/ 255) plus the colour's, each at most 255, with the colour's alpha: table[colour << 8 |
+   entry]. */
+static void soft_table8(const uint32_t *pre, uint8_t *table)
+{
+    for (int e = 0; e < 256; e++) {
+        uint32_t pal = REAL_syspalette[e];
+        int r = (int)(pal >> 16 & 0xff), g = (int)(pal >> 8 & 0xff), b = (int)(pal & 0xff);
+        for (int k = 0; k < 16; k++) {
+            uint32_t c = pre[k], a = c >> 24, v = (uint32_t)e;
+            if (a) {
+                int inv = 0xff - (int)a;
+                int nr = inv * r / 0xff + (int)(c >> 16 & 0xff), ng = inv * g / 0xff + (int)(c >> 8 & 0xff),
+                    nb = inv * b / 0xff + (int)(c & 0xff);
+                if (nr > 0xff) nr = 0xff;
+                if (ng > 0xff) ng = 0xff;
+                if (nb > 0xff) nb = 0xff;
+                v = RGB_colourmatch(((a << 8 | (uint32_t)nr) << 8 | (uint32_t)ng) << 8 | (uint32_t)nb);
+            }
+            table[k << 8 | e] = (uint8_t)v;
+        }
+    }
+}
+
 /* 0x53c8b0: the window's depth, the pixels, the palette and its two forms. */
 static bool soft_update(FontSoft *t, const uint8_t *pixels, const uint32_t *palette)
 {
@@ -432,7 +459,10 @@ static bool soft_update(FontSoft *t, const uint8_t *pixels, const uint32_t *pale
         t->p565[i] = (((c >> 16 & 0xff) * 0x1f + 0x80) / 0xff << 6 | ((c >> 8 & 0xff) * 0x3f + 0x80) / 0xff) << 5 |
                      ((c & 0xff) * 0x1f + 0x80) / 0xff | (c & 0xff000000u);
     }
-    if (t->depth < 9) PENDING_NOTE(0x53c930, "the software font's 8-bit window table");
+    if (t->depth < 9) {
+        if (!t->table8) t->table8 = malloc(0x1000);   /* (0x53d0d0) */
+        if (t->table8) soft_table8(t->pre, t->table8);
+    }
     return true;
 }
 
@@ -514,8 +544,14 @@ static void soft_glyph(const FontSoft *t, int x, int y, int u, int v, int w, int
         }
         return;
     }
-    if (inside && depth == 8) {
-        PENDING_NOTE(0x573b60, "the software font on an 8-bit window");
+    if (inside && depth == 8) {   /* 0x573b60: each pixel through the table by its colour */
+        if (!t->table8) return;
+        uint8_t *d = at(x, y);
+        for (; h != 0; h--, s += row - n, d += WINDOW_cur.stride - 2 * n)
+            for (int i = 0; i < n; i++, s++, d += 2) {
+                d[0] = t->table8[(*s >> 4) << 8 | d[0]];
+                d[1] = t->table8[(*s & 0xf) << 8 | d[1]];
+            }
         return;
     }
     /* (the pixels one by one through the 2D library's plot 0x5738d0, which blends by alpha in the

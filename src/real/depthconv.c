@@ -1,11 +1,11 @@
 /* \real\cmn\depthconv.c and its pixel kernels: see depthconv.h. */
 #include "real/depthconv.h"
 #include "exe.h"
-#include "pending.h"
 #include "real/mem.h"
 #include "real/pack.h"
 #include "real/real.h"
 #include "real/shape.h"
+#include "real/window.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -68,15 +68,54 @@ static void k_p4_p8(void *d, const void *s, int n)
     for (int i = 0; i < n; i++) dst[i] = (i & 1) ? src[i >> 1] >> 4 : src[i >> 1] & 0x0f;
 }
 
-/* 0x537c40: the nearest display colour of an ARGB value (the 2D window's own format decides how; window
-   code isn't ported yet). Only the 565 -> 8-bit kernel needs it, which the GL driver never selects. */
-static uint8_t colourmatch(uint32_t argb)
+/* 0x537ba0: the palette entry nearest an ARGB colour (squared distance over r, g, b; the first of equals),
+   among those the flags allow (0x5de790: all but 254 and 255), in the system palette by default. */
+static uint8_t nearest(const uint32_t *pal, uint32_t argb)
 {
-    PENDING_NOTE(0x537c40, "RGB_colourmatch");
-    return 0;
+    const uint8_t *ok = exe_data(0x5de790, 256);
+    if (!pal) pal = REAL_syspalette;
+    int best = 99999, pick = 0;
+    for (int i = 0; i < 256; i++) {
+        if (ok && !ok[i]) continue;
+        int db = (int)(argb & 0xff) - (int)(pal[i] & 0xff), dg = (int)(argb >> 8 & 0xff) - (int)(pal[i] >> 8 & 0xff),
+            dr = (int)(argb >> 16 & 0xff) - (int)(pal[i] >> 16 & 0xff);
+        int d = dr * dr + dg * dg + db * db;
+        if (d < best) best = d, pick = i;
+    }
+    return (uint8_t)pick;
 }
 
-/* 0x56ff60: RGB565 -> 8-bit index, through the inverse table (0x69e0ac; never set up in the port) or the
+/* RGB_colourmatch 0x537c40: an ARGB colour in the current window's format. 8 bits and below: the nearest
+   palette entry (0x572d40; its inverse table 0x69e0ac is never made); 15: 1555 with the alpha bit, 0 for
+   0 (0x572d0b); 16: 4444 for the 'm' type (0x572db0), else 565 (0x572ce0); 24 and up: as it is; others 0. */
+uint32_t RGB_colourmatch(uint32_t argb)
+{
+    unsigned depth = WINDOW_cur.depth;
+    if (depth < 9) return nearest(NULL, argb);
+    if (depth == 15) return argb ? ((argb & 0xf800) >> 6) + 0x8000 + ((argb & 0xf80000) >> 9) + (argb >> 3 & 0x1f) : 0;
+    if (depth != 16) return depth < 24 ? 0 : argb;
+    if (WINDOW_cur.type == 'm')
+        return (((argb >> 20 & 0xf) | (argb >> 28) << 4) << 4 | (argb >> 12 & 0xf)) << 4 | (argb >> 4 & 0xf);
+    return ((argb & 0xfc00) >> 5) + ((argb & 0xf80000) >> 8) + (argb >> 3 & 0x1f);
+}
+
+uint32_t RGB_pixelcolour(uint32_t px)
+{
+    switch (WINDOW_cur.depth) {
+    case 15:
+        return (((((px & 0x8000) ? 0xffu : 0) << 5 | (px >> 10 & 0x1f)) << 8 | (px >> 5 & 0x1f)) << 8 | (px & 0x1f)) << 3;
+    case 16:
+        if (WINDOW_cur.type == 'm')
+            return (((px >> 12 & 0xf) << 4 << 8 | (px >> 8 & 0xf) << 4) << 8 | (px >> 4 & 0xf) << 4) << 8 | (px & 0xf) << 4;
+        return (((px ? 0xffu : 0) << 8 | (px >> 11 & 0x1f) << 3) << 8 | (px >> 5 & 0x3f) << 2) << 8 | (px & 0x1f) << 3;
+    case 24: case 32:
+        return px;
+    default:
+        return REAL_syspalette[px & 0xff];
+    }
+}
+
+/* 0x56ff60: RGB565 -> 8-bit index, through the inverse table (0x69e0ac; never made, in the original too) or the
    colour match. */
 static void k_565_p8(void *d, const void *s, int n)
 {
@@ -84,7 +123,7 @@ static void k_565_p8(void *d, const void *s, int n)
     const uint8_t *src = s;
     for (int i = 0; i < n; i++) {
         uint32_t v = ld16(src + 2 * i);
-        dst[i] = colourmatch(0xff000000u | x5(v >> 11) << 16 | (v & 0x7e0) << 5 | (v & 0x1f) << 3);
+        dst[i] = (uint8_t)RGB_colourmatch(0xff000000u | x5(v >> 11) << 16 | (v & 0x7e0) << 5 | (v & 0x1f) << 3);
     }
 }
 

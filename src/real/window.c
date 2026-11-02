@@ -329,10 +329,19 @@ static void over1555(uint16_t *d, uint32_t c)
     *d = (uint16_t)(((c & 0xf80000) >> 9) + (c >> 3 & 0x1f) + ((c & 0xf800) >> 6) + 0x8000);
 }
 
-static void fade8(void *dst, const void *src, int n)   /* 0x53fb80: the nearest palette entry */
+/* 0x53fb80: over an 8-bit pixel, its palette colour times 255 - alpha (/ 256) plus the faded colour's,
+   each channel a byte that wraps, then the nearest palette entry. */
+static void fade8(void *dst, const void *src, int n)
 {
-    (void)dst, (void)src, (void)n;
-    PENDING_NOTE(0x53fb80, "the faded draw on an 8-bit window");
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4, d++) {
+        uint32_t f = faded(s), inv = (uint8_t)~(f >> 24), pal = RGB_pixelcolour(*d);
+        uint8_t r = (uint8_t)(((pal >> 16 & 0xff) * inv >> 8) + (f >> 16 & 0xff));
+        uint8_t g = (uint8_t)(((pal >> 8 & 0xff) * inv >> 8) + (f >> 8 & 0xff));
+        uint8_t b = (uint8_t)(((pal & 0xff) * inv >> 8) + (f & 0xff));
+        *d = (uint8_t)RGB_colourmatch((uint32_t)r << 16 | (uint32_t)g << 8 | b);
+    }
 }
 static void fade1555(void *dst, const void *src, int n)   /* 0x53fc90 */
 {
