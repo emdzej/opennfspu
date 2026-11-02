@@ -125,6 +125,7 @@ void Options_Apply(void)
     g_hud_splits = Options_Int(0x5d5f58, g_hud_splits);              /* SPLITTIMES -> 0x657dd8 */
     g_hud_opponentlist = Options_Int(0x5d5f64, g_hud_opponentlist);  /* OPPONENTLIST -> 0x657dd4 */
     g_hud_imperial = Options_Int(0x5d5fa4, g_hud_imperial);          /* SPEEDUNITS -> 0x657dc0 */
+    g_hud_layout = Options_Int(0x5d5fbc, g_hud_layout);              /* SCREENLAYOUT -> 0x657db8 */
     g_hud_damage_display = Options_Int(0x5d5f84, g_hud_damage_display);   /* DAMAGEDISPLAY -> 0x657dc8 */
     g_music_shuffle = Options_Int(0x5d60f8, g_music_shuffle);       /* RANDOMPLAYLIST -> 0x657a5c */
 }

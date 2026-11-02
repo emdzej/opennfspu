@@ -17,6 +17,7 @@ static const char *save_dir = "SaveData\\";
 
 HudDials g_hud_dials;
 int32_t g_hud_imperial;
+int32_t g_hud_layout;
 int32_t g_hud_splits = 1;   /* (the front end's default) */
 int32_t g_hud_damage_display = 1;   /* (fe.txt's) */
 
@@ -42,12 +43,13 @@ static uint8_t *read_savedata(const char *file, size_t *n)
     return vfs_read_all(path, n);
 }
 
-/* The player's file, else the default ("%s%s%s" 0x5ccb98, "%s%s" 0x5cc588). */
-static uint8_t *read_file(const char *player, const char *own, const char *fallback, size_t *n)
+/* The player's file, else the default ("%s%s%s" 0x5ccb98, "%s%s" 0x5cc588); the name read into used. */
+static uint8_t *read_file(const char *player, const char *own, const char *fallback, size_t *n, char *used, size_t cap)
 {
     char f[200];
     snprintf(f, sizeof f, "%s%s", player, own);
     uint8_t *d = read_savedata(f, n);
+    snprintf(used, cap, "%s", d ? f : fallback);
     return d ? d : read_savedata(fallback, n);
 }
 
@@ -65,26 +67,114 @@ static void to_pixels(void)
     pos[12][0] = (int32_t)(w * rdf(c + 0x20)), pos[12][1] = (int32_t)(h * rdf(c + 0x24));
 }
 
-/* Both files' records. 0x41f7c0 */
-static bool load_layouts(const char *player)
+/* The name of a layout ("Config 1" .. "Config 4", the table 0x5ccb38). */
+static const char *config_name(int config) { return exe_str(exe_u32(0x5ccb38 + 4 * (uint32_t)config)); }
+
+/* Both files' records, then the one for the screen: its choices' +0x28, +0x2c the screen's size and its
+   name the layout's. 0x41f7c0 */
+static bool load_layouts(const char *player, int config)
 {
     free(looks);
     free(choices);
     looks = choices = NULL;
+    nconfigs = 0;
     size_t n = 0, m = 0;
-    looks = read_file(player, "1.hud", "XXhud1XX.hud", &n);
+    char used[200];
+    looks = read_file(player, "1.hud", "XXhud1XX.hud", &n, used, sizeof used);
     if (!looks) return false;
     nconfigs = (int)(n / LOOK);
-    choices = read_file(player, "2.hud", "XXhud2XX.hud", &m);
+    choices = read_file(player, "2.hud", "XXhud2XX.hud", &m, used, sizeof used);
     if (!choices || (int)(m / CHOICE) < nconfigs) return false;
-    to_pixels();
-    return true;
+    for (int i = 0; i < nconfigs; i++) {
+        const uint8_t *c = choices + CHOICE * i;
+        if (rd32(c + 0x28) != screen_w || rd32(c + 0x2c) != screen_h) continue;
+        if (strcmp((const char *)looks + LOOK * i, config_name(config))) continue;
+        current = i;
+        to_pixels();
+        return true;
+    }
+    return false;
+}
+
+/* A place made for the screen from its place on 640 x 480 (0x41e4a0): above 640 wide, a box across the
+   middle is centred, one right of it keeps its distance from the right edge, one below the middle (y
+   over 240) from the bottom; then kept on the screen. */
+static void fit(int32_t *px, int32_t *py, int32_t w, int32_t h)
+{
+    int32_t x = *px, y = *py;
+    if (0x280 < screen_w) {
+        bool down = false;
+        if (x < 0x140 && 0x140 < x + w) {
+            x = screen_w / 2 - w / 2;
+            down = 0xf0 < y;
+        } else if (x <= 0x140) {
+            down = 0xf0 < y;
+        } else if (y <= 0xf0) {
+            x = screen_w - 0x280 + x;
+        } else {
+            x = screen_w - 0x280 + x;
+            down = true;
+        }
+        if (down) y = screen_h - 0x1e0 + y;
+    }
+    if (screen_w < x + w) x = screen_w - w;
+    if (screen_h < h + y) y = screen_h - h;
+    *px = x, *py = y;
+}
+
+/* A fraction pair at f for the screen, by the box size at sz (0x41f010's steps). */
+static void refit(uint8_t *f, const uint8_t *sz)
+{
+    int32_t x = (int32_t)((double)rdf(f) * 640.0), y = (int32_t)((double)rdf(f + 4) * 480.0);   /* 0x5b2a8c, 0x5b2a88 */
+    fit(&x, &y, rd32(sz), rd32(sz + 4));
+    float v[2] = {(float)((double)x / (double)screen_w), (float)((double)y / (double)screen_h)};
+    memcpy(f, v, 8);
+}
+
+/* The places of a new layout record from 640 x 480 to the screen: the look's eleven (the first one twice,
+   as the original), then the choices' two. 0x41f010 */
+static void refit_layout(uint8_t *l, uint8_t *c)
+{
+    static const uint16_t sizes[10] = {0x94, 0x9c, 0xa4, 0xac, 0xb4, 0xbc, 0xc4, 0xd4, 0xe4, 0xf4};
+    for (int k = 0; k < 10; k++) refit(l + 0x188 + 8 * k, l + sizes[k]);
+    refit(l + 0x188, l + 0x94);
+    refit(l + 0x1d8, l + 0xfc);
+    refit(c + 0xc, c);
+    refit(c + 0x20, c + 0x14);
+}
+
+/* No record for the screen (0x41ec10, also the HUD editor's new layout): both files (the player's, else
+   the defaults) get a copy of the layout's record at their end, named the layout's and for the screen's
+   size with its places fitted, and are written back whole (over the defaults when the player has none,
+   made writable first, 0x59df60). */
+static void add_layout(const char *player, int config)
+{
+    size_t n = 0, m = 0;
+    char f1[200], f2[200];
+    uint8_t *l = read_file(player, "1.hud", "XXhud1XX.hud", &n, f1, sizeof f1);
+    uint8_t *c = read_file(player, "2.hud", "XXhud2XX.hud", &m, f2, sizeof f2);
+    uint8_t *nl = l ? realloc(l, n + LOOK) : NULL, *nc = c ? realloc(c, m + CHOICE) : NULL;
+    if (!nl || !nc || (size_t)LOOK * (size_t)(config + 1) > n || (size_t)CHOICE * (size_t)(config + 1) > m) {
+        free(nl ? nl : l);
+        free(nc ? nc : c);
+        return;   /* (the original goes on with its record pointers unset) */
+    }
+    uint8_t *look = nl + n / LOOK * LOOK, *choice = nc + m / CHOICE * CHOICE;
+    memcpy(look, nl + LOOK * config, LOOK);
+    snprintf((char *)look, LOOK, "%s", config_name(config));
+    memcpy(choice, nc + CHOICE * config, CHOICE);
+    memcpy(choice + 0x28, &screen_w, 4);
+    memcpy(choice + 0x2c, &screen_h, 4);
+    refit_layout(look, choice);
+    plat_save_user_file(f1, nl, n + LOOK);
+    plat_save_user_file(f2, nc, m + CHOICE);
+    free(nl);
+    free(nc);
 }
 
 void HudConfig_Load(const char *player, int config, int w, int h)
 {
-    screen_w = w, screen_h = h;
-    (void)config;   /* 0x60c958: the record the defaults copy (0x41ec10, the HUD editor's) */
+    screen_w = w, screen_h = h;   /* 0x60c900, 0x60c81c; the layout 0x60c958 */
     if (loads == 0) {
         current = 0;
         char path[300];
@@ -92,8 +182,11 @@ void HudConfig_Load(const char *player, int config, int w, int h)
         size_t n = 0;
         loc = vfs_read_all(path, &n);
         if (loc) LOC_setlanguage(loc, 0, 0);   /* (Options_Language: English) */
-        if (!load_layouts(player ? player : ""))
-            PENDING_NOTE(0x41ec10, "the HUD layouts' defaults, written when the files don't load");
+        if (!player) player = "";
+        if (!load_layouts(player, config)) {
+            add_layout(player, config);
+            load_layouts(player, config);
+        }
     }
     loads++;
 }

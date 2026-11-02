@@ -4310,7 +4310,7 @@ void HUD_Init(void)
     if (s_file_replay) Music_Play(NULL, 0);
     /* The player's name (the race description's +0x558 +0x17c), the layout chosen (0x657db8), the
        screen. */
-    HudConfig_Load(g_race_player, 0, g_display.width, g_display.height);
+    HudConfig_Load(g_race_player, g_hud_layout, g_display.width, g_display.height);
     always = true;  /* (HUD_LoadStrings 0x41e190 sets 0x60c970) */
     add(gear_new(), true, false);
     add(speed_new(), true, false);

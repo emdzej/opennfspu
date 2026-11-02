@@ -44,6 +44,7 @@ typedef struct {
 extern HudDials g_hud_dials;
 extern int32_t g_hud_damage_display;   /* 0x657dc8: DAMAGEDISPLAY (3 the parts' percentages, else bars) */
 extern int32_t g_hud_splits;     /* 0x657dd8: SPLITTIMES (1 the record, 2 the best lap, 3 the last) */
+extern int32_t g_hud_layout;     /* 0x657db8: SCREENLAYOUT (the layout, "Config 1" .. "Config 4") */
 extern int32_t g_hud_imperial;   /* 0x657dc0: miles (the front end's Display_SpeedUnits) */
 
 /* The localised strings and the layouts for the player (HUD_LoadStrings 0x41e190, counted: only the
