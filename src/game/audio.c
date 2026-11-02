@@ -1731,7 +1731,8 @@ static void engines_stop(void)
 }
 
 /* The sounds stopped with a pause (0x4aaf20): the one-shot's plays silenced (0x4af6d0(0, 0); its
-   second pair at 0x656ae8, 0x4af590's, isn't ported), every slot's play at volume 0, the music cut, the
+   second pair at 0x656ae8, 0x4af590's bank 2 patches 0xa1.., plays only for a request whose +0x1f is
+   set, which none is: 0x4af6a0's defaults leave it 0), every slot's play at volume 0, the music cut, the
    reverb's send off and the engines' voices stopped (0x4ad2e0: their snapshots dropped, the start and
    stop sounds and both voices of each layer stopped, the layers' eased volumes 0). The original then
    puts back the options' copies 0x657ca0.. (0x5d1740 .. 0x5d1750) that the resume took: the port's
@@ -1783,7 +1784,7 @@ void Audio_Resume(void)
 
 /* The one-shots' stream stopped (0x4afb00): the requests waiting dropped (the original marks them
    skipped and waits for its file thread to drain them), both plays stopped (the second pair at
-   0x656ae8 isn't ported, see Audio_Pause). */
+   0x656ae8 never plays, see Audio_Pause). */
 static void stream_stop(void)
 {
     s_req_rd = s_req_wr = 0;
