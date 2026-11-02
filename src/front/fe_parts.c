@@ -7,6 +7,8 @@
 #include "real/shape.h"
 #include "real/window.h"
 #include "render/render.h"
+#include "app.h"
+#include "support/crt.h"
 #include "vfs.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -607,6 +609,137 @@ void FEStyle_Glow(float x, float y, float w, float h, int a, int b)
     quad4(x + w, y0 + fb, in, xr, y0, out, x + w, yb - fb, in, xr, yb, out);       /* right */
 }
 
+/* TIMER_ticks (0x53c050), 128 a second, on the port's clock. */
+static uint32_t timer_ticks(void) { return (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u); }
+
+void FEGlint_Init(FEGlint *g, uint32_t colour, int w, int h, int mode)
+{
+    g->w = w, g->h = h, g->mode = mode, g->colour = colour;
+    g->active = false;
+    g->start = timer_ticks();
+    g->dur = 0;
+    g->cur = 0;
+}
+
+/* The glint (0x51f660): a run lasts 64 + rand() % 32 ticks once allowed after the last wait, then a wait
+   of 256 + rand() % 256. During a run a streak len long (the least of (w + h) / 5, w - 1 and h - 1) runs
+   round a corner: along a vertical edge for h, then along the bottom or top, while its twin runs along
+   a horizontal edge for w, then down or up the other side; mode 1 from the top left, 2 the top right,
+   3 the bottom left, 4 the bottom right. Each streak fades from transparent at its tail to the colour
+   0xddffffff at its head (0x4d8300 by its length out of len), split where it turns the corner. (Where the
+   tail is still on the edge the original mixes from the length itself taken as a colour: next to
+   transparent black; kept.) */
+void FEGlint_Draw(FEGlint *g, int px, int py, int a, bool allow)
+{
+    if (plain()) return;
+    FE2D_Frame((float)px, (float)py, (float)g->w, (float)g->h, fade(g->colour, a));   /* 0x4d8cb0 */
+    if (!g->mode) return;
+    uint32_t t = timer_ticks();
+    if (!g->active) {
+        if ((int)(t - g->start) <= g->dur || !allow) return;
+        g->active = true;
+        g->start = t;
+        g->dur = CRT_rand() % 32 + 0x40;
+        g->cur = g->mode == 5 ? CRT_rand() % 4 + 1 : g->mode;
+        return;
+    }
+    if (g->dur < (int)(t - g->start)) {
+        g->active = false;
+        g->start = t;
+        g->dur = CRT_rand() % 256 + 0x100;
+    }
+    if (!g->active) return;
+    int W = g->w, H = g->h, L = W + H;
+    int len = L / 5;
+    if (W - 1 <= len) len = W - 1;
+    if (H - 1 < len) len = H - 1;
+    if (len <= 0) return;   /* (the original divides by it) */
+    int head = ((len + L) * (int)(t - g->start)) / g->dur - len;
+    uint32_t C = fade(0xddffffffu, a);   /* 0x4d82a0 */
+
+    /* the vertical streak and its turn along the far horizontal edge */
+    int v = head, seg, turn;
+    uint32_t top, bottom, tc0, tc1;
+    if (H < v) {
+        seg = 0;
+        turn = L - v < len ? L - v : len;
+        goto mix_v;
+    } else if (len + v < H) {
+        if (v < 0) {
+            seg = len + v;
+            v = 0;
+        } else {
+            seg = len;
+        }
+        turn = 0;
+    mix_v:
+        top = FE2D_Mix((uint32_t)seg, C, 0xff - seg * 0xff / len);
+        bottom = C;
+        tc0 = 0xffffff;
+        tc1 = FE2D_Mix(0xffffffu, C, turn * 0xff / len);
+    } else {
+        seg = H - v;
+        turn = len - seg;
+        top = 0xffffff;
+        bottom = FE2D_Mix(0xffffffu, C, seg * 0xff / len);
+        tc0 = bottom;
+        tc1 = C;
+    }
+    if (v < H) {
+        float x = (float)(g->cur == 2 || g->cur == 4 ? px - 1 + W : px);
+        float y = (float)(g->cur <= 2 ? py + v : py - v + H), hh = (float)(g->cur <= 2 ? seg : -seg);
+        if (1 <= g->cur && g->cur <= 4) FE2D_Gouraud(x, y, 1.0f, hh, top, top, bottom, bottom);   /* 0x4d9160 */
+    }
+    if (H <= len + v && 1 <= g->cur && g->cur <= 4) {
+        int off = v - H < 0 ? 0 : v - H;
+        bool right = g->cur == 2 || g->cur == 4;
+        float x = (float)(right ? px - off + W : px + off), w = (float)(right ? -turn : turn);
+        float y = (float)(g->cur <= 2 ? py - 1 + H : py);
+        FE2D_Gouraud(x, y, w, 1.0f, tc0, tc1, tc0, tc1);
+    }
+
+    /* the horizontal streak and its turn down (or up) the far vertical edge */
+    int u = head, hseg;
+    uint32_t left, right_c, ec0, ec1 = C;
+    if (W < u) {
+        hseg = 0;
+        turn = L - u < len ? L - u : len;
+        goto mix_h;
+    } else if (u + len < W) {
+        if (u < 0) {
+            hseg = u + len;
+            u = 0;
+        } else {
+            hseg = len;
+        }
+        turn = 0;
+    mix_h:
+        left = FE2D_Mix((uint32_t)hseg, C, 0xff - hseg * 0xff / len);
+        right_c = C;
+        ec0 = 0xffffff;
+        ec1 = FE2D_Mix(0xffffffu, C, turn * 0xff / len);
+    } else {
+        hseg = W - u;
+        turn = len - hseg;
+        left = 0xffffff;
+        right_c = FE2D_Mix(0xffffffu, C, hseg * 0xff / len);
+        ec0 = right_c;
+    }
+    if (u < W && 1 <= g->cur && g->cur <= 4) {
+        bool right = g->cur == 2 || g->cur == 4;
+        float x = (float)(right ? W - u + px : px + u), w = (float)(right ? -hseg : hseg);
+        float y = (float)(g->cur <= 2 ? py : py - 1 + H);
+        FE2D_Gouraud(x, y, w, 1.0f, left, right_c, left, right_c);
+    }
+    if (W <= len + u && 1 <= g->cur && g->cur <= 4) {
+        int off = u - W < 0 ? 0 : u - W;
+        bool right = g->cur == 2 || g->cur == 4;   /* (its far edge: the left one) */
+        float x = (float)(right ? px : W - 1 + px);
+        float y = (float)(g->cur <= 2 ? py + off : py - off + H), hh = (float)(g->cur <= 2 ? turn : -turn);
+        FE2D_Gouraud(x, y, 1.0f, hh, ec0, ec0, ec1, ec1);
+    }
+}
+
 static int data_int(const FertControl *c, const char *name, int def)
 {
     for (int k = 0; k < c->nparts; k++) {
@@ -614,6 +747,37 @@ static int data_int(const FertControl *c, const char *name, int def)
         if (a) return a->type == FATTR_INT ? FertAttr_int(a) : atoi(FertAttr_str(a));
     }
     return def;
+}
+
+/* The GoTo buttons' glints (FEGoToButton_v21 0x4c8b10: a glinty box of data.width by data.height in
+   black, its mode data.glintybox; +0x160 the button seen), one a button, the least lately drawn given
+   up for a new one. */
+typedef struct {
+    const FertControl *c;
+    FEGlint g;
+    bool seen;
+    uint32_t used;
+} GoToGlint;
+static GoToGlint s_goto_glint[64];
+static uint32_t s_goto_frame;
+
+static GoToGlint *goto_glint(const FertControl *c, int mode)
+{
+    s_goto_frame++;
+    GoToGlint *e = NULL, *old = &s_goto_glint[0];
+    for (int i = 0; i < 64 && !e; i++) {
+        if (s_goto_glint[i].c == c && s_goto_glint[i].g.mode == mode) e = &s_goto_glint[i];
+        if (s_goto_glint[i].used < old->used) old = &s_goto_glint[i];
+    }
+    if (!e) {
+        e = old;
+        e->c = c;
+        e->seen = false;
+        FEGlint_Init(&e->g, 0xff000000u, data_int(c, "width", 0), data_int(c, "height", 0), mode);
+        e->g.start--;   /* (made with the layout, before its first draw) */
+    }
+    e->used = s_goto_frame;
+    return e;
 }
 
 /* A GoTo button (FEGoToButton_v15 0x4c8ba0): the gradient, its parts, the drop shadow or the hovered
@@ -643,11 +807,25 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
         FE2D_Frame(x, y, w, h, (uint32_t)a << 24 | 0xffffffu);
         return;
     }
-    if (data_int(c, "glintybox", -1) == -1) return;   /* (+0x150: the glint, with its stems) */
+    int mode = data_int(c, "glintybox", -1);
+    if (mode == -1) return;   /* (+0x150: the glint, with its stems) */
     uint32_t k = (uint32_t)a << 24;
     FE2D_Rect(x, y, 1.0f, (float)(data_int(c, "stemleftheight", 0) + (r[3] - r[1])), k);
     FE2D_Rect(x + w, y, 1.0f, (float)(data_int(c, "stemrightheight", 0) + (r[3] - r[1])), k);
-    /* (the glint sweeping along the bar, 0x51f660: pending) */
+    GoToGlint *gg = goto_glint(c, mode);
+    if (!gg) return;
+    /* +0x160, seen: set when disabled, or once its transition is over (0x4c83f0: the port has none);
+       a run may start then, and later only while hovered, pressed or focused (0x4c7860, 0x4c7920,
+       0x4c79a0); never while disabled (0x4c7a10) */
+    bool disabled_now = (c->feflags & 0x10) != 0, allow;
+    if (disabled_now) gg->seen = true;
+    if (!gg->seen) {
+        gg->seen = true;
+        allow = true;
+    } else {
+        allow = (c->feflags & (4 | 8 | 0x40)) != 0;
+    }
+    FEGlint_Draw(&gg->g, (int)x, (int)y, a, allow && !disabled_now);
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name)

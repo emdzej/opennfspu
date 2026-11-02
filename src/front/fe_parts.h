@@ -66,3 +66,17 @@ void FEStyle_Range(int p0, int p1, int x0, int y0, int x1, int y1, uint32_t c0, 
 void FEStyle_Emboss(float x, float y, float w, float h, int a, int b);
 /* A glow b pixels out round a box (0x5213e0): white at it, half white at the outside. */
 void FEStyle_Glow(float x, float y, float w, float h, int a, int b);
+
+/* The glinty box (0x20 bytes, made by 0x51f620): a box's one-pixel frame with, for a mode 1 .. 4 (5 one of
+   them at random each time), a glint running round it. */
+typedef struct {
+    int w, h, mode;          /* +0, +4, +8 */
+    uint32_t colour;         /* +0xc: the frame's */
+    bool active;             /* +0x10 */
+    uint32_t start;          /* +0x14: TIMER_ticks */
+    int dur;                 /* +0x18 */
+    int cur;                 /* +0x1c: this run's mode */
+} FEGlint;
+void FEGlint_Init(FEGlint *g, uint32_t colour, int w, int h, int mode);   /* 0x51f620 */
+/* At (x, y) at fade a; allow: a new run may start (0x51f660). */
+void FEGlint_Draw(FEGlint *g, int x, int y, int a, bool allow);
