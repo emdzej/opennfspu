@@ -1,4 +1,5 @@
 /* A race car's hits and its return to the road (see car_respawn.h). */
+#include "game/car_collide.h"
 #include "game/input.h"
 #include "game/camera.h"
 #include "game/car_respawn.h"
@@ -129,12 +130,13 @@ static void race_part(Car *c)
     if (*CAR_I(c, 0x1108) != 0 && c->b[0x7e] == 0) *CAR_I(c, 0x1108) = 0;
     if (*CAR_F(c, 0x430) != K(0x5b23f8)) {
         if (*CAR_I(c, 0x434) == 0 && K(0x5b2730) < *CAR_F(c, 0x430)) {
-            if (*CAR_I(c, CAR_FLAGS) & 1) PENDING_NOTE(0x493d40, "the player's hit feedback");
+            if (*CAR_I(c, CAR_FLAGS) & 1) Car_HitSpeeds(c);   /* 0x493d40 */
             *CAR_I(c, 0x1104) = 1;
             for (int w = 0; w < 4; w++) *CAR_I(c, 0x870 + 0xc4 * w) = 0;
             if (*CAR_I(c, 0x1100) < 1) *CAR_I(c, 0x1100) = 0xc0;
         }
-        PENDING_NOTE(0x412250, "the player's force feedback (0x412250)");
+        /* 0x412250: the hit's jolt on a force-feedback wheel (its angle about the car, its strength),
+           only with such a device (0x5e940c): gasm has none. */
         if (K(0x5b246c) < *CAR_F(c, 0x430)) {
             /* The hit's sound event: its kind by the hit's type (0x5cc518), the surface by the type
                (0x5cc4d8 the walls', 0x5cc534 the objects'), the strength scaled (half for objects). */

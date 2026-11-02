@@ -112,5 +112,6 @@ void Race_Restart(int32_t start)
     if (g_track_name[0]) Sky_LoadFsh(g_track_name, true);
     Weather_Restart();
     if (g_race_local < g_ncars) Headlights_SetCar(g_cars[g_race_local]);
-    PENDING_NOTE(0x412170, "the force feedback's car (0x533090)");
+    /* 0x412170: the force feedback's car and its effects restarted (0x533090), only with a
+       force-feedback device (0x5e940c): gasm has none, so never. */
 }

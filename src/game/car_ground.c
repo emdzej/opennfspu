@@ -1,4 +1,5 @@
 /* The cars' contact with the ground (see car_ground.h). */
+#include "game/car_collide.h"
 #include "game/car_ground.h"
 #include "game/race_car.h"
 #include "game/car_impulse.h"
@@ -564,7 +565,7 @@ void CarSim_Forces(void *car)
             }
         } else if (lowest < K(0x5b4a18)) {
             /* A hard landing: out of the ground and bounced by the surface. */
-            if (flags & 1) PENDING_NOTE(0x493d40, "the human car's landing (0x493d40)");
+            if (flags & 1) Car_HitSpeeds(c);   /* 0x493d40 */
             Car_AddEvent(c, 1, -1, 0, 5, rel, 0);   /* 0x40f080: the landing's sound */
             float pen = K(0x5b4a18) - lowest;
             uint32_t m = 0xbd4ccccdu;

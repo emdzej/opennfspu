@@ -32,6 +32,17 @@ static float dot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * 
 /* The edge's last surface flag (0x628c88), the wall sound's choice. */
 static uint32_t g_wall_flag;
 
+
+/* The car's side and forward speeds again along +0x490 and +0x4a8, the wheels' +0x870 words and
+   +0xdb8, +0xdc0 cleared: a human car after a hit or a hard landing. 0x493d40 */
+void Car_HitSpeeds(Car *c)
+{
+    *CAR_F(c, 0xd58) = dot3(CAR_F(c, 0x33c), CAR_F(c, 0x490));
+    *CAR_F(c, 0xd60) = dot3(CAR_F(c, 0x33c), CAR_F(c, 0x4a8));
+    *CAR_I(c, 0xdc0) = 0;
+    for (int w = 0; w < 4; w++) *CAR_I(c, 0x870 + 0xc4 * w) = 0;
+    *CAR_I(c, 0xdb8) = 0;
+}
 /* The car's speed in its frame after a hit (velocity damped by 0x3f7f7cee). 0x493db0 */
 static void after_hit(Car *c)
 {
@@ -42,7 +53,7 @@ static void after_hit(Car *c)
     *CAR_F(c, 0xd60) = dot3(v, CAR_F(c, 0x37c));
     float az = fabsf(v[2]), ax = fabsf(v[0]);
     *CAR_F(c, 0x35c) = ax <= az ? ax * K(0x5b2468) + az : az * K(0x5b2468) + ax;
-    if (*CAR_I(c, CAR_FLAGS) & 4) PENDING_NOTE(0x493d40, "the human car's hit effects (0x493d40)");
+    if (*CAR_I(c, CAR_FLAGS) & 4) Car_HitSpeeds(c);   /* 0x493d40 */
 }
 
 /* Slow glancing hits turn the car along the wall (its yaw +0x38c). 0x493e80 */

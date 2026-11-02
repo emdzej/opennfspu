@@ -15,3 +15,6 @@ void CarSim_Objects(Car *c);
 void CarSim_Collide(void *car);
 /* Empties the list of the cars checked against each other (0x628f5c = 0 in Sim_ClearContacts). */
 void CarSim_ClearCollided(void);
+
+/* A human car's speeds after a hit or a hard landing (0x493d40). */
+void Car_HitSpeeds(Car *c);
