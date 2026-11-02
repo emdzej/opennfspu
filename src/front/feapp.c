@@ -2483,6 +2483,25 @@ static bool factory_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* The victory message's map (FEPrizeCarMapControl, vtable 0x5b8880): its shape the era's map (v21
+   0x505a80: FEData\TrackArt\ mclass, mgold or mmod .fsh by 0x503db0's era 0x209, 0x20a, 0x20b; shape 0),
+   drawn at its place in white at the control's fade (v15 0x505b40: 0x4d8280 of 0x4c8410). */
+static bool prizemap_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    static const uint32_t names[3] = {0x5db974, 0x5db97c, 0x5db984};   /* "mclass", "mgold", "mmod" */
+    char path[300];
+    snprintf(path, sizeof path, "FEData\\TrackArt\\%s.fsh", exe_str(names[FEData_RaceEra()]));   /* ("%s%s.fsh" 0x5cccc8, 0x65b350) */
+    FEShapes_Load(path);   /* FE_ValidateShapes */
+    FeImage *img = FEShapes_Image(path, 0);   /* 0x4d74e0 */
+    if (!img) return true;
+    int32_t pos[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, pos);
+    FE2D_Image(img, (float)(pos[0] + ox), (float)(pos[1] + oy), (float)img->w, (float)img->h, 0xffffffffu, 0, false);   /* 0x4d95a0 */
+    return true;
+}
+
 /* The gouraud bar (0x521530) from..to per cent of w: up to 50 c0 to c50, past it c50 to c100 (without
    c100: c0, their half-way mix, c50), each half's end colour by how far it reaches; going left the first
    half's start colour by how far it starts in. Its drop shadow (0x520780) at 3, 4, going left from its
@@ -2536,6 +2555,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (FECtrl_Draw(c, ox, oy)) return true;
     if (FEShowcase_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.PRIZERACEMAP")) return prizemap_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH") || !strcmp(c->id, "NFS5.WORDWRAPCONTROL")) return wordwrap_draw(c, ox, oy);
