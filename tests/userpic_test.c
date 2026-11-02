@@ -1,4 +1,4 @@
-/* The player's own picture decoders (front/feuserpic.c): small BMP, TGA, PCX and JPEG files made here, read
+/* The player's own picture decoders (front/feuserpic.c): small BMP, TGA, PCX, TIFF and JPEG files made here, read
    back pixel for pixel. Needs no game data. */
 #include "front/feuserpic.h"
 #include <stdio.h>
@@ -74,6 +74,32 @@ int main(void)
             }
     check("pcx", pcx, p, ".pcx");
 
+    /* a big-endian TIFF, RGB in one PackBits strip (each row one literal run), its IFD after the strip */
+    uint8_t tif[8 + H * (1 + 3 * W) + 2 + 9 * 12 + 4 + 6] = {'M', 'M', 0, 42};
+    p = 8;
+    for (int y = 0; y < H; y++) {
+        tif[p++] = 3 * W - 1;
+        for (int x = 0; x < W; x++) colour(x, y, tif + p), p += 3;
+    }
+    size_t strip = p - 8, bps = p;
+    tif[p++] = 0, tif[p++] = 8, tif[p++] = 0, tif[p++] = 8, tif[p++] = 0, tif[p++] = 8;
+    size_t ifd = p;
+    tif[6] = (uint8_t)(ifd >> 8), tif[7] = (uint8_t)ifd;
+    static const uint16_t tags[9][3] = {{256, 3, W}, {257, 3, H}, {258, 3, 0}, {259, 3, 32773}, {262, 3, 2},
+                                        {273, 4, 8}, {277, 3, 3}, {278, 3, H}, {279, 4, 0}};
+    tif[p++] = 0, tif[p++] = 9;
+    for (int i = 0; i < 9; i++) {
+        uint32_t v = i == 2 ? (uint32_t)bps : i == 8 ? (uint32_t)strip : tags[i][2];
+        uint8_t *e = tif + p;
+        e[0] = (uint8_t)(tags[i][0] >> 8), e[1] = (uint8_t)tags[i][0], e[3] = (uint8_t)tags[i][1];
+        e[7] = i == 2 ? 3 : 1;
+        if (tags[i][1] == 3 && i != 2) e[8] = (uint8_t)(v >> 8), e[9] = (uint8_t)v;
+        else e[10] = (uint8_t)(v >> 8), e[11] = (uint8_t)v;
+        p += 12;
+    }
+    p += 4;
+    check("tif", tif, p, ".tif");
+
     /* a grey baseline JPEG, 16 x 8: two blocks, flat 64 and 192 (DC only, quantiser 1). The DC table
        codes category 10 as 00 and 11 as 01; the AC table only EOB, as 0 */
     static const uint8_t head[] = {
@@ -95,6 +121,24 @@ int main(void)
         if (rgb[i] != (i / 3 % 16 < 8 ? 64 : 192)) bad++;
     CHECK(bad == 0);
     printf("jpg: %s\n", ok && !bad ? "ok" : "bad");
+    free(rgb);
+
+    /* the same picture progressive: its quantiser, then a DC scan of the top bits (Al 1: -256, +512 in
+       categories 9 and 10), the DC's last bits (both 0) and an AC scan of two end-of-blocks */
+    static const uint8_t prog[] = {
+        0xff, 0xc2, 0, 11, 8, 0, 8, 0, 16, 1, 1, 0x11, 0, 0xff, 0xc4, 0, 21, 0x00, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 9, 10, 0xff, 0xc4, 0, 20, 0x10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0xff, 0xda, 0,
+        8, 1, 1, 0x00, 0, 0, 0x01, 0x1f, 0xec, 0x01, 0xff, 0xda, 0, 8, 1, 1, 0x00, 0, 0, 0x10, 0x3f, 0xff, 0xda, 0, 8,
+        1, 1, 0x00, 1, 63, 0x00, 0x3f, 0xff, 0xd9};
+    uint8_t pjpg[71 + sizeof prog];
+    memcpy(pjpg, head, 71), memcpy(pjpg + 71, prog, sizeof prog);
+    ok = FEUserPic_Decode(pjpg, sizeof pjpg, ".jpg", &w, &h, &rgb);
+    CHECK(ok && w == 16 && h == 8);
+    bad = 0;
+    for (int i = 0; ok && i < 16 * 8 * 3; i++)
+        if (rgb[i] != (i / 3 % 16 < 8 ? 64 : 192)) bad++;
+    CHECK(bad == 0);
+    printf("progressive jpg: %s\n", ok && !bad ? "ok" : "bad");
     free(rgb);
 
     CHECK(!FEUserPic_Decode(bmp, 10, ".bmp", &w, &h, &rgb));

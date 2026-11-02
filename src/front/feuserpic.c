@@ -4,8 +4,8 @@
    texture, as the front end's movie frames are (femovie.c), at the picture's own size. */
 #include "front/feuserpic.h"
 #include "front/fejpeg.h"
+#include "front/fetiff.h"
 #include "exe.h"
-#include "pending.h"
 #include "real/texture.h"
 #include "real/window.h"
 #include "render/render.h"
@@ -192,7 +192,7 @@ bool FEUserPic_Decode(const uint8_t *d, size_t n, const char *ext, int *w, int *
     if (!strcasecmp(ext, ".tga")) return tga(d, n, w, h, rgb);
     if (!strcasecmp(ext, ".pcx")) return pcx(d, n, w, h, rgb);
     if (!strcasecmp(ext, ".jpg")) return FEJpeg_Decode(d, n, w, h, rgb);
-    PENDING_NOTE(0x100010e0, "gimme.dll ConvertFile: a TIFF picture");
+    if (!strcasecmp(ext, ".tif")) return FETiff_Decode(d, n, w, h, rgb);
     return false;
 }
 

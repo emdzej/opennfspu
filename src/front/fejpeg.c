@@ -1,6 +1,8 @@
-/* Baseline JPEG for a player's own picture (gimme.dll's reader, see feuserpic.c): Huffman-coded
-   sequential DCT, 8-bit samples, one (grey) or three (YCbCr) components with any sampling factors up to
-   2 x 2, restart intervals. Progressive and arithmetic-coded files are refused. */
+/* JPEG for a player's own picture (gimme.dll's reader, IJG's libjpeg, see feuserpic.c): Huffman-coded
+   sequential or progressive DCT, 8-bit samples, one (grey) or three (YCbCr) components with sampling
+   factors up to 2 x 2, any number of scans, restart intervals. Arithmetic-coded and lossless files are
+   refused. libjpeg smooths the blocks of a progressive file whose AC bands never all arrive (a truncated
+   one); the port doesn't (pend). */
 #include "front/fejpeg.h"
 #include <math.h>
 #include <stdlib.h>
@@ -15,6 +17,8 @@ typedef struct {
 typedef struct {
     int id, h, v, tq, td, ta, pred;
     int bw, bh;            /* blocks across and down (whole MCUs) */
+    int cw, ch;            /* the blocks its own size covers (a one-component scan's) */
+    int16_t *coef;         /* bw * bh blocks of 64 coefficients, zigzag order */
     uint8_t *data;         /* bw * 8 by bh * 8 samples */
 } Comp;
 
@@ -28,6 +32,9 @@ typedef struct {
     Huff hd[4], ha[4];
     Comp c[3];
     int nc, width, height, hmax, vmax, restart;
+    int bw, bh;            /* the MCUs' blocks at the largest sampling */
+    bool progressive;
+    int ss, se, ah, al, eobrun;   /* the scan's band, its bits, the end-of-band run */
 } Jpeg;
 
 static const uint8_t zigzag[64] = {
@@ -92,29 +99,103 @@ static int decode(Jpeg *j, const Huff *h)
 
 static int extend(int v, int t) { return v < (1 << (t - 1)) ? v - (1 << t) + 1 : v; }
 
-/* one block's coefficients, dequantised, its inverse DCT into out (stride) */
-static bool block(Jpeg *j, Comp *c, uint8_t *out, int stride)
+/* One block's part of a scan into its coefficients (in zigzag order): a sequential block, or a progressive
+   scan's DC first / DC refinement / AC first / AC refinement pass (the spectral band Ss..Se, bit Al). */
+static bool block(Jpeg *j, Comp *c, int16_t *z)
 {
-    float coef[64] = {0};
-    int t = decode(j, &j->hd[c->td]);
-    if (t < 0 || t > 16) return false;
-    int diff = t ? extend(getbits(j, t), t) : 0;
-    c->pred += diff;
-    coef[0] = (float)(c->pred * j->q[c->tq][0]);
-    for (int k = 1; k < 64;) {
-        int rs = decode(j, &j->ha[c->ta]);
-        if (rs < 0) return false;
-        int r = rs >> 4, s = rs & 15;
-        if (s == 0) {
-            if (r != 15) break;
-            k += 16;
-            continue;
+    if (!j->progressive) {
+        int t = decode(j, &j->hd[c->td]);
+        if (t < 0 || t > 16) return false;
+        c->pred += t ? extend(getbits(j, t), t) : 0;
+        z[0] = (int16_t)c->pred;
+        for (int k = 1; k < 64;) {
+            int rs = decode(j, &j->ha[c->ta]);
+            if (rs < 0) return false;
+            int r = rs >> 4, s = rs & 15;
+            if (s == 0) {
+                if (r != 15) break;
+                k += 16;
+                continue;
+            }
+            k += r;
+            if (k > 63) return false;
+            z[k++] = (int16_t)extend(getbits(j, s), s);
         }
-        k += r;
-        if (k > 63) return false;
-        coef[zigzag[k]] = (float)(extend(getbits(j, s), s) * j->q[c->tq][k]);
-        k++;
+        return true;
     }
+    if (j->ss == 0) {   /* DC */
+        if (j->ah == 0) {
+            int t = decode(j, &j->hd[c->td]);
+            if (t < 0 || t > 16) return false;
+            c->pred += t ? extend(getbits(j, t), t) : 0;
+            z[0] = (int16_t)(c->pred * (1 << j->al));
+        } else if (getbit(j)) {
+            z[0] = (int16_t)(z[0] | 1 << j->al);
+        }
+        return true;
+    }
+    if (j->ah == 0) {   /* AC first */
+        if (j->eobrun > 0) {
+            j->eobrun--;
+            return true;
+        }
+        for (int k = j->ss; k <= j->se;) {
+            int rs = decode(j, &j->ha[c->ta]);
+            if (rs < 0) return false;
+            int r = rs >> 4, s = rs & 15;
+            if (s == 0) {
+                if (r < 15) {
+                    j->eobrun = (1 << r) - 1 + (r ? getbits(j, r) : 0);
+                    break;
+                }
+                k += 16;
+                continue;
+            }
+            k += r;
+            if (k > 63) return false;
+            z[k++] = (int16_t)(extend(getbits(j, s), s) * (1 << j->al));
+        }
+        return true;
+    }
+    /* AC refinement: a bit for each coefficient already nonzero, new ones of +-1 << Al among the zeros */
+    int bit = 1 << j->al, k = j->ss;
+    if (j->eobrun <= 0) {
+        do {
+            int rs = decode(j, &j->ha[c->ta]);
+            if (rs < 0) return false;
+            int r = rs >> 4, s = rs & 15;
+            if (s == 0) {
+                if (r < 15) {
+                    j->eobrun = (1 << r) - 1 + (r ? getbits(j, r) : 0);
+                    r = 64;   /* the rest of the block only refined */
+                }
+            } else {
+                s = getbit(j) ? bit : -bit;
+            }
+            while (k <= j->se) {
+                int16_t *p = &z[k++];
+                if (*p) {
+                    if (getbit(j) && !(*p & bit)) *p = (int16_t)(*p + (*p > 0 ? bit : -bit));
+                } else {
+                    if (r == 0) {
+                        *p = (int16_t)s;
+                        break;
+                    }
+                    r--;
+                }
+            }
+        } while (k <= j->se);
+    } else {
+        j->eobrun--;
+        for (; k <= j->se; k++)
+            if (z[k] && getbit(j) && !(z[k] & bit)) z[k] = (int16_t)(z[k] + (z[k] > 0 ? bit : -bit));
+    }
+    return true;
+}
+
+/* a block's coefficients dequantised and through the inverse DCT into out (stride) */
+static void idct(const Jpeg *j, const Comp *c, const int16_t *z, uint8_t *out, int stride)
+{
     static float cosv[8][8];
     static bool init;
     if (!init) {
@@ -122,7 +203,8 @@ static bool block(Jpeg *j, Comp *c, uint8_t *out, int stride)
             for (int u = 0; u < 8; u++) cosv[x][u] = (u ? 1.0f : 0.70710678f) * cosf((float)((2 * x + 1) * u) * 3.14159265f / 16.0f);
         init = true;
     }
-    float tmp[64];
+    float coef[64], tmp[64];
+    for (int k = 0; k < 64; k++) coef[zigzag[k]] = (float)(z[k] * j->q[c->tq][k]);
     for (int y = 0; y < 8; y++)
         for (int u = 0; u < 8; u++) {
             float s = 0;
@@ -136,44 +218,52 @@ static bool block(Jpeg *j, Comp *c, uint8_t *out, int stride)
             int v = (int)lrintf(s / 4.0f + 128.0f);
             out[y * stride + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
         }
-    return true;
 }
 
 static uint32_t be16(const uint8_t *p) { return (uint32_t)p[0] << 8 | p[1]; }
 
-static bool scan(Jpeg *j)
+static void restart(Jpeg *j, int *left)
 {
-    int mcux = (j->width + 8 * j->hmax - 1) / (8 * j->hmax), mcuy = (j->height + 8 * j->vmax - 1) / (8 * j->vmax);
-    for (int i = 0; i < j->nc; i++) {
-        Comp *c = &j->c[i];
-        c->bw = mcux * c->h;
-        c->bh = mcuy * c->v;
-        c->data = malloc((size_t)c->bw * 8 * (size_t)c->bh * 8);
-        if (!c->data) return false;
-        c->pred = 0;
+    if (!j->restart) return;
+    if (*left == 0) {
+        /* the RSTn marker: realign and reset the predictions and the band's end-of-block run */
+        j->bitcnt = 0;
+        j->marker = false;
+        while (j->p + 1 < j->n && !(j->d[j->p] == 0xff && j->d[j->p + 1] >= 0xd0 && j->d[j->p + 1] <= 0xd7)) j->p++;
+        j->p += 2;
+        for (int i = 0; i < j->nc; i++) j->c[i].pred = 0;
+        j->eobrun = 0;
+        *left = j->restart;
     }
+    (*left)--;
+}
+
+/* A scan of ns components (sc: their indices): one component's blocks in order (its own size), or the
+   interleaved MCUs */
+static bool scan(Jpeg *j, const int *sc, int ns)
+{
     int left = j->restart;
+    if (ns == 1) {
+        Comp *c = &j->c[sc[0]];
+        for (int by = 0; by < c->ch; by++)
+            for (int bx = 0; bx < c->cw; bx++) {
+                restart(j, &left);
+                if (!block(j, c, c->coef + ((size_t)by * (size_t)c->bw + (size_t)bx) * 64)) return false;
+            }
+        return true;
+    }
+    int mcux = j->bw / j->hmax, mcuy = j->bh / j->vmax;
     for (int my = 0; my < mcuy; my++)
         for (int mx = 0; mx < mcux; mx++) {
-            if (j->restart && left == 0) {
-                /* the RSTn marker: realign and reset the predictions */
-                j->bitcnt = 0;
-                j->marker = false;
-                while (j->p + 1 < j->n && !(j->d[j->p] == 0xff && j->d[j->p + 1] >= 0xd0 && j->d[j->p + 1] <= 0xd7)) j->p++;
-                j->p += 2;
-                for (int i = 0; i < j->nc; i++) j->c[i].pred = 0;
-                left = j->restart;
-            }
-            for (int i = 0; i < j->nc; i++) {
-                Comp *c = &j->c[i];
-                int stride = c->bw * 8;
+            restart(j, &left);
+            for (int i = 0; i < ns; i++) {
+                Comp *c = &j->c[sc[i]];
                 for (int by = 0; by < c->v; by++)
                     for (int bx = 0; bx < c->h; bx++) {
-                        uint8_t *o = c->data + (size_t)((my * c->v + by) * 8) * (size_t)stride + (size_t)((mx * c->h + bx) * 8);
-                        if (!block(j, c, o, stride)) return false;
+                        size_t b = (size_t)(my * c->v + by) * (size_t)c->bw + (size_t)(mx * c->h + bx);
+                        if (!block(j, c, c->coef + b * 64)) return false;
                     }
             }
-            if (j->restart) left--;
         }
     return true;
 }
@@ -185,20 +275,21 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
     Jpeg *j = calloc(1, sizeof *j);
     if (!j) return false;
     j->d = d, j->n = n, j->p = 2;
-    bool ok = false, frame = false;
-    while (j->p + 4 <= n) {
+    bool ok = false, frame = false, scanned = false;
+    while (j->p + 2 <= n) {
         if (d[j->p] != 0xff) {
             j->p++;
             continue;
         }
         uint8_t m = d[j->p + 1];
-        if (m == 0xff) {
+        if (m == 0xff || m == 0x00) {
             j->p++;
             continue;
         }
         j->p += 2;
         if (m == 0xd8 || (m >= 0xd0 && m <= 0xd7) || m == 0x01) continue;
         if (m == 0xd9) break;
+        if (j->p + 2 > n) break;
         size_t len = be16(d + j->p), s = j->p + 2, e = j->p + len;
         if (len < 2 || e > n) break;
         if (m == 0xdb) {   /* quantisation tables */
@@ -221,10 +312,11 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
             }
         } else if (m == 0xdd) {
             j->restart = (int)be16(d + s);
-        } else if (m == 0xc0 || m == 0xc1) {   /* baseline / extended sequential, Huffman */
-            if (d[s] != 8) goto done;
+        } else if (m == 0xc0 || m == 0xc1 || m == 0xc2) {   /* sequential or progressive, Huffman */
+            if (frame || d[s] != 8) goto done;
+            j->progressive = m == 0xc2;
             j->height = (int)be16(d + s + 1), j->width = (int)be16(d + s + 3), j->nc = d[s + 5];
-            if (j->nc != 1 && j->nc != 3) goto done;
+            if ((j->nc != 1 && j->nc != 3) || !j->width || !j->height || j->width > 8192 || j->height > 8192) goto done;
             for (int i = 0; i < j->nc; i++) {
                 const uint8_t *q = d + s + 6 + 3 * i;
                 j->c[i] = (Comp){.id = q[0], .h = q[1] >> 4, .v = q[1] & 15, .tq = q[2] & 3};
@@ -232,22 +324,54 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
                 if (j->c[i].h > j->hmax) j->hmax = j->c[i].h;
                 if (j->c[i].v > j->vmax) j->vmax = j->c[i].v;
             }
-            frame = true;
-        } else if ((m >= 0xc2 && m <= 0xcf) && m != 0xc4 && m != 0xc8 && m != 0xcc) {
-            goto done;   /* progressive, lossless, arithmetic */
-        } else if (m == 0xda) {   /* the scan (one, interleaved) */
-            if (!frame || d[s] != j->nc) goto done;
+            int mcux = (j->width + 8 * j->hmax - 1) / (8 * j->hmax), mcuy = (j->height + 8 * j->vmax - 1) / (8 * j->vmax);
+            j->bw = mcux * j->hmax, j->bh = mcuy * j->vmax;
             for (int i = 0; i < j->nc; i++) {
-                int id = d[s + 1 + 2 * i], t = d[s + 2 + 2 * i];
-                for (int k = 0; k < j->nc; k++)
-                    if (j->c[k].id == id) j->c[k].td = t >> 4 & 3, j->c[k].ta = t & 3;
+                Comp *c = &j->c[i];
+                c->bw = mcux * c->h, c->bh = mcuy * c->v;
+                c->cw = ((j->width * c->h + j->hmax - 1) / j->hmax + 7) / 8;
+                c->ch = ((j->height * c->v + j->vmax - 1) / j->vmax + 7) / 8;
+                c->coef = calloc((size_t)c->bw * (size_t)c->bh, 64 * sizeof *c->coef);
+                if (!c->coef) goto done;
             }
+            frame = true;
+        } else if (m >= 0xc3 && m <= 0xcf && m != 0xc4 && m != 0xc8 && m != 0xcc) {
+            goto done;   /* lossless, hierarchical, arithmetic */
+        } else if (m == 0xda) {   /* a scan */
+            int ns = d[s], sc[3];
+            if (!frame || ns < 1 || ns > j->nc || s + 4 + 2 * (size_t)ns > e) goto done;
+            for (int i = 0; i < ns; i++) {
+                int id = d[s + 1 + 2 * i], t = d[s + 2 + 2 * i];
+                sc[i] = -1;
+                for (int k = 0; k < j->nc; k++)
+                    if (j->c[k].id == id) j->c[k].td = t >> 4 & 3, j->c[k].ta = t & 3, sc[i] = k;
+                if (sc[i] < 0) goto done;
+            }
+            const uint8_t *q = d + s + 1 + 2 * ns;
+            j->ss = q[0], j->se = q[1], j->ah = q[2] >> 4, j->al = q[2] & 15;
+            if (j->progressive && (j->se > 63 || j->ss > j->se || (j->ss == 0) != (j->se == 0) || (j->ss && ns != 1)))
+                goto done;
             j->p = e;
-            if (!scan(j)) goto done;
-            ok = true;
-            break;
+            j->bitcnt = 0, j->marker = false, j->eobrun = 0;
+            for (int i = 0; i < j->nc; i++) j->c[i].pred = 0;
+            if (!scan(j, sc, ns)) goto done;
+            scanned = true;
+            continue;   /* (the bit reader stopped at the next marker) */
         }
         j->p = e;
+    }
+    if (scanned) {
+        ok = true;
+        for (int i = 0; ok && i < j->nc; i++) {   /* the samples, every block of the padded MCUs */
+            Comp *c = &j->c[i];
+            int stride = c->bw * 8;
+            c->data = malloc((size_t)stride * (size_t)c->bh * 8);
+            if (!c->data) ok = false;
+            for (int by = 0; ok && by < c->bh; by++)
+                for (int bx = 0; bx < c->bw; bx++)
+                    idct(j, c, c->coef + ((size_t)by * (size_t)c->bw + (size_t)bx) * 64,
+                         c->data + (size_t)by * 8 * (size_t)stride + (size_t)bx * 8, stride);
+        }
     }
     if (ok) {
         int W = j->width, H = j->height;
@@ -274,7 +398,7 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
         *w = W, *h = H;
     }
 done:
-    for (int i = 0; i < 3; i++) free(j->c[i].data);
+    for (int i = 0; i < 3; i++) free(j->c[i].data), free(j->c[i].coef);
     free(j);
     if (!ok) {
         free(*rgb);
