@@ -6,6 +6,7 @@
 #include "exe.h"
 #include "game/track.h"
 #include "game/car.h"
+#include "game/race_car.h"
 #include "game/world.h"
 #include "game/track_pending.h"
 #include "pending.h"
@@ -636,13 +637,16 @@ void Scene_LoadStartScenes(const char *track, int reverse)
     build_line_triggers();
 }
 
-/* Scene_LoadSkillTest 0x46d280: <dir><track>_ST<test>.scn. A negative test is an error; test 0 is none:
-   the original sets the game type back to 0 (0x6573ec) unless the race is linear (0x657494), which is the
-   same error. The race options aren't ported, so the port takes test 0 as the non-linear case. */
+/* Scene_LoadSkillTest 0x46d280: <dir><track>_ST<test>.scn. Test 0 is none: on a looped race the game
+   type goes back to 0 (0x6573ec); on a linear one (0x657494) it is the error a negative test is. */
 void Scene_LoadSkillTest(const char *track, int test)
 {
+    if (test == 0 && !g_race_linear) {
+        g_race_type = 0;
+        return;
+    }
     if (test <= 0) {
-        if (test < 0) error_box(exe_str(0x5cfbe0));
+        error_box(exe_str(0x5cfbe0));
         return;
     }
     ensure_scene();
