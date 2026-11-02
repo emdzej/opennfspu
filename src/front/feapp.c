@@ -727,7 +727,11 @@ static bool player_callback(const char *cb)
         return false;
     }
     (void)in;
-    PENDING_NOTE(0x504b20, "the tournament accessor's refresh after the player screens");
+    FEData_TourRefresh();   /* (0x504b20, and its Game.GameType 5, 10 or 11 back to 4) */
+    if (s_gametype == 5 || s_gametype == 10 || s_gametype == 11) {
+        s_gametype = 4;
+        FEData_SetGameType(4);
+    }
     return true;
 }
 

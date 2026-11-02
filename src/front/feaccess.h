@@ -56,6 +56,10 @@ int FEData_CarSetting(const char *name);
 /* The car lists again (0x4f34c0): the dealer's cars of the career's year, the dealer's and the market's
    first chosen, the track lists. */
 void FEData_RefreshCars(void);
+/* The tournaments' choice again (0x504b20, after the player screens): the event types the career's era
+   opens (only the special events once every era is done), the tournament part run or the first not
+   completed, the first of its remaining races. */
+void FEData_TourRefresh(void);
 /* GenericCar.Car's nfs5.car record (the merged list's car past the owned ones), NULL on an owned car. */
 const uint8_t *FEData_GenericCar(void);
 /* The track a game type races a circuit (0x4fb4f0: its nfs5.trk record's +0x6e 1): quick race Track1,

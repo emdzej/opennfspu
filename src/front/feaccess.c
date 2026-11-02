@@ -458,6 +458,44 @@ static void tourny_list(int type)
     }
 }
 
+void FEData_TourRefresh(void)
+{
+    /* 0x504b20 */
+    int32_t head[7] = {0};
+    int n = 0;
+    const uint8_t *t = tour_section(head, &n);
+    FEAccessor *e = FEAccess_Find("Tournament.EventType");
+    if (head[6] && e && e->list != 0x5b81cc) {   /* (0x4fc750: every era done, the special events alone; its place kept) */
+        e->list = 0x5b81cc;
+        e->count = list_count(0x5b81cc);
+    }
+    /* 0x503b70: of the list shown, the first tournament part run (some of its races run, not all), else
+       the first not completed (+0xd3c 0), else the first */
+    tourny_list(e ? e->pos : 0);
+    int pick = 0;
+    bool found = false;
+    for (int k = 0; t && k < s_ntourny && !found; k++) {
+        const uint8_t *r = t + 0xd40 * s_tourny[k];
+        int races = rec16(r, 0x39c), open = 0;
+        for (int j = 0; j < races; j++) if (!r[0x3d0 + 0xa4 * j]) open++;
+        if (0 < open && open < races) pick = k, found = true;
+    }
+    for (int k = 0; t && k < s_ntourny && !found; k++)
+        if (rec16(t + 0xd40 * s_tourny[k], 0xd3c) == 0) pick = k, found = true;
+    FEAccessor *a = FEAccess_Find("Tournament.Tournament");
+    if (a) {
+        refresh(a);
+        a->pos = pick < a->count ? pick : 0;
+    }
+    /* 0x506170: the event types the era opens (0x209 one, 0x20a two, 0x20b three, else none) */
+    if (e) {
+        e->count = head[3] == 0x209 ? 1 : head[3] == 0x20a ? 2 : head[3] == 0x20b ? 3 : 0;
+        if (e->pos >= e->count) e->pos = 0;
+    }
+    FEAccessor *rt = FEAccess_Find("Tournament.RemainingTracks");
+    if (rt) rt->pos = 0;
+}
+
 static int s_remain[10], s_nremain;   /* 0x691e78: the tournament's races not run yet (their indices) */
 
 /* The races of the chosen tournament not run yet (0x504720): of its +0x39c races (at most 10, 0x502150),
