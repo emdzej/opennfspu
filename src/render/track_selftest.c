@@ -123,7 +123,7 @@ bool TRACK_selftest(const char *name)
         ready = true;
         if (!load(name)) { failed = true; return false; }
     }
-    /* The race frame (0x468900); the camera stays where it was put (its update, 0x461060, is pending). */
+    /* The race frame (0x468900); the camera stays where it was put (the viewer has no camera task). */
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     if (tm) TexManager_begin(tm);
     Render_Frame(&views);

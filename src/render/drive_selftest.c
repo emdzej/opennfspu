@@ -40,7 +40,7 @@
 #include "render/rtex.h"
 #include "render/sprite.h"
 #include "render/dynlight.h"
-#include "render/render_pending.h"
+#include "render/rworld.h"
 #include "render/rlayers.h"
 #include "render/rlists.h"
 #include "exe.h"

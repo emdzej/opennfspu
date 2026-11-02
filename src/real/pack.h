@@ -1,7 +1,7 @@
 /* EA real library packers: the codec dispatch in front of compressed files and RefPack, the one codec
    the game's data uses. A packed block starts with a type byte (bit 0: a 3-byte packed size follows the
    magic) and a magic byte 0xfb (0x32 for some types), then the 3-byte big-endian unpacked size. Types:
-   0x10 RefPack, 0x18 and 0x30/0x32/0x34 and 0x46 other EA codecs (none in the data: pending). */
+   0x10 RefPack, 0x18 and 0x30/0x32/0x34 and 0x46 other EA codecs (none in the data). */
 #pragma once
 #include <stdint.h>
 

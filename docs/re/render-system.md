@@ -2,7 +2,7 @@
 
 The game's render system (0x464000-0x469000) between the game and EAGL/THRASH: the driver choice, the
 graphics device, render states, cameras and views, and the race frame. Port: `src/render/render.c`,
-`render.h`; the render options in `render_options.c`. Pending calls are listed in `render_pending.h`.
+`render.h`; the render options in `render_options.c`. The world draw is `rworld.c`.
 
 ## Starting up
 

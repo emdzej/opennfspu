@@ -1,5 +1,5 @@
-/* The world draw of a view (0x468a20, Render_PendingWorld's port): the world's visible objects into the
-   render lists and the lists drawn, between the parts of the view that aren't ported (pending notes). */
+/* The world draw of a view (Render_World 0x468a20): the world's visible objects into the render lists
+   and the lists drawn. */
 #include "eagl/eagl.h"
 #include "game/track.h"
 #include "game/sim_math.h"
@@ -8,11 +8,10 @@
 #include "game/wtree.h"
 #include "game/world.h"
 #include "exe.h"
-#include "pending.h"
 #include "render/headlights.h"
 #include "render/rdraw.h"
 #include "render/render.h"
-#include "render/render_pending.h"
+#include "render/rworld.h"
 #include "render/rlists.h"
 #include "render/sky.h"
 #include "render/sprite.h"
@@ -251,7 +250,7 @@ static void world_pass(RCamera *c)
 
 void (*g_render_cars)(RCamera *c);
 
-void Render_PendingWorld(RCamera *c)
+void Render_World(RCamera *c)
 {
     Headlights_Update();     /* 0x452590 (each view: the original's 0x468a20 starts with it) */
     Sprite_CameraGround();   /* 0x451f70 */

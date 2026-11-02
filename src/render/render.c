@@ -18,7 +18,7 @@
 #include "platform.h"
 #include "pending.h"
 #include "real/real.h"
-#include "render/render_pending.h"
+#include "render/rworld.h"
 #include "render/r3dcar.h"
 #include "render/rlayers.h"
 #include "render/rmaterial.h"
@@ -727,7 +727,7 @@ void Render_MainViews(RaceViews *rv)
     c->clear = Sky_ClearColour(false);                   /* 0x459940, 0x466da0 */
     if (c->view) c->view->background = c->clear;
     View_Begin(g_render, c);
-    Render_PendingWorld(c);                              /* 0x468a20 */
+    Render_World(c);                                     /* 0x468a20 */
     View_End(g_render);
     RDraw_ClearVisited();                                /* 0x44fd70 */
 }
@@ -766,7 +766,7 @@ void Render_RearView(void)
     c->clear = Sky_ClearColour(true);                    /* 0x459940, 0x466da0 */
     if (c->view) c->view->background = c->clear;
     View_Begin(g_render, c);
-    Render_PendingWorld(c);                              /* 0x468a20 */
+    Render_World(c);                                     /* 0x468a20 */
     View_End(g_render);
     RDraw_ClearVisited();                                /* 0x44fd70 */
     g_racecam[0].flags2 &= (uint8_t)~0x10;
