@@ -1745,11 +1745,25 @@ static void map_draw(HudVisual *v)
     if (g_race_view == 2 || g_race_view == 3) return;
     if ((HudConfig_choicei32(0x40) == 0 && !(v->state == 1 || v->state == 2)) || v->state == 0) return;   /* 0x41e7d0 */
     if (!m->camera || !g_render) return;
-    PENDING_NOTE(0x4329c0, "the map's guard band off (EAGL context +0x117e4)");
+    /* The guard band off for the map: the context's flags but the driver's (from 0x20000) cleared, the
+       band's shift 0 and its scale 1. */
+    EaglContext *c = g_eagl;
+    c->flags &= 0xfffe0000u;
+    EAGL_SetGuardBand(0);
+    c->guardband = 1.0f;
     tray_draw(&m->tray);
     if (v->state == 3) {
         map_grid(m);
         map_world(m);
+    }
+    /* Then back on by the word at +0x117ec, which holds the draw's sort flag (cleared after every draw)
+       and its padding, not the band's shift: as in the original, the band stays off from then on. */
+    int32_t shift;
+    memcpy(&shift, &c->sort, 4);
+    if (shift != 0) {
+        c->flags |= EAGL_CF_GUARDBAND;
+        EAGL_SetGuardBand(shift);
+        c->guardband = (float)(1 << (shift & 0x1f));
     }
 }
 
