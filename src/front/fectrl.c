@@ -148,13 +148,16 @@ static CtrlInput from_binding(uint32_t b)
     return in;
 }
 
-/* The commit (slot 1, 0x51c480): an axis from 0x80 to 0x80 + 0x7f its way (the dead zone's accessors,
-   XAxis_Min .., pend), a button, a key's scan code, a hat's direction. */
+/* The commit (slot 1, 0x51c480): an axis from its dead zone's min to its max (XAxis_Min .., the device's,
+   0 and 0x80 at first: the panel's handles pend) each its way from 0x80, within 0 .. 0xff; a button, a
+   key's scan code, a hat's direction. */
 static uint32_t to_binding(const CtrlInput *in)
 {
     switch (in->type) {
     case 1: {
-        uint32_t lo = 0x80, hi = (uint32_t)(in->dir * 0x7f + 0x80);
+        int mn = 0, mx = 0x80;
+        int l = mn * in->dir + 0x80, h = mx * in->dir + 0x80;
+        uint32_t lo = (uint32_t)(l < 0 ? 0 : l), hi = (uint32_t)(h < 0x100 ? h : 0xff);
         return ((((uint32_t)in->dev << 4 | (uint32_t)in->idx) << 8 | lo) << 8 | hi) << 8 | 1;
     }
     case 2: return ((uint32_t)in->dev << 16 | (uint32_t)in->idx) << 8 | 2;

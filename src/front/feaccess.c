@@ -176,6 +176,19 @@ static void audio(void)
     add_list("Audio.Quality", 0x5b6c08, 0x5d61a0);
 }
 
+/* FEdaControllers' force feedback levels (0x51d8b0: FEIntAccessor 0x4b9ef0, 0 .. 100 from 50, options
+   0x89 .. 0x8d, FFTOTALVOLUME0 ..; the force feedback itself has no device in gasm). */
+static void force_feedback(void)
+{
+    static const struct { const char *name; uint32_t key; } ff[5] = {
+        {"FF.TotalVolume", 0x5d5d0c}, {"FF.RoadVolume", 0x5d5cfc}, {"FF.EngineVolume", 0x5d5cec},
+        {"FF.CollisionVolume", 0x5d5cd8}, {"FF.RoadGripVolume", 0x5d5cc4}};
+    for (int i = 0; i < 5; i++) {
+        FEAccessor *a = add(ff[i].name, ACC_INT, 101, 0, option(ff[i].key, 0x32));
+        if (a) a->key = ff[i].key;
+    }
+}
+
 
 /* The display data area (FEdaDisplay_v0 0x4e4610): the HUD's choices (options 0x5b .. 0x69). */
 static void display(void)
@@ -1423,6 +1436,7 @@ void FEData_Init(void)
        (0x4f3f10: a position below the first list's count is its) */
     add("zMergedList.Car", ACC_MERGED, s_ncars, 0, cp);
     audio();
+    force_feedback();
     setup();
     display();
     graphics();
