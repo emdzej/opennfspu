@@ -65,6 +65,7 @@ static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_shadowmap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_vertexlight(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_uvlight(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_vertexlight_ambient(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_falsesort1(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_falsesort2(EaglLayer *, EaglStream *, EaglStream *);
 
@@ -83,7 +84,7 @@ static const RLayerClass classes[] = {
     {0x800e, 1, 0x5b3c28, 1, true, false, 0x10, 0, 0x20, exec_transform, 0x448eb0, "RCustomLayers::LayerTransformCoords"},
     {0x800f, 0x8000, 0, 0, false, false, 0, 0, 0x20, exec_falsesort1, 0x4499c0, "RCustomLayers::LayerFalseSort1"},
     {0x8010, 0x8000, 0, 0, false, false, 0, 0, 0x20, exec_falsesort2, 0x449a10, "RCustomLayers::LayerFalseSort2"},
-    {0x8011, -1, 0, 0, true, false, 4, 0, 0, NULL, 0x453490, "Headlights::LayerVertexLight_Ambient"},
+    {0x8011, -1, 0x5b3d88, 2, true, false, 4, 0, 0, exec_vertexlight_ambient, 0x453490, "Headlights::LayerVertexLight_Ambient"},
     {0x8100, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_spectex, 0x445450, "R3DSpecularTextureLayer"},
     {0x8101, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_skymap, 0x445a40, "R3DSkyMapTextureLayer"},
     {0x8102, 3, 0x5b38c0, 3, false, true, 0, 0, 0, exec_shadowmap, 0x446060, "R3DShadowMapTextureLayer"},
@@ -832,26 +833,17 @@ static EaglLayer *exec_shadowmap(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     return l->next;
 }
 
-/* 0x452fe0 (Headlights::LayerVertexLight and _Opaque): the vertices' colours (dependency 0) with the
-   headlights' colour added by the light of their positions (dependency 2, through the index list of
-   dependency 1), each channel at most 255; without lights on the colours as they are; then the police
-   roof light's (0x452920). (The viewed car's lights, its R3DObject's +0x2d4 bytes 0 and 1, are taken as
-   on at night.) */
-static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+/* The vertex light (0x452fe0 and 0x453490): each vertex's colour, col[k] or the one ambient amb, with
+   the headlights' colour added by its light; without lights on the colours as they are. */
+static void vertexlight(const uint32_t *col, uint32_t amb, const uint8_t *idx, const float *pos, uint32_t npos, int stride)
 {
-    (void)s0, (void)s1;
     EaglContext *c = g_eagl;
-    if (!l->dep || l->ndeps < 3) dep_assert();
-    const uint32_t *col = dep_data(l, 0);
-    const uint8_t *idx = dep_present(l, 1) ? EAGL_LayerData(l->dep[1]) : NULL;
-    const float *pos = dep_data(l, 2);
-    uint32_t npos = dep_info(l, 2) >> 4;
-    int stride = (int)l->param, per = c->prim, n = c->nverts;
+    int per = c->prim, n = c->nverts;
     bool all = (c->flags & EAGL_CF_INSIDE) || per == 1;
     bool on = g_r3d_night != 0;
     uint8_t *o = c->verts + 0x10;
     g_headlight_lit = false;
-    if (on && col && pos) {
+    if (on && pos) {
         Headlights_Light((int)npos, pos, EAGL_StackTop(&c->view->model)->m);
         uint32_t hc = g_headlight_colour;
         uint32_t (*pc)[2] = c->primcodes;
@@ -863,7 +855,7 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
             } else {
                 for (int v = 0; v < per && k < n; v++, k++, o += stride) {
                     float li = g_headlight_light[idx ? idx[k] : (k < 256 ? k : 255)];
-                    uint32_t cv = col[k], out;
+                    uint32_t cv = col ? col[k] : amb, out;
                     if (li <= 0.0f) out = cv | 0xff000000u;
                     else {
                         g_headlight_lit = true;
@@ -878,8 +870,8 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
             }
             pc++;
         }
-    } else if (col) {
-        for (int k = 0; k < n; k++, o += stride) memcpy(o, &col[k], 4);
+    } else {
+        for (int k = 0; k < n; k++, o += stride) memcpy(o, col ? &col[k] : &amb, 4);
     }
     if (Headlights_CopOn() && pos) {
         /* 0x452920: the police roof light added (by point, or by the index list) */
@@ -902,6 +894,31 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
         }
     }
     c->flags |= EAGL_CF_DIFFUSE;
+}
+
+/* 0x452fe0 (Headlights::LayerVertexLight and _Opaque): the vertices' colours (dependency 0) with the
+   headlights' colour added by the light of their positions (dependency 2, through the index list of
+   dependency 1), each channel at most 255; then the police roof light's (0x452920). (The viewed car's
+   lights, its R3DObject's +0x2d4 bytes 0 and 1, are taken as on at night.) */
+static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0, (void)s1;
+    if (!l->dep || l->ndeps < 3) dep_assert();
+    const uint32_t *col = dep_data(l, 0);
+    if (!col) return l->next;
+    vertexlight(col, 0, dep_present(l, 1) ? EAGL_LayerData(l->dep[1]) : NULL, dep_data(l, 2), dep_info(l, 2) >> 4, (int)l->param);
+    return l->next;
+}
+
+/* 0x453490 (Headlights::LayerVertexLight_Ambient): the same with one colour for all, the stream's
+   (its first word); the positions dependency 1 through the index list of dependency 0 (0x5b3d88). */
+static EaglLayer *exec_vertexlight_ambient(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s1;
+    if (!l->dep || l->ndeps < 2) dep_assert();
+    uint32_t amb = 0;
+    if (s0 && s0->data) memcpy(&amb, s0->data, 4);
+    vertexlight(NULL, amb, dep_present(l, 0) ? EAGL_LayerData(l->dep[0]) : NULL, dep_data(l, 1), dep_info(l, 1) >> 4, (int)l->param);
     return l->next;
 }
 
