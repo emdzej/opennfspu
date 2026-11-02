@@ -17,7 +17,6 @@
    A material with several draw layers runs the kernel again: with nothing new it draws the previous
    result once more (multi-pass). */
 #include "eagl/eagl.h"
-#include "eagl/eagl_pending.h"
 #include "real/texture.h"
 #include "pending.h"
 #include "real/set3d.h"

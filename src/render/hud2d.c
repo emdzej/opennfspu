@@ -1,7 +1,6 @@
 /* The HUD's 2D drawing (see hud2d.h). */
 #include "render/hud2d.h"
 #include "eagl/eagl.h"
-#include "eagl/eagl_pending.h"
 #include "exe.h"
 #include "pending.h"
 #include "render/render.h"

@@ -1,9 +1,9 @@
 /* The EAGL context, render-state table, materials and layers (0x5387a0, 0x53eed0..0x53f6f0,
    0x5401e0..0x540920, 0x548f80, 0x549050). */
 #include "eagl/eagl.h"
-#include "eagl/eagl_pending.h"
 #include "exe.h"
 #include "real/set3d.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -458,6 +458,8 @@ static uint32_t gives_none(EaglLayer *l) { return 0; }                          
 static uint32_t gives_colour(EaglLayer *l) { return 4; }                             /* 0x44a010 */
 static uint32_t gives_uv(EaglLayer *l) { return 8; }                                 /* 0x449fe0 */
 static uint32_t gives_coords(EaglLayer *l) { return 0x10; }                          /* 0x449fd0 */
+static uint32_t gives_one(EaglLayer *l) { return 1; }                                /* 0x53fb00 */
+static uint32_t gives_coords2(EaglLayer *l) { return 0x28; }                         /* 0x53fb30 */
 
 /* The draw layers' dependencies are exe data: {5 colours, 0x10 specular, 2 uv, 3 texture} (0x5bbe38) and
    with two stages {5, 0x10, 2/0xc, 2/0xd, 3/0xe, 3/0xf} (0x5bbe58). */
@@ -471,6 +473,14 @@ static void load_deps(void)
     deps_loaded = true;
 }
 static const uint32_t *draw_deps(EaglLayer *l, uint32_t *n) { load_deps(); *n = 4; return deps_draw; }   /* 0x53fab0 */
+/* The indexed uv layer's one dependency: {2 uv, any id} (0x5c08c0). */
+static uint32_t deps_indexuv[2];
+static const uint32_t *indexuv_deps(EaglLayer *l, uint32_t *n)   /* 0x574900 */
+{
+    if (exe_loaded()) deps_indexuv[0] = exe_u32(0x5c08c0), deps_indexuv[1] = exe_u32(0x5c08c4);
+    *n = 1;
+    return deps_indexuv;
+}
 static const uint32_t *draw2_deps(EaglLayer *l, uint32_t *n) { load_deps(); *n = 6; return deps_draw2; } /* 0x53fb10 */
 
 /* LayerCoords (type 1): the positions, transformed here (0x53f220; stride 0x28 for the two-texture
@@ -577,15 +587,152 @@ static EaglLayer *draw2_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     return l->next;
 }
 
+/* The vertex list at +0x10c0c of layers 0xc, 0xd and 0xf: the reader starts at the list and takes the
+   first entry before it moves, so the first vertex comes twice; a negative entry ends it. Nothing in this
+   build fills the list (no data makes these layers); the port stops at the end of its area. */
+static int32_t vlist_first(EaglContext *c)
+{
+    c->vcursor = c->vlist;
+    return c->vlist[0];
+}
+
+static int32_t vlist_next(EaglContext *c)
+{
+    if (c->vcursor >= c->vlist + sizeof c->vlist / sizeof *c->vlist) return -1;
+    return *c->vcursor++;
+}
+
+static void *find_data(EaglLayer *l, uint32_t type, uint32_t id)
+{
+    return EAGL_LayerData(EAGL_LayerFindPrev(l, type, id));
+}
+
+/* fistp: to nearest, the integer indefinite for what doesn't fit */
+static int32_t fist(float v)
+{
+    if (!(v > -2147483648.0f && v < 2147483648.0f)) return INT32_MIN;
+    return (int32_t)lrintf(v);
+}
+
+static float len3d(const float *v) { return (float)sqrt((double)v[2] * v[2] + (double)v[1] * v[1] + (double)v[0] * v[0]); }   /* 0x573830 (0x532890) */
+
+/* Environment colour (type 5, factory 0xc; 0x5741f0): the listed vertices lit by a light set (layer
+   type 10): {count, positions[8] (float4, +4), kinds[8] (+0x84), colours[8] (float4, +0xa8)} with the ids
+   of its colour layers at +0x124 (type 9: the diffuse colours, float4 per vertex, rgb in 1..3), +0x128
+   (type 6: the shininess per vertex, and type 9: the specular colours, else the diffuse ones) and +0x130
+   (type 6: the ambient factor per vertex). Each light adds its colour * the diffuse colour * n.l when
+   n.l > 0 (the vertex through the object stack, the light through the camera's, the normal as it is);
+   kind 2 also the light's colour * the ambient factor; kind 3 the specular colour * (r.e)^shininess, r
+   the light's reflection and e the camera's -z in model space. Out: the colours (type 5) scaled by the
+   sums over 255, each at most 1 (no lower bound), as ARGB. */
+static EaglLayer *envcolour_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    EaglContext *c = g_eagl;
+    const uint8_t *set = find_data(l, 10, 0);
+    const float *normals = find_data(l, 1, 6), *pos = find_data(l, 1, 7);
+    const uint32_t *colours = find_data(l, 5, 0);
+    uint32_t id_diffuse, id_spec, id_amb;
+    memcpy(&id_diffuse, set + 0x124, 4);
+    memcpy(&id_spec, set + 0x128, 4);
+    memcpy(&id_amb, set + 0x130, 4);
+    const float *diffuse = find_data(l, 9, id_diffuse), *spec = NULL;
+    const float *shine = NULL, *amb = NULL;
+    EaglLayer *f = EAGL_LayerFindPrev(l, 6, id_spec);
+    if (f) {
+        shine = EAGL_LayerData(f);
+        f = EAGL_LayerFindPrev(l, 9, id_spec);
+        spec = f ? EAGL_LayerData(f) : diffuse;
+    }
+    f = EAGL_LayerFindPrev(l, 6, id_amb);
+    if (f) amb = EAGL_LayerData(f);
+    uint32_t *out = s1->data;
+    EaglView *view = c->view;
+    EaglMatrix inv;
+    EAGL_MatInvert(EAGL_StackTop(&view->view), &inv);   /* 0x53a1c0 */
+    float eye[4], back[4] = {0, 0, -1.0f, 0};
+    EAGL_MatTransform4(&inv, 1, back, 16, eye, 16);     /* 0x53a0a0 */
+    int32_t count;
+    memcpy(&count, set, 4);
+    for (int32_t v = vlist_first(c); v >= 0; v = vlist_next(c)) {
+        float p[4], acc[3] = {0, 0, 0};
+        EAGL_MatTransform4(EAGL_StackTop(&view->model), 1, pos + 4 * v, 16, p, 16);
+        const float *n = normals + 4 * v;
+        for (int32_t i = 0; i < count; i++) {
+            float lp[4], d[3], lc[4];
+            int32_t kind;
+            EAGL_MatTransform4(EAGL_StackTop(&view->view), 1, (const float *)(set + 4 + 16 * i), 16, lp, 16);
+            memcpy(&kind, set + 0x84 + 4 * i, 4);
+            memcpy(lc, set + 0xa8 + 16 * i, 16);
+            d[0] = lp[0] - p[0], d[1] = lp[1] - p[1], d[2] = lp[2] - p[2];
+            double len = len3d(d);
+            double ndl = ((double)d[2] * n[2] + (double)d[1] * n[1] + (double)d[0] * n[0]) / len;
+            if (ndl > 0.0)   /* (0x5b23f8) */
+                for (int k = 0; k < 3; k++) acc[k] = (float)(diffuse[4 * v + 1 + k] * (double)lc[k] * ndl + acc[k]);
+            if (kind == 2 && amb)
+                for (int k = 0; k < 3; k++) acc[k] = (float)((double)amb[v] * lc[k] + acc[k]);
+            if (kind == 3 && shine) {
+                float r[3];
+                for (int k = 0; k < 3; k++) r[k] = (float)(ndl * n[k] * 2.0 - d[k] / len);
+                double el = len3d(eye);
+                double s = (-(double)eye[0] * r[0] - (double)eye[1] * r[1] - (double)eye[2] * r[2]) / (float)el;
+                double e = pow(s, shine[v]);   /* (0x5a3730) */
+                for (int k = 0; k < 3; k++) acc[k] = (float)(e * spec[4 * v + 1 + k] + acc[k]);
+            }
+        }
+        uint32_t col = colours[v];
+        float a = (float)(col >> 24) * (1.0f / 255.0f);   /* 0x5b3888 */
+        float rgb[3] = {(float)(col >> 16 & 0xff) * acc[0] * (1.0f / 255.0f), (float)(col >> 8 & 0xff) * acc[1] * (1.0f / 255.0f),
+                        (float)(col & 0xff) * acc[2] * (1.0f / 255.0f)};
+        if (a >= 1.0f) a = 1.0f;   /* (0x5b24a8; NaN kept, as the x87 compare leaves it) */
+        for (int k = 0; k < 3; k++)
+            if (rgb[k] >= 1.0f) rgb[k] = 1.0f;
+        uint32_t ia = (uint32_t)fist(a * 255.0f), ir = (uint32_t)fist(rgb[0] * 255.0f), ig = (uint32_t)fist(rgb[1] * 255.0f),
+                 ib = (uint32_t)fist(rgb[2] * 255.0f);   /* 0x5b3710 */
+        out[v] = ((ia << 8 | ir) << 8 | ig) << 8 | ib;
+    }
+    return l->next;
+}
+
+/* Normals (type 1, factory 0xd; 0x574770): the listed vertices' normals (type 1, id 6) through the
+   object stack's rotation, all four columns, into stream 1. */
+static EaglLayer *normals_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    EaglContext *c = g_eagl;
+    const float *src = find_data(l, 1, 6);
+    float *out = s1->data;
+    const float *m = EAGL_StackTop(&c->view->model)->m;
+    for (int32_t v = vlist_first(c); v >= 0; v = vlist_next(c)) {
+        const float *n = src + 4 * v;
+        for (int k = 0; k < 4; k++) out[4 * v + k] = (float)((double)n[1] * m[4 + k] + (double)m[k] * n[0] + (double)n[2] * m[8 + k]);
+    }
+    return l->next;
+}
+
+/* Indexed uv (type 2, factory 0xf; 0x574880): each listed vertex's uv pair from the first dependency's
+   by its byte in stream 0, into stream 1. */
+static EaglLayer *indexuv_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    EaglContext *c = g_eagl;
+    const uint32_t *src = EAGL_LayerData(l->dep[0]);
+    const uint8_t *idx = s0->data;
+    uint32_t *out = s1->data;
+    for (int32_t v = vlist_first(c); v >= 0; v = vlist_next(c)) {
+        out[2 * v] = src[2 * idx[v]];
+        out[2 * v + 1] = src[2 * idx[v] + 1];
+    }
+    return l->next;
+}
+
 #define VT(exec, deps, s0, s1, gives) { exec, layer_destroy, EAGL_LayerSetParam, deps, no_reset, s0, s1, gives, gives_none }
 static const EaglLayerVtbl vt_draw = VT(draw_execute, draw_deps, no, no, gives_none);              /* 0x5bbc60 */
 static const EaglLayerVtbl vt_sort = VT(sort_execute, no_deps, no, no, gives_none);                /* 0x5bbc84 */
 static const EaglLayerVtbl vt_draw2 = VT(draw2_execute, draw2_deps, yes, no, gives_none);          /* 0x5bbca8 */
 static const EaglLayerVtbl vt_specular = VT(EAGL_LayerNext, no_deps, yes, no, gives_colour);       /* 0x5bbccc */
-static const EaglLayerVtbl vt_indexcoords = VT(indexcoords_execute, no_deps, yes, no, gives_uv);   /* 0x5bbcf0 */
+static const EaglLayerVtbl vt_indexcoords = {indexcoords_execute, layer_destroy, EAGL_LayerSetParam, no_deps, no_reset, yes, no,
+                                              gives_one, gives_uv};   /* 0x5bbcf0 (slot 8: 0x449fe0) */
 static const EaglLayerVtbl vt_type9 = VT(EAGL_LayerNext, no_deps, yes, no, gives_coords);          /* 0x5bbd14 */
 static const EaglLayerVtbl vt_type10 = VT(EAGL_LayerNext, no_deps, no, yes, gives_none);           /* 0x5bbd38 */
-static const EaglLayerVtbl vt_coords2 = VT(coords2_execute, no_deps, yes, no, gives_coords);       /* 0x5bbe10 */
+static const EaglLayerVtbl vt_coords2 = VT(coords2_execute, no_deps, yes, no, gives_coords2);       /* 0x5bbe10 */
 static const EaglLayerVtbl vt_coords = VT(coords_execute, no_deps, yes, no, gives_coords);         /* 0x5b6a34 LayerCoords */
 static const EaglLayerVtbl vt_coordsdata = VT(EAGL_LayerNext, no_deps, yes, no, gives_coords);     /* 0x5bbdec */
 static const EaglLayerVtbl vt_uv = VT(EAGL_LayerNext, no_deps, yes, no, gives_uv);                 /* 0x5b69e4 LayerUV */
@@ -594,9 +741,9 @@ static const EaglLayerVtbl vt_colours = VT(EAGL_LayerNext, no_deps, yes, no, giv
 static const EaglLayerVtbl vt_type6 = VT(EAGL_LayerNext, no_deps, yes, no, gives_colour);          /* 0x5bbdc8 */
 static const EaglLayerVtbl vt_state = VT(state_execute, no_deps, yes, no, gives_none);             /* 0x5b69bc LayerState */
 static const EaglLayerVtbl vt_typec = VT(EAGL_LayerNext, no_deps, yes, no, gives_coords);          /* 0x5bbda4 */
-static const EaglLayerVtbl vt_envcolour = VT(EAGL_PendingLayerEnvColour, no_deps, yes, no, gives_colour); /* 0x5bbd5c */
-static const EaglLayerVtbl vt_normals = VT(EAGL_PendingLayerNormals, no_deps, yes, yes, gives_coords);    /* 0x5bbd80 */
-static const EaglLayerVtbl vt_indexuv = VT(EAGL_PendingLayerIndexUV, no_deps, yes, yes, gives_uv);        /* 0x5c0898 */
+static const EaglLayerVtbl vt_envcolour = VT(envcolour_execute, no_deps, no, yes, gives_colour); /* 0x5bbd5c */
+static const EaglLayerVtbl vt_normals = VT(normals_execute, no_deps, no, yes, gives_coords);    /* 0x5bbd80 */
+static const EaglLayerVtbl vt_indexuv = VT(indexuv_execute, indexuv_deps, yes, yes, gives_uv);        /* 0x5c0898 */
 
 /* size is the original's (0x30 for the base layer): the port allocates its own layer struct plus what
    the original's object had beyond the base (the sort layer's 0x7e0 bytes). */

@@ -159,8 +159,9 @@ typedef struct EaglContext {
     uint8_t verts[0xfc00];     /* +0x00434: work vertices, ThrashVertex (32 bytes) or ThrashVertex2 (40) */
     uint16_t indices[0x5e8];   /* +0x10034: 504 triangles */
     int32_t ntris;             /* +0x10c04: triangles of the immediate (non-DX7) path */
-    void *list_head;           /* +0x10c08 */
-    uint8_t pad10c0c[0x3f4];
+    int32_t *vcursor;          /* +0x10c08: the reader of vlist */
+    int32_t vlist[0xfd];       /* +0x10c0c: a vertex list ending below 0, read by layers 0xc, 0xd, 0xf; nothing
+                                  in this build fills it */
     uint32_t primcodes[EAGL_MAX_VERTS][2]; /* +0x11000: per primitive {AND & 0x3c03, OR & 0x3f} */
     int32_t pad117e0;          /* +0x117e0 */
     uint32_t flags;            /* +0x117e4: EAGL_CF_* */
@@ -301,8 +302,6 @@ void EAGL_DrawStrip(EaglContext *c, const uint32_t *diffuse, const uint32_t *spe
                     int stamp_diffuse, int stamp_specular, int stamp_uv);        /* 0x540a40 */
 void EAGL_DrawList(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
                    int stamp_diffuse, int stamp_specular, int stamp_uv);         /* 0x543840 */
-/* Pending (src/eagl/pending.c): lines 0x548120, quads 0x545830, the two-stage kernels 0x542090 (strip),
-   0x544780 (list), 0x546bb0 (quads). */
 void EAGL_DrawLines(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
                     int stamp_diffuse, int stamp_specular, int stamp_uv);        /* 0x548120 */
 void EAGL_DrawQuads(EaglContext *c, const uint32_t *diffuse, const uint32_t *specular, const float *uv,
