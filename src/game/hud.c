@@ -1592,6 +1592,10 @@ static void map_view(HTrackMap *m, EaglView *v, bool turned, bool road)
     EAGL_ViewSetOrtho(v, 1.0f, 1.0f, 800.0f);
 }
 
+static uint32_t s_flash[CAR_MAX];     /* 0x5cd158: each car's blip colour (a cop's) */
+static int32_t s_flash_tick[CAR_MAX]; /* 0x60fda8: its last turn */
+static bool s_flash_read;
+
 /* The cars: the racers placed (and the cops), a blip the size of their footprint times s. 0x433070 */
 static void map_blips(HudArt *art, int s)
 {
@@ -1619,8 +1623,18 @@ static void map_blips(HudArt *art, int s)
             if ((col & 0xff0000) < 0x14 && (col & 0xff00) < 0x14 && (col & 0xff) < 0x14) col = 0xff202020u;
             a = b = col;
         } else {
-            PENDING_NOTE(0x433070, "the cops' flashing blips");
-            a = b = 0xc0ff0000u;
+            /* a cop's blip flashes blue and red, turned each 0x20 ticks (0x60fda8, 0x5cd158 by car) */
+            if (!s_flash_read) {
+                /* (nine words, blue; the original's later cars read and write past them) */
+                for (int k = 0; k < CAR_MAX; k++) s_flash[k] = exe_u32(0x5cd158 + 4u * (uint32_t)k);
+                s_flash_read = true;
+            }
+            if (0x20 < g_sim_tick - s_flash_tick[i]) {
+                s_flash_tick[i] = g_sim_tick;
+                s_flash[i] = s_flash[i] != 0xc00000ffu ? 0xc00000ffu : 0xc0ff0000u;
+            }
+            b = s_flash[i];
+            a = b != 0xc00000ffu ? 0xc00000ffu : 0xc0ff0000u;
         }
         HudArt_setcolours(art, b, a, a, b);
         HudArt_draw(art);
