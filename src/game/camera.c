@@ -1151,7 +1151,16 @@ void Camera_ToView(int p, RCamera *v, int type)
 {
     RaceCamera *c = &g_racecam[p];
     if (!c->car) return;
-    if (c->flags & 4) PENDING_NOTE(0x464e40, "the camera's roll with the car (+0x11c0, +0x11c4)");
+    if (c->flags & 4) {
+        /* The roll with the car: its orientation turned about z by the car's +0x11c4 and about x by
+           twice its +0x11c0 (less a turn with the flags' 2). Nothing but the race's reset (0x410d99)
+           writes the two, so both turns are whole and the product is the orientation itself. */
+        float z[9], x[9], m[9];
+        Mat3_RotZ(z, *CAR_F(c->car, 0x11c4));
+        Mat3_RotX(x, (float)-((c->flags >> 1) & 1) + *CAR_F(c->car, 0x11c0) * 2.0f);
+        Mat3_Mul(z, x, m);
+        Mat3_Mul(m, c->orient, c->orient);
+    }
     float eye[3], o[9];
     if (type == 1) {
         /* The car's own eye: its position at the mode's height, its orientation (left, up, back). */
