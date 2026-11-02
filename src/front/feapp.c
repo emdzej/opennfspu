@@ -32,6 +32,7 @@
 #include "exe.h"
 #include "app.h"
 #include "pending.h"
+#include "front/fetrans.h"
 #include "render/carpages.h"
 #include "platform.h"
 #include "render/r3dcar.h"
@@ -113,6 +114,10 @@ static bool s_cd_started;             /* FEScreenOptions +0x2a8: the shown song 
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
 static char s_overlay_id[32];
+static FertControl *s_overlay_out;
+static char s_room_shown[32];         /* +0xe8's room id */
+static FertTrans s_room_trans;    /* (the last one going off) */
+static bool s_overlay_made;
 static RCamera *s_camera;
 static int32_t s_mouse[2] = {-1, -1}; /* the pump's last poll (+0x14 ..) */
 static uint32_t s_buttons;
@@ -285,6 +290,38 @@ static void screen_free(FertControl *w)
     FertControl_free(w);
 }
 
+/* The screens on their way off (each entry's current window going off before its next comes on,
+   0x4d1fc0): drawn until gone, then let go or kept in the stack's history. While the stack is put
+   together (FEApp_Init, 0x4d2e70's) none go off: the screens come on at the first frame. */
+typedef struct {
+    FertControl *w;
+    bool free_it, popup;
+} Leaving;
+static Leaving s_leaving[8];
+static int s_nleaving;
+static bool s_building;
+static bool is_popup(const FertControl *w);
+
+static void leave(FertControl *w, bool free_it)
+{
+    if (s_building || s_nleaving == 8 || !w->trans.live || FETrans_Gone(&w->trans)) {
+        if (free_it) screen_free(w);
+        return;
+    }
+    FETrans_Off(&w->trans);   /* (slot 31, 0x4e0560) */
+    s_leaving[s_nleaving++] = (Leaving){w, free_it, is_popup(w)};
+}
+
+/* A screen to come on afresh (the original loads it again, FEMenu's constructor 0x4e0360). */
+static void trans_fresh(FertControl *w)
+{
+    memset(&w->trans, 0, sizeof w->trans);
+    w->trans.delay = 3;
+    w->trans.counter = 0x200;
+}
+
+static bool waiting(const FertControl *w) { return w->trans.phase == 0; }
+
 static FertControl *load_screen(const char *name)
 {
     char path[300];
@@ -341,6 +378,10 @@ bool FEApp_Init(const char *start)
         s_ready = true;
     }
     Render_SetVideoMode(g_render, 640, 480, 16, 2);   /* (FEApplication_Run 0x4d2e70's) */
+    if (s_bar) {   /* (the bottom bar comes on with each run, slot 30) */
+        trans_fresh(s_bar);
+        FETrans_On(&s_bar->trans);
+    }
     s_result = FE_RUNNING;
     s_replay_chosen = false;   /* (FECallBackList's constructor 0x50c120) */
     FESave_ListReplays();      /* (the data areas anew: FEdaUserList_v0 0x4e5400's Replay.List) */
@@ -352,6 +393,10 @@ bool FEApp_Init(const char *start)
     FECD_Init();       /* 0x4bdfb0 (then the player's save's CD player section over it) */
     FESave_CDApply();
     s_music_at = -1;   /* 0x65b928: the application (the car renderer's showroom mode) */
+    for (int i = 0; i < s_nleaving; i++)
+        if (s_leaving[i].free_it) screen_free(s_leaving[i].w);
+    s_nleaving = 0;
+    s_building = true;   /* (until the first frame) */
     while (s_depth) screen_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     if (s_nsaved) {
         /* back from a race (0x4d2e70 after it): the screens it began from, the knockout between its races
@@ -507,7 +552,7 @@ static bool is_popup(const FertControl *w)
 /* Back to the screen under the popups (0x4d1e40(-1): the top screen's popups closed). */
 static void close_popups(void)
 {
-    while (s_depth > 1 && is_popup(s_stack[s_depth - 1])) screen_free(s_stack[--s_depth]);
+    while (s_depth > 1 && is_popup(s_stack[s_depth - 1])) leave(s_stack[--s_depth], true);
     screen_entered();
 }
 
@@ -542,10 +587,15 @@ bool FEApp_GotoScreen(const char *name, bool push)
         plat_log(m);
         return false;
     }
-    if (!push && s_depth) screen_free(s_stack[--s_depth]);
-    if (s_depth == STACK) {
+    if (s_depth == STACK && push) {
         FertControl_free(w);
         return false;
+    }
+    /* (a screen in the top's place: the top goes off first, 0x4d1e40 -> slot 31; a popup comes over it) */
+    if (s_depth && !is_popup(w)) {
+        FertControl *old = s_stack[s_depth - 1];
+        if (!push) s_depth--;
+        leave(old, !push);
     }
     snprintf(s_stack_name[s_depth], sizeof s_stack_name[0], "%s", name);
     s_stack[s_depth++] = w;
@@ -564,7 +614,13 @@ bool FEApp_GotoScreen(const char *name, bool push)
 
 void FEApp_Back(void)
 {
-    if (s_depth > 1) screen_free(s_stack[--s_depth]);
+    if (s_depth > 1) {
+        /* (the top goes off; under a screen (not a popup) the one before comes on again, loaded anew) */
+        FertControl *t = s_stack[--s_depth];
+        bool pop = is_popup(t);
+        leave(t, true);
+        if (!pop && !s_building) trans_fresh(s_stack[s_depth - 1]);
+    }
     screen_entered();
 }
 
@@ -1465,7 +1521,7 @@ static void poll(void)   /* 0x529530 */
     if (changed & 1) {
         /* (FEApplication_v3 0x4d22a0: the bottom bar first, then the top screen) */
         if (s_bar && FertWindow_hit(s_bar, mx, my)) window_event(s_bar, (b & 1) ? 4 : 8, mx, my);
-        else window_event(FEApp_Top(), (b & 1) ? 4 : 8, mx, my);
+        else if (!s_nleaving && FEApp_Top() && !waiting(FEApp_Top())) window_event(FEApp_Top(), (b & 1) ? 4 : 8, mx, my);   /* (none while screens change) */
     }
 }
 
@@ -1493,12 +1549,33 @@ static void sync_overlay(FertControl *w)
         for (int k = 0; !a && k < w->screen->nparts; k++) a = FertAttrList_find(&w->screen->parts[k]->attrs, "screen");
         if (a) id = FertAttr_str(a);
     }
-    if (!strcmp(id, s_overlay_id)) return;
-    snprintf(s_overlay_id, sizeof s_overlay_id, "%s", id);
-    FertControl_free(s_overlay);
-    s_overlay = NULL;
-    const char *lay = overlay_layout(id);
-    if (lay) s_overlay = load_screen(lay);
+    /* (0x4d1620 / 0x4d1fc0: another id sends the overlay off; gone, the new one is made and comes on) */
+    if (s_overlay_out) {
+        FETrans_Tick(&s_overlay_out->trans);
+        if (FETrans_Gone(&s_overlay_out->trans)) {
+            FertControl_free(s_overlay_out);
+            s_overlay_out = NULL;
+        }
+    }
+    if (strcmp(id, s_overlay_id)) {
+        snprintf(s_overlay_id, sizeof s_overlay_id, "%s", id);
+        if (s_overlay) {
+            if (s_building || s_overlay_out || !s_overlay->trans.live) FertControl_free(s_overlay);
+            else {
+                FETrans_Off(&s_overlay->trans);
+                s_overlay_out = s_overlay;
+            }
+            s_overlay = NULL;
+        }
+        s_overlay_made = false;
+    }
+    if (!s_overlay && !s_overlay_out && !s_overlay_made) {
+        s_overlay_made = true;
+        const char *lay = overlay_layout(id);
+        if (lay) s_overlay = load_screen(lay);
+        if (s_overlay) FETrans_On(&s_overlay->trans);
+    }
+    if (s_overlay) FETrans_Tick(&s_overlay->trans);
 }
 
 static void sync_room(FertControl *w)
@@ -1510,7 +1587,23 @@ static void sync_room(FertControl *w)
         for (int k = 0; !a && k < w->screen->nparts; k++) a = FertAttrList_find(&w->screen->parts[k]->attrs, "room");
         if (a) room = FertAttr_str(a);
     }
-    FE3D_SetRoom(room);
+    /* (the room, +0xe8, as the overlay: another id sends it off, gone the new one comes on; its light by
+       its counter, 0x4e7b60) */
+    if (!room) room = "";
+    if (strcmp(room, s_room_shown)) {
+        if (s_building || !s_room_trans.live || FETrans_Gone(&s_room_trans)) {
+            snprintf(s_room_shown, sizeof s_room_shown, "%s", room);
+            memset(&s_room_trans, 0, sizeof s_room_trans);
+            s_room_trans.delay = 3;
+            s_room_trans.counter = 0x200;
+            FETrans_On(&s_room_trans);
+        } else if (s_room_trans.phase != 3) {
+            FETrans_Off(&s_room_trans);
+        }
+    }
+    FETrans_Tick(&s_room_trans);
+    FE3D_SetRoom(*s_room_shown ? s_room_shown : NULL);
+    FE3D_SetFade(1.0f - (float)FETrans_Counter(&s_room_trans) / 512.0f);   /* (0x5b6b2c) */
     const char *car = NULL;
     uint32_t col[4];
     bool havecol = false;
@@ -2868,11 +2961,15 @@ static void update_all(FertControl *w)
    value part's place; in the screen and its panels. */
 static void draw_combos(FertControl *w)
 {
+    const FertTrans *outer = FETrans_Window();   /* (the values with their combo box's transition) */
+    FETrans_SetWindow(w->trans.live ? &w->trans : outer);
     for (int i = 0; i < w->nchildren; i++)
         if (w->children[i]->sub && !(w->children[i]->feflags & 0x20)) draw_combos(w->children[i]->sub);
     for (int i = 0; i < w->nchildren; i++) {
         FertControl *c = w->children[i];
         if (!is_combo(c) || c->state == FertControl_findState(c, "hidden")) continue;
+        int32_t dx = 0, dy = 0;
+        FETrans_Offset(c, &dx, &dy);
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
         int k = FertControl_findPart(c, "label");
         if (!a || k < 0) continue;
@@ -2896,9 +2993,13 @@ static void draw_combos(FertControl *w)
         const char *ws = data_str(c, "width");
         if (ws) width = atoi(ws);
         FE2D_DepthStep();
+        pos[0] += dx, pos[1] += dy;
+        g_fe_fade = FETrans_Fade(c);
         if (nl == 1) FE2D_Text(font, (float)(pos[0] + 5), (float)(pos[1] + 2), 0, 0xffffffffu, copy, 1.0f, 1.0f);
         else FE2D_Text(font, (float)(pos[0] + width - 13), (float)(pos[1] + 2), 2, 0xffffffffu, copy, 1.0f, 1.0f);
+        g_fe_fade = 0xff;
     }
+    FETrans_SetWindow(outer);
 }
 
 /* A combo box's selection box (FEComboBox 0x4c4960, open: 0x4c79a0): the accessor's rows, 14 pixels each
@@ -3341,6 +3442,41 @@ static void menu_music(void)
     }
 }
 
+/* The index of the base screen: the top's, or the one under its popups. */
+static int base_index(void)
+{
+    int b = s_depth - 1;
+    while (b > 0 && is_popup(s_stack[b])) b--;
+    return b;
+}
+
+/* The transitions' frame (0x4d1fc0): the screens going off ticked and, gone, let go; with none left
+   the waiting screens put on (slot 30); the shown ones and the bottom bar ticked (slot 32). */
+static void trans_tick(void)
+{
+    s_building = false;
+    for (int i = 0; i < s_nleaving;) {
+        FETrans_Tick(&s_leaving[i].w->trans);
+        if (FETrans_Gone(&s_leaving[i].w->trans)) {
+            if (s_leaving[i].free_it) screen_free(s_leaving[i].w);
+            memmove(&s_leaving[i], &s_leaving[i + 1], (size_t)(--s_nleaving - i) * sizeof *s_leaving);
+        } else {
+            i++;
+        }
+    }
+    int b = base_index();
+    if (!s_nleaving)
+        for (int i = b; 0 <= i && i < s_depth; i++)
+            if (waiting(s_stack[i])) FETrans_On(&s_stack[i]->trans);
+    for (int i = b; 0 <= i && i < s_depth; i++) FETrans_Tick(&s_stack[i]->trans);
+    if (s_bar) FETrans_Tick(&s_bar->trans);
+    /* (the first entry's current: the screen going off until it's gone) */
+    const FertTrans *first = s_depth ? &s_stack[b < 0 ? 0 : b]->trans : NULL;
+    for (int i = 0; i < s_nleaving; i++)
+        if (!s_leaving[i].popup) first = &s_leaving[i].w->trans;
+    FETrans_SetBase(first);
+}
+
 /* A screen of the stack, its watches and controls ticked; the top one's own ticks, pointer and lists. */
 static void draw_screen(FertControl *s, FertControl *top)
 {
@@ -3400,10 +3536,11 @@ void FEApp_Frame(void)
     }
     menu_music();
     FEMovieBox_Update();
+    trans_tick();
     FertControl *w = FEApp_Top();
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     FEPointer_Begin();   /* (0x4d2980: 0x4e1460 first) */
-    sync_room(w);
+    sync_room(s_depth ? s_stack[base_index()] : NULL);   /* (the first entry's screen's, 0x4d1620) */
     Render_BeginFrame(g_render);
     if (tm) TexManager_begin(tm);
     /* 0x4d2980: the room first in the 3D camera; the base screen's 2D and the bottom bar over it
@@ -3437,14 +3574,16 @@ void FEApp_Frame(void)
             if (f != c->feflags) refresh_state(c);
         }
     }
+    if (s_overlay_out) FEWindow_Draw(s_overlay_out);
     if (s_overlay) {   /* (0x4d2980: the overlay before the screens) */
         for (int i = 0; i < s_overlay->nchildren; i++) FertControl_Update(s_overlay->children[i]);
         FEWindow_Draw(s_overlay);
     }
-    /* (a popup over its screen: the screens under the popups drawn first) */
-    int base = s_depth - 1;
-    while (w && base > 0 && is_popup(s_stack[base])) base--;
-    if (w) draw_screen(s_stack[base], w);
+    for (int i = 0; i < s_nleaving; i++)   /* (the screens going off where the new one will be) */
+        if (!s_leaving[i].popup) FEWindow_Draw(s_leaving[i].w);
+    /* (a popup over its screen: the screens under the popups drawn first; one still to come on not) */
+    int base = base_index();
+    if (w && !waiting(s_stack[base])) draw_screen(s_stack[base], w);
     if (s_bar) {
         for (int i = 0; i < s_bar->nchildren; i++) {
             FertControl_Update(s_bar->children[i]);
@@ -3462,7 +3601,10 @@ void FEApp_Frame(void)
     RCamera_Setup2D(s_camera);
     FE2D_Clear();
     if (w)
-        for (int i = base + 1; i < s_depth; i++) draw_screen(s_stack[i], w);
+        for (int i = base + 1; i < s_depth; i++)
+            if (!waiting(s_stack[i])) draw_screen(s_stack[i], w);
+    for (int i = 0; i < s_nleaving; i++)
+        if (s_leaving[i].popup) FEWindow_Draw(s_leaving[i].w);
     dialog_draw();
     FEPointer_Draw();   /* (0x4d2980, after the windows: 0x4e1470 at the mouse) */
     FE2D_Flush();

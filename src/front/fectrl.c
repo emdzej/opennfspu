@@ -446,7 +446,7 @@ bool FECtrl_Draw(FertControl *c, int32_t ox, int32_t oy)
     char t[200];
     int arc;
     text_of(k, t, sizeof t, &arc, waiting);
-    int a = 0xff;   /* (0x4c8410: the control's alpha) */
+    int a = 0xff;   /* (0x4c8410: the control's alpha, g_fe_fade's in the 2D) */
     float right = (float)(r[2] - r[0] - 4 + x), shift = 0;
     if (arc != -1) {
         char path[300], nm[16];

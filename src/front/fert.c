@@ -332,6 +332,8 @@ FertControl *FertControl_new(bool window)
     FertControl *c = calloc(1, sizeof *c);
     if (!c) return NULL;
     c->window = window;
+    c->trans.delay = 3;            /* (FEMenu's constructor 0x4e0360: unseen until it comes on) */
+    c->trans.counter = 0x200;
     FertAttrList *l = &c->attrs;   /* 0x523f60 */
     add(l, FATTR_POINT, "pos", "0,0");
     add(l, FATTR_POINT, "size", "0,0");

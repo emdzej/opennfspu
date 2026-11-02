@@ -337,11 +337,14 @@ static void room_free(FE3DRoom *r)
     free(r);
 }
 
+static float s_fade = 1.0f;
+void FE3D_SetFade(float f) { s_fade = f; }
+
 /* An object's light block from the room's colours, or the car's fixed light (0x4e7b60). */
 static void light(FE3DRoom *r, FE3DObject *o, bool car)
 {
     if (!o) return;
-    float fade = 1.0f;   /* 1 - the room's fade (0x4e0930) / 0x200 */
+    float fade = s_fade;   /* 1 - the room's fade (0x4e0930) / 0x200 */
     CarLight *l = &o->car.light;
     float *f = l->f;   /* (the rest as it was: the garage's shadow record, +0x14c, stays) */
     f[0x8c / 4] = f[0x90 / 4] = f[0x94 / 4] = 1.0f;

@@ -2,6 +2,7 @@
 #include "front/fe_parts.h"
 #include "pending.h"
 #include "front/fe2d.h"
+#include "front/fetrans.h"
 #include "real/font.h"
 #include "real/loc.h"
 #include "real/shape.h"
@@ -392,7 +393,7 @@ void FEPart_Draw(FertPart *p, int32_t ox, int32_t oy)
     pt(p, "pos", pos);
     pt(p, "size", size);
     switch (p->kind) {
-    case FPART_RECT:      /* 0x4e5f60 (the fade, 0x4e2e40 / 0x4c8410, pending) */
+    case FPART_RECT:      /* 0x4e5f60 (the fade, 0x4e2e40 / 0x4c8410: g_fe_fade's) */
         FE2D_Rect((float)(pos[0] + ox), (float)(pos[1] + oy), (float)size[0], (float)size[1], colour(p, "color"));
         break;
     case FPART_TEXT:
@@ -431,12 +432,18 @@ void FEControl_Draw(FertControl *c, int32_t ox, int32_t oy)
 }
 
 /* A window at its origin: its own position (a panel's screen's is the panel's) on its parent's. */
+static void draw_control(FertControl *c, int32_t ox, int32_t oy);
+
 static void draw_at(FertControl *w, int32_t ox, int32_t oy)
 {
     int32_t wp[2] = {0, 0};
     FertAttr *pa = FertAttrList_find(&w->attrs, "pos");
     if (pa) FertAttr_point(pa, wp);
     ox += wp[0], oy += wp[1];
+    /* (its controls by its transition; a window never put on or off (a panel's screen) by the one it is
+       in, else none) */
+    const FertTrans *outer = FETrans_Window();
+    FETrans_SetWindow(w->trans.live ? &w->trans : outer);
     /* (the screen object, the layout's first section, holds the screen's settings: room, callback list,
        music; the window's draw doesn't draw it) */
     for (int i = w->nchildren - 1; 0 <= i; i--) {   /* 0x528390: last first */
@@ -448,13 +455,24 @@ static void draw_at(FertControl *w, int32_t ox, int32_t oy)
             continue;
         }
         /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
-        if (FE_ControlDrawHook && FE_ControlDrawHook(c, ox, oy)) continue;
-        if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) continue;   /* (none of its parts is drawn plainly: femovie.c) */
-        if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
-        else if (!strcmp(c->id, "NFS5.GlintyRectangle")) FEGlintyBox_Draw(c, ox, oy);
-        else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
-        else FEControl_Draw(c, ox, oy);
+        /* each at its transition's fade and offset (0x4c8410, 0x4c8330), which its draw takes */
+        int32_t dx = 0, dy = 0;
+        FETrans_Offset(c, &dx, &dy);
+        g_fe_fade = FETrans_Fade(c);
+        draw_control(c, ox + dx, oy + dy);
+        g_fe_fade = 0xff;
     }
+    FETrans_SetWindow(outer);
+}
+
+static void draw_control(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (FE_ControlDrawHook && FE_ControlDrawHook(c, ox, oy)) return;
+    if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) return;   /* (none of its parts is drawn plainly: femovie.c) */
+    if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
+    else if (!strcmp(c->id, "NFS5.GlintyRectangle")) FEGlintyBox_Draw(c, ox, oy);
+    else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
+    else FEControl_Draw(c, ox, oy);
 }
 
 void FEWindow_Draw(FertControl *w) { draw_at(w, 0, 0); }
@@ -750,6 +768,13 @@ static int data_int(const FertControl *c, const char *name, int def)
     return def;
 }
 
+/* Whether the drawn window's transition is over (0x4c83f0: its counter, 0x4e0930 with 1, at 0). */
+static bool trans_done(void)
+{
+    const FertTrans *t = FETrans_Window();
+    return !t || FETrans_Counter(t) == 0;
+}
+
 /* The controls' glinty boxes (FEGoToButton_v21 0x4c8b10: data.width by data.height in black, its mode
    data.glintybox, +0x160 the button seen; FEGlintyBoxControl_v21 0x521db0: data.width by data.height in
    data.col, its mode data.animate), one a control, the least lately drawn given up for a new one. */
@@ -789,7 +814,7 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
     int32_t r[4];
     FertControl_rect(c, r);
     float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
-    int a = 0xff;   /* (0x4c8410: the control's fade) */
+    int a = 0xff;   /* (0x4c8410: the control's fade, g_fe_fade's in the 2D) */
     int ds = data_int(c, "dropshadow", 0);
     bool shadow = ds == 1, gradient = ds == 2;   /* +0x14c, +0x14d (0x4c89e0) */
     bool hover = (c->feflags & 4) != 0, disabled = (c->feflags & 0x10) != 0, focused = (c->feflags & 0x40) != 0;
@@ -815,14 +840,14 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
     FE2D_Rect(x + w, y, 1.0f, (float)(data_int(c, "stemrightheight", 0) + (r[3] - r[1])), k);
     GoToGlint *gg = ctl_glint(c, 0xff000000u, data_int(c, "width", 0), data_int(c, "height", 0), mode);
     if (!gg) return;
-    /* +0x160, seen: set when disabled, or once its transition is over (0x4c83f0: the port has none);
-       a run may start then, and later only while hovered, pressed or focused (0x4c7860, 0x4c7920,
-       0x4c79a0); never while disabled (0x4c7a10) */
+    /* +0x160, seen: set when disabled, or once its transition is over (0x4c83f0: the window's counter
+       at 0); a run may start then, and later only while hovered, pressed or focused (0x4c7860,
+       0x4c7920, 0x4c79a0); never while disabled (0x4c7a10) */
     bool disabled_now = (c->feflags & 0x10) != 0, allow;
     if (disabled_now) gg->seen = true;
     if (!gg->seen) {
-        gg->seen = true;
-        allow = true;
+        allow = trans_done();
+        if (allow) gg->seen = true;
     } else {
         allow = (c->feflags & (4 | 8 | 0x40)) != 0;
     }
@@ -832,7 +857,7 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
 static uint32_t data_colour(const FertControl *c, const char *name);
 
 /* A glinty rectangle (FEGlintyBoxControl_v15 0x521e60): only its glinty box, at its place, a run free to
-   start whenever its transition is over (0x4c83f0: the port's always are). */
+   start whenever its transition is over (0x4c83f0 at 0). */
 void FEGlintyBox_Draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (c->feflags & 0x20) return;
@@ -840,7 +865,7 @@ void FEGlintyBox_Draw(FertControl *c, int32_t ox, int32_t oy)
     FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
     if (pa) FertAttr_point(pa, pos);
     GoToGlint *gg = ctl_glint(c, data_colour(c, "col"), data_int(c, "width", 0), data_int(c, "height", 0), data_int(c, "animate", 0));
-    if (gg) FEGlint_Draw(&gg->g, pos[0] + ox, pos[1] + oy, 0xff, true);   /* (0x4c8410: the fade) */
+    if (gg) FEGlint_Draw(&gg->g, pos[0] + ox, pos[1] + oy, 0xff, trans_done());   /* (the fade: g_fe_fade's) */
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name)
@@ -863,7 +888,7 @@ static void FEGouraudBox_Draw(FertControl *c, int32_t ox, int32_t oy)
     a = FertAttrList_find(&c->attrs, "size");
     if (a) FertAttr_point(a, size);
     float x = (float)(pos[0] + ox), y = (float)(pos[1] + oy), w = (float)size[0], h = (float)size[1];
-    int al = 0xff;   /* (0x4c8410: the fade) */
+    int al = 0xff;   /* (0x4c8410: the fade, g_fe_fade's in the 2D) */
     FE2D_DepthStep();
     quad4(x + (float)data_int(c, "ULoffX", 0), y + (float)data_int(c, "ULoffY", 0), fade(data_colour(c, "cUL"), al),
           x + w + (float)data_int(c, "URoffX", 0), y + (float)data_int(c, "URoffY", 0), fade(data_colour(c, "cUR"), al),

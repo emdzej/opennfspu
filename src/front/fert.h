@@ -114,6 +114,16 @@ typedef struct {
 
 /* ---- controls (FERT::Target 0x5bb028, FERT::Control 0x5bafd4, FERT::Window 0x5bb0e0) ---- */
 
+/* A window's transition (FEMenu +0x124 .. +0x130: front/fetrans.c), and a control's transition flags
+   (FEControl +0x118, +0x11c). */
+typedef struct {
+    int delay;                 /* +0x124: frames before it starts */
+    uint32_t start;            /* +0x128: TIMER_ticks */
+    int phase;                 /* +0x12c: 0 gone, 1 coming on, 2 on, 3 going off */
+    int counter;               /* +0x130: 0x200 .. 0 (on) */
+    bool live;                 /* (the port's: started at least once) */
+} FertTrans;
+
 typedef struct FertControl {
     char id[FERT_NAME];        /* the template's id */
     char name[FERT_NAME];      /* Target's name */
@@ -135,6 +145,9 @@ typedef struct FertControl {
     struct FertControl *focus;       /* +0x120 of a window */
     int32_t mouse[2];                /* +0x114 */
     struct FertControl *sub;         /* a panel's screen (FEPanel +0x14c: its layout "filename", open) */
+    FertTrans trans;                 /* a window's */
+    uint32_t transon, transoff;      /* a control's (+0x118, +0x11c) */
+    bool trans_read;
 } FertControl;
 
 FertControl *FertControl_new(bool window);   /* 0x523f60 (Control), 0x527bc0 (Window) */

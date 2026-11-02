@@ -21,6 +21,8 @@ typedef struct {
 } FeImage;
 
 extern float g_fe_depth;   /* 0x65b954 */
+/* The control drawn now's fade, 0 .. 0xff (its transition's, 0x4c8410): every colour's alpha by it. */
+extern int g_fe_fade;
 
 void FE2D_Init(void);      /* 0x4d88c0 */
 void FE2D_Free(void);      /* 0x4d8bc0 */

@@ -189,7 +189,7 @@ static void update(Logo *l)
 
 /* Its draw (v15 0x4c1750): the logo and its name (none when it is a 1-pixel-high shape) side by side from
    the control's place, left, centred (align 1) or right (2) of it, centred down its box, in white at the
-   control's fade (0x4c8410: 0xff; the transition offset 0x4c8330: none). Over them (drawn over what is
+   control's fade (0x4c8410, g_fe_fade's; the transition's offset 0x4c8330 in ox, oy). Over them (drawn over what is
    there, so only on them) the glint every so often: across the screen's width (0x4e2d30: 640) in as many
    ticks, at the control's top, white at a quarter of the fade; then a wait of up to 127 ticks. (The port
    runs the update with the draw: it changes nothing but the logo.) */

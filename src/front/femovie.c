@@ -546,7 +546,7 @@ bool FEMovieBox_Draw(FertControl *c, int32_t ox, int32_t oy)
     /* FEMovieCircle_v15 0x4cd520: its stencil (the black rectangle stencilshape1 and the oval's eight
        pieces stencilshape2 .. 9) at its pos two depth steps nearer, then the movie drawn over what is
        there (the z test), the queue flushed; then its lines and "NEED FOR SPEED" (0x4cd980).
-       (The screen's transition offset, 0x4c8330, isn't modelled: none.) */
+       (The transition's offset, 0x4c8330, comes in ox, oy, its fade in g_fe_fade: draw_at's.) */
     int32_t px = ox + b->pos[0], py = oy + b->pos[1];
     FE2D_DepthPushStep();   /* 0x4da4c0 */
     char name[16];

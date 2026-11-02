@@ -66,6 +66,7 @@ static Item *s_items;
 static int s_n, s_cap;
 static int32_t s_order;        /* 0x65b970 */
 float g_fe_depth = 0.99998474f; /* 0x65b954 (0x3f7fff00) */
+int g_fe_fade = 0xff;
 static float s_saved = 0.99998474f;   /* 0x65b988 */
 /* (0x65b984, set while a depth is pinned, is never read) */
 
@@ -149,9 +150,17 @@ static void insert(const Item *it)
     s_n++;
 }
 
-static void quad(Item *it, const float xy[4][2], const uint32_t c[4], const float *uv, bool opaque, void *tex)
+/* A colour at the drawn control's fade (0x4d82a0, as each draw of the original takes it). */
+static uint32_t faded(uint32_t c) { return (uint32_t)(((c >> 24) * (uint32_t)g_fe_fade) / 0xff) << 24 | (c & 0xffffffu); }
+
+static void quad(Item *it, const float xy[4][2], const uint32_t c_in[4], const float *uv, bool opaque, void *tex)
 {
     memset(it, 0, sizeof *it);
+    uint32_t c[4] = {c_in[0], c_in[1], c_in[2], c_in[3]};
+    if (g_fe_fade != 0xff) {
+        for (int k = 0; k < 4; k++) c[k] = faded(c[k]);
+        opaque = false;
+    }
     for (int k = 0; k < 4; k++) {
         it->u.q.pos[k][0] = xy[k][0];
         it->u.q.pos[k][1] = xy[k][1];
@@ -282,6 +291,7 @@ void FE2D_ImageClip(const FeImage *img, float x, float y, float w, float h, cons
 
 void FE2D_Text(HudFont *f, float x, float y, int align, uint32_t colour, const char *s, float sx, float sy)
 {
+    if (g_fe_fade != 0xff) colour = faded(colour);
     if (!colour) return;
     float z = g_fe_depth;
     if (f && f->font) {

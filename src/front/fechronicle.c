@@ -250,8 +250,8 @@ static void box_start(FertControl *c)
    columns 91 apart: the year (black, centred), a frame for the name, the name of the set's picture (the
    356 Roadster No1's the weeicons logo), and the two rows' icons (the picture, the media) in their
    frames, the one under the mouse hovered. A column goes on to the year's next set; with no icon of the
-   set in any kind, to the next year's first. (The transition offset 0x4c8330 and the fade 0x4c8410:
-   none.) */
+   set in any kind, to the next year's first. (The transition's offset 0x4c8330 and fade 0x4c8410
+   come from draw_at: ox, oy and g_fe_fade.) */
 static void box_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (s_box.c != c) box_start(c);

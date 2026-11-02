@@ -124,7 +124,7 @@ bool FEHudPreview_Draw(FertControl *c, int32_t ox, int32_t oy)
     int32_t p[2] = {0, 0};
     FertAttr *pa = FertAttrList_find(&c->attrs, "pos");   /* 0x524b90 */
     if (pa) FertAttr_point(pa, p);
-    int x = p[0] + ox, y = p[1] + oy;   /* (the transition's offset, 0x4c8330: none) */
+    int x = p[0] + ox, y = p[1] + oy;   /* (the transition's offset, 0x4c8330, in ox, oy) */
     uint32_t white = 0xffffffffu;       /* 0x4d8280 */
     if (s.shape[0]) FE2D_Image(s.shape[0], (float)x, (float)y, (float)s.shape[0]->w, (float)s.shape[0]->h, white, 0, false);   /* 0x4d95a0 */
     float bw = 240.0f, bh = 180.0f;   /* (0x5b6030, 0x5b6034) */
