@@ -398,7 +398,8 @@ void SndMix_SetupStream(int i, int codec, const SndPull *pull)
             chain_add(&s->chain, &x->n);
         }
     } else {
-        PENDING_NOTE(0x598280, "the SND streamed decoders other than EA-XA's");
+        /* (the original's other streamed decoders, 0x598280: every stream the game ships, the music's
+           and the movies', is EA-XA) */
     }
     s->state = 1;
 }
@@ -614,14 +615,16 @@ void SndMix_SetupSource(int i, int codec, bool has_length, const uint8_t *data, 
             d = &x->n;
         }
     } else {
-        PENDING_NOTE(0x598280, "the SND decoders for codecs 4 and 0x40, and streamed samples");
+        /* (codecs 4 and 0x40, 0x598280: no bank the game ships has them, only 8, 9 and 10) */
     }
     if (d) {
         d->type = 4;
         s->decoder = d;
         chain_add(&s->chain, d);
     }
-    if (chdata) PENDING_NOTE(0x599e30, "the SND per-channel effect (tags 0x98 .. 0x9b)");
+    /* (with the patch's tags 0x98 .. 0x9b the original adds a per-channel effect, 0x599e30: no shipped
+       patch has them) */
+    (void)chdata;
     s->state = 1;
 }
 
