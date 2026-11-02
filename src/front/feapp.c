@@ -3421,9 +3421,12 @@ void FEApp_Frame(void)
         for (int i = 0; i < s_bar->nchildren; i++) {
             FertControl *c = s_bar->children[i];
             if (!strcmp(c->name, "ID_BACKBUTTON")) {
-                /* (0x4d7c70: off while locked, 0x4d5df0; its other conditions pend) */
+                /* (0x4d7c70 by 0x4d5df0: off while locked; else on with a screen to go back to and no
+                   popup open, or always in the race's options (FEApplication_Run's mode 1, +0x178: the
+                   port's race has its own pause menu)) */
                 uint32_t f = c->feflags;
-                if (!s_back_locked) c->feflags &= ~0x10u;
+                bool on = !s_back_locked && s_depth > 1 && !is_popup(s_stack[s_depth - 1]);
+                if (on) c->feflags &= ~0x10u;
                 else if (FertControl_findState(c, "disabled") >= 0) c->feflags |= 0x10;
                 if (f != c->feflags) refresh_state(c);
                 continue;
