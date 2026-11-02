@@ -32,12 +32,14 @@ enum { CAR_NOPTIONS = 120, CAR_NLODS = 7, CAR_NHINGES = 0x17 };
 typedef struct {
     char licence[32];            /* +0x1c0: the licence plate's text (8 characters are drawn) */
     uint32_t colours[4];         /* +0x218: the four chosen colours (0xAARRGGBB; +0x21c is the stripe's) */
+    int driver;                  /* +0x150: DRIVER, the figure at the wheel (0 .. 7; 8 and up: none) */
     int options[CAR_NOPTIONS];   /* +0x32c: forced option values (-1 = the style's) */
     int slot1end;                /* +0x50c: nonzero = animation slot 1 starts at its last frame */
     int racenumber;              /* +0x510: < 0 none */
     uint32_t scheme;             /* +0x514: the colour package (R3DCar_SetColours) */
     int stretch;                 /* +0x518: nonzero = the model is scaled by 0x5b37c8 */
     int customtpage;             /* +0x51c: nonzero = the pages are 4444 and start grey, no shapes drawn */
+    int passenger;               /* +0x520: PASSENGER */
 } R3DCarSpec;
 
 /* The simulation's car as the renderer sees it (R3DObject +0xf4). */

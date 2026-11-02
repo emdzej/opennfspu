@@ -5,6 +5,7 @@
 #include "render/r3dcar.h"
 #include "render/weather.h"
 #include "game/camera.h"
+#include "game/car_drive.h"
 #include "render/rlayers.h"
 #include "exe.h"
 #include "app.h"
@@ -243,12 +244,55 @@ void R3DCar_LoadStyles(R3DCar *car, int style)
     style_extent(&car->headease, car->headlightextent, now);
 }
 
-/* R3DCar_v19 0x43ad80 (before the LODs are built): the style's options, then the car spec's forced ones.
-   The race's rest of it (light and gear state, the timed extents) pends with the simulation. */
+/* R3DCar_v19 0x43ad80 (before the LODs are built): the style's options, then the race's: in the front end
+   (0x65b928) options 41 and 6 off and the headlights up; in the race the roof (41: twice 37, less one
+   with the top up), 37 and 42 off, the passenger (59), and the figure at the wheel from DRIVER (9: by
+   0x5cd5c4; 43 and 56 its build, by fours; none from 8; race mode 9 (0x6573e8) dresses the first four
+   and the rest alike; a car drawn from LOD 0 has none), the headlights by the track's night (0x628a28).
+   Their position is taken where it is and set going to the new one at once. Then the animation slots
+   kept and reset, the car spec's forced options and TINYCAR (58). */
 static void car_prelod(R3DCar *car)
 {
     R3DCarState *st = car->state;
     R3DCar_LoadStyles(car, st->style);
+    float to;
+    if (g_r3d_frontend) {
+        st->options[41] = 0;
+        st->options[6] = 0;
+        to = car->headlightextent;
+        car->headon = 1;
+    } else {
+        const R3DCarSpec *sp = st->spec;
+        if (sp) {
+            st->options[41] = st->options[37] * 2 - (sp->slot1end ? 0 : 1);
+            st->options[37] = 0;
+            int d = sp->driver;
+            st->options[9] = d >= 0 && d < 16 ? (int)exe_u32(0x5cd5c4 + 4 * (uint32_t)d) : 0;
+            st->options[42] = 0;
+            st->options[59] = sp->passenger;
+            if (st->flags & 0x10) {
+                st->options[9] = 0;
+            } else if (d >= 8) {
+                st->options[9] = 1;
+                st->options[43] = 1;
+                st->options[56] = 1;
+            } else if (g_race_mode == 9) {
+                st->options[9] = d < 4 ? 1 : 6;
+                st->options[43] = d < 4 ? 1 : 3;
+                st->options[56] = d < 4 ? 2 : 1;
+            } else {
+                st->options[43] = d / 4 * 2 + 2;
+                st->options[56] = d / 4 + 1;
+            }
+        }
+        car->headon = g_r3d_night != 0;
+        to = car->headon ? car->headlightextent : 0;
+    }
+    uint32_t now = app_ticks_ms();   /* GetTickCount */
+    car->headease.from = ease_now(&car->headease, now);
+    car->headease.to = to;
+    car->headease.since = now;
+    car->headease.dur = 0;
     memcpy(car->keptanim, car->anim, sizeof car->keptanim);   /* (+0x608, 0xa0 bytes) */
     for (int i = 0; i < 8; i++) {
         car->anim[i].pos = 0;
@@ -257,9 +301,11 @@ static void car_prelod(R3DCar *car)
         car->anim[i].frames = 0;
         car->anim[i].on = 1;
     }
-    if (st->spec)
+    if (st->spec) {
         for (int i = 0; i < CAR_NOPTIONS; i++)
             if (st->spec->options[i] >= 0) st->options[i] = st->spec->options[i];
+        st->options[58] = st->spec->stretch;
+    }
 }
 
 /* ---- the part sort: MSVC 6 std::sort over 12-byte records by the signed key byte at +8 ---- */

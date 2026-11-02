@@ -6,7 +6,7 @@
 #include "render/carparticle.h"
 #include "game/race_car.h"
 #include "exe.h"
-#include "pending.h"
+#include "real/real.h"
 #include "real/mem.h"
 #include "render/carpages.h"
 #include "render/r3dcar.h"
@@ -130,8 +130,8 @@ void Parts_Find(Car *c)
                 src = g_parts + k * CARPART_SIZE;
                 break;
             }
-        if (!src) {
-            PENDING_NOTE(0x4db520, "the \"Part %d not found.\" message (the original then copies from address 0)");
+        if (!src) {   /* FEError 0x4db520: fatal ("Part %d not found." 0x5d0c58, FEError.cpp 0x5d9780 line 5) */
+            REAL_abort(exe_str(0x5d9780), 5, exe_str(0x5d0c58), (int)id);
             continue;
         }
         memcpy(p, src, CARPART_SIZE);
@@ -471,6 +471,8 @@ static void Car_MakeRenderer(Car *c)
     r->spec.scheme = (uint32_t)DESC_I(c, 0x514);
     r->spec.stretch = DESC_I(c, 0x518);
     r->spec.customtpage = DESC_I(c, 0x51c);
+    r->spec.driver = DESC_I(c, 0x150);
+    r->spec.passenger = DESC_I(c, 0x520);
     r->state.spec = &r->spec;
     r->state.style = DESC_I(c, 0x328);   /* +0x568: BODYSTYLE */
     r->state.index = *CAR_I(c, CAR_INDEX);
