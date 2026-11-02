@@ -445,10 +445,6 @@ static void draw_at(FertControl *w, int32_t ox, int32_t oy)
             if (c->sub && !(c->feflags & 0x20)) draw_at(c->sub, ox, oy);
             continue;
         }
-        if (!strcmp(c->id, "NFS5.TrackSmall2dSpline") || !strcmp(c->id, "NFS5.TrackLarge2dSpline")) {
-            PENDING_NOTE(0x4fbf40, "the tracks' 2D splines (FETrack2dSpline: the tournament's locations)");
-            continue;
-        }
         if (!strcmp(c->id, "NFS5.HUD")) {
             /* FEHudDisplayControl (vtable 0x5b603c): the race HUD's preview with the display settings */
             PENDING_NOTE(0x4caea0, "FEHudDisplayControl: the HUD's preview");
