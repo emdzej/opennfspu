@@ -1063,6 +1063,8 @@ static bool is_combo(const FertControl *c) { return !strcmp(c->id, "NFS5.ComboBo
 /* A colour box (FEColorBox: its swatch and the selection box pend; a click steps its colour). */
 static bool is_colourbox(const FertControl *c) { return !strcmp(c->id, "NFS5.ColorBox"); }
 
+static void combo_open(FertControl *c);
+
 static void on_up(FertControl *c)
 {
     if (c->feflags & 0x10) return;   /* 0x4c7a10: disabled */
@@ -1071,9 +1073,13 @@ static void on_up(FertControl *c)
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + data_int_of(c, "step"));
         return;
     }
-    if (is_combo(c) || is_colourbox(c)) {
-        /* (FEComboBox opens its selection box, the list to pick from; the port steps to the next item
-           for now) */
+    if (is_combo(c)) {
+        combo_open(c);   /* (0x4c66c0, closed) */
+        return;
+    }
+    if (is_colourbox(c)) {
+        /* (FEColorBox opens its colour picker, FEColorSelectBox 0x4c3800: pending; the port steps to the
+           next colour) */
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + 1);
         return;
@@ -1169,6 +1175,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
 static void *s_slider_held;   /* (the list bar pressed: its moves and its release while held) */
 static void slider_held_move(int mx, int my);
 static void slider_held_up(void);
+static bool combo_mouse(bool down, int32_t mx, int32_t my);
 
 static void poll(void)   /* 0x529530 */
 {
@@ -1208,6 +1215,7 @@ static void poll(void)   /* 0x529530 */
             inputbox_keys(in, k, nk);
         }
     }
+    if ((changed & 1) && combo_mouse((b & 1) != 0, mx, my)) return;   /* (an open combo box has the mouse first) */
     if (changed & 1) {
         /* (FEApplication_v3 0x4d22a0: the bottom bar first, then the top screen) */
         if (s_bar && FertWindow_hit(s_bar, mx, my)) window_event(s_bar, (b & 1) ? 4 : 8, mx, my);
@@ -2563,6 +2571,178 @@ static void draw_combos(FertControl *w)
     }
 }
 
+/* A combo box's selection box (FEComboBox 0x4c4960, open: 0x4c79a0): the accessor's rows, 14 pixels each
+   (FEPositionableAccessor_v26 0x4bc2e0), below the bar (part selectionbox: at (0, data.height),
+   data.width wide), as tall as the rows up to data.selectionboxmaxheight, with a scroll bar when they
+   don't fit (+0x1dc). It slides open (and shut) over 16 timer ticks (0x4c5030). Its back is a gouraud
+   from 0xffffbb00 to that blended with 0xb282a8b0 by its height of the maximum, framed in black; the row
+   under the mouse is on the hover colour (data.highlightcolorhover, else 0xffbc0000) in white, the others
+   in the text colour (data.textcolor, else black), each 3 in and 2 down (0x4bbf30). One is open at a
+   time. (The selection box's slide direction and the label's offset from the click are not ported.) */
+static struct {
+    FertControl *c;
+    bool open;
+    uint32_t t0;          /* +0x1d4: the timer at the last open or close */
+    int hover;            /* +0x1a8, -1 none */
+    ListSlider slider;    /* +0x1bc */
+    bool scroll;          /* +0x1dc */
+} s_combo;
+
+typedef struct { int x, y, w, h, maxh, n, shown; } ComboBox;
+
+/* a to b by p of 255, each channel in integers (0x4d8300) */
+static uint32_t blend255(uint32_t a, uint32_t b, int p)
+{
+    uint32_t o = 0, q = (uint32_t)(0xff - p);
+    for (int sh = 0; sh < 32; sh += 8) o |= ((((a >> sh) & 0xff) * q + ((b >> sh) & 0xff) * (uint32_t)p) / 0xff) << sh;
+    return o;
+}
+
+static void combo_box(FertControl *c, FEAccessor *a, ComboBox *b)
+{
+    int32_t r[4];
+    control_rect(c, r);
+    int sw = data_int_of(c, "selectionboxwidth");
+    b->x = r[0];
+    b->y = r[1] + data_int_of(c, "height");
+    b->w = sw > 0 ? sw : data_int_of(c, "width");
+    b->maxh = data_int_of(c, "selectionboxmaxheight");
+    b->n = FEAccess_Count(a);
+    int total = b->n * 14;   /* (v25 0x4bc2c0) */
+    b->h = total < b->maxh ? total : b->maxh;   /* 0x4c4f70 */
+    s_combo.scroll = b->maxh <= total;
+    /* the bar's count: the rows from the first that the list can start at (0x4c5030) */
+    int fit = b->h / 14;
+    b->shown = fit;
+    slider_setcount(&s_combo.slider, s_combo.scroll ? b->n - fit + 2 : 0);
+}
+
+static void combo_open(FertControl *c)
+{
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    if (!a) return;
+    memset(&s_combo, 0, sizeof s_combo);
+    s_combo.c = c;
+    s_combo.open = true;
+    s_combo.hover = -1;
+    ComboBox b;
+    combo_box(c, a, &b);
+    slider_layout(&s_combo.slider, b.x + b.w - 0x10, b.y, b.maxh);
+    combo_box(c, a, &b);
+    if (s_combo.scroll) {   /* (the chosen row in view) */
+        int p = FEAccess_Pos(a) - b.shown / 2;
+        slider_setpos(&s_combo.slider, p);
+        slider_refresh(&s_combo.slider);
+    }
+    Audio_UI(2);   /* 0x4aab80 */
+    s_combo.t0 = timer_ticks();
+}
+
+static void combo_close(int sound)
+{
+    if (!s_combo.open) return;
+    s_combo.open = false;
+    s_combo.t0 = timer_ticks();
+    if (s_slider_held == &s_combo.slider) s_slider_held = NULL;
+    if (sound) Audio_UI(sound);
+}
+
+/* The height shown now: up to the box's over the 16 ticks after opening, down after closing. */
+static int combo_height(int h)
+{
+    int e = (int)(timer_ticks() - s_combo.t0) * h / 16;
+    if (h < e) e = h;
+    return s_combo.open ? e : h - e;
+}
+
+/* The mouse with a combo box open (0x4c66c0): a press on its scroll bar drags it; a release on a row
+   picks it (sound 5) and closes; a release on the bar closes it (sound 3); a press elsewhere closes it and
+   goes on to what is under the mouse. */
+static bool combo_mouse(bool down, int32_t mx, int32_t my)
+{
+    if (!s_combo.open || !s_combo.c) return false;
+    FEAccessor *a = FEAccess_Find(data_str(s_combo.c, "accessor"));
+    if (!a) {
+        combo_close(0);
+        return false;
+    }
+    ComboBox b;
+    combo_box(s_combo.c, a, &b);
+    int32_t r[4];
+    control_rect(s_combo.c, r);
+    bool in_list = mx >= b.x && mx < b.x + b.w && my >= b.y && my < b.y + b.h;
+    bool in_bar = mx >= r[0] && mx < r[0] + data_int_of(s_combo.c, "width") && my >= r[1] && my < b.y;
+    if (down) {
+        if (in_list && s_combo.scroll && slider_down(&s_combo.slider, mx, my)) {
+            s_slider_held = &s_combo.slider;
+            return true;
+        }
+        if (in_list || in_bar) return true;
+        combo_close(3);
+        return false;
+    }
+    if (in_bar) {
+        combo_close(3);
+        return true;
+    }
+    if (!in_list) return false;
+    int first = s_combo.scroll ? s_combo.slider.pos : 0;
+    if (s_combo.scroll && mx >= b.x + b.w - 0x10) return true;   /* (the bar's) */
+    int row = first + (my - b.y) / 14;
+    if (row < b.n) {
+        FEAccess_SetPos(a, row);   /* (slot 0x2c) */
+        combo_close(5);
+    }
+    return true;
+}
+
+static void combo_draw(void)
+{
+    if (!s_combo.c) return;
+    FEAccessor *a = FEAccess_Find(data_str(s_combo.c, "accessor"));
+    if (!a) return;
+    ComboBox b;
+    combo_box(s_combo.c, a, &b);
+    int e = combo_height(b.h);
+    if (!s_combo.open && e <= 0) {
+        s_combo.c = NULL;
+        return;
+    }
+    if (b.maxh <= 0 || e <= 0) return;
+    uint32_t top = 0xffffbb00u;
+    uint32_t bot = blend255(top, 0xb282a8b0u, b.h * 0xff / b.maxh);
+    float x = (float)b.x, y = (float)b.y, w = (float)b.w;
+    FE2D_DepthStep();
+    FE2D_Gouraud(x, y, w, (float)e, top, top, bot, bot);   /* 0x4d9160 */
+    uint32_t hover_c = data_colour(s_combo.c, "highlightcolorhover"), text_c = data_colour(s_combo.c, "textcolor");
+    if (!hover_c) hover_c = 0xffbc0000u;   /* 0x4d8260 */
+    text_c |= 0xff000000u;
+    int first = s_combo.scroll ? s_combo.slider.pos : 0;
+    float rw = s_combo.scroll ? w - 16.0f : w;
+    s_combo.hover = -1;
+    if (s_combo.open && e == b.h && s_mouse[0] >= b.x && s_mouse[0] < b.x + (int)rw && s_mouse[1] >= b.y && s_mouse[1] < b.y + b.h)
+        s_combo.hover = first + (s_mouse[1] - b.y) / 14;
+    HudFont *f = list_font();
+    FE2D_DepthStep();
+    for (int i = first, yy = b.y; i < b.n && yy + 14 <= b.y + e; i++, yy += 14) {
+        uint32_t fg = text_c;
+        if (i == s_combo.hover) {
+            FE2D_Gouraud(x + 1.0f, (float)yy, rw - 2.0f, 14.0f, hover_c, hover_c, hover_c, hover_c);
+            fg = 0xffffffffu;   /* 0x4d8280 */
+        }
+        list_text(f, x + 1.0f + 3.0f, (float)yy + 2.0f, FEAccess_TextAt(a, i), fg, 0);
+    }
+    if (s_combo.scroll && e == b.h) {
+        slider_tick(&s_combo.slider);
+        if (s_slider_held != &s_combo.slider) slider_hit(&s_combo.slider, s_mouse[0], s_mouse[1]);
+        slider_refresh(&s_combo.slider);
+        FE2D_DepthStep();
+        slider_draw(&s_combo.slider, 0, 0, 0xff);
+    }
+    FE2D_DepthStep();
+    FE2D_Frame(x, y, w, (float)e, 0xff000000u);   /* 0x4d8cb0 */
+}
+
 /* A control of the screen by name (FEApplication's 0x5287b0), in its panels too. */
 static FertControl *control_named(FertControl *w, const char *name)
 {
@@ -2880,6 +3060,7 @@ void FEApp_Frame(void)
         FEWindow_Draw(w);
         if (w == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
         draw_combos(w);
+        if (w == FEApp_Top()) combo_draw();
     }
     if (s_bar) {
         for (int i = 0; i < s_bar->nchildren; i++) {

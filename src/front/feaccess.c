@@ -1669,6 +1669,13 @@ int FEAccess_ItemId(const FEAccessor *a)
     return (int)exe_u32(a->list + 4u * (uint32_t)a->pos);
 }
 
+const char *FEAccess_TextAt(const FEAccessor *a, int i)
+{
+    FEAccessor t = *a;   /* (the accessor's slot 0x30: a row's text; the copy at that row) */
+    t.pos = i;
+    return FEAccess_Text(&t);
+}
+
 const char *FEAccess_Text(const FEAccessor *a)
 {
     static char b[64];

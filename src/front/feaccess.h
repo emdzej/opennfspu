@@ -30,6 +30,8 @@ int FEAccess_Int(const FEAccessor *a);
 void FEAccess_SetRange(FEAccessor *a, int lo, int hi);
 /* The text of the current item. */
 const char *FEAccess_Text(const FEAccessor *a);
+/* Row i's text (the accessor's slot 0x30), the position kept. The text is in a buffer the next call reuses. */
+const char *FEAccess_TextAt(const FEAccessor *a, int i);
 /* A list accessor's current item's string id (FELocalizedTextAccessor's v0x6c); 0 for other kinds. */
 int FEAccess_ItemId(const FEAccessor *a);
 
