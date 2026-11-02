@@ -76,6 +76,8 @@ bool World_LoadSim(UData *root);
 int Road_NearestNode(const Road *r, const float p[3], int near);
 /* The segment holding node n, -1 if none. 0x481b20 */
 int Road_SegmentOf(const Road *r, int n);
+/* The node of segment seg nearest p (ground plane), walking from hint (0x481560 -> 0x481160). */
+int Road_NearestInSegment(const Road *r, int seg, const float p[3], int hint);
 /* The node `by` nodes on from n (back if negative) in n's segment, clamped to the road; past the
    segment's end on through the junction there (branch: its road, -1 the one going the same way), else
    the segment's end. 0x481670 */

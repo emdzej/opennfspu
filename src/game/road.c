@@ -366,6 +366,25 @@ int Road_SegmentOf(const Road *r, int n)
     return -1;
 }
 
+/* 0x481160 (via 0x481560): from the hint, or the segment's nearer end when the hint is outside it,
+   stepping to the neighbour within [first, last] that is nearer in the ground plane until neither is. */
+int Road_NearestInSegment(const Road *r, int seg, const float p[3], int hint)
+{
+    if (seg < 0 || r->nseg <= seg) return hint;
+    int first = r->seg[seg].first, last = r->seg[seg].last, cur = hint;
+    if (cur < first || last < cur) cur = node_d2(r, last, p) <= node_d2(r, first, p) ? last : first;
+    if (cur == -1) return -1;
+    for (;;) {
+        float d = node_d2(r, cur, p);
+        if (last <= cur || d <= node_d2(r, cur + 1, p)) {
+            if (cur <= first || d <= node_d2(r, cur - 1, p)) return cur;
+            cur--;
+        } else {
+            cur++;
+        }
+    }
+}
+
 int Road_Step(const Road *r, int n, int by, int branch)
 {
     int s = Road_SegmentOf(r, n);

@@ -630,11 +630,21 @@ static void player_distance(Car *c)
     *CAR_F(c, 0x78) = best;
 }
 
+/* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
+   segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
 void WSurface_TrackNode(WSurface *s, const float p[3])
 {
     int16_t old = s->node;
-    if (s->f4 >= 0) PENDING_NOTE(0x481560, "the road node by the junction's two segments");
-    if (g_road && g_road->nnodes) s->node = (int16_t)Road_NearestNode(g_road, p, s->node);
+    if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
+        int a = Road_NearestInSegment(g_road, Road_SegmentOf(g_road, s->node), p, s->node);
+        int b = Road_NearestInSegment(g_road, s->f4, p, s->node);
+        const float *qa = Road_NodePos(g_road, a), *qb = Road_NodePos(g_road, b);
+        float da = (p[2] - qa[2]) * (p[2] - qa[2]) + (p[0] - qa[0]) * (p[0] - qa[0]);
+        float db = (p[2] - qb[2]) * (p[2] - qb[2]) + (p[0] - qb[0]) * (p[0] - qb[0]);
+        s->node = (int16_t)(da < db ? a : b);
+    } else if (g_road && g_road->nnodes) {
+        s->node = (int16_t)Road_NearestNode(g_road, p, s->node);
+    }
     s->changed = s->node != old;
     s->node_changed = s->node != old;
 }
