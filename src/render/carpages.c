@@ -772,10 +772,10 @@ void R3DCar_LoadCommon(void)
     g_rtex_global = RTexBank_ctor(calloc(1, sizeof *g_rtex_global), m, 3);
     snprintf(path, sizeof path, exe_str(0x5cddb0), g_r3d_cardir);           /* "%scarcmn.fsh" */
     RTexBank_loadfile(g_rtex_global, path, 0x10000);
-    /* The environment map (R3DCar_LoadEnvMap into 0x6115d8) pends; then the race-decal and licence fonts
-       opened with the software font driver current ("%sracedecal.ffn" 0x5cdda0, "%slicense.ffn"
-       0x5cdd90). */
-    PENDING_NOTE(0x440fa0, "R3DCar_LoadEnvMap");
+    /* The track's environment map (0x440fa0 of the track's name, 0x657444: the port's CarEnv_Load, which
+       the race's load calls before the cars, render/drive_selftest.c; nothing in the front end); then
+       the race-decal and licence fonts opened with the software font driver current ("%sracedecal.ffn"
+       0x5cdda0, "%slicense.ffn" 0x5cdd90). */
     {
         FontDriver old = FONT_setdriver(FONT_DRIVER_WINDOW);
         snprintf(path, sizeof path, exe_str(0x5cdda0), g_r3d_cardir);
