@@ -420,7 +420,8 @@ static Sky *Sky_ctor(Sky *s, const char *name)
         uint32_t f = SkyText_record(&text, i)->flags;
         /* The record's type picks the level (0x45acb0 basic 0x5c bytes; 0x45b460 multi 0x88 with mode 0..3
            for 4, 8, 0x10, 0x20; 0x45be40 free clouds 0xfc), a slot each (NULL when the allocation fails).
-           The port adds no slot for the ones not ported yet. */
+           The free clouds (type "freecloud": noise-textured cloud billboards) aren't ported: no sky text
+           the game ships has one, so the port adds no slot for them. */
         if (f & 2) {
             SkyBasic *b = malloc(sizeof *b);
             if (b) SkyBasic_ctor(b, SkyText_record(&text, i), g_skytex, s->config, (f & 0x200) == 0x200);
@@ -431,7 +432,6 @@ static Sky *Sky_ctor(Sky *s, const char *name)
             if (m) SkyMulti_ctor(m, SkyText_record(&text, i), g_skytex, s->config, mode, (f & 0x200) == 0x200);
             if (s->nlayers < 9) s->layer[s->nlayers++] = m ? &m->base : NULL;
         }
-        else if (f & 0x40) PENDING_NOTE(0x45be40, "SkyLevel_FreeClouds");
     }
     SkyHorizon *h = malloc(sizeof *h);
     if (h) SkyHorizon_ctor(h, g_skytex, s->config);
