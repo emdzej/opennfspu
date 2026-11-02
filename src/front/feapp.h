@@ -14,7 +14,8 @@
 #include "front/fert.h"
 #include "game/race_setup.h"
 
-/* The front end's start: its templates, strings, fonts, the 2D queue; then the start screen. */
+/* The front end's start: its templates, strings, fonts, the 2D queue; then the start screen. After a race
+   its loading screen's steps first, a frame each: false until it's started (or when it fails). */
 bool FEApp_Init(const char *start);
 /* The sound opened once (GameMain's Audio_Init 0x4a6610, before the intro movies and the front end). */
 bool FEApp_Sound(void);

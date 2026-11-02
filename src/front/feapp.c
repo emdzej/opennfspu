@@ -1,5 +1,6 @@
 /* The front end's application (feapp.h). */
 #include "front/feapp.h"
+#include "front/feintro.h"
 #include "render/rtex.h"
 #include "front/femovie.h"
 #include "front/feuserpic.h"
@@ -364,9 +365,31 @@ static FertControl *load_screen(const char *name)
     return w;
 }
 
+static bool fe_start(const char *start);
+
+/* 0x5d9158: 1 until the first run's start is done; FEApplication_Run's runs after it (back from a race)
+   show the loading screen's steps (FE_LoadingScreen 0x4dd4b0) between its start's loads. The port's
+   start does its loads at once: steps 0 .. 8 a frame each before it, 9 after it. */
+static bool s_first_run = true;
+static int s_festep;
+
 bool FEApp_Init(const char *start)
 {
     if (!g_render) return false;
+    if (!s_first_run && s_festep < 9) {
+        if (s_festep == 0) Render_SetVideoMode(g_render, 640, 480, 16, 2);   /* (FEApplication_Run 0x4d2e70's, first) */
+        FE_LoadingScreen(s_festep++);
+        return false;
+    }
+    bool ok = fe_start(start);
+    if (!s_first_run) FE_LoadingScreen(9);
+    s_first_run = false;
+    s_festep = 0;
+    return ok;
+}
+
+static bool fe_start(const char *start)
+{
     if (!s_ready) {
         Fert_ListControls(FE_DIR_CONTROLS);          /* 0x529eb0 */
         FEStrings_Load(language());                  /* 0x4e0090 */

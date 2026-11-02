@@ -13,3 +13,7 @@
 void FEIntro_Start(void);
 /* One app frame of it: false once it's over. */
 bool FEIntro_Frame(void);
+/* The front end's loading screen (FE_LoadingScreen 0x4dd4b0), a step of FEApplication_Run's start
+   after a race: era0.fsh with "loading" in the options' language and the bar at 12.4 pixels a step on
+   the back buffer, flipped; after step 8 its art is freed. */
+void FE_LoadingScreen(int step);

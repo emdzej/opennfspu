@@ -10,6 +10,10 @@
 #include "real/set3d.h"
 #include "real/shape.h"
 #include "real/window.h"
+#include "real/texture.h"
+#include "support/ufile.h"
+#include "game/music.h"
+#include "game/options.h"
 #include "snd/snd.h"
 #include "app.h"
 #include "exe.h"
@@ -359,20 +363,66 @@ void FEIntro_Start(void)
     next_movie();
 }
 
-/* The loading screen's tiles: rows of 32, 64 and three of 128 pixels squares (the shapes in order). */
-static void loadscreen_draw(void)
+/* A loading screen's tiles: rows of 32, 64 and three of 128 pixels squares (the shapes in order). */
+static void tiles(const uint8_t *fsh)
 {
     static const int rows[5][3] = {{0, 32, 0}, {32, 64, 20}, {96, 128, 30}, {224, 128, 35}, {352, 128, 40}};
-    WINDOW_selectback();
     for (int r = 0; r < 5; r++) {
         int size = rows[r][1], index = rows[r][2];
         for (int x = 0; x < 640; x += size, index++) {
-            const uint8_t *shape = SHAPE_entry(s.loadscrn, index);
+            const uint8_t *shape = SHAPE_entry(fsh, index);
             if (shape) WINDOW_drawscaled(shape, x, rows[r][0], size, size);
         }
     }
+}
+
+static void loadscreen_draw(void)
+{
+    WINDOW_selectback();
+    tiles(s.loadscrn);
     WINDOW_deselect();
     THRASH.fn.pageflip();
+}
+
+/* FE_LoadingScreen 0x4dd4b0 */
+void FE_LoadingScreen(int step)
+{
+    static uint8_t *text, *art;   /* 0x6903f4, 0x6903f8 */
+    if (g_texgraphics && g_texgraphics->textures) TexManager_end(g_texgraphics->textures);   /* 0x535df0 */
+    Music_FadeOut(1);   /* 0x4ae190 */
+    /* (the music stream's prebuffering waited for, 0x4ad440 against 0x4ad490: the port's stream is fed by
+       the frames) */
+    char path[300], found[300];
+    int language = Options_Int(0x5d61cc, 0);   /* LANGUAGE (0x657c84) */
+    if (!text && language != 0) {
+        snprintf(path, sizeof path, exe_str(0x5d1090), FE_DIR_ART);   /* "%sloadtext.fsh" */
+        if (UTIL_searchpath(path, found)) text = UTIL_loadfileabort(path, 0);
+    }
+    snprintf(path, sizeof path, exe_str(0x5d10c0), FE_DIR_ART, 0);   /* "%sera%d.fsh" */
+    if (!art) art = UTIL_loadfileabort(path, 0);
+    /* (0x4b0b40: the application's activation, race.c) */
+    WINDOW_selectback();
+    if (art) tiles(art);
+    if (language != 0 && text) {
+        const uint8_t *t = SHAPE_entry(text, language - 1);
+        if (t) {
+            int16_t w = (int16_t)(t[4] | t[5] << 8), h = (int16_t)(t[6] | t[7] << 8);
+            int16_t cx = (int16_t)(t[8] | t[9] << 8), cy = (int16_t)(t[10] | t[11] << 8);
+            WINDOW_drawscaledkey(t, -cx, -cy, w, h);
+        }
+    }
+    if (0 <= step) {
+        union { uint32_t u; float f; } k = {exe_u32(0x5b4ac0)};   /* 12.4 pixels a step */
+        WINDOW_fillrect(0x12e, 0x1d3, (int)((double)step * (double)k.f), 6, 0xffffbb00);
+    }
+    WINDOW_deselect();
+    THRASH.fn.pageflip();
+    if (8 < step) {
+        MEM_purge(art);
+        art = NULL;
+        if (text) MEM_purge(text);
+        text = NULL;
+    }
 }
 
 bool FEIntro_Frame(void)
