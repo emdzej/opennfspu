@@ -2,6 +2,7 @@
 #include "front/feapp.h"
 #include "render/rtex.h"
 #include "front/femovie.h"
+#include "front/feuserpic.h"
 #include "front/fecarlogo.h"
 #include "front/fetrackmap.h"
 #include "front/fehudpreview.h"
@@ -2828,7 +2829,7 @@ static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy)
    one is inset, the others cast a shadow. The select name screen's (FEPlayerPicture_v15 0x4cf630): the
    chosen player's driver, its stem's digit (0 .. 8) of ALLdrivr.fsh, at its place when there are players
    (FE_LoadDriverPictures 0x4db650 converts it, or the player's own picture "<name>.<ext>", into
-   SaveData\pic16.fsh with gimme.dll first). */
+   SaveData\pic16.fsh with gimme.dll first: the port shows the own picture through feuserpic.c). */
 
 static bool picture_draw(FertControl *c, int32_t ox, int32_t oy)
 {
@@ -2840,7 +2841,14 @@ static bool picture_draw(FertControl *c, int32_t ox, int32_t oy)
         FEAccessor *a = FEAccess_Find("UserList.UserList");
         if (!a || !FEAccess_Count(a)) return true;
         const char *stem = FESave_PlayerStem(FEAccess_Pos(a));
-        PENDING_NOTE(0x4db650, "a player's own picture (<name>.<ext> through gimme.dll's ConvertFile)");
+        FeImage *own = NULL;
+        UserPicState ps = FEUserPic_Get(stem[0] ? stem + 1 : stem, &own);   /* (0x4db650: "<name>.<ext>") */
+        if (ps == USERPIC_FAILED) return true;   /* (ConvertFile failed: no picture) */
+        if (ps == USERPIC_SHOWN && own) {
+            FE2D_DepthStep();
+            FE2D_Image(own, x, y, (float)own->w, (float)own->h, 0xffffffffu, 0, false);
+            return true;
+        }
         int n = stem[0] - '0';
         n = n < 1 ? 0 : n > 8 ? 8 : n;
         char path[300];
