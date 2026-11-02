@@ -7,6 +7,7 @@
 #include "render/weather.h"
 #include "render/particles.h"
 #include "render/carparticle.h"
+#include "render/r3dcar.h"
 #include "game/audio.h"
 #include "game/scene.h"
 #include "game/sim_rand.h"
@@ -39,9 +40,25 @@ static void Sim_ClearContacts(void)
 
 static int32_t s_fxsaved;   /* 0x657ca4 */
 
+/* Each car renderer's tick (slot 8, R3DCar_v8 0x438350) through their list (0x6115f0, the newest
+   first): in the race its particles' emitters set from the car (0x43eeb0 with 1), the viewed car's too
+   (which its draw leaves out in the driver's and hood views). 0x443570 */
+static void R3DCar_TickAll(void)
+{
+    if (g_r3d_frontend) return;
+    for (int i = g_ntraffic - 1; i >= 0; i--) {
+        R3DCar *r = g_traffic[i] ? g_traffic[i]->p[CARP_R3D] : NULL;
+        if (r) CarParticles_Update(r->particles, true);
+    }
+    for (int i = g_ncars - 1; i >= 0; i--) {
+        R3DCar *r = g_cars[i] ? g_cars[i]->p[CARP_R3D] : NULL;
+        if (r) CarParticles_Update(r->particles, true);
+    }
+}
+
 void Sim_Step(void)
 {
-    PENDING_NOTE(0x4b0d70, "the replay's tick (0x4b0d70)");
+    PENDING_NOTE(0x4b0d70, "the window's deactivation (0x6573e0: the sound paused, the display given back)");
     if (!g_race_started) {
         /* The countdown's steps at the ticks of 0x5cc7c4 (not in the free modes 6, 7, 8). */
         int32_t at = (int32_t)exe_u32(0x5cc7c4 + 4u * (uint32_t)(uint8_t)g_race_countdown);
@@ -72,7 +89,7 @@ void Sim_Step(void)
         Race_UpdatePositions();               /* 0x415fe0 */
         Race_WrongWay();                      /* (Audio_Tick 0x4a7430's part) */
         World_Tick();                         /* 0x479e20: the fading skid marks */
-        PENDING_NOTE(0x417030, "the cars' renderers' ticks (R3DCar_TickAll)");
+        R3DCar_TickAll();                     /* 0x443570 */
         CarParticles_TickAll();               /* R3DCarParticle_Tick 0x43f590 */
         Scene_Tick();                         /* 0x470b10 */
     }
