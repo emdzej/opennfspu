@@ -497,7 +497,40 @@ void AIi_SpeedTarget(Car *c)
     uint32_t f = (uint32_t)*CAR_I(c, CAR_FLAGS);
     *CAR_F(c, 0xeb8) = 0;
     if (f & 0x20) {
-        PENDING_NOTE(0x40afd0, "the police's speed target");
+        /* The police: chasing (+0xecc bit 1) at the chase's factor (+0x109c, its +0x84 at least 1) of
+           its speed (+0x1024); else 16.5 (against the race the followed car's band, below the first
+           still 16.5: the original keeps that), the SuperCops paced like the traffic, at least
+           8.888889. */
+        if (*CAR_I(c, 0xecc) & 2) {
+            float k = *CAR_F(c, 0x109c) * K(0x5cc358);
+            *CAR_F(c, 0x108c) = k;
+            *CAR_F(c, 0x84) = k <= 1.0f ? 1.0f : k;
+            *CAR_F(c, 0xeb8) = *CAR_F(c, 0x1024) * *CAR_F(c, 0x108c) * (float)*CAR_I(c, 0xeb0);
+            *CAR_F(c, 0xebc) = *CAR_F(c, 0xeb8);
+            return;
+        }
+        int dir = *CAR_I(c, 0xeb0);
+        float v = 16.5f;
+        Car *t = followed(c);
+        if (dir != dir_of_race() && t) {
+            float a = absf(*CAR_F(t, 0xec0));
+            if (a < K(0x5b2554)) v = 16.5f;
+            else if (a < K(0x5b2650)) v = 13.333333f;
+            else if (a < K(0x5b2410)) v = 8.888889f;
+            else if (a < K(0x5b264c)) v = 4.4444447f;
+            else v = a < K(0x5b2648) ? 2.2222223f : 2.77f;
+        }
+        if (f & 0x10) {
+            float p = v * *CAR_F(c, 0xeec);
+            if (v > K(0x5b23f8)) {
+                if (p < v - K(0x5b2658)) p = v - K(0x5b2658);
+                if (p < K(0x5b2654)) p = K(0x5b2654);
+            }
+            v = p * *CAR_F(c, 0x1018);
+        }
+        if (v < K(0x5b2430)) v = 8.888889f;
+        *CAR_F(c, 0xeb8) = (float)dir * v;
+        *CAR_F(c, 0xebc) = *CAR_F(c, 0xeb8);
         return;
     }
     if (!(f & 0x10)) return;
