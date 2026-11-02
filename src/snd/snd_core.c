@@ -880,6 +880,19 @@ int SND_SetGroupVolume(uint32_t bits, int vol)
     return 0;
 }
 
+/* The master volume (0x565840): every playing voice's volume again. */
+int SND_SetMaster(int vol)
+{
+    if (!s_on) return -10;
+    s_master = (uint8_t)vol;
+    for (int i = 0; i < s_nvoices; i++)
+        if (s_voice[i].state == 1 && 0 <= s_voice[i].handle) {
+            voice_volume(&s_voice[i]);
+            voice_apply_volume(i);
+        }
+    return 0;
+}
+
 /* An effect set (0x5650f0): its mode and preset, then the group's level (0 when off). */
 void SND_SetFx(uint32_t bits, int level, int mode, const uint8_t *preset)
 {

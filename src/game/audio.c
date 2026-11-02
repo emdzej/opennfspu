@@ -1746,6 +1746,70 @@ void Audio_Resume(void)
     Music_Play(NULL, 0);
 }
 
+/* The one-shots' stream stopped (0x4afb00): the requests waiting dropped (the original marks them
+   skipped and waits for its file thread to drain them), both plays stopped (the second pair at
+   0x656ae8 isn't ported, see Audio_Pause). */
+static void stream_stop(void)
+{
+    s_req_rd = s_req_wr = 0;
+    for (int i = 0; i < 2; i++)
+        if (s_pair[i] != -1) SND_Stop(s_pair[i]);
+    s_pair[0] = s_pair[1] = -1;
+}
+
+static void slots_stop(void)
+{
+    for (int i = 0; i < 0x50; i++)
+        if (s_slot[i][0] != -1) {
+            SND_Stop(s_slot[i][0]);
+            s_slot[i][0] = s_slot[i][1] = -1;
+        }
+}
+
+static void reverb_off(void)
+{
+    if (s_revset) {
+        SND_SetGroupVolume(0, 0);
+        s_revlevel = 0;
+        s_revset = false;
+    }
+}
+
+/* The race's sounds stopped at its end (0x4ab040): the stream (it first waits for 0x656034's play,
+   which nothing starts), the master volume 0, the music cut, the slots' plays stopped, the reverb's
+   send off, then the master back up a step at a time to full. */
+void Audio_Stop(void)
+{
+    if (!s_on) return;
+    stream_stop();
+    SND_SetMaster(0);
+    Music_FadeOut(0);
+    slots_stop();
+    reverb_off();
+    for (int v = 0; v < 0x80; v++) SND_SetMaster(v);
+}
+
+/* And before the replay plays again (0x4ab130): as Audio_Stop, the stream's cached banks given up as
+   well, and no thunder waiting (0x4a8430). */
+void Audio_Flush(void)
+{
+    if (!s_on) return;
+    stream_stop();
+    SND_SetMaster(0);
+    for (int i = 0; i < 0x20; i++) {
+        if (s_cache[i].idx == -1) continue;
+        if (s_cache[i].slot != -1) SND_BankRemove(s_cache[i].slot);
+        free(s_cache[i].data);
+        s_cache[i] = (StreamBank){-1, -1, -1, 0, NULL};
+    }
+    Music_FadeOut(0);
+    slots_stop();
+    for (int v = 0; v < 0x80; v++) SND_SetMaster(v);
+    reverb_off();
+    s_thunder = -1;
+    s_thunder_angle = s_thunder_wait = 0;
+}
+
 /* The player's car (0x4a7430): its distance from the listener, the Doppler (340 / (340 + the closing
    speed)), its pan, how it faces the listener, its rpm's volume lift. */
 static void player_tick(Car *c)

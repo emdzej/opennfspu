@@ -45,6 +45,9 @@ void Audio_SpeechFree(void);
 /* The sounds stopped with a pause (0x4aaf20) and started again (0x4aafd0). */
 void Audio_Pause(void);
 void Audio_Resume(void);
+/* The race's sounds stopped at its end (0x4ab040), and before the replay plays again (0x4ab130). */
+void Audio_Stop(void);
+void Audio_Flush(void);
 /* The race's bank-3 one-shots: a gate passed (0x4aac00, patch 2), a cone hit (0x4aac20, 0), the wrong
    way's warning (0x4aac40, 1, quieter). */
 void Audio_Gate(void);

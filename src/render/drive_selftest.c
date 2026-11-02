@@ -367,8 +367,9 @@ bool DRIVE_selftest(const char *track, const char *car)
         /* RaceLoop's replay part: its quit ends the race; its pause stops it (the cameras updated once,
            the sounds stopped) */
         if (s_replay_again) {
-            PENDING_NOTE(0x4ab130, "the sounds' stop before the replay again");
+            /* (the sounds' stop, 0x4ab130, with the restart below) */
         } else if (Replay_ExitWanted()) {
+            Audio_Stop();    /* 0x4ab040 */
             if (!g_drive_result) g_drive_result = 1;
         } else if (Replay_Paused() != Replay_PauseWanted()) {
             Replay_SetPaused(Replay_PauseWanted());
@@ -447,7 +448,8 @@ bool DRIVE_selftest(const char *track, const char *car)
            (0x414ed0, 0x413ec0), the HUD's visuals hidden (0x425740), then the race-over screens. The
            replay panel's restart (0x657428) ends the loop and GameMain runs it again: the results'
            screens then stay hidden (0x60ca10). */
-        if (!s_replay_again) keep_wear();
+        if (s_replay_again) Audio_Flush();   /* 0x4ab130 */
+        else keep_wear();
         s_replay_again = false;
         g_race_view = 2;
         g_replay_mode = 2;

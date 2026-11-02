@@ -131,6 +131,7 @@ int SND_Channels(void);
    mode 0 off, 1 the preset given, else the default. And a group's send levels (0x565150). */
 void SND_SetFx(uint32_t bits, int level, int mode, const uint8_t *preset);
 int SND_SetGroupVolume(uint32_t bits, int vol);
+int SND_SetMaster(int vol);                                 /* 0x565840 */
 /* The heard volume of a play (0x5910d0: the voice's +0x3d), negative for none. */
 int SND_Heard(int handle);
 /* The library's 100 Hz ticks so far (0x6b48e8). */
