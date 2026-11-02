@@ -1,5 +1,6 @@
 /* The player's save (fesave.h). */
 #include "front/fesave.h"
+#include "front/fecd.h"
 #include "front/fehudpreview.h"
 #include "exe.h"
 #include "front/fe_parts.h"
@@ -116,9 +117,15 @@ bool Save_Parse(Save *s, const uint8_t *d, size_t n)
             rd_skip(&r, (size_t)(k < 0 ? 0 : k) * 2);
         } else if (!strcmp(name, "Knockout")) {   /* 0x4dd810: the knockout's state raw (front/feaccess.c) */
             rd_skip(&r, 0x84);
-        } else if (!strcmp(name, "CDPlayer")) {
+        } else if (!strcmp(name, "CDPlayer")) {   /* 0x4bdd50 */
             int32_t k = rd_i32(&r);
-            rd_skip(&r, (size_t)(k < 0 ? 0 : k) * 4);
+            if (k < 0 || k > 0x400) return false;
+            free(s->cd);
+            s->cd = k ? calloc((size_t)k, sizeof *s->cd) : NULL;
+            s->ncd = 0;
+            for (int i = 0; i < k && !r.bad; i++) s->cd[s->ncd++] = rd_i32(&r);
+            if (r.bad || !add_section(s, name, NULL, 0)) return false;
+            continue;
         } else if (!strcmp(name, "accessor")) {
             int32_t k = rd_i32(&r);
             rd_skip(&r, (size_t)(k < 0 ? 0 : k));
@@ -172,6 +179,9 @@ uint8_t *Save_Serialize(const Save *s, size_t *n)
             wr_str(&w, s->player2);
             wr(&w, s->flags, 3);
             wr(&w, s->extra, 32);
+        } else if (!strcmp(x->name, "CDPlayer")) {   /* 0x4bdf20 */
+            wr_i32(&w, s->ncd);
+            for (int k = 0; k < s->ncd; k++) wr_i32(&w, s->cd[k]);
         } else if (!strcmp(x->name, "UsedCarMarket")) {
             wr_i32(&w, s->nused);
             wr_i32(&w, s->usedinfo);
@@ -193,6 +203,7 @@ void Save_Free(Save *s)
     free(s->cars);
     for (int i = 0; i < s->nused; i++) free(s->used[i].parts);
     free(s->used);
+    free(s->cd);
     memset(s, 0, sizeof *s);
 }
 
@@ -245,9 +256,35 @@ static void write_list_file(const char *stem)
 
 /* Save_Write 0x4de850: the data areas' sections to "<picture><name>.sav" (the name itself for picture -1);
    nothing for no name. */
+static bool has_section(const Save *sv, const char *name)
+{
+    for (int i = 0; i < sv->nsec; i++)
+        if (!strcmp(sv->sec[i].name, name)) return true;
+    return false;
+}
+
+/* The CD player's chosen songs: from a save read (its loader fills the list, 0x4bdd50) and into the
+   one written (the writer's from the list, 0x4bdf20). */
+void FESave_CDApply(void)
+{
+    if (s_ok && has_section(&s_save, "CDPlayer")) FECD_SetSelected(s_save.cd, s_save.ncd);
+}
+
+static void cd_take(void)
+{
+    int n = FECD_SelCount();
+    int32_t *c = n ? malloc(sizeof *c * (size_t)n) : NULL;
+    if (n && !c) return;
+    if (n) memcpy(c, FECD_Sel(), sizeof *c * (size_t)n);
+    free(s_save.cd);
+    s_save.cd = c;
+    s_save.ncd = n;
+}
+
 static bool save_write(const char *name, int32_t pic)
 {
     if (!name[0] || !s_ok) return false;
+    cd_take();
     char f[128];
     if (pic == -1) snprintf(f, sizeof f, "%s.sav", name);
     else snprintf(f, sizeof f, "%d%s.sav", (int)pic, name);
@@ -384,6 +421,7 @@ bool FESave_LoadStem(const char *stem, bool write_first)
     s_serial++;
     snprintf(s_stem, sizeof s_stem, "%s", stem);
     snprintf(s_save.player, sizeof s_save.player, "%s", strcmp(stem, template_stem()) ? stem + 1 : stem);
+    FESave_CDApply();
     write_list_file(stem);
     FESave_ListPlayers();
     /* (0x501020's re-listing of the owned cars up for sale: the market's, front/femarket.c, at its list's
@@ -461,6 +499,7 @@ static void start_player(void)
     }
     if (s_ok) {
         s_serial++;
+        FESave_CDApply();
         s_save.player[0] = 0;
         s_stem[0] = 0;
     } else {

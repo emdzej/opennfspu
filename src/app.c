@@ -29,6 +29,8 @@
 #include "front/feapp.h"
 #include "front/feintro.h"
 #include "front/fesave.h"
+#include "front/fecd.h"
+#include "game/music.h"
 #include "front/feaccess.h"
 #include "render/render.h"
 #include "render/thrash.h"
@@ -229,6 +231,12 @@ bool app_frame(void)
                     if (g_race_mode == 4) FEData_TourRaceInfo(&g_race_tour);   /* (0x4ecc60 -> 0x4ebb70) */
                     else memset(&g_race_tour, 0, sizeof g_race_tour);
                     g_race_tour.era = FEData_RaceEra();   /* (0x4ecc60's 0xbb) */
+                    {
+                        /* 0x4be610: the CD player's chosen songs as the race's playlist (0x3c, 0x143) */
+                        int n = FECD_SelCount();
+                        g_music_nplaylist = n < 0x80 ? n : 0x80;
+                        memcpy(g_music_playlist, FECD_Sel(), sizeof *g_music_playlist * (size_t)g_music_nplaylist);
+                    }
                     {
                         Save *sv = FESave_Current();   /* (the description's player, 0x4eab10) */
                         snprintf(g_race_player, sizeof g_race_player, "%s", sv ? sv->player : "");

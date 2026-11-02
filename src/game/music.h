@@ -14,7 +14,11 @@ typedef struct {
     int32_t length;           /* +0x1c */
 } MusicSong;
 
-extern int32_t g_music_shuffle;   /* 0x657a5c */
+extern int32_t g_music_shuffle;   /* 0x657a5c: RANDOMPLAYLIST (option 0x43) */
+/* The race's playlist (options 0x3c NUMPLAYLISTSONGS and 0x143: the front end's CD player's songs,
+   0x4be610), entry numbers; the port's -1 for a race without the front end. */
+extern int32_t g_music_nplaylist;     /* 0x657cb8 */
+extern int32_t g_music_playlist[0x80];
 
 /* The archive GameData\Music\zzz<name>.viv and a stream player with a buffer of bytes (0x4aded0). */
 void Music_Init(int bytes, int unused, const char *name);
@@ -27,4 +31,18 @@ void Music_SetVolume(int vol);                       /* 0x4ae690 */
 void Music_Next(void);                               /* 0x4ad560: the music key */
 int Music_SongList(const char *pattern, int32_t *out, int cap);   /* 0x4adbf0's entries */
 int Music_PlayedMs(void);
+/* A song of a list (Music_LoadSongList 0x4adbf0's entries, 0x40 bytes from +8): the entry's name, its
+   title and artist (0x4ad720), the ms its bytes last (bytes * 10 / 348) and its entry number. */
+typedef struct {
+    const char *name;         /* +0x00 */
+    const char *title;        /* +0x04: tbuf */
+    const char *artist;       /* +0x08 */
+    int32_t f0c, f10, f14;
+    int32_t length;           /* +0x18 */
+    int32_t id;               /* +0x1c */
+    char tbuf[0x20];          /* +0x20 */
+} MusicListSong;
+int Music_LoadSongList(const char *pattern, MusicListSong *out, int cap);
+/* 0x4ad4c0: {a song started since the last call, playing (non-zero), its ms left}; false no music. */
+bool Music_Status(int32_t out[3]);
 const MusicSong *Music_Current(void);

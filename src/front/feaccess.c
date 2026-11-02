@@ -1,11 +1,13 @@
 /* The front end's data accessors (feaccess.h). */
 #include "front/feaccess.h"
+#include "front/fecd.h"
 #include "front/fectrl.h"
 #include "support/crt.h"
 #include "real/random.h"
 #include "front/fe_parts.h"
 #include "exe.h"
 #include "pending.h"
+#include "game/music.h"
 #include "game/options.h"
 #include "front/fesave.h"
 #include "front/femarket.h"
@@ -24,7 +26,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -36,9 +38,10 @@ struct FEAccessor {
     float fmin, fstep; int dec, slot;   /* ACC_SETUP: FEFloatAccessor's range, decimals; the car's float */
     int src;         /* ACC_OWNED: 1 the market's cars; ACC_COLOUR / ACC_INTCOLOUR: 1 the garage car's */
     uint32_t cval;   /* FEColourAccessor's colour (+0x2c) for the garage car's (src 1) */
+    bool nosel;      /* the CD player's lists: no row chosen (+0x1d, 0x4bc1f0; the position reads -1) */
 };
 
-enum { NACC = 128 };
+enum { NACC = 160 };
 static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
@@ -174,6 +177,18 @@ static void audio(void)
     }
     add_list("Audio.Mode", 0x5b6c1c, 0x5d6198);
     add_list("Audio.Quality", 0x5b6c08, 0x5d61a0);
+    /* the CD player's (front/fecd.c): the time shown as played or left (no option), in order or shuffled
+       (option 0x43 RANDOMPLAYLIST), the song shown (FECurrentSongSelection 0x4be970, its titles), the
+       songs there are (FEAvailableSongsAccessor 0x4be760) and the chosen (FESelectedSongsAccessor 0x4be7e0),
+       both with no row chosen at first */
+    FEAccessor *v = add("CDPlayer.View", ACC_LIST, list_count(0x5d9df8), 0, 0);
+    if (v) v->list = 0x5d9df8;
+    add_list("CDPlayer.Options", 0x5d9dec, 0x5d60f8);
+    add("CDPlayer.Title", ACC_CDTITLE, 0, 0, 0);
+    FEAccessor *av = add("CDPlayer.AvailableList", ACC_CDAVAIL, 0, 0, 0);
+    if (av) av->nosel = true;
+    FEAccessor *sl = add("CDPlayer.SelectedList", ACC_CDSEL, 0, 0, 0);
+    if (sl) sl->nosel = true;
 }
 
 /* FEdaControllers' force feedback levels (0x51d8b0: FEIntAccessor 0x4b9ef0, 0 .. 100 from 50, options
@@ -1563,6 +1578,16 @@ static void refresh(const FEAccessor *c)
         if (a->pos >= a->count) a->pos = 0;
         return;
     }
+    if (a->kind == ACC_CDAVAIL || a->kind == ACC_CDSEL || a->kind == ACC_CDTITLE) {
+        /* (_v2 0x4be7b0, 0x4be840, 0x4becd0: the count set, 0x4bbef0, a place at or past it back to 0;
+           the chosen list's choice dropped first when the list is shorter than its place) */
+        int n = a->kind == ACC_CDSEL ? FECD_SelCount() : FECD_Count();
+        if (a->kind == ACC_CDSEL && !a->nosel && (unsigned)n < (unsigned)a->pos) a->nosel = true;
+        if (a->kind == ACC_CDTITLE) a->pos = FECD_Pos();
+        a->count = n;
+        if (n <= a->pos) a->pos = 0;
+        return;
+    }
     if (a->kind == ACC_REPLAYS) {
         a->count = FESave_ReplayCount();
         if (a->pos >= a->count) a->pos = 0;
@@ -1635,7 +1660,12 @@ static void refresh(const FEAccessor *c)
 }
 
 int FEAccess_Count(const FEAccessor *a) { refresh(a); return a->count; }
-int FEAccess_Pos(const FEAccessor *a) { return a->pos; }
+int FEAccess_Pos(const FEAccessor *a) { return a->nosel ? -1 : a->pos; }
+
+void FEAccess_Unselect(FEAccessor *a)   /* 0x4bc1f0 */
+{
+    if (a) a->nosel = true;
+}
 
 /* The garage car's palette colour of a colour accessor (0x4f02d0 the body +0x3ec, 0x4f0410 the first
    stripe +0x3f0, 0x4f04d0 the second +0x3f4, 0x4f0390 the interior +0x530; 0x10 an entry, swapped). */
@@ -1677,8 +1707,15 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
         refresh(a);
         return;
     }
+    if (a->kind == ACC_CDAVAIL || a->kind == ACC_CDSEL) {   /* 0x4bbe20: clamped, a row chosen */
+        a->pos = pos >= a->count ? a->count - 1 : pos;
+        if (a->pos < 0) a->pos = 0;
+        a->nosel = false;
+        return;
+    }
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
+    if (a->kind == ACC_CDTITLE) FECD_SetPos(a->pos);   /* FECurrentSongSelection_v11 0x4be9a0: it plays */
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
     if ((a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) && a->src == 1) a->cval = palette_colour(a, a->pos);
 }
@@ -1729,6 +1766,11 @@ const char *FEAccess_Text(const FEAccessor *a)
         return FESave_ReplayStem(a->pos);
     case ACC_DEVICES:
         return FECtrl_ListName(a->src == 1, a->pos);
+    case ACC_CDAVAIL:   /* _v12 0x4be790 */
+    case ACC_CDTITLE:   /* _v12 0x4bea50 (its mode 0: the title) */
+        return FECD_Text(a->pos, 0);
+    case ACC_CDSEL:     /* _v12 0x4be810 */
+        return FECD_Text(FECD_SelRow(a->pos), 0);
     case ACC_OPPCAR: {   /* FEOpponentCarAccessor_v12 0x4f4d40 */
         static const int16_t id[5] = {0x280, 0x282, 0x283, 0x284, 0x281};
         return FEStrings_Get(id[a->pos < 5 ? a->pos : 0]);
@@ -1796,10 +1838,47 @@ const char *FEAccess_Text(const FEAccessor *a)
 const uint8_t *FEAccess_CarRecord(const FEAccessor *a);
 bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 
+/* The CD player's watches' texts: TOTALPLAY the chosen songs' lengths summed (FESelectedSongsAccessor_v5
+   0x4be890), SONGTIMEREMAIN the song playing's ms left (0x4ad4c0), or when CDPlayer.View isn't at 0 the
+   shown song's length less them; TRACKPLAY the shown song's length (FECurrentSongSelection_v5 0x4beaa0),
+   minutes and seconds by string 0x2859; STATUS playing (0x2857) or stopped (0x2858); others "This is a
+   bug" (0x5d79a0). */
+static const char *cd_minsec(int ms)
+{
+    static char b[32];
+    const char *f = FEStrings_Get(0x2859);
+    snprintf(b, sizeof b, f ? f : "%d:%02d", ms / 1000 / 60, ms / 1000 % 60);
+    return b;
+}
+
+static const char *cd_text(const FEAccessor *a, const char *arg)
+{
+    refresh(a);
+    if (a->kind == ACC_CDSEL) {
+        if (strcmp(arg, "TOTALPLAY")) return exe_str(0x5d79a0);
+        int t = 0;
+        for (int i = 0; i < a->count; i++) t += FECD_Length(FECD_Sel()[i]);
+        return cd_minsec(t);
+    }
+    int32_t st[3];
+    bool on = Music_Status(st) && st[1] != 0;
+    if (!strcmp(arg, "SONGTIMEREMAIN")) {
+        if (!on) return cd_minsec(0);
+        int ms = st[2];
+        FEAccessor *v = FEAccess_Find("CDPlayer.View");
+        if (v && FEAccess_Pos(v) != 0) ms = FECD_Length(a->pos) - st[2];
+        return cd_minsec(ms);
+    }
+    if (!strcmp(arg, "TRACKPLAY")) return cd_minsec(FECD_Length(a->pos));
+    if (!strcmp(arg, "STATUS")) return FEStrings_Get(on ? 0x2857 : 0x2858);
+    return exe_str(0x5d79a0);
+}
+
 const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
 {
     static char b[16];
     if (a->kind == ACC_SHOWCASE) return FEShowcase_Text(Fert_ParseInt(arg ? arg : ""));   /* v5 0x508540 */
+    if ((a->kind == ACC_CDSEL || a->kind == ACC_CDTITLE) && arg && *arg) return cd_text(a, arg);
     if (a->kind == ACC_FDATA) {   /* FEFactoryDriverDataAccessor_v5 0x519620 */
         FEAccessor *p = FEAccess_Find("Factory.ProfileNum");
         return FEFactory_Data(arg, p ? p->pos : 0);

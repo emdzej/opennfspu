@@ -5,6 +5,7 @@
 #include "front/fecarlogo.h"
 #include "front/fetrackmap.h"
 #include "front/fehudpreview.h"
+#include "front/fecd.h"
 #include "front/fectrl.h"
 #include "front/feshowcase.h"
 #include "front/fechronicle.h"
@@ -105,6 +106,7 @@ static RaceOpponent s_opp[8];         /* its opponents (0x4eb830) */
 static int s_nopp = -1;
 static int s_fd_cheat;                /* FEFactoryDriverCBL +0x150: Factory.MissionCheat when last seen */
 static int32_t s_music_at;            /* FEMainScreen +0x290: the tick the last song started */
+static bool s_cd_started;             /* FEScreenOptions +0x2a8: the shown song chosen on its first tick */
 static FertControl *s_parent;         /* the window of the control an event is for */
 static FertControl *s_overlay;        /* +0xe4: the screen's overlay (its "screen" id, 0x4e1010) */
 static char s_overlay_id[32];
@@ -295,6 +297,13 @@ static FertControl *load_screen(const char *name)
     }
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_USEDCARCBL")) s_used_parts = false;   /* (0x4f6790) */
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_BUYPARTSCBL")) FEData_PartsOpen();   /* (0x518ba0) */
+    if (!strcmp(screen_attr(w, "callbacklist"), "ID_OPTIONSSCREEN")) {
+        /* (FEScreenOptions' constructor 0x510ed0: the menu song faded out over 1.5 s, the CD player's
+           song unchosen, so its first tick plays the one shown) */
+        Music_FadeOut(0x5dc);
+        FECD_Select(-1);
+        s_cd_started = false;
+    }
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_TOURNYSCREEN")) {   /* (0x5051a0: its first offer) */
         s_tourny_win = w;
         s_tourny_offer = Market_FirstOffer();
@@ -327,6 +336,8 @@ bool FEApp_Init(const char *start)
     /* The sound (GameMain's Audio_Init 0x4a6610 before the front end; the port's race closes it at its
        end, so it opens again here) and the menus' music. */
     FEApp_Sound();
+    FECD_Init();       /* 0x4bdfb0 (then the player's save's CD player section over it) */
+    FESave_CDApply();
     s_music_at = -1;   /* 0x65b928: the application (the car renderer's showroom mode) */
     while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     if (s_nsaved) {
@@ -740,6 +751,38 @@ static bool player_callback(const char *cb)
     return true;
 }
 
+/* The options screen's CD player buttons (FEScreenOptions_Command 0x510ed0's, its slots 57 .. 64). */
+static bool cd_callback(const char *cb)
+{
+    FEAccessor *av = FEAccess_Find("CDPlayer.AvailableList"), *sl = FEAccess_Find("CDPlayer.SelectedList"),
+               *ti = FEAccess_Find("CDPlayer.Title");
+    if (!strcmp(cb, "PLAYSONG")) {   /* _v61 0x5119a0: the chosen song from its start */
+        Music_FadeOut(0);
+        const char *n = FECD_CurrentName();
+        Music_Play(n, 0);
+    } else if (!strcmp(cb, "STOPSONG")) {   /* _v62 0x5119c0 */
+        Music_FadeOut(0);
+    } else if (!strcmp(cb, "SKIPFWD") || !strcmp(cb, "SKIPBK")) {   /* _v63 0x5119d0, _v64 0x5119e0 */
+        if (ti) FEAccess_SetPos(ti, FEAccess_Pos(ti) + (cb[4] == 'F' ? 1 : -1));
+    } else if (!strcmp(cb, "ADDSONG")) {
+        /* _v57 0x5118c0: the available row chosen added, unless 40 are (message 0x32f) */
+        if (av && sl && FEAccess_Pos(av) >= 0) {
+            if (FEAccess_Count(sl) > 0x27) FEApp_Message(0x32f);   /* (FEDialogOneItemSelfDeleting 0x512d00) */
+            else FECD_Add(FECD_Id(FEAccess_Pos(av)));
+        }
+    } else if (!strcmp(cb, "REMOVESONG")) {   /* _v58 0x511940: the chosen row out, the choice dropped */
+        if (sl && FEAccess_Pos(sl) >= 0) FECD_Remove(FEAccess_Pos(sl));
+        FEAccess_Unselect(sl);
+    } else if (!strcmp(cb, "CLEARALL")) {   /* _v59 0x511980 */
+        FECD_Clear();
+    } else if (!strcmp(cb, "RESETLIST")) {   /* _v60 0x511990 */
+        FECD_Reset();
+    } else {
+        return false;
+    }
+    return true;
+}
+
 static void callback(const char *cb)
 {
     if (player_callback(cb)) return;
@@ -762,6 +805,7 @@ static void callback(const char *cb)
     } else if (!strcmp(cb, "DEFAULTCONTROLS")) {   /* 0x511820: the chosen controller's defaults */
         FEAccessor *a = FEAccess_Find("Controller.AllControllers");
         FECtrl_Map(FECtrl_ListDevice(a ? FEAccess_Pos(a) : 0));
+    } else if (cd_callback(cb)) {
     } else if (!strcmp(cb, "SHOWPLAYLISTPANEL") || !strcmp(cb, "HIDEPLAYLISTPANEL")) {
         /* the audio area's (0x4f6ca0, 0x4f6cb0): the CD player's play list or the audio settings */
         FertControl *w = FEApp_Top();
@@ -2568,6 +2612,11 @@ static void draw_combos(FertControl *w)
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
         int k = FertControl_findPart(c, "label");
         if (!a || k < 0) continue;
+        /* (data.nolabel, +0x1fc: 0 the value right-aligned past the label; 1 the value at the left in
+           the label's place; 2 and 3 no value, the box shows its label only (the CD player's); 4's
+           own centred layout pends, drawn as 0) */
+        int nl = data_int_of(c, "nolabel");
+        if (nl == 2 || nl == 3) continue;
         FertAttr *f = FertAttrList_find(&c->parts[k]->attrs, "fontPathName");
         char path[300];
         FE_ResolvePath(f ? FertAttr_str(f) : "", path, sizeof path);
@@ -2583,7 +2632,8 @@ static void draw_combos(FertControl *w)
         const char *ws = data_str(c, "width");
         if (ws) width = atoi(ws);
         FE2D_DepthStep();
-        FE2D_Text(font, (float)(pos[0] + width - 13), (float)(pos[1] + 2), 2, 0xffffffffu, copy, 1.0f, 1.0f);
+        if (nl == 1) FE2D_Text(font, (float)(pos[0] + 5), (float)(pos[1] + 2), 0, 0xffffffffu, copy, 1.0f, 1.0f);
+        else FE2D_Text(font, (float)(pos[0] + width - 13), (float)(pos[1] + 2), 2, 0xffffffffu, copy, 1.0f, 1.0f);
     }
 }
 
@@ -2995,6 +3045,14 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
 static void menu_music(void)
 {
     if (!s_sound) return;
+    /* (FEScreenOptions_v1 0x5111d0 runs the base list's update, not the main screen's: no menu songs
+       there, the CD player's instead; its first tick chooses the song shown, which plays it) */
+    if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_OPTIONSSCREEN")) {
+        FEAccessor *ti = FEAccess_Find("CDPlayer.Title");
+        if (!s_cd_started && ti) FEAccess_SetPos(ti, FEAccess_Pos(ti));
+        s_cd_started = true;
+        return;
+    }
     int32_t now = (int32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
     if (s_music_at < 0 || s_music_at < now - 0x1e00) {
         Music_FadeOut(0);   /* 0x4ae190 */

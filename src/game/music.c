@@ -43,32 +43,39 @@ typedef struct {
 
 static Music *s_music;   /* 0x656ab4 */
 int32_t g_music_shuffle; /* 0x657a5c: the options' shuffle */
+int32_t g_music_nplaylist = -1;      /* 0x657cb8 */
+int32_t g_music_playlist[0x80];      /* 0x657cbc */
 
 /* (GetTickCount in the shuffles: the SND library's 100 Hz ticks as milliseconds, so runs repeat) */
 static uint32_t tick_count(void) { return SND_Ticks() * 10u; }
 
 /* The song's name parts (0x4ad720): the title between the first and second '-', the artist after the
    second (up to 31 characters each kept as the original's: the title copied, the artist pointed at). */
-static void song_info(MusicSong *s, const char *name)
+static void name_parts(const char *name, char title[0x20], const char **artist)
 {
-    memset(s->title, 0, sizeof s->title);
-    s->name = name;
-    s->artist = NULL;
+    memset(title, 0, 0x20);
+    *artist = NULL;
     int n = 0;
     bool dash = false;
     for (const char *p = name; p && *p; p++) {
         if (*p == '-') {
             if (dash) {
-                s->artist = p + 1;
+                *artist = p + 1;
                 break;
             }
             dash = true;
             n = 0;
         } else if (n < 0x1f) {
-            s->title[n++] = *p;
+            title[n++] = *p;
         }
-        s->title[n] = 0;
+        title[n] = 0;
     }
+}
+
+static void song_info(MusicSong *s, const char *name)
+{
+    s->name = name;
+    name_parts(name, s->title, &s->artist);
 }
 
 /* The name against a pattern (0x4a5d60): the rightmost of the operators & | ! ~ ^ splits it (and, or,
@@ -243,7 +250,7 @@ void Music_SetPlaylist(int n, const int32_t *songs)
     if (!m) return;
     m->nlist = 0;
     for (int i = 0; i < n; i++)
-        if (-1 < songs[i] && songs[i] < m->nsongs) m->list[m->nlist++] = (int8_t)songs[i];
+        if (-1 < songs[i] && songs[i] < m->nsongs && m->nlist < 0x80) m->list[m->nlist++] = (int8_t)songs[i];   /* (the port bounds it to the list's 0x80) */
 }
 
 static int rnd_pick(int n) { return (int)((uint32_t)abs((int)(tick_count() + REAL_rand())) % (uint32_t)n); }
@@ -397,6 +404,46 @@ int Music_PlayedMs(void)
     if (st[0] <= 0) return 0;
     SND_StreamEntry(st[1], e);
     return e[0] == 2 ? e[1] : 0;
+}
+
+int Music_LoadSongList(const char *pattern, MusicListSong *out, int cap)
+{
+    Music *m = s_music;
+    if (!m || !m->dir) return 0;
+    char pat[0x80];
+    int n = 0;
+    for (int i = 0; i < m->nsongs && n < cap; i++) {
+        uint32_t o = 0, len = 0;
+        const char *name = BIG_locateentry(m->dir, NULL, i, &o, &len);
+        snprintf(pat, sizeof pat, "%s", pattern);
+        if (!match(name, pat)) continue;
+        MusicListSong *e = &out[n++];
+        memset(e, 0, sizeof *e);
+        e->name = name;
+        name_parts(name, e->tbuf, &e->artist);
+        e->title = e->tbuf;
+        e->id = i;
+        e->length = (int32_t)(len * 10 / 0x15c);
+    }
+    return n;
+}
+
+/* 0x4ad4c0: the song's start flag taken (+0x18), playing (the fade's code, else the playlist's place + 1)
+   and the stream entry's ms left (+0xa0) into the song's times (+0x170); a fade's error code names the
+   failure in the artist's place (+0x178, as the original's). */
+bool Music_Status(int32_t out[3])
+{
+    Music *m = s_music;
+    if (!m) return false;
+    m->info.left = m->entry[2];
+    int32_t playing = m->fade == 0 ? m->cur + 1 : m->fade;
+    if (m->fade == -4) m->info.artist = exe_str(0x5d1ba8);   /* "CBUFFER NOT ALLOCATED" */
+    else if (m->fade == -3) m->info.artist = exe_str(0x5d1bc0);   /* "STREAM NOT CREATED" */
+    out[0] = m->f18 != 0;
+    m->f18 = 0;
+    out[1] = playing;
+    out[2] = m->info.left;
+    return true;
 }
 
 const MusicSong *Music_Current(void) { return s_music && s_music->song ? &s_music->info : NULL; }

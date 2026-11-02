@@ -1695,11 +1695,15 @@ void Audio_StartRace(void)
     }
     track_banks_load();
     if (g_replay_mode < 2) {
-        /* the race's playlist (0x657cb8: the front end's song selection; without the front end, every
-           song of its list "game*", 0x5d7948) */
-        int32_t list[0x80];
-        int n = Music_SongList(exe_str(0x5d7948), list, 0x80);
-        Music_SetPlaylist(n, list);
+        /* the race's playlist (0x657cb8: the front end's CD player's songs; without the front end the
+           port's every song of its list "game*", 0x5d7948) */
+        if (0 <= g_music_nplaylist) {
+            Music_SetPlaylist(g_music_nplaylist, g_music_playlist);
+        } else {
+            int32_t list[0x80];
+            int n = Music_SongList(exe_str(0x5d7948), list, 0x80);
+            Music_SetPlaylist(n, list);
+        }
         Music_Play(NULL, 0);
     }
     /* 0x4aafd0: the music's volume from the options' (0x5d14b0's mix of 0x5d1740) */

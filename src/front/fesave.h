@@ -49,6 +49,9 @@ typedef struct {
     SaveCar *used;
     int nused;
     int32_t usedinfo;        /* 0x691b58 */
+    /* CDPlayer: the songs chosen for the races (front/fecd.c's, 0x65b62c) */
+    int32_t *cd;
+    int ncd;
 } Save;
 
 /* The sections of a save's bytes; false on a section the port can't read or a short file. */
@@ -65,6 +68,8 @@ Save *FESave_Current(void);
 bool FESave_Write(void);
 /* Whether a player's save is the current one, and its file's stem ("<picture><name>"). */
 bool FESave_HavePlayer(void);
+/* The save's CD player section (if it has one) into the CD player's chosen list (0x4bdd50). */
+void FESave_CDApply(void);
 const char *FESave_Stem(void);
 /* A count up at each load (the screens' copies of the save's data follow it). */
 unsigned FESave_Serial(void);

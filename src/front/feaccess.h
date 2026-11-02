@@ -24,6 +24,8 @@ FEAccessor *FEAccess_Find(const char *path);
 int FEAccess_Count(const FEAccessor *a);
 int FEAccess_Pos(const FEAccessor *a);
 void FEAccess_SetPos(FEAccessor *a, int pos);
+/* A list's choice dropped (0x4bc1f0: its position reads -1 till one is set; the CD player's lists). */
+void FEAccess_Unselect(FEAccessor *a);
 /* An int accessor's value (its first plus its place) and its range made lo .. hi (0x4ba0d0: a place past
    the new end back to 0). */
 int FEAccess_Int(const FEAccessor *a);

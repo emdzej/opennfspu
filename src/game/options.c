@@ -2,6 +2,7 @@
 #include "game/options.h"
 #include "exe.h"
 #include "game/hud_config.h"
+#include "game/music.h"
 #include "platform.h"
 #include "vfs.h"
 #include <ctype.h>
@@ -125,4 +126,5 @@ void Options_Apply(void)
     g_hud_opponentlist = Options_Int(0x5d5f64, g_hud_opponentlist);  /* OPPONENTLIST -> 0x657dd4 */
     g_hud_imperial = Options_Int(0x5d5fa4, g_hud_imperial);          /* SPEEDUNITS -> 0x657dc0 */
     g_hud_damage_display = Options_Int(0x5d5f84, g_hud_damage_display);   /* DAMAGEDISPLAY -> 0x657dc8 */
+    g_music_shuffle = Options_Int(0x5d60f8, g_music_shuffle);       /* RANDOMPLAYLIST -> 0x657a5c */
 }
