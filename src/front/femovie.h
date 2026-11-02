@@ -28,6 +28,7 @@ void FEMovie_Update(FEMovie *m, struct Window *win);
 bool FEMovie_Ended(const FEMovie *m);                   /* 0x4e2140: it came to its end once */
 bool FEMovie_Playing(const FEMovie *m);                 /* 0x4e1b50 */
 void FEMovie_Pause(FEMovie *m);                         /* 0x4e1b40 */
+void FEMovie_Resume(FEMovie *m);                        /* 0x4e1b20 */
 
 /* The movie controls of the current screens: their draw (FEMovieBox_v15 0x4cd080, FEMovieCircle_v15
    0x4cd520; the first makes the box, its v20 and v21), true when c is one; their update in the front

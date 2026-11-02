@@ -677,6 +677,46 @@ void Audio_UI(int patch)
     SND_Play(s_banks[7].slot, patch, &p);
 }
 
+/* A speech bank from the speech archive (0x4fc980: <speech>zzzxeng.viv's entry, its own heap "Congrats
+   Speech"), its patch 0 played at once at the speech's volume (0x5d174c); 0 for none. Audio_SpeechFree
+   stops and frees it (0x4fe390's). */
+static struct { uint8_t *data; int slot, play; } s_speechbank = {NULL, -1, -1};
+
+void Audio_SpeechFree(void)
+{
+    if (0 <= s_speechbank.play) SND_Stop(s_speechbank.play);
+    if (0 <= s_speechbank.slot) SND_BankRemove(s_speechbank.slot);
+    free(s_speechbank.data);
+    s_speechbank.data = NULL;
+    s_speechbank.slot = s_speechbank.play = -1;
+}
+
+bool Audio_SpeechBank(const char *entry)
+{
+    Audio_SpeechFree();
+    if (!s_on) return false;
+    char path[160];
+    snprintf(path, sizeof path, exe_str(0x5db66c), "GameData\\Speech\\");   /* "%szzzxeng.viv" of 0x65b31c */
+    size_t size = 0;
+    uint8_t *viv = vfs_read_all(path, &size);
+    uint32_t off = 0, len = 0;
+    if (!viv || !BIG_locateentry(viv, entry, 0, &off, &len) || !len || off + len > size) {
+        free(viv);
+        return false;
+    }
+    s_speechbank.data = malloc(len);
+    if (s_speechbank.data) memcpy(s_speechbank.data, viv + off, len);
+    free(viv);
+    if (!s_speechbank.data) return false;
+    s_speechbank.slot = SND_BankAdd(s_speechbank.data);
+    if (s_speechbank.slot < 0) return false;
+    SndParams p;
+    SND_ParamsDefault(&p);
+    p.vol = (int8_t)opt(0x5d174c);
+    s_speechbank.play = SND_Play(s_speechbank.slot, 0, &p);
+    return true;
+}
+
 void Audio_Gate(void) { play_once(s_banks[3].slot, 2, 0, 0x7f, 0x40, 0x10000, 0x7f); }       /* 0x4aac00 */
 void Audio_Cone(void) { play_once(s_banks[3].slot, 0, 0, 0x7f, 0x40, 0x10000, 0x7f); }       /* 0x4aac20 */
 void Audio_WrongWay(void) { play_once(s_banks[3].slot, 1, 0, 0x28, 0x40, 0x10000, 0x7f); }   /* 0x4aac40 */

@@ -2003,8 +2003,11 @@ int FEData_TourOpponents(RaceOpponent out[8], int start[9], float *skill)
    three of the standings, once more completed (+0xd3c); the first time, the year to the next of the table
    0x5b8670; when the era has no tournament left not completed, the next era (0x209 .. 0x20b; 0x691e54 at
    the last). Below the first three the races open again (the port's: the original's 0x503263 path). */
+static bool s_era_ended;   /* 0x691e81: the last tournament's end ended its era */
+
 static void tour_end(uint8_t *r)
 {
+    s_era_ended = false;
     int n = rec16(r, 0x39c);
     if (n > 10) n = 10;
     for (int i = 0; i < n; i++) if (!r[0x3d0 + 0xa4 * i]) return;
@@ -2034,7 +2037,7 @@ static void tour_end(uint8_t *r)
                 if (head[3] == 0x20b) head[6] = 1;
                 if (head[3] == 0x209) head[3] = 0x20a;
                 else head[3] = 0x20b;
-                PENDING_NOTE(0x4fcaa0, "the era's end (FEEndOfEra_Run: its screens and movies)");
+                s_era_ended = true;   /* (the front end then shows the era's end, front/feendofera.c) */
             }
             memcpy(ts->data, head, sizeof head);
         }
@@ -2484,6 +2487,48 @@ void FEData_TourRaceInfo(RaceTournament *t)
         if (rec32(x, 4) == head[3] && rec16(x, 0xe4) != 2 && rec16(x, 0xd3c) == 0) open++;
     }
     t->end_of_era = rec16(r, 0xd3c) < 1 && rec16(r, 0xe2) != 1 && open == 1 && left == 1;
+}
+
+bool FEData_EraEnded(void) { return s_era_ended; }   /* 0x504db0 */
+
+int FEData_Era(void)   /* 0x502880 */
+{
+    int32_t head[7] = {0};
+    int nt = 0;
+    tour_section(head, &nt);
+    return head[3] ? head[3] : 0x209;
+}
+
+bool FEData_EraDone(int era)   /* 0x503480: none of the era's tournaments (but kind 2) left never completed */
+{
+    int32_t head[7] = {0};
+    int nt = 0;
+    const uint8_t *all = tour_section(head, &nt);
+    for (int i = 0; all && i < nt; i++) {
+        const uint8_t *x = all + 0xd40 * i;
+        if (rec32(x, 4) == era && rec16(x, 0xe4) != 2 && rec16(x, 0xd3c) == 0) return false;
+    }
+    return true;
+}
+
+const uint8_t *FEData_EraTournament(int era, int k)
+{
+    /* 0x5028f0's lists (0x502150: the records of the era, +4, but kind 2, +0xe4, in their order) */
+    int32_t head[7] = {0};
+    int nt = 0;
+    const uint8_t *all = tour_section(head, &nt);
+    for (int i = 0; all && i < nt; i++) {
+        const uint8_t *x = all + 0xd40 * i;
+        if (rec32(x, 4) != era || rec16(x, 0xe4) == 2) continue;
+        if (k-- == 0) return x;
+    }
+    return NULL;
+}
+
+const uint8_t *FEData_CarAt(int i)   /* the whole car list's i-th (0x6919e8), NULL past it */
+{
+    if (!s_car || i < 0 || (size_t)(i + 1) * CAR_SIZE > s_car_size) return NULL;
+    return s_car + CAR_SIZE * (size_t)i;
 }
 
 int FEData_RaceEra(void)

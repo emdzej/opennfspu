@@ -223,6 +223,7 @@ void FEMovie_Free(FEMovie *m)
 bool FEMovie_Ended(const FEMovie *m) { return m && m->ended; }
 bool FEMovie_Playing(const FEMovie *m) { return m && !m->paused; }
 void FEMovie_Pause(FEMovie *m) { if (m) m->paused = true; }
+void FEMovie_Resume(FEMovie *m) { if (m) m->paused = false; }
 
 /* The movie's update into its window (slot 0, 0x4e1d80): the clock on by the ticks since the last one
    (only after a frame was shown and while playing); the frames due got, the 'MADe' ones among them

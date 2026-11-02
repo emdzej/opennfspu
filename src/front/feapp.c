@@ -4,6 +4,7 @@
 #include "front/fecarlogo.h"
 #include "front/feshowcase.h"
 #include "front/fechronicle.h"
+#include "front/feendofera.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
@@ -85,7 +86,8 @@ static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCa
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
 static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
 static int s_grid_pers[8], s_grid_start[9], s_ngrid = -1;   /* the knockout's and the career's grid for the race */
-static float s_skill = 1.0f;   /* the opponents' skill factor (the career race's difficulty, +0x3cc) */
+static float s_skill = 1.0f;
+static bool s_era_race;   /* 0x6577dc of the race just run: the last race of its era's last tournament */   /* the opponents' skill factor (the career race's difficulty, +0x3cc) */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int s_testdrive_type;          /* 0x5dc1b8 */
 static bool s_factory_race;           /* the race Factory Driver's mission */
@@ -333,6 +335,18 @@ bool FEApp_Init(const char *start)
             while (s_depth) FertControl_free(s_stack[--s_depth]);
             return FEApp_GotoScreen(start, true);
         }
+        if (s_gametype == 4 && s_era_race && FEData_EraEnded() && n > 0) {
+            /* (0x4d2e70's career stack after the last race of an era's last tournament, TOURNAMENTENDOFERA
+               0x6577dc and 0x504db0: the first screen, the victory room, the era's end over it) */
+            s_era_race = false;
+            ok = FEApp_GotoScreen(s_saved[0], true);
+            if (ok) ok = FEApp_GotoScreen(exe_str(0x5d93ac), true);   /* "VictoryRoom" */
+            if (ok) ok = FEApp_GotoScreen(exe_str(0x5d93a0), true);   /* "endofera" */
+            if (ok) return true;
+            while (s_depth) FertControl_free(s_stack[--s_depth]);
+            return FEApp_GotoScreen(start, true);
+        }
+        s_era_race = false;
         for (int i = 0; i < n && ok; i++) ok = FEApp_GotoScreen(s_saved[i], true);
         if (ok && FEData_KnockoutOn()) FEApp_GotoScreen("knockoutraceinfo", true);
         if (ok) return true;
@@ -364,6 +378,7 @@ void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int 
 {
     /* a quit race (0x657e34): 0x4ed590 records nothing, a career race only its tournament's end */
     if (s_tour_race >= 0) {
+        s_era_race = !quit && g_race_tour.end_of_era;   /* (TOURNAMENTENDOFERA, 0x6577dc) */
         if (quit) FEData_TourEnd();
         else FEData_TourResult(s_tour_race, places, times, clean, n);
     }
@@ -397,6 +412,7 @@ void FEApp_End(void)
     }
     FE3D_Free();
     FEChronicle_Free();    /* 0x506920 (0x4d5d40) */
+    FEEndOfEra_Free();
     FEShowcase_Load(NULL); /* 0x5081e0 (the port's: the race's memory) */
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
     g_r3d_frontend = 0;
@@ -1651,6 +1667,10 @@ static void screen_entered(void)
     FECarLogo_Drop(on_stack);
     /* (FEChronicleCallBackList 0x506450, made with each of its screens) */
     if (s_depth && !strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE")) FEChronicle_Open();
+    /* (FEEndOfEraCallBackList 0x4fcaa0, made with its screen; freed when it's gone, 0x4fe390) */
+    bool eoe = s_depth && !strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_ENDOFERASCREEN");
+    if (eoe && !FEEndOfEra_On()) FEEndOfEra_Open();
+    else if (!eoe && FEEndOfEra_On()) FEEndOfEra_Free();
 }
 
 /* A word-wrapped watch (FEWordWrapAccessorWatch_v15 0x5225e0 -> 0x522b10): its accessor's text broken into
@@ -2678,6 +2698,7 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
         }
     }
     else if (!strcmp(cbl, "ID_TOURNYSCREEN")) tourny_update(w);
+    else if (!strcmp(cbl, "ID_ENDOFERASCREEN")) FEEndOfEra_Update();   /* _v1 0x4fe730 */
     else if (!strcmp(cbl, "ID_CHRONICLE")) {
         /* FEChronicleCallBackList_v1 0x506e90: the era's button selected, the others not */
         static const uint32_t ids[5] = {0x5dbb24, 0x5dbb14, 0x5dbb04, 0x5dbaf4, 0x5dbae4};
@@ -2770,6 +2791,7 @@ void FEApp_Frame(void)
         update_watches(w);
         update_all(w);   /* (the controls' ticks) */
         FEWindow_Draw(w);
+        if (w == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
         draw_combos(w);
     }
     if (s_bar) {

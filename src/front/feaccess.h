@@ -201,3 +201,11 @@ bool FEData_CheatCode(const char *name);
 void FEData_TourRaceInfo(RaceTournament *t);
 /* The race's era option (0x4ecc60's 0xbb from 0x503db0): 0 .. 2. */
 int FEData_RaceEra(void);
+/* The career's era (0x502880: 0x209 .. 0x20b), an era with no tournament left never completed
+   (0x503480), the k-th tournament record of an era's list (0x5028f0), the last tournament's end having
+   ended its era (0x504db0), the whole car list's i-th record (0x6919e8). */
+int FEData_Era(void);
+bool FEData_EraDone(int era);
+const uint8_t *FEData_EraTournament(int era, int k);
+bool FEData_EraEnded(void);
+const uint8_t *FEData_CarAt(int i);

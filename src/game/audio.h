@@ -38,6 +38,10 @@ void Audio_SayLead(int s);
 /* The front end's and the HUD's sounds (0x4aab80): fesfx's patch (5 a click, 8 a slider, 9 a key or
    button, 4 a billboard) at the mix's volume. */
 void Audio_UI(int patch);
+/* A speech bank of the speech archive (zzzxeng.viv's entry) played at once (0x4fc980), and its stop and
+   release. */
+bool Audio_SpeechBank(const char *entry);
+void Audio_SpeechFree(void);
 /* The sounds stopped with a pause (0x4aaf20) and started again (0x4aafd0). */
 void Audio_Pause(void);
 void Audio_Resume(void);
