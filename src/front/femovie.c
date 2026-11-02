@@ -15,7 +15,6 @@
 #include "snd/snd.h"
 #include "app.h"
 #include "exe.h"
-#include "pending.h"
 #include "platform.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -298,8 +297,11 @@ void FEMovie_Draw(FEMovie *m, int32_t ox, int32_t oy, uint32_t colour)
     Texture_reload(m->image->tex, m->win->shape);   /* 0x536280 */
     float x = (float)(m->x + ox), y = (float)(m->y + oy);
     if (m->box_h < m->h && m->w < m->box_w) {
-        /* (0x4d9920: the image cut to the box's rectangle; no screen's box is that shape) */
-        PENDING_NOTE(0x4d9920, "FEMovie's draw cut to its box");
+        /* A box lower than the film and wider: the box's width by the film's height, cut to the box
+           (0x4d9920; no screen's box is that shape) */
+        const int32_t clip[4] = {(int32_t)x, (int32_t)y, (int32_t)((float)m->box_w + x), (int32_t)((float)m->box_h + y)};
+        FE2D_ImageClip(m->image, x, y, (float)m->box_w, (float)m->h, clip, colour, 0, false);
+        return;
     }
     FE2D_Image(m->image, x, y, (float)m->box_w, (float)m->box_h, colour, 0, false);   /* 0x4d95e0 */
 }
