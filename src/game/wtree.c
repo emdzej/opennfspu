@@ -811,14 +811,57 @@ static int obj_hitkind(const WTreeObject *o, const float vel[3])
     return (o->drivethru != 0) + 2;
 }
 
+static void obj_centre(const WTreeElem *e, float out[3]);
+
 static float cyl_radius(const WTreeObject *o) { return o->radius; }   /* 0x486650 */
 static float box_radius(const WTreeObject *o) { return o->radius; }   /* 0x486ce0 */
 
+/* The ground-plane line (x0, z0) .. (x1, z1) against the circle (cx, cz, r) (0x489d20): its two
+   crossings' parameters (t0 the nearer root), true when either is within 0 .. 1 (none when the line
+   misses: the root of a negative is NaN, failing both tests). */
+static bool line_circle(float x0, float z0, float x1, float z1, float cx, float cz, float r, float *t0, float *t1)
+{
+    double dx = (double)x1 - x0, dz = (double)z1 - z0;
+    double a = dx * dx + dz * dz;
+    double b = ((double)x0 - cx) * dx + ((double)z0 - cz) * dz;
+    b += b;
+    double pc = (double)z0 * cz + (double)x0 * cx;
+    double c = ((double)cz * cz + (double)cx * cx + (double)z0 * z0 + (double)x0 * x0) - (pc + pc) - (double)r * r;
+    double q = sqrt(b * b - c * a * 4.0), a2 = a + a;
+    *t0 = (float)((-b - q) / a2);
+    double u = (q - b) / a2;
+    *t1 = (float)u;
+    if (*t0 >= k_zero && *t0 <= k_one) return true;
+    return u >= (double)k_zero && u <= (double)k_one;
+}
+
+/* The segment against the cylinder in the ground plane (slot 6, 0x4866b0): both crossings within the
+   segment, the normal from the centre to their middle and the point on the circle there (2); else the
+   one crossing (the nearer when it is within, else the farther), the normal to it from the centre and
+   the crossing itself (1); 0 when the segment misses. */
 static int cyl_collide(const WTreeObject *o, const float seg[6], float n[3], float at[3])
 {
-    (void)o, (void)seg, (void)n, (void)at;
-    PENDING_NOTE(0x4866b0, "the cylinder against a segment (0x4866b0, the AI's look-ahead)");
-    return 0;
+    float c[3], t0, t1;
+    obj_centre(&o->e, c);
+    if (!line_circle(seg[0], seg[2], seg[3], seg[5], c[0], c[2], o->radius, &t0, &t1)) return 0;
+    float d[3] = {seg[3] - seg[0], seg[4] - seg[1], seg[5] - seg[2]};   /* 0x5320a0 */
+    float t = t1;
+    if (k_zero <= t0) {
+        if (t0 <= k_one && k_zero <= t1 && t1 <= k_one) {
+            float m[3] = {(d[0] * t1 + seg[0] + d[0] * t0 + seg[0]) * k_half, k_zero, (d[2] * t1 + seg[2] + d[2] * t0 + seg[2]) * k_half};
+            n[0] = m[0] - c[0], n[1] = 0, n[2] = m[2] - c[2];
+            normalize(n, n);
+            float p[3] = {n[0] * o->radius + c[0], n[1] * o->radius + c[1], n[2] * o->radius + c[2]};   /* 0x532070 */
+            if (at) memcpy(at, p, sizeof p);
+            return 2;
+        }
+        if (t0 <= k_one) t = t0;
+    }
+    float p[3] = {d[0] * t + seg[0], k_zero, d[2] * t + seg[2]};
+    n[0] = p[0] - c[0], n[1] = 0, n[2] = p[2] - c[2];
+    normalize(n, n);
+    if (at) memcpy(at, p, sizeof p);
+    return 1;
 }
 
 /* The segment against the box's four sides in the ground plane: the number crossed; the first crossed
