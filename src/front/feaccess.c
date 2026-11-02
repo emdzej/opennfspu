@@ -19,6 +19,7 @@
 #include <strings.h>
 
 void Audio_UI(int patch);   /* game/audio.h (whose car.h this file's CAR_SIZE clashes with) */
+void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
@@ -1706,18 +1707,47 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "PRIZEMONEY")) return FE_MoneyText(rec32(r, 0xec));
         if (!strcmp(arg, "TIMESCOMPLETED")) { snprintf(tb, sizeof tb, "%d", rec16(r, 0xd3c)); return tb; }
         if (!strcmp(arg, "LOCATION")) return FEAccess_Text(FEAccess_Find("Tournament.RemainingTracks"));
-        PENDING_NOTE(0x505cd0, "the tournament's difficulty and record time (the remaining tracks)");
-        return "";
+        /* DIFFICULTY and RECORDTIME: Tournament.RemainingTracks' track (0x4f9c30): its difficulty's
+           string (+0x78, from 0x1c2), its record list's first time (0x4fa6c0: +0x1b0 +0x48) */
+        int race = FEData_TourRace();
+        const uint8_t *t = race >= 0 ? track_by_id(rec16(r, 0x3a0 + 0xa4 * race)) : NULL;
+        if (!strcmp(arg, "DIFFICULTY")) {
+            const char *d = t ? FEStrings_Get(rec16(t, 0x78) + 0x1c2) : NULL;
+            return d ? d : "";
+        }
+        if (!strcmp(arg, "RECORDTIME")) {
+            if (!t) return "";
+            HTime_Format(rec32(t, 0x1b0 + 0x48), tb, false);
+            return tb;
+        }
+        return exe_str(0x5d79a0);   /* "This is a bug" */
     }
     if (a->kind == ACC_INT && arg && !strcmp(a->name, "Knockout.TrackNumber")) {
         /* FEKnockoutTrackNumberAccessor_v5 0x4ba290: "<d>TRACKNUMBER" its number, "<d>TRACKNAME",
            "<d>TRACKLAPS", "<d>TRACKDIRECTION", "<d>TRACKTRAFFIC" slot d's, for the slots raced (fewer
-           than Game.NumKOOpponents); "TRACKNAME" the chosen slot's (DIFFICULTY, RECORDTIME pend) */
+           than Game.NumKOOpponents); "TRACKNAME", "DIFFICULTY", "RECORDTIME" the chosen slot's */
         static char kb[64];
         int d = arg[0] - '0', n = FEData_KOOpponents();
         const char *f = arg;
         if (d >= 0 && d <= 6) f = arg + 1;
         else d = a->pos;
+        if (!strcmp(f, "DIFFICULTY") || !strcmp(f, "RECORDTIME")) {
+            /* the slot's track (Track<d>.Track's, 0x4f9c30): its difficulty's string (+0x78, from
+               0x1c2), its record list's first time (0x4fa6c0: +0x1b0 +0x48) */
+            char nm[32];
+            snprintf(nm, sizeof nm, "Track%d.Track", d + 1);
+            FEAccessor *ta = FEAccess_Find(nm);
+            if (!ta || !s_trk) return "";
+            refresh(ta);
+            const uint8_t *t = track_by_id(rec16(s_trk + TRK_SIZE * track_rec(ta, ta->pos), 0));
+            if (!t) return "";
+            if (f[0] == 'D') {
+                const char *x = FEStrings_Get(rec16(t, 0x78) + 0x1c2);
+                return x ? x : "";
+            }
+            HTime_Format(rec32(t, 0x1b0 + 0x48), kb, false);
+            return kb;
+        }
         if (f == arg && strcmp(f, "TRACKNAME")) return "";
         if (d >= n && f != arg) return "";
         if (!strcmp(f, "TRACKNUMBER")) { snprintf(kb, sizeof kb, "%d", d + 1); return kb; }
