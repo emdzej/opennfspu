@@ -19,6 +19,7 @@
 #include "game/hud.h"
 #include "game/input.h"
 #include "game/controls.h"
+#include "game/music.h"
 #include "game/replay_file.h"
 #include "game/sim_rand.h"
 #include "game/race_progress.h"
@@ -367,7 +368,7 @@ static void race_actions(void)
         if (!g_drive_paused) {
             if (Input_Action(ACT_VIEWDISTANCE, true))   /* 0x44f0f0 */
                 g_renderopts.adjustableviewdistance = (g_renderopts.adjustableviewdistance + 1) % 4;
-            if (Input_Action(ACT_HORIZON, true)) PENDING_NOTE(0x45da50, "the horizon key (the sky's +0x60)");
+            if (Input_Action(ACT_HORIZON, true)) Sky_ToggleHorizon();   /* 0x45dc40's +0x60 */
             if (Input_Action(ACT_TOGGLEHUD, true)) HUD_ToggleHud();             /* 0x427370 */
             if (Input_Action(ACT_CYCLEMAP, true)) HUD_CycleMap();               /* 0x426700 */
             if (Input_Action(ACT_ZOOMINMAP, true)) HUD_ZoomMap(true);           /* 0x4275c0 */
@@ -376,8 +377,8 @@ static void race_actions(void)
             if (Input_Action(ACT_TOGGLEMAP, true)) HUD_ToggleMap();             /* 0x427320 */
             if (Input_Action(ACT_ZOOMOUTMAP, true)) HUD_ZoomMap(false);         /* 0x4275f0 */
             if (Input_Action(ACT_HUDTRANSPARENCY, true)) HUD_ToggleTrays();     /* 0x427590 */
-            if (Input_Action(ACT_SFX, true)) PENDING_NOTE(0x4ab2b0, "the sound effects' key");
-            if (Input_Action(ACT_MUSIC, true)) PENDING_NOTE(0x4ad560, "the music's key");
+            if (Input_Action(ACT_SFX, true)) Audio_ToggleSfx();   /* 0x4ab2b0 */
+            if (Input_Action(ACT_MUSIC, true)) Music_Next();      /* 0x4ad560 */
             if (Input_Action(ACT_CYCLECAMERA, true) && g_replay_mode < 2) Camera_NextMode(0);   /* 0x465920 */
             g_look[0] = Input_Action(ACT_LOOKFORWARD, false);
             g_look[1] = Input_Action(ACT_LOOKRIGHT, false);

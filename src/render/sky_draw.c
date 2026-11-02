@@ -592,6 +592,19 @@ static void sky_draw(Sky *s)
     set_nearfar(c, znear, zfar);
 }
 
+void Sky_ToggleHorizon(void)
+{
+    Sky *s = g_sky;   /* 0x45dc40 */
+    if (!s) return;
+    if (s->f60 == 0) {
+        s->f60 = 1;          /* 0x45da50 */
+        Sky_SetLight(true);
+    } else if (s->f60 == 1) {
+        s->f60 = 0;          /* 0x45da70 */
+        Sky_SetLight(false);
+    }
+}
+
 void Sky_DrawBefore(void)   /* 0x45d690 */
 {
     if (!g_sky) return;

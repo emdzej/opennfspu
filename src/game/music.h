@@ -24,6 +24,7 @@ void Music_FadeOut(int ms);                          /* 0x4ae190 (0: at once) */
 void Music_SetPlaylist(int n, const int32_t *songs); /* 0x4ae240: entry numbers */
 int Music_Play(const char *pattern, int mode);       /* 0x4ae2a0 */
 void Music_SetVolume(int vol);                       /* 0x4ae690 */
+void Music_Next(void);                               /* 0x4ad560: the music key */
 int Music_SongList(const char *pattern, int32_t *out, int cap);   /* 0x4adbf0's entries */
 int Music_PlayedMs(void);
 const MusicSong *Music_Current(void);

@@ -5,6 +5,7 @@
 #include "pending.h"
 #include "real/file.h"
 #include "real/mem.h"
+#include "render/render.h"
 #include "support/ufile.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -148,6 +149,16 @@ void Sky_CreateLight(int weather)   /* 0x459820 */
     if (!g_sky_light) return;
     *g_sky_light = g_sky_config && g_sky_config->data
                        ? g_sky_config->data + SKY_SLOT_BASE + Sky_SlotFor(weather) * SKY_SLOT_SIZE : NULL;
+}
+
+/* The light environment's slot again: the level's (0x4598f0), or slot 0's (0x4598b0, whose search
+   starts and ends at 0). */
+void Sky_SetLight(bool level)
+{
+    if (!g_sky_light) return;
+    *g_sky_light = g_sky_config && g_sky_config->data
+                       ? g_sky_config->data + SKY_SLOT_BASE + (level ? Sky_SlotFor(g_renderopts.skyrendering) : 0) * SKY_SLOT_SIZE
+                       : NULL;
 }
 
 void Sky_FreeLight(void)            /* 0x459890 */

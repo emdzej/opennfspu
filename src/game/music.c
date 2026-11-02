@@ -316,6 +316,35 @@ int Music_Play(const char *pattern, int mode)
     return m->nlist;
 }
 
+/* The music's key (I_MUSIC, 0x4ad560): the song playing faded out and the song cleared; with a song asked
+   for (+0x10) the music stops, else the next is one of the playlist at random. */
+void Music_Next(void)
+{
+    Music *m = s_music;
+    if (!m || m->nlist == 0 || m->volume <= 0) return;
+    m->song = NULL;
+    m->f18 = 1;
+    m->fade = 0;
+    m->info.left = m->info.length = 0;
+    m->info.name = m->info.artist = NULL;
+    m->info.title[0] = 0;
+    if (m->state == 0 && -1 < m->cur) {
+        SND_StreamFade(m->player, 500, 0);
+        m->fadetime = 1000;
+    }
+    m->cur++;
+    if (m->f10) {
+        m->f10 = 0;
+        m->state = -1;
+        m->cur = -1;
+        return;
+    }
+    m->f10 = 1;
+    m->state = 1;
+    if (m->nlist == 1) m->cur = 0;
+    else if (0 < m->nlist) m->cur = rnd_pick(m->nlist);
+}
+
 /* The music's volume (0x4ae690): 0 stops it; from 0 a song starts; a fade in progress is rescaled. */
 void Music_SetVolume(int vol)
 {

@@ -31,6 +31,9 @@ void SkyConfig_Upgrade(SkyConfig *c, int version);
    one that is set (a slot's first word non-zero), else slot 0. 0x459820 / 0x459890 */
 void Sky_CreateLight(int weather);
 void Sky_FreeLight(void);
+void Sky_SetLight(bool level);   /* 0x4598f0 (true) / 0x4598b0 into 0x627e1c */
+/* The horizon key (I_HORIZON): the sky's +0x60 toggled with the light's slot (0x45da50, 0x45da70). */
+void Sky_ToggleHorizon(void);
 const uint8_t *Sky_LightSlot(void);              /* *0x627e1c: SKY_SLOT_SIZE bytes in the configuration */
 int Sky_SlotFor(int weather);
 /* How much the cars' light glows show at the eye's place along the road (the sky colour keys' +0x18).

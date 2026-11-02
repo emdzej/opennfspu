@@ -44,6 +44,8 @@ bool Audio_SpeechBank(const char *entry);
 void Audio_SpeechFree(void);
 /* The sounds stopped with a pause (0x4aaf20) and started again (0x4aafd0). */
 void Audio_Pause(void);
+/* The effects off or on again (I_SFX). 0x4ab2b0 */
+void Audio_ToggleSfx(void);
 void Audio_Resume(void);
 /* The race's sounds stopped at its end (0x4ab040), and before the replay plays again (0x4ab130). */
 void Audio_Stop(void);

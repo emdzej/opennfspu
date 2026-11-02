@@ -31,8 +31,12 @@ static const char *sound_dir(void) { return "GameData\\Sounds\\"; }   /* 0x65b31
    bytes over them once the sound is on (0x4a8950). Other options read their starting values. */
 static int32_t s_mix[15];
 static bool s_mix_read;
+static bool s_sfx_off;    /* !0x656840: the effects' key turned them off */
+static int32_t s_sfx_kept; /* 0x657ca4: the effects' volume while off (0x657ca8 .. the others') */
+
 static int32_t opt(uint32_t va)
 {
+    if (s_sfx_off && 0x5d1748 <= va && va <= 0x5d1750) return 0;   /* (zeroed by the effects' key) */
     if (0x5d14b0 <= va && va < 0x5d14ec && s_mix_read) return s_mix[(va - 0x5d14b0) / 4];
     return (int32_t)exe_u32(va);
 }
@@ -1703,6 +1707,25 @@ void Audio_StartRace(void)
     Music_Play(NULL, 0);
 }
 
+/* The engines' voices stopped (0x4ad2e0): their snapshots dropped, the start and stop sounds and both
+   voices of each layer stopped, the layers' eased volumes 0. */
+static void engines_stop(void)
+{
+    for (int k = 0; k < 2; k++) {
+        Engine *e = s_engine[k];
+        if (!e) continue;
+        e->rd = e->wr;
+        if (-1 < e->stop_h) { SND_Stop(e->stop_h); e->stop_h = -1; }
+        if (-1 < e->start_h) { SND_Stop(e->start_h); e->start_h = -1; }
+        for (int i = 0; i < 32; i++) {
+            if (e->v[i].handle != -1) SND_Stop(e->v[i].handle);
+            if (e->v2[i].handle != -1) SND_Stop(e->v2[i].handle);
+            e->vol[i] = 0;
+            e->v[i].handle = e->v2[i].handle = -1;
+        }
+    }
+}
+
 /* The sounds stopped with a pause (0x4aaf20): the one-shot's plays silenced (0x4af6d0(0, 0); its
    second pair at 0x656ae8, 0x4af590's, isn't ported), every slot's play at volume 0, the music cut, the
    reverb's send off and the engines' voices stopped (0x4ad2e0: their snapshots dropped, the start and
@@ -1722,18 +1745,26 @@ void Audio_Pause(void)
         s_revlevel = 0;
         s_revset = false;
     }
-    for (int k = 0; k < 2; k++) {
-        Engine *e = s_engine[k];
-        if (!e) continue;
-        e->rd = e->wr;
-        if (-1 < e->stop_h) { SND_Stop(e->stop_h); e->stop_h = -1; }
-        if (-1 < e->start_h) { SND_Stop(e->start_h); e->start_h = -1; }
-        for (int i = 0; i < 32; i++) {
-            if (e->v[i].handle != -1) SND_Stop(e->v[i].handle);
-            if (e->v2[i].handle != -1) SND_Stop(e->v2[i].handle);
-            e->vol[i] = 0;
-            e->v[i].handle = e->v2[i].handle = -1;
-        }
+    engines_stop();   /* 0x4ad2e0 */
+}
+
+/* The effects' key (I_SFX, 0x4ab2b0): off, the one-shots and every slot's play silenced and the
+   engines stopped, the effects' volumes (0x5d1744 .. 0x5d1750) kept and zeroed; on, them back. */
+void Audio_ToggleSfx(void)
+{
+    if (!s_on) return;   /* (0x657c94: no sound) */
+    if (!s_sfx_off) {
+        for (int i = 0; i < 2; i++)
+            if (s_pair[i] != -1) SND_SetVolume(s_pair[i], 0);   /* 0x4af6d0(0, 0) */
+        engines_stop();
+        for (int i = 0; i < 0x49; i++)   /* (to 0x6563c8: not the last seven) */
+            if (s_slot[i][0] != -1) SND_SetVolume(s_slot[i][0], 0);
+        s_sfx_kept = g_audio_fx;
+        g_audio_fx = 0;
+        s_sfx_off = true;
+    } else {
+        g_audio_fx = s_sfx_kept;
+        s_sfx_off = false;
     }
 }
 
