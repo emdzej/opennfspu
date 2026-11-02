@@ -1636,8 +1636,8 @@ void Audio_StartRace(void)
         s_revset = false;
     }
     if (!s_on || opt(0x5d1750) <= 0) return;
-    /* 0x4a8670: the opponents' engine banks (and the rain's) read before the start */
-    PENDING_NOTE(0x657a24, "the rain's bank before the start (the weather)");
+    /* 0x4a8670: the opponents' engine banks read before the start (and the rain's when 0x657a24 is 1:
+       never, no track spec file ships, see ai_data.c) */
     for (int pass = 0; pass < 0x40; pass++) {
         stream_tick();
         bool done = true;

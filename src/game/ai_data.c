@@ -91,7 +91,8 @@ static void personalities(Udff *u)
         memcpy(&sc, &bits, 8);
         float f = (float)((float)(int32_t)tab(0x5cc254, l[6]) * sc);
         memcpy(&v[11], &f, 4);
-        /* (0x657a24, the track's weather from its spec file (0x628a22), not ported: 0, dry) */
+        /* (0x657a24, the track's weather: only a track spec file sets it (World_LoadSpecFile 0x475c10,
+           GameData\Track\Tr<nn>.bin's +2), and the game ships none: always 0, dry) */
         int32_t wet = 0;
         v[12] = tab(0x5cc294, wet + l[8]);
         v[13] = tab(0x5cc2a8, wet + l[8]);

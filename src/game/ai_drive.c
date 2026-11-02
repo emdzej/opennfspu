@@ -177,7 +177,7 @@ float AI_SpeedFactor(Car *c, float v)
     }
     if (I(0x1098) != 0x3f800000) f *= F(0x1098);
     float p = f * F(0x10dc);
-    /* (0x657a24 above 0, the wet track's 0x5b25e8: the weather's spec, not ported) */
+    /* (0x657a24 above 0, the wet track's 0x5b25e8: never, see ai_data.c's weather) */
     if (I(CAR_FLAGS) & 0x20) p *= F(0x1028);
     if (AI_Mood(c, 4) != -1) p *= K(0x5b246c);
     float r = catch_up(c);
