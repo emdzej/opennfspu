@@ -57,6 +57,7 @@ const char *FEData_Track(void);
 bool FEData_TrackRecords(const char *track, int32_t race[8], int32_t lap[8], char names[8][32], char cars[8][32]);
 /* A time entered among the track's records, the later ones moved down (0x4fa560: before the first
    slower; none, not entered), the driver and car (17 letters) with it; nfs5.trk saved (0x4fa320). */
+void FEData_ResetRecords(void);   /* RESETRECORDS 0x4faa80: the game's records back */
 void FEData_TrackRecordEnter(const char *track, const char *name, const char *car, int32_t t);
 /* zMergedList.Car's car one of the player's (0x4f4420: its place before the owned cars' count). */
 bool FEData_MergedOwned(void);
@@ -98,6 +99,7 @@ const char *FEData_TourTrack(void);
 /* That race run: the racers' places (0 not finished) and times, the player first. */
 void FEData_TourResult(int race, const int *places, const int *times, const bool *clean, int n);
 void FEData_TourEnd(void);
+void FEData_TourForfeit(void);   /* FORFEITTOURNY's yes: the tournament's races open again (0x5033f0) */
 /* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
 int FEData_TourLaps(void);
 /* The career race's traffic count (0x4fb630); slots[] its own traffic cars' ids (nfs5.car kind 1) when

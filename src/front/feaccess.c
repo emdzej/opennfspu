@@ -1548,13 +1548,12 @@ void FEData_DefaultSetup(void)   /* DEFAULTSETTINGS (0x4f10e0 -> 0x4eeb70, as 0x
     FESave_Write();
 }
 
-void FEData_Init(void)
+/* FE_LoadTrackRecords 0x4fa3c0: the user's nfs5.trk (the records kept), else the game's (the original
+   copies it there first; the port writes it once a record changes). The empty records ("n/a", 0x5db32c)
+   get the longest time, 359999. */
+static void load_track_records(void)
 {
-    if (s_nacc) return;
     size_t n = 0;
-    /* FE_LoadTrackRecords 0x4fa3c0: the user's nfs5.trk (the records kept), else the game's (the original
-       copies it there first; the port writes it once a record changes). The empty records ("n/a",
-       0x5db32c) get the longest time, 359999. */
     s_trk = plat_load_user_file("nfs5.trk", &n);
     if (s_trk && (n == 0 || n % TRK_SIZE)) free(s_trk), s_trk = NULL;
     if (!s_trk) s_trk = vfs_read_all("FEData\\Data\\nfs5.trk", &n);
@@ -1569,6 +1568,27 @@ void FEData_Init(void)
             t = 359999;
             memcpy(e + 0x48, &t, 4);
         }
+}
+
+/* RESETRECORDS (the track records screen's, 0x4faa80): the game's nfs5.trk copied over the user's
+   (0x4fa740), the records let go (0x4fa550) and loaded again. */
+void FEData_ResetRecords(void)
+{
+    size_t n = 0;
+    uint8_t *d = vfs_read_all("FEData\\Data\\nfs5.trk", &n);
+    if (!d) return;
+    bool ok = plat_save_user_file("nfs5.trk", d, n);
+    free(d);
+    if (!ok) return;
+    free(s_trk);
+    load_track_records();
+}
+
+void FEData_Init(void)
+{
+    if (s_nacc) return;
+    load_track_records();
+    size_t n = s_trk_size;
     for (size_t i = 0; s_trk && (i + 1) * TRK_SIZE <= n && s_ntracks < 32; i++) {
         char path[128];
         snprintf(path, sizeof path, "GameData\\Track\\%s.crp", (const char *)s_trk + TRK_SIZE * i + 8);   /* "%s.crp" */
@@ -2532,6 +2552,20 @@ int FEData_TourOpponents(RaceOpponent out[8], int start[9], float *skill)
    the last). Below the first three the races open again (the port's: the original's 0x503263 path). */
 static bool s_era_ended;   /* 0x691e81: the last tournament's end ended its era */
 
+/* A tournament's races open again (0x5033f0): each run flag (+0x3d0), its eight racers' points (+0x3d2),
+   times (+0x3e4), bonuses (+0x404) and prizes (+0x424) none. */
+static void tour_reopen(uint8_t *r, int n)
+{
+    for (int i = 0; i < n; i++) {
+        uint8_t *x = r + 0xa4 * i;
+        x[0x3d0] = 0;
+        memset(x + 0x3d2, 0, 16);
+        memset(x + 0x3e4, 0, 32);
+        memset(x + 0x404, 0, 32);
+        memset(x + 0x424, 0, 32);
+    }
+}
+
 static void tour_end(uint8_t *r)
 {
     s_era_ended = false;
@@ -2569,14 +2603,17 @@ static void tour_end(uint8_t *r)
             memcpy(ts->data, head, sizeof head);
         }
     }
-    for (int i = 0; i < n; i++) {   /* the races open again (0x503080's clearing of their results) */
-        uint8_t *x = (uint8_t *)r + 0xa4 * i;
-        x[0x3d0] = 0;
-        memset(x + 0x3d2, 0, 16);
-        memset(x + 0x3e4, 0, 32);
-        memset(x + 0x404, 0, 32);
-        memset(x + 0x424, 0, 32);
-    }
+    tour_reopen(r, n);   /* the races open again (0x503080's clearing of their results) */
+}
+
+/* FORFEITTOURNY's answer (FETournamentCallBackList's update 0x505a50 after its dialog): the chosen
+   tournament's races open again (0x5033f0 on it, all its races), nothing else kept. */
+void FEData_TourForfeit(void)
+{
+    uint8_t *r = (uint8_t *)FEData_Tournament();
+    if (!FESave_Current() || !r) return;
+    tour_reopen(r, rec16(r, 0x39c));
+    FESave_Write();
 }
 
 /* A career race's results into the save (the original's race-over update pends; the port's, on the

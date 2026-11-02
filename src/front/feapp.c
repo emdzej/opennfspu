@@ -61,7 +61,7 @@ static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
    an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
 enum { DLG_ONE, DLG_TWO, DLG_INPUT };
-enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE, DLG_FOR_KILLREPLAY };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE, DLG_FOR_KILLREPLAY, DLG_FOR_FORFEIT };
 static struct {
     bool up;
     int kind, purpose, done;
@@ -1008,6 +1008,13 @@ static void callback(const char *cb)
            accessor's slots 0x54 / 0x50, round), 0x690a84 the room's turn 0 or 1 */
         FEAccessor *a = FEAccess_Find(cb[0] == 'T' ? "Track1.Track" : "LoopedTrack.Track");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[strlen(cb) - 3] == 'I' ? 1 : -1));
+    } else if (!strcmp(cb, "FORFEITTOURNY")) {
+        /* the pre-race screen's (0x505780): its question (+0x2e8, FEDialogTwoItem 0x5131f0(0x338), the
+           buttons 700 and 0x2bd) */
+        dialog_open(DLG_TWO, FEStrings_Get(0x338), 700, 0x2bd);
+        s_dialog.purpose = DLG_FOR_FORFEIT;
+    } else if (!strcmp(cb, "RESETRECORDS")) {
+        FEData_ResetRecords();
     } else if (!strcmp(cb, "GOBACKNOVALIDATION") || !strcmp(cb, "DECLINE")) {
         /* the car setup's and the victory room's (0x50c2b0: 0x4d1e40(0), one screen back, no check) */
         FEApp_Back();
@@ -3180,6 +3187,14 @@ void FEApp_Frame(void)
         s_dialog.purpose = DLG_FOR_NONE;
         FEAccessor *rl = FEAccess_Find("Replay.List");
         if (s_dialog.done == 1 && rl && FEAccess_Count(rl)) FESave_DeleteReplay(FEAccess_Pos(rl));
+    }
+    if (s_dialog.purpose == DLG_FOR_FORFEIT && !s_dialog.up) {
+        /* (0x505a50: yes, the tournament's races open again, 0x5033f0, and one screen back) */
+        s_dialog.purpose = DLG_FOR_NONE;
+        if (s_dialog.done == 1) {
+            FEData_TourForfeit();
+            FEApp_Back();
+        }
     }
     if (s_dialog.purpose == DLG_FOR_TOUR && !s_dialog.up) {
         /* FEApplication_v1 0x4d25d0: ok goes on with the race (0x4d5200 again) */
