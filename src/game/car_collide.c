@@ -120,6 +120,29 @@ float CarSim_HitWall(Car *c, const float n[3], const float p[3], const float pus
     return r < K(0x5b23f8) ? -r : r;
 }
 
+
+/* The AI's notice of a wall hit (0x40a690), the cars' but the humans' (flag 4): nearly stopped (|+0xec0|
+   under 10), once half its time (+0x1048) has passed it turns its direction (+0x104c): reversing (-1)
+   to forwards, forwards (below 20, always so here) to reversing, for 0x60 ticks. (0x40a790 is the
+   same for a car's hit.) */
+static void ai_wall_hit(Car *c)
+{
+    if (*CAR_I(c, CAR_FLAGS) & 4) return;
+    if (!(fabsf(*CAR_F(c, 0xec0)) < K(0x5b241c))) return;
+    int32_t *dir = CAR_I(c, 0x104c), *time = CAR_I(c, 0x1048), *since = CAR_I(c, 0x1050);
+    if (*dir == -1 && *time / 2 < g_sim_tick - *since) {
+        *dir = 1;
+        *since = g_sim_tick;
+        *time = 0x60;
+        return;
+    }
+    if (*dir == 1 && *time / 2 < g_sim_tick - *since && fabsf(*CAR_F(c, 0xec0)) < K(0x5b2470)) {
+        *dir = -1;
+        *since = g_sim_tick;
+        *time = 0x60;
+    }
+}
+
 /* The closest point of the edge's line to p (in the ground plane, y 0). 0x489e40 */
 static void closest_on_edge(const float p[3], const float e[6], float out[3])
 {
@@ -185,7 +208,7 @@ void CarSim_Edges(Car *c)
         }
         float impact = CarSim_HitWall(c, n, q, push, true);   /* 0x493f70 */
         memcpy(CAR_F(c, 0x440), q, 12);
-        PENDING_NOTE(0x40a690, "the AI's notice of a wall hit (0x40a690)");
+        ai_wall_hit(c);   /* 0x40a690 */
         if (worst < impact) worst = impact;
         if (K(0x5b2470) < impact) {
             *CAR_F(c, 0x430) = impact;
