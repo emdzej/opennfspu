@@ -3,12 +3,12 @@
 #include "real/depthconv.h"
 #include "real/mem.h"
 #include "real/movdfl.h"
-#include "pending.h"
 #include "platform.h"
 #include "real/real.h"
 #include "real/set3d.h"
 #include "real/shape.h"
 #include <stddef.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -105,15 +105,20 @@ Window *WINDOW_fromshape(uint8_t *shape, unsigned memflags)
     return w;
 }
 
-/* The driver surface of the current window, unlocked. 0x5341a0 */
+/* The driver surface of the current window, unlocked (the display's or back buffer's window loses its
+   pixels too). 0x5341a0 */
 static void unlock_current(void)
 {
     if (!locked) return;
     THRASH.fn.unlockwindow(locked);
     WINDOW_cur.pixels = NULL;
+    if (WINDOW_cur.lock == 1) WINDOW_display.pixels = NULL;
+    else if (WINDOW_cur.lock == 2) WINDOW_back.pixels = NULL;
     locked = NULL;
     THRASH.fn.window(0);
 }
+
+void WINDOW_unlockcurrent(void) { unlock_current(); }
 
 /* The shape type of a THRASH texture format. THRASH_FormatToShapeType 0x5565e0 */
 static uint8_t format_type(uint32_t format)
@@ -210,6 +215,10 @@ void WINDOW_deselect(void) { WINDOW_select(NULL); }
 
 int WINDOW_offset(int x, int y) { return (WINDOW_cur.bpp * x >> 3) + WINDOW_cur.stride * y; }
 
+/* The clip as floats for the quads of driver windows (0x6a6358, 0x6a635c, 0x5dfa14, 0x5dfa18): the last
+   one set, whatever window it was for. */
+static float s_clipf[4] = {0, 0, 640, 480};
+
 void WINDOW_setclip(int x0, int y0, int x1, int y1)
 {
     int wmax = WINDOW_cur.width ? WINDOW_cur.width : display_w;
@@ -226,8 +235,10 @@ void WINDOW_setclip(int x0, int y0, int x1, int y1)
     WINDOW_cur.clip[1] = y0;
     WINDOW_cur.clip[2] = x1;
     WINDOW_cur.clip[3] = y1;
-    /* The original keeps float copies of the clip for the 3D path (0x6a6358, 0x6a635c, 0x5dfa14,
-       0x5dfa18); the port's 3D path is pending. */
+    s_clipf[0] = (float)x0;   /* (the driver's quads' clip: only this sets it) */
+    s_clipf[1] = (float)y0;
+    s_clipf[2] = (float)x1;
+    s_clipf[3] = (float)y1;
 }
 
 void WINDOW_clipall(void) { WINDOW_setclip(0, 0, WINDOW_cur.width, WINDOW_cur.height); }
@@ -238,11 +249,144 @@ static bool through_driver(void)
     return WINDOW_cur.lock != 0 && WINDOW_cur.lock != -1 && WINDOW_cur.pixels == NULL;
 }
 
+/* 0x56d8a0: a w x h quad at (x, y) through the driver, the colour on each vertex, z 0 (0x6a634c), rhw 1
+   (0x5dfa08), uv 0..1 (0x6a6350/54, never set, to 0x5dfa0c/10), clipped to the float clip with the uv
+   cut in proportion; corners top left, top right, bottom right, bottom left. */
+static void driver_quad(float x, float y, float w, float h, uint32_t colour)
+{
+    const float U0 = 0, V0 = 0, U1 = 1, V1 = 1;
+    float u0 = U0, v0 = V0, u1 = U1, v1 = V1, f;
+    if (!(w > 0 && h > 0)) return;
+    f = s_clipf[0] - x;
+    if (f > 0) {
+        x = s_clipf[0];
+        f = 1 - f / w;
+        w = f * w;
+        u0 = U1 - (U1 - U0) * f;
+    }
+    f = x + w - s_clipf[2];
+    if (f > 0) {
+        f = 1 - f / w;
+        w = f * w;
+        u1 = (U1 - u0) * f + u0;
+    }
+    f = s_clipf[1] - y;
+    if (f > 0) {
+        y = s_clipf[1];
+        f = 1 - f / h;
+        h = f * h;
+        v0 = V1 - (V1 - V0) * f;
+    }
+    f = y + h - s_clipf[3];
+    if (f > 0) {
+        f = 1 - f / h;
+        h = f * h;
+        v1 = (V1 - v0) * f + v0;
+    }
+    if (!(w > 0 && h > 0)) return;
+    ThrashVertex v[4];
+    for (int i = 0; i < 4; i++) {
+        bool right = (i + 1) & 2, bottom = i & 2;
+        v[i] = (ThrashVertex){right ? x + w : x, bottom ? y + h : y, 0, 1, colour, 0, right ? u1 : u0, bottom ? v1 : v0};
+    }
+    THRASH.fn.drawquad(&v[0], &v[1], &v[2], &v[3]);
+}
+
+/* "CHOP texes" (0xc bytes): two driver textures and a shape of their size and type, through which a shape
+   is drawn on a driver window a piece at a time. */
+typedef struct {
+    ThrashTexture tex[2];
+    uint8_t *shape;
+} Chop;
+
+static Chop *s_chop;                        /* 0x6a6398 */
+static uint32_t s_chop_colour = 0xffffffffu; /* 0x5dfb7c: the quads' vertex colour */
+
+static int chop_free(Chop *c)   /* 0x572c90 */
+{
+    int ok = 1;
+    if (!c) return ok;
+    if (c->tex[0]) ok = THRASH.fn.tfree(c->tex[0]);
+    if (c->tex[1]) ok = THRASH.fn.tfree(c->tex[1]);
+    if (ok) {
+        if (c->shape) MEM_purge(c->shape);
+        free(c);
+    }
+    return ok;
+}
+
+static Chop *chop_create(int w, int h, int format)   /* 0x572840 */
+{
+    uint8_t type = format_type((uint32_t)format);
+    int bits = SHAPE_typevalid(&type);
+    Chop *c = calloc(1, sizeof *c);
+    if (!c) return NULL;
+    c->shape = SHAPE_create(w, h, bits, 0);
+    if (!c->shape) return NULL;   /* (the original leaves the rest allocated) */
+    c->shape[0] = type;
+    if (!(c->tex[0] = THRASH.fn.talloc(w, h, format, 0, 0))) return NULL;
+    if (!(c->tex[1] = THRASH.fn.talloc(w, h, format, 0, 0))) return NULL;
+    return c;
+}
+
+/* 0x5728f0: the shape in the chop's pieces (its rows converted into the chop's shape by the row kernel,
+   the textures by turns), each a quad scaled from the shape's size to w x h at (x, y). */
+static int chop_draw(Chop *c, const uint8_t *shape, int x, int y, int w, int h)
+{
+    uint8_t *ts = c->shape;
+    int H = (int16_t)(shape[6] | shape[7] << 8), W = (int16_t)(shape[4] | shape[5] << 8);
+    int TH = (int16_t)(ts[6] | ts[7] << 8), TW = (int16_t)(ts[4] | ts[5] << 8);
+    int bpp = (SHAPE_typevalid(shape) + 7) >> 3, srow = SHAPE_rowbytes(shape), trow = SHAPE_rowbytes(ts);
+    float sx = (float)((double)w / W), sy = (float)((double)h / H);
+    DepthKernel k = DEPTH_rowkernel(shape, ts[0], 1);
+    if (!k) return 0;
+    ThrashVertex v[4];
+    for (int i = 0; i < 4; i++) v[i] = (ThrashVertex){0, 0, 0, 1, s_chop_colour, 0, 0, 0};
+    int cur = 0, rows = (TH - 1 + H) / TH, cols = (TW - 1 + W) / TW;
+    for (int r = 0, y0 = 0, rowend = TH; r < rows; r++, rowend += TH) {
+        int y1 = y0 + (H < rowend ? H % TH : TH), th = y1 - y0;
+        for (int col = 0, x0 = 0, colend = TW; col < cols; col++, colend += TW) {
+            int x1 = x0 + (W < colend ? W % TW : TW);
+            const uint8_t *src = shape + 0x10 + y0 * srow + x0 * bpp;
+            for (int i = 0; i < th; i++, src += srow) k(ts + 0x10 + trow * i, src, x1 - x0);
+            ThrashTexture t = c->tex[cur];
+            float l = (float)((double)x0 * sx + x), rt = (float)((double)x1 * sx + x);
+            float tp = (float)((double)y0 * sy + y), bt = (float)((double)y1 * sy + y);
+            float u = (float)((double)(x1 - x0) / TW), vv = (float)((double)th / TH);
+            v[0].x = l, v[0].y = tp;
+            v[1].x = rt, v[1].y = tp, v[1].u = u;
+            v[2].x = rt, v[2].y = bt, v[2].u = u, v[2].v = vv;
+            v[3].x = l, v[3].y = bt, v[3].v = vv;
+            THRASH.fn.tupdate(t, ts + 0x10, NULL);
+            THRASH.fn.settexture(t);
+            THRASH.fn.drawquad(&v[0], &v[1], &v[2], &v[3]);
+            cur ^= 1;
+            x0 = x1;
+        }
+        y0 = y1;
+    }
+    return 1;
+}
+
+/* The chop's texture format: 8888 when the driver takes it plainly, else 4444. */
+static Chop *chop_get(void)
+{
+    if (!s_chop) {
+        const ThrashAbout *a = THRASH.fn.about();
+        s_chop = chop_create(0x40, 0x40, a && a->texformats && (a->texformats[6] & 3) == 1 ? 6 : 7);
+    }
+    return s_chop;
+}
+
 void WINDOW_fillrect(int x, int y, int w, int h, uint32_t colour)
 {
-    if (through_driver()) {
-        /* 0x561b00's driver path: an untextured quad (0x574920, 0x56d8a0). */
-        PENDING_NOTE(0x56d8a0, "WINDOW_fillrect (driver window)");
+    if (through_driver()) {   /* 0x561b00's driver path: an untextured quad in the pixel's colour */
+        intptr_t blend = THRASH.fn.getstate(10), tex = THRASH.fn.getstate(1);
+        THRASH.fn.setstate(10, 0);
+        THRASH.fn.settexture(0);
+        driver_quad((float)x, (float)y, (float)w, (float)h, RGB_pixelcolour(colour));
+        THRASH.fn.setstate(10, (uintptr_t)blend);
+        THRASH.fn.settexture((ThrashTexture)tex);
         return;
     }
     switch (WINDOW_cur.depth) {
@@ -269,9 +413,16 @@ void WINDOW_clear(uint32_t colour)
 
 void WINDOW_drawshape(const uint8_t *shape, int x, int y)
 {
-    if (through_driver()) {
-        /* 0x53d2e0's driver path: the shape as a texture on a quad (0x572840, 0x5728f0). */
-        PENDING_NOTE(0x5728f0, "WINDOW_drawshape (driver window)");
+    if (through_driver()) {   /* 0x53d2e0's driver path: through the chop, made and freed each time */
+        intptr_t blend = THRASH.fn.getstate(10), tex = THRASH.fn.getstate(1);
+        Chop *c = chop_get();
+        THRASH.fn.setstate(10, 0);
+        if (c) {
+            chop_draw(c, shape, x, y, (int16_t)(shape[4] | shape[5] << 8), (int16_t)(shape[6] | shape[7] << 8));
+            if (chop_free(c)) s_chop = NULL;
+        }
+        THRASH.fn.setstate(10, (uintptr_t)blend);
+        THRASH.fn.settexture((ThrashTexture)tex);
         return;
     }
     movdfl(shape, x, y, &MOVDFL_copy);
@@ -392,9 +543,16 @@ static void fade_clut(void *dst, const void *src, int n)
 void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha)
 {
     if (WINDOW_cur.lock != 0 && WINDOW_cur.lock != -1) {
-        if (!WINDOW_cur.pixels) {
-            /* the driver's path: the shape as a texture on a quad with the alpha in its colour */
-            PENDING_NOTE(0x5728f0, "WINDOW_drawshapealpha (driver window)");
+        if (!WINDOW_cur.pixels) {   /* the driver's path: the chop blended, the alpha in the quads' colour */
+            intptr_t blend = THRASH.fn.getstate(10), tex = THRASH.fn.getstate(1);
+            Chop *c = chop_get();
+            THRASH.fn.setstate(10, 2);
+            uint32_t was = s_chop_colour;
+            s_chop_colour = (uint32_t)alpha << 24 | 0xffffff;
+            if (c) chop_draw(c, shape, x, y, (int16_t)(shape[4] | shape[5] << 8), (int16_t)(shape[6] | shape[7] << 8));
+            s_chop_colour = was;
+            THRASH.fn.setstate(10, (uintptr_t)blend);
+            THRASH.fn.settexture((ThrashTexture)tex);
         }
         if (WINDOW_cur.lock != -1 && !WINDOW_cur.pixels) return;
     }

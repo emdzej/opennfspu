@@ -8,6 +8,7 @@
 #include "game/race_car.h"
 #include "game/track.h"
 #include "vfs.h"
+#include "real/ddraw.h"
 #include "real/window.h"
 #include "render/sky.h"
 #include "game/camera.h"
@@ -206,7 +207,7 @@ static void dev_clear(RDevice *d)
 static const RDeviceVtbl device_vt = { dev_destroy, dev_open, dev_begin, dev_present, dev_clear };   /* 0x5bc41c */
 
 /* GLIDE_env 0x556910: the Glide environment variables (SST_VIDEO_24BPP, FX_GLIDE_NO_SPLASH, ...) don't
-   exist here; DDRAW_init, MOUSE_init, KEY_init and the timer task (0x55fc00) belong to other modules.
+   exist here; MOUSE_init, KEY_init and the timer task (0x55fc00) belong to other modules.
    The display's window is locked once for its size and depth (0x5341f0 on 0x5de650). */
 bool GLIDE_env(bool windowed, const char *driver, int display, int mode)
 {
@@ -214,6 +215,7 @@ bool GLIDE_env(bool windowed, const char *driver, int display, int mode)
     if (!THRASH.fn.init()) return false;                 /* THRASH_openwindow */
     if (display) THRASH.fn.selectdisplay(display);
     THRASH.fn.setvideomode(mode, 2, 1);
+    DDRAW_init();
     WINDOW_displayinit();
     return true;
 }

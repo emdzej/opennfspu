@@ -37,6 +37,8 @@ extern Window WINDOW_cur;
 extern Window WINDOW_display;
 /* The back buffer's window (0x5de680, lock 2). */
 extern Window WINDOW_back;
+/* The current window's driver surface unlocked, if it is locked. 0x5341a0 */
+void WINDOW_unlockcurrent(void);
 int WINDOW_selectdisplay(void);   /* 0x5342a0 */
 int WINDOW_selectback(void);      /* 0x5342b0 */
 /* The display's window locked once after the mode is set: the display's size and depth, the default
