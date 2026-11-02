@@ -412,6 +412,10 @@ void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int 
         else FEData_TourResult(s_tour_race, places, times, clean, n);
     }
     s_tour_race = -1;
+    if (s_gametype == 5) {   /* (the career's test drive: 0x504b20 at the front end's exit, back to 4) */
+        s_gametype = 4;
+        FEData_SetGameType(4);
+    }
     if (s_gametype == 2 && !quit) FEData_KnockoutResult(places, n);   /* (0x4ddb10) */
     FEData_RefreshCars();   /* (FEApplication_Run's 0x4ed390: 0x4f34c0, then the career's market) */
     if (s_gametype == 4) Market_Update(FEData_CareerYear());
@@ -860,6 +864,8 @@ static void callback(const char *cb)
         FEData_DefaultSetup();
     } else if (!strcmp(cb, "SAVESETTINGS") || !strcmp(cb, "LOADSETTINGS")) {
         FEData_KeepSetup(cb[0] == 'L');
+    } else if (!strcmp(cb, "GOTOQUICKFIX")) {   /* the garage's (FEQuickFixCallBackList slot 55 0x50e960) */
+        FEData_QuickFixClear();
     } else if (!strcmp(cb, "QUICKFIX")) {
         int m = FEData_QuickFix();   /* FEQuickFixCallBackList 0x50e9f0 */
         if (m > 0) FEApp_Message(m);
@@ -963,6 +969,48 @@ static void callback(const char *cb)
         s_testdrive_type = cb[9] == 'U' ? 7 : cb[9] == 'N' ? 6 : 8;
         set_direction(0);   /* (0x4fb630's types 6 .. 8: forward) */
         s_result = FE_PLAY;
+    } else if (!strcmp(cb, "TESTDRIVE")) {
+        /* The pre-race screen's (FETournamentCallBackList 0x505720): with a car owned (0x691dfc),
+           Game.GameType 5 and the race started (0x4d5200(0), its checks), else back to 4: the tournament's
+           chosen track with its laps, reverse and mirror (0x4fb630's types 4, 5), alone, no traffic
+           (0x4ec590), in zMergedList.Car's car (0x4eadb0: the Quick Race list's, not the career's chosen
+           one). The used cars' (0x516210) does nothing; the victory room's (0x506340, type 11: the prize
+           car) pends. */
+        if (strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_TOURNYSCREEN")) return;
+        Save *sv = FESave_Current();
+        if (!sv || !sv->ncars || !can_play()) return;
+        const char *t = FEData_TourTrack(), *c = FEData_Car();
+        if (!t || !c) return;
+        s_gametype = 5;
+        FEData_SetGameType(5);
+        int race = FEData_TourRace();
+        const uint8_t *tr = FEData_Tournament();
+        s_reverse = tr && race >= 0 && tr[0x3a4 + 0xa4 * race] != 0;
+        s_mirror = tr && race >= 0 && tr[0x3a5 + 0xa4 * race] != 0;
+        s_laps = FEData_TourLaps();
+        snprintf(s_track, sizeof s_track, "%s", t);
+        snprintf(s_car, sizeof s_car, "%s", c);
+        s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
+        s_owned_race = FEData_OwnedIndex("zMergedList.Car");
+        s_testdrive = false;
+        s_factory_race = false;
+        s_tour_race = -1;
+        s_opponents = 0;
+        s_nopp = 0;
+        s_ngrid = -1;
+        s_skill = 1.0f;
+        s_traffic = 0;
+        memset(s_traffic_slots, 0, sizeof s_traffic_slots);
+        s_result = FE_PLAY;
+    } else if (!strcmp(cb, "TRACK1INC") || !strcmp(cb, "TRACK1DEC") || !strcmp(cb, "LOOPEDINC") ||
+               !strcmp(cb, "LOOPEDDEC")) {
+        /* 0x50d440 / 0x50d480, 0x50d5c0 / 0x50d600: the location screens' track on or back (the
+           accessor's slots 0x54 / 0x50, round), 0x690a84 the room's turn 0 or 1 */
+        FEAccessor *a = FEAccess_Find(cb[0] == 'T' ? "Track1.Track" : "LoopedTrack.Track");
+        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[strlen(cb) - 3] == 'I' ? 1 : -1));
+    } else if (!strcmp(cb, "GOBACKNOVALIDATION") || !strcmp(cb, "DECLINE")) {
+        /* the car setup's and the victory room's (0x50c2b0: 0x4d1e40(0), one screen back, no check) */
+        FEApp_Back();
     } else if (!strcmp(cb, "STARTREPLAY")) {
         /* FECallBackList_v51 0x50ca50: the replay chosen (0x699fc9) and the race started (v53 0x50c550 ->
            0x4d5200(1): no checks), its file the race's (0x4ecc60's caller: options 0x97 2, 0x110) */
@@ -1123,6 +1171,11 @@ static void on_up(FertControl *c)
     if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) {   /* FECarSettingButton: its accessor a step on */
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + data_int_of(c, "step"));
+        return;
+    }
+    if (!strcmp(c->id, "NFS5.CheckBox")) {   /* FECheckBox_v9 0x4c3340: a click in it turns its accessor over */
+        FEAccessor *a = FEAccess_Find(data_str(c, "boolAccessor"));
+        if (a) FEAccess_SetPos(a, !FEAccess_Pos(a));   /* (FEBoolAccessor's slot 29) */
         return;
     }
     if (is_combo(c)) {
@@ -1767,10 +1820,10 @@ static AnimButton *anim_of(FertControl *c)
     return b;
 }
 
-/* The picture's frame (0x526e20 on picture.shapeIndex, then the part's update). */
-static void anim_frame(FertControl *c, int frame)
+/* A part's frame (0x526e20 on <part>.shapeIndex, then the part's update). */
+static void part_frame(FertControl *c, const char *part, int frame)
 {
-    int i = FertControl_findPart(c, "picture");
+    int i = FertControl_findPart(c, part);
     if (i < 0) return;
     FertPart *p = c->parts[i];
     FertAttr *a = FertAttrList_find(&p->attrs, "shapeIndex");
@@ -1781,6 +1834,8 @@ static void anim_frame(FertControl *c, int frame)
     FertAttr_eval(a);
     if (Fert_PartEvalHook) Fert_PartEvalHook(p);
 }
+
+static void anim_frame(FertControl *c, int frame) { part_frame(c, "picture", frame); }
 
 /* Its update (FEAnimatingGoToButton_v1 0x4c9460): disabled the plain run's first frame; else the run
    of its state (pressed with the separate run, hovered, plain): after its wait it plays its frames over
@@ -2352,6 +2407,13 @@ static bool factory_draw(FertControl *c, int32_t ox, int32_t oy)
 
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
+    if (!strcmp(c->id, "NFS5.CheckBox")) {
+        /* FECheckBox (vtable 0x5b5b38; _v1 0x4c32b0, _v14 0x4c3300): its picture checkBoxPic the frame
+           data.onIndex or data.offIndex by its data.boolAccessor, then drawn as any control */
+        FEAccessor *a = FEAccess_Find(data_str(c, "boolAccessor"));
+        if (a) part_frame(c, "checkBoxPic", data_int_of(c, FEAccess_Pos(a) ? "onIndex" : "offIndex"));
+        return false;
+    }
     if (FEMovieBox_Draw(c, ox, oy)) return true;
     if (FEChronicle_Draw(c, ox, oy)) return true;
     if (FECarLogo_Draw(c, ox, oy)) return true;

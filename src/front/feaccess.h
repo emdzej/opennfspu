@@ -130,8 +130,10 @@ float FEData_CarDamage(const SaveCar *c);
    with "damage"); false for another accessor. */
 bool FEAccess_CarDamage(const FEAccessor *a, float out[10]);
 bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
-/* The repair screen's quick fix of the owned car (0x50e9f0): 0 done, else the message's string id. */
+/* The repair screen's quick fix of the owned car's ticked categories (0x50e9f0): 0 done, else the
+   message's string id; and its boxes all off (GOTOQUICKFIX 0x50e960). */
 int FEData_QuickFix(void);
+void FEData_QuickFixClear(void);
 /* The owned car an accessor's position is (its index in the save), -1 when it isn't one. */
 int FEData_OwnedIndex(const char *accessor);
 /* A race's wear (the race car's parts by id) added to an owned car's installed parts (the race's

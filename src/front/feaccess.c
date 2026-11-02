@@ -517,8 +517,56 @@ void FEData_AddWear(int car, const int32_t *ids, const float *wear, int n)
     }
 }
 
-/* QUICKFIX (FEQuickFixCallBackList 0x50e9f0): every category's repair (its check box: all here), not with
-   too little money (the message 0x329); else the parts' wear to none (0x4efb00 ..), the money less it. */
+/* A part's repair (0x5182d0): its repair cost paid (0x500890), its wear none. */
+static void repair_part(Save *sv, SaveCar *c, int i, int year)
+{
+    sv->money -= part_repair(c->parts[i][0], c->parts[i][1], year);
+    c->parts[i][1] = 0;   /* (0.0f, +0x164) */
+}
+
+static void repair_type(Save *sv, SaveCar *c, int type, int year)   /* (0x4efb00 ..: the car's parts of a type) */
+{
+    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+        const uint8_t *p = part_rec(c->parts[i][0]);
+        if (p && rec16(p, 0x26) == type) repair_part(sv, c, i, year);
+    }
+}
+
+/* The cosmetic repair (0x4efdc0): each of the ten body zones (+0x6a8) none, and each time the first
+   cosmetic part (type 10) named "Body" (0x5da740) repaired: paid once, its wear none after. (The original
+   repairs a null part when the car has none; the port skips it.) */
+static void repair_cosmetic(Save *sv, SaveCar *c, int year)
+{
+    for (int z = 0; z < 10; z++) {
+        memset(c->rec + 0x6a8 + 4 * z, 0, 4);
+        for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) {
+            const uint8_t *p = part_rec(c->parts[i][0]);
+            if (p && rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, exe_str(0x5da740))) {
+                repair_part(sv, c, i, year);
+                break;
+            }
+        }
+    }
+}
+
+/* The quick fix's check boxes (FEdaCar_v0 0x4f1520: FEBoolAccessor 0x4b82f0, off), the repair screen's
+   categories and the whole car last. */
+static const char *const k_quickfix[10] = {"QUICKFIX.ENGINE", "QUICKFIX.BRAKES", "QUICKFIX.TRANSMISSION",
+    "QUICKFIX.SUSPENSION", "QUICKFIX.SHOCKS", "QUICKFIX.BODYWORK", "QUICKFIX.SWAYBARS", "QUICKFIX.TIRES",
+    "QUICKFIX.COSMETIC", "QUICKFIX.OVERALL"};
+
+void FEData_QuickFixClear(void)   /* GOTOQUICKFIX (0x50e960): every box off */
+{
+    for (int k = 0; k < 10; k++) {
+        FEAccessor *a = FEAccess_Find(k_quickfix[k]);
+        if (a) FEAccess_SetPos(a, 0);
+    }
+}
+
+/* QUICKFIX (FEQuickFixCallBackList 0x50e9f0): the ticked categories' costs (0x4ef230 ..; the whole car's,
+   0x4ef5f0, all ten types again) against the money, the message 0x329 when short; else each ticked one
+   repaired in turn (0x4efb00 ..; the whole car 0x4efea0: every part, then the cosmetic repair), each part
+   paying its own repair, so a part a box before fixed costs nothing more; then every box off. */
 int FEData_QuickFix(void)
 {
     Save *sv = FESave_Current();
@@ -526,11 +574,30 @@ int FEData_QuickFix(void)
     if (!sv || !a || !FEAccess_Count(a)) return -1;
     SaveCar *c = &sv->cars[FEAccess_Pos(a)];
     int year = career_year();
+    bool on[10];
     int32_t total = 0;
-    for (int k = 0; k < 9; k++) total += category_cost(c, k_cats[k].type, k_cats[k].type2, year);
+    for (int k = 0; k < 10; k++) {
+        FEAccessor *b = FEAccess_Find(k_quickfix[k]);
+        on[k] = b && FEAccess_Pos(b) != 0;
+        if (!on[k]) continue;
+        if (k < 9) total += category_cost(c, k_cats[k].type, k_cats[k].type2, year);
+        else for (int t = 1; t <= 10; t++) total += category_cost(c, t, 0, year);
+    }
     if (sv->money < total) return 0x329;
-    for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) c->parts[i][1] = 0;   /* (0.0f) */
-    sv->money -= total;
+    for (int k = 0; k < 9; k++) {
+        if (!on[k]) continue;
+        if (k == 8) {
+            repair_cosmetic(sv, c, year);
+            continue;
+        }
+        repair_type(sv, c, k_cats[k].type, year);
+        if (k_cats[k].type2) repair_type(sv, c, k_cats[k].type2, year);
+    }
+    if (on[9]) {
+        for (int i = c->ninstalled; i < c->ninstalled + c->nother; i++) repair_part(sv, c, i, year);
+        repair_cosmetic(sv, c, year);
+    }
+    FEData_QuickFixClear();
     FESave_Write();
     return 0;
 }
@@ -1548,6 +1615,7 @@ void FEData_Init(void)
     FEAccessor *ap = add("Controller.AllPads", ACC_DEVICES, 0, 0, 0);
     if (ap) ap->src = 1, ap->owned = -1;
     add("Game.Damage", ACC_BOOL, 2, 0, 1);   /* FEBoolAccessor 0x4b82f0: on */
+    for (int k = 0; k < 10; k++) add(k_quickfix[k], ACC_BOOL, 2, 0, 0);
     FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
     if (df) df->list = 0x5d9f08;
     /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
