@@ -16,6 +16,7 @@
 #include "vfs.h"
 #include "platform.h"
 #include "app.h"
+#include "render/render.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +27,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -299,10 +300,54 @@ static void display(void)
     for (int i = 0; i < 14; i++) add_list(d[i].name, d[i].list, d[i].key);
 }
 
-/* The graphics data area (FEdaGraphics_v0 0x4e4e00): the renderer's choices (options 0x44 .. 0x54) and the
-   gamma (0x4d, 0..400 from 100). (Graphics.Resolutions, the display modes' list 0x4bc2f0, pends.) */
+/* Graphics.Resolutions (FEScreenResolutionAccessor 0x4bc2f0): a row per display mode the options may
+   offer (0x44e650) among the driver's first count (0x44e5d0; from mode 0, so the last of them is never
+   looked at), its size and depth kept (+0x38, +0x3c, +0x40). It has no option: it starts at row 0 each time
+   the front end starts, whatever fe.txt says, and its row goes to the race (slot 1 0x4bc430: WIDTH,
+   HEIGHT, DEPTH, options 0x3e .. 0x40, into the stream FEApplication_Run 0x4d2e70 hands the game). */
+enum { NRES = 16 };
+static int s_resw[NRES], s_resh[NRES], s_resbpp[NRES], s_nres;
+
+static void resolutions(void)
+{
+    int n = Render_ModeCount();
+    s_nres = 0;
+    for (int i = 0; i < n && s_nres < NRES; i++) {
+        if (!Render_ModeUsable(i)) continue;
+        Render_ModeInfo(i, &s_resw[s_nres], &s_resh[s_nres], &s_resbpp[s_nres]);
+        s_nres++;
+    }
+    add("Graphics.Resolutions", ACC_RES, s_nres, 0, 0);
+}
+
+static const FEAccessor *res_acc(void)
+{
+    const FEAccessor *a = FEAccess_Find("Graphics.Resolutions");
+    return a && a->kind == ACC_RES && a->pos < s_nres ? a : NULL;
+}
+
+bool FEAccess_Resolution(int *w, int *h)   /* 0x4ba6d0, 0x4bc420 */
+{
+    const FEAccessor *a = res_acc();
+    if (!a) return false;
+    *w = s_resw[a->pos], *h = s_resh[a->pos];
+    return true;
+}
+
+void FEAccess_WriteResolution(void)   /* FEScreenResolutionAccessor_v1 0x4bc430 */
+{
+    const FEAccessor *a = res_acc();
+    if (!a) return;
+    Options_SetInt(0x5d6130, s_resw[a->pos]);     /* WIDTH */
+    Options_SetInt(0x5d6128, s_resh[a->pos]);     /* HEIGHT */
+    Options_SetInt(0x5d6120, s_resbpp[a->pos]);   /* DEPTH */
+}
+
+/* The graphics data area (FEdaGraphics_v0 0x4e4e00): the display modes, the renderer's choices (options
+   0x44 .. 0x54) and the gamma (0x4d, 0..400 from 100). */
 static void graphics(void)
 {
+    resolutions();
     static const struct { const char *name; uint32_t list, key; } g[11] = {
         {"Graphics.WideScreen", 0x5b6da4, 0x5d60ec}, {"Graphics.CarChrome", 0x5b6d94, 0x5d60e0},
         {"Graphics.CarDetail", 0x5b6d94, 0x5d60d4},  {"Graphics.SpecialFX", 0x5b6d80, 0x5d60c8},
@@ -1887,6 +1932,9 @@ const char *FEAccess_Text(const FEAccessor *a)
     }
     case ACC_LIST:
         return FEStrings_Get((int32_t)exe_u32(a->list + 4u * (unsigned)a->pos));
+    case ACC_RES:   /* (FEStringListAccessor's rows, 0x4b8750) */
+        snprintf(b, sizeof b, exe_str(0x5d7574), s_resw[a->pos], s_resh[a->pos], s_resbpp[a->pos]);
+        return b;
     case ACC_BOOL:   /* FEBoolAccessor_v12 0x4b8340 */
         return FEStrings_Get(a->pos == 1 ? 0x2c0 : 0x2c1);
     case ACC_DEALER:

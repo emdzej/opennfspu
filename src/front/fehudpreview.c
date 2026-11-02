@@ -38,12 +38,20 @@ static const char *player(void)   /* 0x500820: the player's name (0x691dc8) */
     return sv ? sv->player : "";
 }
 
+/* The size of the display mode chosen in the graphics options (Graphics.Resolutions: 0x4ba6d0, 0x4bc420). */
+static void res_size(int *w, int *h)
+{
+    if (!FEAccess_Resolution(w, h)) *w = g_display.width, *h = g_display.height;
+}
+
 /* The layout for the screen layout chosen (HUD_LoadStrings 0x41e190 with the display mode's size), and
    the choices from it. */
 static void load(void)
 {
+    int w, h;
+    res_size(&w, &h);
     s.layout = value(LAYOUT);
-    HudConfig_Load(player(), s.layout, g_display.width, g_display.height);
+    HudConfig_Load(player(), s.layout, w, h);
     for (int k = SPEEDO; k < NCHOICES; k++) {
         FEAccessor *a = acc(k);
         if (a) FEAccess_SetPos(a, HudConfig_choicei32(k_choice[k].off));   /* (v0x2c) */
@@ -57,7 +65,9 @@ void FEHudPreview_ResetChoices(void)
     int layout = RTex_layoutfor(&RTex_machine);
     FEAccessor *a = acc(LAYOUT);
     if (a) FEAccess_SetPos(a, layout);
-    HudConfig_Load(player(), layout, g_display.width, g_display.height);
+    int w, h;
+    res_size(&w, &h);
+    HudConfig_Load(player(), layout, w, h);
     for (int k = SPEEDO; k < NCHOICES; k++)
         if ((a = acc(k))) FEAccess_SetPos(a, HudConfig_choicei32(k_choice[k].off));
     HudConfig_Free();

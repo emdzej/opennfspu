@@ -362,6 +362,49 @@ void Render_SetMode(RenderSystem *r, int mode)
     EAGL_SetDisplaySize((float)w, (float)h);
 }
 
+static const ThrashAbout *about(void) { return THRASH.fn.about ? THRASH.fn.about() : NULL; }   /* (no driver: none) */
+
+/* The driver's display modes (0x44e5d0: the device's slot 9, the about block's nmodes; 1 windowed). */
+int Render_ModeCount(void)
+{
+    if (g_render && g_render->windowed) return 1;
+    const ThrashAbout *a = about();
+    return a ? a->nmodes : 0;
+}
+
+/* A mode's size and depth (0x44e5f0; 640 x 480 x 16 windowed). */
+void Render_ModeInfo(int i, int *w, int *h, int *bpp)
+{
+    const ThrashAbout *a = about();
+    if ((g_render && g_render->windowed) || !a || i < 0 || i > a->nmodes) {
+        *w = 640, *h = 480, *bpp = 16;
+        return;
+    }
+    *w = a->modes[i].width, *h = a->modes[i].height, *bpp = a->modes[i].bpp;
+}
+
+/* Whether the options may offer a mode (0x44e650): a flipped chain of more than one buffer, 640 x 480 at
+   least; on the cards of type 9 and 10 (Voodoo2 and 3) under 2 or 4 million pixel bytes (w x h x 6);
+   off Glide, the texture memory left after three pages of it above 1.5 MB (2 MB above 640 wide, 4 MB
+   deeper than 16 bits). Windowed only mode 0. */
+bool Render_ModeUsable(int i)
+{
+    if (g_render && g_render->windowed) return i == 0;
+    const ThrashAbout *a = about();
+    if (!a || i < 0 || i > a->nmodes) return false;
+    const ThrashMode *m = &a->modes[i];
+    bool ok = 1 < m->unknown6 && 0x27f < m->width && 0x1df < m->height;
+    if (card_type == 9) ok = ok && m->width * m->height * 6 < 2000000;
+    else if (card_type == 10) ok = ok && m->width * m->height * 6 < 4000000;
+    if (ok && !g_rcaps.glide) {
+        int bytes = (m->bpp == 15 ? 16 : m->bpp) / 8;
+        int left = (int)g_rcaps.vramtotal - bytes * m->width * m->height * 3;
+        int need = 0x10 < m->bpp ? 4000000 : 0x280 < m->width ? 2000000 : 1500000;
+        ok = need < left;
+    }
+    return ok;
+}
+
 /* A display size and depth (Render_SetVideoMode 0x467f00) when it isn't the one open (width 0: the
    open size at that depth): the nearest mode with the buffers in a flipped chain, mode 0 windowed. The
    front end and the intro movies ask for 640 x 480 x 16, the race for fe.txt's. */

@@ -192,6 +192,7 @@ bool app_frame(void)
                         Save *sv = FESave_Current();
                         snprintf(g_race_driver_name, sizeof g_race_driver_name, "%s", sv ? sv->player : "");
                     }
+                    FEAccess_WriteResolution();   /* (the display mode's row, as it goes into the race's stream) */
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */
                     Options_Apply();

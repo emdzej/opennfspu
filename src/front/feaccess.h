@@ -34,6 +34,10 @@ FEAccessor *FEAccess_DeadZoneAccessor(int axis, bool max);
    the new end back to 0). */
 int FEAccess_Int(const FEAccessor *a);
 void FEAccess_SetRange(FEAccessor *a, int lo, int hi);
+/* Graphics.Resolutions' display mode (false without one), and it written to WIDTH, HEIGHT and DEPTH for
+   the race (FEScreenResolutionAccessor 0x4bc2f0). */
+bool FEAccess_Resolution(int *w, int *h);
+void FEAccess_WriteResolution(void);
 /* The text of the current item. */
 const char *FEAccess_Text(const FEAccessor *a);
 /* Row i's text (the accessor's slot 0x30), the position kept. The text is in a buffer the next call reuses. */
