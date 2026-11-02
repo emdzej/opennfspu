@@ -148,8 +148,16 @@ void CarLight_Update(CarLight *l, Car *car, int camtype)
     l->lighttex = lt;
     CarEnvMap *m = g_carenv;
     if (m) select_slice(m, (uint32_t)(uint16_t)s.node);
-    for (int i = 0; i < 3; i++) l->tex[i] = m && g_render_carenv ? slice_texture(m, covered, i) : NULL;   /* 0x4407f0 */
-    PENDING_NOTE(0x4407f0, "the reflection textures' states (0x5377e0, 0x5361e0)");
+    /* 0x4407f0: each texture kept (+0xd0) and, when there is one, its states with U and V addressing 1
+       (0x5377e0) set on it (0x5361e0). */
+    for (int i = 0; i < 3; i++) {
+        Texture *t = m && g_render_carenv ? slice_texture(m, covered, i) : NULL;
+        l->tex[i] = t;
+        if (!t) continue;
+        TextureStates st = t->states;
+        TextureStates_settile(&st, 1);
+        Texture_setstates(t, &st);
+    }
     *at(l, 0x4) = 1.0f / (m && m->cur ? m->cur->size : 4.0f);   /* 0x4410f0 (0x5b2460: 4 without a slice) */
     *at(l, 0x8) = m && m->cur ? m->cur->aspect : 1.0f;            /* 0x441110 */
     /* the car's place across and along the road at its node, in sixths (0x5b2420) */
