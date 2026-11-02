@@ -1,6 +1,5 @@
 /* The car's texture pages: see carpages.h. */
 #include "render/carpages.h"
-#include "render/car_pending.h"
 #include "exe.h"
 #include "pending.h"
 #include "real/file.h"

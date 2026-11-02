@@ -177,6 +177,7 @@ typedef struct R3DCar {
 
 /* Game state the renderer reads (globals of the original). */
 extern int16_t g_r3d_night;     /* 0x628a28: the track's night flag */
+extern const char *g_r3d_cardir;  /* 0x65b300: the car models' directory ("GameData\\CarModel\\") */
 extern int g_r3d_frontend;      /* 0x65b928: the front end's showroom (vs the race) */
 extern int g_r3d_mirror;        /* 0x65742c: > 0 mirrors the driver's camera */
 extern int g_r3d_quality;       /* 0x6197c4: the detail level (0 = parts never deform; indexes the LOD

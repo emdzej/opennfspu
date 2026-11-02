@@ -11,7 +11,6 @@
 #include "real/mem.h"
 #include "real/set3d.h"
 #include "real/shape.h"
-#include "render/car_pending.h"
 #include "pending.h"
 #include "render/carhalo.h"
 #include "render/carpages.h"
@@ -770,8 +769,10 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
     R3DCar_GlobalTextures(car);
     car->crp = crp_acquire(path);
     if (!car->crp) {
-        /* The original loads a stand-in car ("%seden2" under its car directory) unless this was it. */
-        R3DCar_PendingFallback(car, name);
+        /* A stand-in car ("%seden2" 0x5cdc28 under the car directory) unless this was it (slot 1 again). */
+        char alt[260];
+        snprintf(alt, sizeof alt, exe_str(0x5cdc28), g_r3d_cardir);
+        if (strcmp(alt, name) != 0) R3DCar_LoadCrp(car, alt);
         return true;
     }
     R3DCar_LoadTpg(car, name);
