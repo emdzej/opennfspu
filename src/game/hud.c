@@ -45,6 +45,9 @@ static int32_t s_mousex, s_mousey;  /* 0x60ca80, 0x60ca84: where the mouse was *
 static int32_t s_pointer_ticks;     /* 0x60ca88: the ticks left showing it after the mouse moved */
 static int32_t s_pointer_last;      /* 0x60ca8c: the tick of the last draw */
 static bool s_noscreens;     /* 0x60ca10: the race-over's screens skipped */
+static int32_t s_place;        /* 0x60ca6c: the player's place at the race's end */
+static bool s_raceover_done;   /* 0x60ca70: the race-over's screens queued once */
+static bool s_restarted;       /* 0x60ca78: "race again" chosen in the pause menu */
 static HudVisual *mission;   /* 0x60ca50 */
 static HudVisual *s_time;    /* 0x60ca1c */
 static HudVisual *s_multitime;   /* 0x60ca40 */
@@ -4411,6 +4414,12 @@ int HUD_HandleInput(int x, int y, int event)
         if (g_race_mode == 4 || g_race_mode == 10 || g_race_mode == 2) return 0;
         close_modals(0);
         HUD_RaceStart();   /* 0x426a40 with 0 */
+        s_restarted = true;
+        s_pointer_ticks = 0;
+        {
+            uint32_t b;
+            if (!MOUSE_state(&s_mousex, &s_mousey, &b)) s_mousex = s_mousey = 0;   /* (MOUSE_getstate 6) */
+        }
         break;
     case 4:   /* exit to Windows: asked first (0x46fb) */
         modal[0]->vt->setstate(modal[0], 2);
@@ -4518,35 +4527,59 @@ void HUD_HideAll(void)
     nmodal = 0;
 }
 
+
+/* Both of 0x426a40's ends: the replay panel's play button back (0x42df90), the wrong way's blink over
+   (0x436e90); the lap announcer's count and best (0x60ca90, 0x60ca94). */
+static void raceover_common(void)
+{
+    if (s_replay) ((HReplay *)s_replay)->paused = 0;
+    if (wrongway) {
+        HWrongWay *w = (HWrongWay *)wrongway;
+        w->shown = 1;
+        w->acc = w->last = 0;
+    }
+}
+
 void HUD_RaceStart(void)
 {
     /* 0x426a40 with 0: the race-over's state cleared, each car's damage kept for the safe-driving
-       bonus */
+       bonus, the cones and the time's penalties none. (0x60ca98, the place the debug keys 0x427900
+       force, is never set in the port.) */
+    raceover_common();
+    s_place = 0;
+    s_raceover_done = s_restarted = false;
     for (int i = 0; i < g_racers.n && i < 8; i++) {
         s_start_damage[i] = g_cars[i] ? zones_damage(g_cars[i], 0x4e4) : 0;
         if (g_racers.c[i]) g_racers.c[i]->b[0xcc0] = 0;
     }
+    s_cones_down = 0;   /* 0x60ca04 */
+    if (s_time) ((HTime *)s_time)->penalties = 0;   /* 0x4317b0 */
+    if (mission) g_mission_knocked = 0;             /* 0x4297f0 */
+    s_laps_done = s_bestlap = 0;
 }
 
 void HUD_RaceOver(void)
 {
-    PENDING_NOTE(0x426a40, "the race-over HUD's other parts (place swaps, the replay's HUD)");
-    if (s_noscreens) {   /* (the replay's restart, the pause's view replay: no screens, once) */
-        s_noscreens = false;
-        return;
-    }
-    /* The records take the player's time first, when the player has a place (or in a mission). */
+    /* 0x426a40 with 1: the player's place (a network race's from the session, 0x48d720); the race-over's
+       screens once, not after "race again" nor when skipped (the replay's restart, the pause's view
+       replay: 0x60ca10, cleared instead). */
+    raceover_common();
     Car *me = local_car();
-    if ((me && *CAR_I(me, 0xcd4) != 0) || g_race_mode == 9) {
-        if (s_records) {
+    s_place = me ? *CAR_I(me, 0xcd4) : 0;
+    if (!s_raceover_done && !s_restarted && !s_noscreens) {
+        /* The records take the player's time first, when the player has a place (or in a mission). */
+        if (s_place != 0 || g_race_mode == 9) {
             if (g_race_mode == 4) {
                 tour_update();   /* 0x427620 */
                 if (s_standings) s_standings->vt->reset(s_standings);   /* 0x431ae0 */
             }
-            s_records->vt->reset(s_records);   /* 0x433980 */
+            if (s_records) s_records->vt->reset(s_records);   /* 0x433980 */
+            race_screens(false);   /* 0x426c50 */
         }
-        race_screens(false);   /* 0x426c50 */
-    }
+        s_raceover_done = true;
+    } else s_noscreens = false;
+    s_laps_done = s_bestlap = 0;
+    s_restarted = false;
     /* (port: the list's first is shown at once; the original's starts hidden and is passed) */
     if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
 }
