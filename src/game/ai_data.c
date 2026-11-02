@@ -176,7 +176,11 @@ static void squares(Car *c)
 
 void AI_LoadData(void)
 {
-    PENDING_NOTE(0x40ad40, "the AI's tuning (tuning.bin)");
+    /* AI_LoadTuning 0x40ad40 reads Simulation\AI\tuning.bin (140 16.16 words: the six "caravan"
+       slots' spacing, the car types' skill multipliers into 0x657410, the track multipliers it skips,
+       the weather's curve table 0x5e6e30, the upgrades' multipliers 0x5e6e00 .. 0x5e6e2f) and sets
+       0x5cc358 to 1. Nothing in the game reads any of what it stores, and 0x5cc358 is 1 already: the
+       port reads nothing. */
     traffic_config();
     for (int i = 0; i < g_ncars; i++) AI_MoodsReset(g_cars[i]);   /* 0x40ab60 */
     load_personalities();
