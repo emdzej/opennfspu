@@ -32,6 +32,9 @@
 #include "game/wtree.h"
 #include "platform.h"
 #include "real/texture.h"
+#include "real/depthconv.h"
+#include "real/mem.h"
+#include "real/window.h"
 #include "render/r3dcar.h"
 #include "render/render.h"
 #include "render/rtex.h"
@@ -461,6 +464,32 @@ static void pause_key(void)
 /* RaceLoop's walk over the interface keys' samples since the last frame (0x606ac8 up to 0x5e99b8, only
    the last when more than 16 behind): the orbit keys while a screen is up, the HUD's keys, the camera's
    and the look keys while not paused, then the pause key. */
+/* RaceLoop's screenshot key (0x415300): the display copied into a window of its size and depth, that
+   converted to 15 bits (0x7e), written as Unleashed<nn>.tga in the save directory; nn 0 .. 98, then 0
+   again (0x606adc, from 0 each run). */
+static void race_screenshot(void)
+{
+    static int shot;   /* 0x606adc */
+    char f[40];
+    snprintf(f, sizeof f, exe_str(0x5cc7d4), "", shot);
+    Window *w = WINDOW_new(WINDOW_display.width, WINDOW_display.height, WINDOW_display.depth, 0);
+    if (!w) return;   /* (the original reads through it) */
+    WINDOW_selectdisplay();          /* 0x5342a0 */
+    WINDOW_readshape(w->shape);      /* 0x535390 */
+    WINDOW_deselect();
+    uint8_t *c = SHAPE_converttype(w->shape, DEPTH_bpptotype(15), 0, 0);   /* 0x5350f0, 0x534ab0 */
+    Window *cw = c ? WINDOW_fromshape(c, 0) : NULL;
+    if (cw) {
+        WINDOW_select(cw);
+        WINDOW_savetga(1, f);        /* 0x534080 */
+        WINDOW_deselect();
+        WINDOW_destroy(cw);
+    }
+    WINDOW_destroy(w);
+    MEM_purge(c);
+    if (++shot > 0x62) shot = 0;
+}
+
 static void race_actions(void)
 {
     if (g_input_samples - g_input_cursor > 0x10) g_input_cursor = g_input_samples;
@@ -471,7 +500,7 @@ static void race_actions(void)
             if (Input_Action(ACT_ROTCAMCLOCK, true)) g_racecam[0].lookspeed = -3;   /* 0x461660 */
             if (Input_Action(ACT_ROTCAMSTOP, true)) g_racecam[0].lookspeed = 0;     /* 0x461670 */
         }
-        if (Input_Action(ACT_SCREENSHOT, true)) PENDING_NOTE(0x415300, "the screenshot key (Unleashed%02d.tga)");
+        if (Input_Action(ACT_SCREENSHOT, true)) race_screenshot();
         if (Input_Action(ACT_TOGGLEPAUSEMENU, true)) HUD_TogglePauseMenu();   /* 0x425710 */
         if (!g_drive_paused) {
             if (Input_Action(ACT_VIEWDISTANCE, true))   /* 0x44f0f0 */
@@ -633,6 +662,12 @@ bool DRIVE_selftest(const char *track, const char *car)
         if (!g_race_over && plat_param("endrace", ev, sizeof ev) && atoi(ev) <= g_sim_tick) {
             g_race_over = 1;
             Race_End(2);   /* (as Race_TickOdd's end does: the results' copies the screens read) */
+        }
+        /* --param shot=<tick>: the screenshot key at that tick, once (tests) */
+        static bool shot_done;
+        if (!shot_done && plat_param("shot", ev, sizeof ev) && atoi(ev) <= g_sim_tick) {
+            shot_done = true;
+            race_screenshot();
         }
         /* --param raceexit=<tick>: the race-over's Escape at that tick of its replay (tests) */
         if (g_replay_mode == 2 && plat_param("raceexit", ev, sizeof ev) && atoi(ev) <= g_sim_tick) g_drive_result = 1;

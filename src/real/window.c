@@ -4,6 +4,7 @@
 #include "real/mem.h"
 #include "real/movdfl.h"
 #include "pending.h"
+#include "platform.h"
 #include "real/real.h"
 #include "real/set3d.h"
 #include "real/shape.h"
@@ -478,4 +479,154 @@ void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h)
         }
     }
     if (converted) MEM_purge(converted);
+}
+
+/* ---- pixels read back and the TGA writer (0x570b00, 0x535230, 0x534010) ---- */
+
+/* The bytes per pixel the driver paths use: 32 over the default depth (2 at 16 bits, but 1 at 32: the
+   original's arithmetic). */
+static int driver_bytes(void) { return WINDOW_defaultdepth ? 32 / WINDOW_defaultdepth : 0; }
+
+uint32_t WINDOW_getpixel(int x, int y)
+{
+    const uint8_t *p = NULL;
+    bool inside = x >= WINDOW_cur.clip[0] && x < WINDOW_cur.clip[2] && y >= WINDOW_cur.clip[1] && y < WINDOW_cur.clip[3];
+    ThrashSurface *s = NULL;
+    if (!through_driver()) {
+        if (inside) p = WINDOW_cur.pixels + WINDOW_offset(x, y);   /* 0x573e00 */
+    } else {
+        s = THRASH.fn.lockwindow();
+        if (s && inside) p = (const uint8_t *)s->pixels + driver_bytes() * x + s->pitch * y;
+    }
+    /* Outside the clip the original reads through y taken as an address; the port reads nothing. */
+    uint32_t v = 0;
+    if (p) switch (WINDOW_cur.depth) {
+        case 4: v = x & 1 ? *p >> 4 : *p & 0xf; break;
+        case 8: v = *p; break;
+        case 15: case 16: v = (uint32_t)(p[0] | p[1] << 8); break;
+        case 24: v = (uint32_t)(p[0] | p[1] << 8 | p[2] << 16); break;   /* 0x56e058 */
+        case 32: v = (uint32_t)(p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24); break;
+        default: break;
+        }
+    /* The driver's surface is unlocked after the read (only when it was inside, as the original). */
+    if (s && inside) THRASH.fn.unlockwindow(s);
+    return v;
+}
+
+void WINDOW_readshape(uint8_t *shape)
+{
+    uint32_t pos = (uint32_t)(shape[0xc] | shape[0xd] << 8 | shape[0xe] << 16 | (uint32_t)shape[0xf] << 24);
+    int x = (int32_t)(pos << 20) >> 20, y = (int32_t)(pos << 4) >> 20;
+    if (!through_driver()) {
+        movdfl(shape, x, y, &MOVDFL_read);
+        pos = (pos & 0xf000f000u) ^ ((uint32_t)x & 0xfff) ^ ((uint32_t)y & 0xfff) << 16;   /* (0x535230) */
+        shape[0xc] = (uint8_t)pos, shape[0xd] = (uint8_t)(pos >> 8), shape[0xe] = (uint8_t)(pos >> 16);
+        shape[0xf] = (uint8_t)(pos >> 24);
+        return;
+    }
+    if (x > display_w || x < 0 || y > display_h || y < 0) return;
+    ThrashSurface *s = THRASH.fn.lockwindow();
+    if (!s) return;   /* (the original reads through it regardless) */
+    int sw = (int16_t)(shape[4] | shape[5] << 8), sh = (int16_t)(shape[6] | shape[7] << 8);
+    int cols = display_w - x < sw ? display_w - x : sw;
+    int end = display_h - y < sh ? display_h - y : sh;
+    /* Rows y .. end - 1: the shape's height counted from the screen's top, not from y (the original's). */
+    int off = 0;
+    for (int row = y; row < end; row++) {
+        int n = driver_bytes() * cols;
+        memcpy(shape + 0x10 + off, (const uint8_t *)s->pixels + driver_bytes() * x + s->pitch * row, (size_t)n);
+        off += n;
+    }
+    THRASH.fn.unlockwindow(s);
+}
+
+static void put_le(uint8_t *p, uint32_t v, int n)   /* 0x56e0b1 */
+{
+    for (int i = 0; i < n; i++) p[i] = (uint8_t)(v >> 8 * i);
+}
+
+/* The TGA of the current window's clip rectangle: its size (0x533d30) and the file (0x533d80): an
+   uncompressed true-colour image (type 2; 8-bit windows a colour-mapped one, type 1, with the system
+   palette), top-left first; a 16-bit (565) window's pixels go to 1555 with the top bit set but on black
+   (0x570050). */
+static int tga_size(void)
+{
+    int bits = (WINDOW_cur.depth + 7) & ~7;
+    int n = (WINDOW_cur.clip[3] - WINDOW_cur.clip[1]) * (WINDOW_cur.clip[2] - WINDOW_cur.clip[0]) * bits / 8;
+    return bits == 8 ? n + 0x312 : n + 0x12;
+}
+
+static void tga_build(uint8_t *b)
+{
+    int w = WINDOW_cur.clip[2] - WINDOW_cur.clip[0], h = WINDOW_cur.clip[3] - WINDOW_cur.clip[1];
+    int bits = (WINDOW_cur.depth + 7) & ~7;
+    bool pal = bits == 8;
+    put_le(b + 0, 0, 1);
+    put_le(b + 1, pal, 1);
+    put_le(b + 2, pal ? 1 : 2, 1);
+    put_le(b + 3, 0, 2);
+    put_le(b + 5, pal ? 0x100 : 0, 2);
+    put_le(b + 7, pal ? 0x18 : 0, 1);
+    put_le(b + 8, (uint32_t)WINDOW_cur.clip[0], 2);
+    put_le(b + 10, (uint32_t)(WINDOW_cur.height - WINDOW_cur.clip[3]), 2);
+    put_le(b + 12, (uint32_t)w, 2);
+    put_le(b + 14, (uint32_t)h, 2);
+    put_le(b + 16, (uint32_t)bits, 1);
+    put_le(b + 17, 0x20, 1);
+    uint8_t *p = b + 0x12;
+    if (pal)   /* 0x5709f0: the palette's colours as their bytes 0 .. 2 (blue, green, red) */
+        for (int i = 0; i < 256; i++, p += 3) put_le(p, REAL_syspalette[i], 3);
+    uint8_t *px = p;
+    for (int y = WINDOW_cur.clip[1]; y < WINDOW_cur.clip[1] + h; y++)   /* 0x533f20 */
+        for (int x = WINDOW_cur.clip[0]; x < WINDOW_cur.clip[0] + w; x++) {
+            uint32_t v = WINDOW_getpixel(x, y);
+            switch (bits) {
+            case 8: *p++ = (uint8_t)v; break;
+            case 16: put_le(p, v, 2), p += 2; break;
+            case 24: put_le(p, v, 3), p += 3; break;
+            case 32: put_le(p, v, 4), p += 4; break;
+            default: break;
+            }
+        }
+    if (WINDOW_cur.depth == 16)
+        for (int i = 0; i < w * h; i++) {
+            uint16_t c = (uint16_t)(px[2 * i] | px[2 * i + 1] << 8);
+            if (c) c = (uint16_t)((c >> 1 & 0xffe0) | (c & 0x1f) | 0x8000);
+            put_le(px + 2 * i, c, 2);
+        }
+}
+
+/* 0x534010: the TGA written as a file with the windows put back afterwards (0x570c80, 0x570cb0). */
+static int tga_save(const char *name)
+{
+    int size = tga_size();
+    uint8_t *b = MEM_alloc("BFILE", size, 0);   /* (BFILE_alloc) */
+    if (!b) return 0;
+    tga_build(b);
+    Window cur, display;
+    memcpy(&cur, &WINDOW_cur, offsetof(Window, rec));
+    memcpy(&display, &WINDOW_display, offsetof(Window, rec));
+    WINDOW_deselect();
+    int ok = plat_save_user_file(name, b, (size_t)size);   /* (0x568a20: FILE_save through FILESYS_atomic) */
+    memcpy(&WINDOW_display, &display, offsetof(Window, rec));
+    memcpy(&WINDOW_cur, &cur, offsetof(Window, rec));
+    if (WINDOW_cur.lock != 0 && WINDOW_cur.pixels == NULL) THRASH.fn.window(WINDOW_cur.lock);
+    else WINDOW_select(&cur);
+    MEM_purge(b);
+    return ok;
+}
+
+int WINDOW_savetga(int flags, const char *name)
+{
+    if ((flags & 1) == 1) return tga_save(name);
+    if ((flags & 2) == 2) {
+        /* The image built in memory and dropped (the original keeps no pointer to it). */
+        uint8_t *b = MEM_alloc("BFILE", tga_size(), 0);
+        if (b) {
+            tga_build(b);
+            MEM_purge(b);
+            return 1;
+        }
+    }
+    return 0;
 }

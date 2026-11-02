@@ -77,3 +77,13 @@ void WINDOW_drawshape(const uint8_t *shape, int x, int y);
 void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha);
 /* A shape scaled to w x h at (x, y) on the current window (a negative size mirrors). 0x5628c0 */
 void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h);
+
+/* The current window's pixel at (x, y) in its format, 0 outside its clip (a driver window through a lock
+   of its surface). 0x570b00 */
+uint32_t WINDOW_getpixel(int x, int y);
+/* The current window's pixels at a shape's position (its +0xc word) copied into the shape (a driver
+   window straight from its surface). 0x535390 -> 0x535230 */
+void WINDOW_readshape(uint8_t *shape);
+/* The current window's clip rectangle as a TGA: flags 1 writes the file name (a user file, as the
+   original's save directory), 2 only builds it. 0x534080 */
+int WINDOW_savetga(int flags, const char *name);

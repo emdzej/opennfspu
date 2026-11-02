@@ -20,6 +20,8 @@ typedef struct {
 } BlitTable;
 
 extern const BlitTable MOVDFL_copy;   /* 0x5dec38: plain copies (0x5b0000, 0x53d100, 0x53d120, 0x53d140) */
+/* 0x5de5f0: the other way, the window's pixels into the shape's (the shape's pixels are written). */
+extern const BlitTable MOVDFL_read;
 extern const BlitTable MOVDFL_fill;   /* 0x5df880: fills with MOVDFL_fillcolour (0x561980 ...) */
 extern uint32_t MOVDFL_fillcolour;    /* 0x6a5b00: the replicated fill colour */
 

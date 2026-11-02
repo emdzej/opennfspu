@@ -19,6 +19,15 @@ static void copy32(void *dst, const void *src, int n) { copy8(dst, src, n * 4); 
 
 const BlitTable MOVDFL_copy = {{copy8, copy16, copy16, copy24, copy32}, NULL, 2, 0};
 
+/* ---- read-back kernels (table 0x5de5f0): the window's pixels copied into the shape ---- */
+
+static void read8(void *dst, const void *src, int n) { copy8((void *)src, dst, n); }        /* 0x5351b0 */
+static void read16(void *dst, const void *src, int n) { copy8((void *)src, dst, n * 2); }   /* 0x5351d0 */
+static void read24(void *dst, const void *src, int n) { copy8((void *)src, dst, n * 3); }   /* 0x5351f0 */
+static void read32(void *dst, const void *src, int n) { copy8((void *)src, dst, n * 4); }   /* 0x535210 */
+
+const BlitTable MOVDFL_read = {{read8, read16, read16, read24, read32}, NULL, 0, 0};
+
 /* ---- fill kernels (table 0x5df880) ---- */
 
 /* 0x5b0980 (PACODE): n bytes of the 32-bit pattern, by address (a byte or halfword to align, then
