@@ -1,6 +1,7 @@
 /* EA real library packers, see pack.h. */
 #include "real/pack.h"
-#include "pending.h"
+#include <stdbool.h>
+#include <string.h>
 #include "real/locatbig.h"
 
 /* The codecs below the RefPack one, which no shipped file uses: 0x5941b0 (type 0x18), 0x5935b0
@@ -54,7 +55,175 @@ static uint32_t unpack_type18(const uint8_t *src, uint8_t *dst)
     return (uint32_t)size;
 }
 
-static uint32_t unpack_type30(const uint8_t *src, uint8_t *dst) { PENDING_NOTE(0x5935b0, "UNPACK_type30"); return 0; }
+/* Types 0x30/0x32/0x34 (HUFF, 0x5935b0, always called with its table flag set): a bit stream read from the
+   top, refilled 16 bits (two bytes, big-endian) at a time. After the magic (the low bit of its first byte
+   set: a 3-byte packed size skipped) the unpacked size (24 bits), the escape byte (8 bits), then a
+   canonical Huffman code: the count of codes of each length from 1 until a length fills the code space,
+   and its symbols in code order, each the count of unused byte values to step over from the previous
+   one (from 0xff). Numbers: '1' and two bits (0..3), or z zeros, a one and z + 2 bits v, v - 4 + 2^(z+2)
+   (the original takes one bit more when the window's top 16 bits are all zeros). Codes up to 8 bits
+   through a 256-entry table, longer ones by the limits of lengths 9 and up. The escape symbol is followed
+   by a number: n > 0 repeats the previous byte n times; 0 and a 0 bit: the next 8 bits are a byte; 0
+   and a 1 bit: the end, then 0x32 sums the bytes once and 0x34 twice. Returns the size. The port stops
+   writing at the size (the original doesn't). */
+typedef struct {
+    const uint8_t *p;
+    uint32_t acc, w;   /* the last 32 bits fetched; the window, its next bit on top */
+    int n;             /* the window's valid bits less 16 */
+} HuffBits;
+
+static void huff_skip(HuffBits *b, int k)
+{
+    b->n -= k;
+    if (b->n < 0) {
+        b->acc = b->acc << 16 | (uint32_t)b->p[0] << 8 | b->p[1];
+        b->p += 2;
+        b->w = b->acc << (-b->n & 31);
+        b->n += 16;
+    } else {
+        b->w <<= k & 31;
+    }
+}
+
+static uint32_t huff_bits(HuffBits *b, int k)   /* k up to 16 */
+{
+    uint32_t v = b->w >> (32 - k);
+    huff_skip(b, k);
+    return v;
+}
+
+static int32_t huff_number(HuffBits *b)
+{
+    if ((int32_t)b->w < 0) return (int32_t)huff_bits(b, 3) - 4;
+    int k = 2;
+    if (b->w & 0xffff0000u) {
+        uint32_t t = b->w;
+        do {
+            t <<= 1;
+            k++;
+        } while ((int32_t)t >= 0);
+        huff_skip(b, k - 1);   /* the zeros and the one */
+    } else {
+        bool zero;
+        do {
+            k++;
+            zero = (int32_t)b->w >= 0;
+            huff_skip(b, 1);
+        } while (zero);
+    }
+    uint32_t v;
+    if (k < 0x11) {
+        v = huff_bits(b, k);
+    } else {
+        uint32_t hi = b->w >> ((0x30 - k) & 31);
+        huff_skip(b, k - 16);
+        v = hi << 16 | huff_bits(b, 16);
+    }
+    return (int32_t)(v - 4 + (1u << (k & 31)));
+}
+
+static uint32_t unpack_type30(const uint8_t *src, uint8_t *dst)
+{
+    HuffBits b = {src + 4, (uint32_t)src[0] << 24 | (uint32_t)src[1] << 16 | (uint32_t)src[2] << 8 | src[3], 0, 0};
+    b.w = b.acc << 16;
+    if (src[0] & 1) {
+        b.p = src + 8;
+        b.acc = (uint32_t)src[5] << 16 | (uint32_t)src[6] << 8 | src[7];
+        b.w = b.acc << 8;
+        b.n = 8;
+    }
+    uint32_t type = ((uint32_t)src[0] << 8 | src[1]) & 0xfeff;
+    uint32_t size = huff_bits(&b, 8) << 16;
+    size |= huff_bits(&b, 16);
+    uint32_t escape = huff_bits(&b, 8);
+    /* the lengths: each one's first index offset, count and limit (its last code + 1, at 16 bits) */
+    int32_t base[20] = {0}, count[20] = {0};
+    uint32_t limit[20] = {0};
+    int32_t code = 0, total = 0, maxlen = 0;
+    for (int len = 1; len < 18; len++) {
+        base[len] = code * 2 - total;
+        int32_t c = huff_number(&b);
+        total += c;
+        count[len] = c;
+        code = code * 2 + c;
+        limit[len] = c ? ((uint32_t)code << ((16 - len) & 31)) & 0xffff : 0;
+        maxlen = len;
+        if (c != 0 && limit[len] == 0) break;
+    }
+    limit[maxlen] = 0xffffffffu;
+    uint8_t used[256] = {0}, syms[256], last = 0xff;
+    for (int32_t i = 0; i < total && i < 256; i++) {
+        int32_t d = huff_number(&b) + 1;
+        do {
+            last++;
+            if (!used[last]) d--;
+        } while (d != 0);
+        used[last] = 1;
+        syms[i] = last;
+    }
+    /* the table of the first 8 bits: each short code's length (0x60 the escape's, 0x40 a longer code) and
+       symbol */
+    uint8_t lens[256], fsym[256];
+    memset(lens, 0x40, sizeof lens);
+    memcpy(fsym, used, sizeof fsym);
+    int pos = 0, esclen = 0, si = 0;
+    for (int len = 1, sh = 7; len <= maxlen && sh >= 0; len++, sh--)
+        for (int32_t c = count[len]; c != 0 && si < 256; c--) {
+            uint8_t sy = syms[si++];
+            uint8_t tag = (uint8_t)len;
+            if (sy == escape) esclen = len, tag = 0x60;
+            for (int k = 0; k < 1 << sh && pos < 256; k++, pos++) lens[pos] = tag, fsym[pos] = sy;
+        }
+    uint8_t *out = dst, *end = dst + size;
+    for (;;) {
+        uint32_t t = b.w >> 24, len = lens[t];
+        b.n -= (int)len;
+        if (b.n >= 0) {
+            b.w <<= len;
+            if (out < end) *out++ = fsym[t];
+            continue;
+        }
+        b.n += 16;
+        if (b.n >= 0) {   /* a short code across the refill */
+            if (out < end) *out++ = fsym[t];
+            b.acc = b.acc << 16 | (uint32_t)b.p[0] << 8 | b.p[1];
+            b.p += 2;
+            b.w = b.acc << ((16 - b.n) & 31);
+            continue;
+        }
+        int l = esclen;
+        if (len != 0x60)
+            for (l = 9; l < 18 && limit[l] <= b.w >> 16; l++) {}
+        uint32_t v = b.w >> ((32 - l) & 31);
+        b.n = b.n + (int)len - 16;   /* back to before the table's length */
+        huff_skip(&b, l);
+        int32_t ix = (int32_t)v - base[l < 20 ? l : 19];
+        uint8_t sy = syms[ix & 0xff];
+        if (sy != escape) {
+            if (out < end) *out++ = sy;
+            continue;
+        }
+        int32_t r = huff_number(&b);
+        if (r == 0) {
+            bool stop = (int32_t)b.w < 0;
+            huff_skip(&b, 1);
+            if (stop) break;
+            uint8_t lit = (uint8_t)huff_bits(&b, 8);
+            if (out < end) *out++ = lit;
+        } else {
+            uint8_t prev = out > dst ? out[-1] : 0;
+            for (int32_t k = 0; k < r && out < end; k++) *out++ = prev;
+        }
+    }
+    if (type == 0x32fb) {
+        uint8_t sum = 0;
+        for (uint32_t i = 0; i < size; i++) sum = dst[i] = (uint8_t)(sum + dst[i]);
+    } else if (type == 0x34fb) {
+        uint8_t d = 0, sum = 0;
+        for (uint32_t i = 0; i < size; i++) d = (uint8_t)(d + dst[i]), sum = dst[i] = (uint8_t)(sum + d);
+    }
+    return size;
+}
 
 /* Type 0x46 (BTREE): the size (3 bytes big-endian, after the 5-byte packed size of 0x47), an escape byte
    and the pairs: n nodes {byte, left, right}. A node byte stands for its two bytes, each expanded again
