@@ -337,7 +337,8 @@ static int impact_patch(int kind, int surf)
 }
 
 /* A car's sound event (0x4a9190): an impact (id -1) by its strength (2 .. 127, a tenth of the levels
-   faster than the last one's), at the volume of its distance; the looped ids' sounds are pending. */
+   faster than the last one's), at the volume of its distance; the looped ids (the skids and scrapes) by
+   the surface and their strength. */
 static void event_sound(int id, int kind, int surf, int strength, int dist, int angle)
 {
     int att = fixdiv(g_racecam[0].mode == 0xc ? 0x8000000 : 0x2000000, dist + (g_racecam[0].mode == 0xc ? 0x10000 : 0x20000));
@@ -1147,7 +1148,8 @@ static uint8_t s_throttle[CAR_MAX];   /* 0x6563c8: each car's eased throttle */
 
 /* The engine's part of the car's sounds (0x4a9e20): the volume by the distance (2048 / (d + 2)), the
    rpm's lift, the gear changes; the throttle eased (up by half the gap, down by an eighth); the view
-   (1 in the car, 2 chase, 3 others). The wind, rain, gearbox whine and the rest are pending. */
+   (1 in the car, 2 chase, 3 others); the wind, the road's noise in an open car, the gear change's clunk,
+   the gearbox's whine. */
 static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int heading, int speedv, int facing)
 {
     (void)heading;

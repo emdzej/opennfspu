@@ -1,6 +1,6 @@
 /* The cars' task functions (the pointers at +0xe0c of a car, set in 0x410dc0, registered by
-   Car_Construct 0x411190): the simulation's per-car work. Each is pending until its port lands; the
-   registration (lists and priorities) is the original's. */
+   Car_Construct 0x411190): the simulation's per-car work, registered (lists and priorities) as the
+   original's. */
 #include "game/car.h"
 #include "game/ai_drive.h"
 #include "game/race_progress.h"
@@ -11,16 +11,9 @@
 #include "game/car_respawn.h"
 #include "game/input.h"
 #include "game/traffic.h"
-#include "pending.h"
-
-#define TASK(addr, what)                                       \
-    static void task_##addr(void *car)                         \
-    {                                                          \
-        (void)car;                                             \
-        PENDING_NOTE(0x##addr, what);                          \
-    }
-TASK(414830, "car task: 0x414830 (unregistered)")
-TASK(49b6b0, "car task: 0x49b6b0 (+0xe24 variant)")
+/* 0x414830: the car's packet recorded or played back (0x414410, 0x4144d0 by the replay's mode 0x5e99f4); set
+   in +0xe10 but never registered, so nothing runs it. */
+static void task_414830(void *car) { (void)car; }
 static void task_516210(void *car) { (void)car; }   /* 0x516210: a function that returns at once */
 
 enum { T_E0C, T_E10, T_E14, T_E18, T_E1C, T_E20, T_E24, T_E28, T_E2C, T_E30 };
@@ -52,7 +45,6 @@ void Car_SetTasks(Car *c)
     }
     /* (f & 4) in a multiplayer race (0x657420 set, the players 0x657404 above 0) takes 0x49b6b0 for
        +0xe24; the port's races are single-player, where 0x657420 is 0. */
-    (void)task_49b6b0;
 }
 
 void Car_RegisterTasks(Car *c)

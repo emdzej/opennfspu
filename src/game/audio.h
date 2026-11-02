@@ -3,7 +3,8 @@
    (EngineAudio_Load 0x4ac9e0: a car's <sound>.viv, its bank and four CRDl layer tables; each odd tick a
    snapshot of the engine's volume, pitch, rpm, throttle and view (0x4ac550) that every third one plays
    (0x4ac060)), and the odd ticks' update (Audio_Tick 0x4a7ef0: the listener at the camera, the player's
-   car's sounds 0x4a7430, 0x4a9e20). The opponents' (0x4a6e50) and the track's sound elements (0x4aed00) follow; music and most speech are pending. */
+   car's sounds 0x4a7430, 0x4a9e20). The opponents' (0x4a6e50) and the track's sound elements (0x4aed00) follow; the music is
+   game/music.c, the speech's banks below. */
 #pragma once
 #include "game/car.h"
 #include <stdbool.h>

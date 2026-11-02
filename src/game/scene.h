@@ -84,7 +84,7 @@ void Scene_Clear(void);                                    /* 0x46cf60: frees ev
 /* The lists (0x628168 all; built by 0x46ca50 / 0x46c5d0 / 0x46c820). NULL before a load. */
 SceneList *Scene_List(void);              /* 0x46d900 */
 /* The odd tick's event triggers (0x470b10): the first race car through a sound trigger (type 4) sets its
-   sound element's one-shot going; animation triggers (7) are pending. */
+   sound element's one-shot going, an animation trigger (7) shows its objects (0x470330). */
 void Scene_Tick(void);
 SceneList *Scene_EventTriggers(void);     /* 0x46d7c0: triggers of other types than 0, 1, 2, 6 (0x62816c) */
 SceneList *Scene_CameraTriggers(void);    /* 0x46d7d0: triggers of type 6 (0x628174) */

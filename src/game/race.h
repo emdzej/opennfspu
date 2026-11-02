@@ -1,6 +1,7 @@
 /* The race's simulation step (Sim_Step 0x415010): one 64 Hz tick of the race, the start's countdown, the
-   cars' task lists (the even list on even ticks), then the tick counter (g_sim_tick, 0x606ac4). The AI,
-   the race's own ticks, audio, the world's animations, the network and the replay are pending. */
+   cars' task lists (the even list on even ticks), then the tick counter (g_sim_tick, 0x606ac4). Then the
+   AI, the race's odd ticks (audio, the wrong way, the scene's triggers); the network game's tick is the
+   one call not ported (multiplayer). */
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>

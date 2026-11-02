@@ -5,7 +5,8 @@
    drivercampos and drivercamrot), 2 .. 4 the near chase cameras, 5 .. 7 the far
    ones, 8, 9 and 15 fixed on the car, 13 overhead; the replay's: 10 circling the car, 11 a TV camera
    following the road, 12 a fixed one rising with the distance (the track's scene cameras, cut to as
-   the cars cross the camera triggers: 0x413ba0); 14, 17 .. 19 are pending. A car that leaves the ground with a mode flagged so gets the crash camera (0x461450). */
+   the cars cross the camera triggers: 0x413ba0), 14 the race's fly-in, 17 .. 19 on two cars (the
+   followed one and the one looked at). A car that leaves the ground with a mode flagged so gets the crash camera (0x461450). */
 #pragma once
 #include "game/car.h"
 #include "game/wtree.h"

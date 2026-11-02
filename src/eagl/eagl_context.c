@@ -566,8 +566,9 @@ static EaglLayer *draw_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     return l->next;
 }
 
-/* The two-stage draw layer (type 0, factory 0x12; 0x53f510): kernels 0x542090 (strip), 0x544780 (list),
-   0x546bb0 (quads) are pending. Without a second texture it draws as one stage would. */
+/* The two-stage draw layer (type 0, factory 0x12; 0x53f510): the strip, list and quads kernels with the
+   second stage (0x542090, 0x544780, 0x546bb0: EAGL_DrawTwoStage). Without a second texture it draws as
+   one stage would. */
 static EaglLayer *draw2_execute(EaglLayer *l, EaglStream *s0, EaglStream *s1)
 {
     EaglContext *c = g_eagl;

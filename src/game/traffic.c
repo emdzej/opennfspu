@@ -93,7 +93,8 @@ void Traffic_Place(Car *c)   /* 0x4a12f0 */
             WSmackBody_Follow(b, rot, CAR_F(c, 0x330));
         }
     }
-    /* (the road traffic's vehicles: on their road node, +0x8 and the node's point, pending with them) */
+    /* (an object whose description's +4 isn't 1 goes on its road node, 0x629540, at the node's point with
+       no turn: Traffic_SmackDescs gives every one 1) */
     c->b[0x7e] = 0;
     c->b[0x7f] = 1;
     c->b[0x7d] = 1;

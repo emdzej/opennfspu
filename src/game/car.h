@@ -138,8 +138,5 @@ void Sim_BuildEngine(Car *c);    /* 0x49c9d0 */
 void Car_SetTasks(Car *c);
 void Car_RegisterTasks(Car *c);
 
-/* The track's factor for a car's AI speeds (Track_Table 0x4a2ba0) and for its +0x140 (0x4a2730): AI
-   tuning; pending (1.0) until the AI is ported. */
-
 /* Every car of the race: parts, objects, lists, specs, renderers, tasks. 0x411190 */
 void Car_Construct(void);
