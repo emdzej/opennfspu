@@ -4246,6 +4246,7 @@ void HUD_Init(void)
     s_laps_done = s_bestlap = 0;   /* (0x426c50's reset) */
     g_mission_forced = -1;         /* 0x60c9ec */
     s_noscreens = false;           /* 0x60ca10 */
+    hidden = false;                /* 0x60ca00 */
     /* A replay file's race (the view 2 from the start): no race screens, the summary's button idle,
        and the next song (0x4ae2a0). */
     s_file_replay = g_race_view == 2;   /* 0x60c9b4 */
@@ -4317,6 +4318,12 @@ void HUD_Init(void)
 }
 
 bool HUD_ModalShown(void) { return nmodal > 0; }   /* 0x426a20 */
+
+/* The HUD hidden or shown again while a modal visual is up (the pause menu's own key). 0x425710 */
+void HUD_TogglePauseMenu(void)
+{
+    if (nmodal > 0) hidden = !hidden;
+}
 
 static void push_modal(HudVisual *v)
 {

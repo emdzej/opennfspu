@@ -18,6 +18,7 @@
 #include "game/race.h"
 #include "game/hud.h"
 #include "game/input.h"
+#include "game/controls.h"
 #include "game/replay_file.h"
 #include "game/sim_rand.h"
 #include "game/race_progress.h"
@@ -170,6 +171,8 @@ static bool load(const char *track, const char *carname)
     for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
     AI_Load();             /* the racing line (0x4031f0) */
     Input_Reset(Replay_Loaded());   /* (a file's replay kept) */
+    Controls_Load();   /* RaceLoop: 0x412e20, the options' bindings, 0x4117c0 */
+    g_input_cursor = g_input_samples;   /* (0x606ac8) */
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
     Police_LoadScript();   /* AI_LoadCopScript 0x403040 */
     AI_MakeControllers();  /* 0x406580 */
@@ -202,40 +205,20 @@ static bool load(const char *track, const char *carname)
     return true;
 }
 
-/* The driver: the keyboard (DirectInput codes) or the pad into the car's controls. */
-/* The driver: the keyboard (DirectInput codes) or the pad into the local player's packet (port: the
-   original samples its configured controls, Input_Sample 0x412e90; the keyboard's steering eases in). */
+/* The controls sampled (Input_Sample 0x412e90: fe.txt's bindings, controls.c) into the local
+   player's packet. --param autodrive=1 (a test aid for headless runs) holds the gas, 2 and right, 3 and
+   left: what the keys' readers give (full keys: the steering a quarter of 0xff, the gas 0x7e). */
 static void read_controls(void)
 {
-    uint8_t keys[KEY_COUNT] = {0};
-    bool kb = plat_keys(keys);
-    uint32_t pad = plat_pad(0);
-    static int autodrive = -1;   /* --param autodrive=1: full throttle, 2: and right, 3: and left (headless runs) */
+    Input_Sample();
+    static int autodrive = -1;
     if (autodrive < 0) {
         char v[8];
         autodrive = plat_param("autodrive", v, sizeof v) ? v[0] - '0' : 0;
     }
-    bool up = autodrive >= 1 || (kb && (keys[0xc8] || keys[0x11])) || (pad & (PAD_A | PAD_UP));
-    bool down = (kb && (keys[0xd0] || keys[0x1f])) || (pad & (PAD_B | PAD_DOWN));
-    bool left = autodrive == 3 || (kb && (keys[0xcb] || keys[0x1e])) || (pad & PAD_LEFT);
-    bool right = autodrive == 2 || (kb && (keys[0xcd] || keys[0x20])) || (pad & PAD_RIGHT);
-    bool hand = (kb && keys[0x39]) || (pad & PAD_X);
-    bool reset = (kb && keys[0x13]) || (pad & PAD_Y);   /* R: C1_COMMAND2_RESET */
-    static int steer;
-    int target = left == right ? 0 : left ? -0x3f : 0x3f;
-    int step = 8;   /* the keyboard's steering eases over about an eighth of a second */
-    if (steer < target) steer = steer + step < target ? steer + step : target;
-    else if (steer > target) steer = steer - step > target ? steer - step : target;
-    g_input_packet[0] = (uint8_t)((hand ? 1 : 0) | (reset ? 5 << 3 : 0));
-    /* The cameras (the original's configured view keys): C the next of the car's list, B looking back. */
-    static bool was_c;
-    bool cam_key = kb && keys[0x2e];
-    if (cam_key && !was_c) Camera_NextMode(0);
-    was_c = cam_key;
-    g_look[2] = kb && keys[0x30];
-    g_input_packet[1] = (uint8_t)(int8_t)steer;
-    g_input_packet[2] = up ? 0x7f : 0;
-    g_input_packet[3] = down ? 0x7f : 0;
+    if (autodrive >= 1) g_input_packet[2] = 0x7e;
+    if (autodrive == 2) g_input_packet[1] = 0xff / 4;
+    if (autodrive == 3) g_input_packet[1] = (uint8_t)(-0xff / 4);
 }
 
 int g_drive_opponents, g_drive_laps, g_drive_race_type, g_drive_traffic, g_drive_cops;
@@ -349,32 +332,68 @@ static void hud_script(void)
     }
 }
 
-/* The pause key (Input_Action 8: Escape) and the menus' mouse (0x415130, HUD_HandleInput 0x425eb0 in
-   RaceLoop 0x415300). In the race Escape pauses when no modal screen is up; in the race-over (the
-   replay) it ends the race. */
+/* The pause key (0x415130 with 1: I_PAUSE pressed): in the race it pauses when no modal screen is up;
+   in the race-over (the replay) it ends the race. */
+static void pause_key(void)
+{
+    if (!Input_Action(ACT_PAUSE, true) || g_sim_tick <= 0x20) return;
+    if (g_replay_mode < 2) {
+        if (!HUD_ModalShown()) {
+            Audio_Pause();           /* 0x4aaf20 */
+            g_drive_paused = true;   /* 0x606a90 */
+            HUD_Pause();             /* 0x4267c0 */
+        }
+    } else {
+        if (g_sim_tick < 0x21) g_race_quit = 1;   /* (0x415130: so early it's a quit) */
+        g_drive_result = 1;          /* Race_End(1) */
+    }
+}
+
+/* RaceLoop's walk over the interface keys' samples since the last frame (0x606ac8 up to 0x5e99b8, only
+   the last when more than 16 behind): the orbit keys while a screen is up, the HUD's keys, the camera's
+   and the look keys while not paused, then the pause key. */
+static void race_actions(void)
+{
+    if (g_input_samples - g_input_cursor > 0x10) g_input_cursor = g_input_samples;
+    for (; g_input_cursor <= g_input_samples; g_input_cursor++) {
+        if (g_drive_result) break;
+        if (HUD_ModalShown() && g_replay_mode < 2) {
+            if (Input_Action(ACT_ROTCAMCCLOCK, true)) g_racecam[0].lookspeed = 3;    /* 0x461650 */
+            if (Input_Action(ACT_ROTCAMCLOCK, true)) g_racecam[0].lookspeed = -3;   /* 0x461660 */
+            if (Input_Action(ACT_ROTCAMSTOP, true)) g_racecam[0].lookspeed = 0;     /* 0x461670 */
+        }
+        if (Input_Action(ACT_SCREENSHOT, true)) PENDING_NOTE(0x415300, "the screenshot key (Unleashed%02d.tga)");
+        if (Input_Action(ACT_TOGGLEPAUSEMENU, true)) HUD_TogglePauseMenu();   /* 0x425710 */
+        if (!g_drive_paused) {
+            if (Input_Action(ACT_VIEWDISTANCE, true))   /* 0x44f0f0 */
+                g_renderopts.adjustableviewdistance = (g_renderopts.adjustableviewdistance + 1) % 4;
+            if (Input_Action(ACT_HORIZON, true)) PENDING_NOTE(0x45da50, "the horizon key (the sky's +0x60)");
+            if (Input_Action(ACT_TOGGLEHUD, true) || Input_Action(ACT_CYCLEMAP, true) ||
+                Input_Action(ACT_ZOOMINMAP, true) || Input_Action(ACT_TOGGLEREARVIEW, true) ||
+                Input_Action(ACT_TOGGLEMAP, true) || Input_Action(ACT_ZOOMOUTMAP, true) ||
+                Input_Action(ACT_HUDTRANSPARENCY, true))
+                PENDING_NOTE(0x427370, "the HUD's keys (0x427370, 0x426700, 0x4275c0, 0x427510, 0x427320, 0x4275f0, 0x427590)");
+            /* (I_CYCLEHUD's pause: its test, 0x427a80, is never true) */
+            if (Input_Action(ACT_SFX, true)) PENDING_NOTE(0x4ab2b0, "the sound effects' key");
+            if (Input_Action(ACT_MUSIC, true)) PENDING_NOTE(0x4ad560, "the music's key");
+            if (Input_Action(ACT_CYCLECAMERA, true) && g_replay_mode < 2) Camera_NextMode(0);   /* 0x465920 */
+            g_look[0] = Input_Action(ACT_LOOKFORWARD, false);
+            g_look[1] = Input_Action(ACT_LOOKRIGHT, false);
+            g_look[2] = Input_Action(ACT_LOOKBEHIND, false);
+            g_look[3] = Input_Action(ACT_LOOKLEFT, false);
+        }
+        pause_key();
+    }
+}
+
+/* The typed keys and the menus' mouse (HUD_HandleInput 0x425eb0 in RaceLoop 0x415300). */
 static void race_menus(void)
 {
     uint8_t k[16];
     int nk = plat_key_presses(k, 16);
-    bool esc = false;
     uint8_t held[KEY_COUNT] = {0};
     bool shift = plat_keys(held) && (held[0x2a] || held[0x36]);
-    for (int i = 0; i < nk; i++) {
-        esc |= k[i] == 0x01;
-        HUD_TypeKey(k[i], shift);   /* (the window's WM_CHAR, 0x610a80) */
-    }
-    if (esc && 0x20 < g_sim_tick) {
-        if (g_replay_mode < 2) {
-            if (!HUD_ModalShown()) {
-                Audio_Pause();           /* 0x4aaf20 */
-                g_drive_paused = true;   /* 0x606a90 */
-                HUD_Pause();             /* 0x4267c0 */
-            }
-        } else {
-            if (g_sim_tick < 0x21) g_race_quit = 1;   /* (0x415130: so early it's a quit) */
-            g_drive_result = 1;          /* Race_End(1) */
-        }
-    }
+    for (int i = 0; i < nk; i++) HUD_TypeKey(k[i], shift);   /* (the window's WM_CHAR, 0x610a80) */
     hud_script();
     int32_t mx, my;
     uint32_t b = 0;
@@ -448,6 +467,12 @@ bool DRIVE_selftest(const char *track, const char *car)
     /* The simulation's 64 Hz from the 60 Hz frames (none while paused). */
     bool held = g_drive_paused || (g_replay_mode == 2 && Replay_Paused());
     ticks_due += held ? 0.0 : 64.0 / 60.0;
+    if (held) {
+        /* (the timer's samples at 32 Hz go on while the simulation waits; nothing is queued) */
+        static double due;
+        due += 32.0 / 60.0;
+        for (; due >= 1.0; due -= 1.0) Input_Sample();
+    }
     int n = (int)ticks_due;
     ticks_due -= n;
     for (int i = 0; i < n && i < 4; i++) {
@@ -477,6 +502,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         }
         Sim_Step();   /* 0x415010 */
     }
+    race_actions();
     {
         /* --param finish=<tick>: the player finished there (a test aid; the race's own finish is the
            lap count's, 0x417460). */

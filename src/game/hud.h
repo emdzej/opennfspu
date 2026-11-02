@@ -41,6 +41,8 @@ void HUD_RaceStart(void);
 void HUD_DrawOverlay(RenderSystem *r, RCamera *c);
 /* Whether the rear-view mirror is on and fully shown (its view is then drawn). 0x427560 */
 bool HUD_RearViewShown(void);
+/* The HUD hidden or shown again while a modal visual is up. 0x425710 */
+void HUD_TogglePauseMenu(void);
 /* Whether a modal visual (a race screen, the pause menu) is up. 0x426a20 */
 bool HUD_ModalShown(void);
 /* Every visual hidden, the modal list emptied (the replay's start). 0x425740 */
