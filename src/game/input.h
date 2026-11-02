@@ -15,6 +15,11 @@
 
 extern int32_t g_replay_mode;    /* 0x5e99f4: 0, 1 racing (recording), 2 replaying, 3 the replay ended */
 extern uint8_t g_input_packet[4];   /* 0x5e99dc: the local player's last sampled packet */
+extern int32_t g_replay_final;   /* 0x606a80: the tick the recording stopped at (its buffer full, or saved) */
+
+enum { REPLAY_BYTES = 0x19000 };
+/* The replay buffer (0x5ed848, REPLAY_BYTES), what a replay file carries after the race's settings. */
+uint8_t *Input_ReplayBuffer(void);
 
 /* Clears the rings and the replay (a race's start); the replay's reading restarts at its beginning. */
 void Input_Reset(bool keep_replay);

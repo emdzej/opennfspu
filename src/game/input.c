@@ -8,9 +8,10 @@
 #include "render/r3dcar.h"
 #include <string.h>
 
-enum { RING = 0x80, PLAYERS = 4, REPLAY_SIZE = 0x19000 };
+enum { RING = 0x80, PLAYERS = 4, REPLAY_SIZE = REPLAY_BYTES };
 
 int32_t g_replay_mode;
+int32_t g_replay_final;
 uint8_t g_input_packet[4];
 
 static uint8_t ring[PLAYERS][RING][4];   /* 0x606af0 */
@@ -37,6 +38,8 @@ void Input_Reset(bool keep_replay)
         written = 0;
     }
 }
+
+uint8_t *Input_ReplayBuffer(void) { return replay; }
 
 bool Input_Enqueue(int player, const uint8_t p[4])
 {
@@ -111,6 +114,7 @@ static void store(const uint8_t b[4][8])
 {
     if (0x18fff < written + 0x80) {
         g_replay_mode = 1;
+        g_replay_final = g_sim_tick;
         return;
     }
     memcpy(replay + written, b[0], 8);

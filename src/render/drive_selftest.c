@@ -18,6 +18,7 @@
 #include "game/race.h"
 #include "game/hud.h"
 #include "game/input.h"
+#include "game/replay_file.h"
 #include "game/sim_rand.h"
 #include "game/race_progress.h"
 #include "pending.h"
@@ -110,6 +111,7 @@ static bool load(const char *track, const char *carname)
 {
     snprintf(g_track_name, sizeof g_track_name, "%s", track);
     g_race_type = g_drive_race_type;    /* (its option 0x10, RACE_TYPE: the world's scenes follow it) */
+    Replay_Apply();   /* (a replay file's race: GameStartup's 0x413830, the track and the race type its) */
     {
         char st[8];
         if (plat_param("skilltest", st, sizeof st)) {   /* --param skilltest=<n>: <track>_st<n>.scn as a race type 4 */
@@ -147,6 +149,7 @@ static bool load(const char *track, const char *carname)
     if (0 < traffic) RaceSetup_Traffic(traffic, g_track_name);   /* (0x4ec590) */
     if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
     if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
+    Replay_Apply();   /* (the file's descriptions and settings over the set-up's) */
     Traffic_SmackDescs();   /* 0x4a15d0 (Race_SelectTrackDefaults 0x414dd0) */
     Car_Construct();
     if (g_ncars < 1) return false;
@@ -163,7 +166,7 @@ static bool load(const char *track, const char *carname)
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
     for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
     AI_Load();             /* the racing line (0x4031f0) */
-    Input_Reset(false);
+    Input_Reset(Replay_Loaded());   /* (a file's replay kept) */
     if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;   /* (the AIDRIVE key) */
     Police_LoadScript();   /* AI_LoadCopScript 0x403040 */
     AI_MakeControllers();  /* 0x406580 */
@@ -186,7 +189,8 @@ static bool load(const char *track, const char *carname)
     }
     g_render_cars = draw_cars;
     HUD_Init();   /* 0x424420 */
-    HUD_RaceStart();   /* (RaceLoop's 0x426a40 with 0) */
+    if (g_race_view == 2) HUD_RaceOver();   /* (RaceLoop's 0x426a40 with the view 2: a file's replay) */
+    else HUD_RaceStart();   /* (RaceLoop's 0x426a40 with 0) */
     set_env();
     RLists_Init();
     plat_set_frame_rate(60.0);
@@ -449,7 +453,11 @@ bool DRIVE_selftest(const char *track, const char *car)
            replay panel's restart (0x657428) ends the loop and GameMain runs it again: the results'
            screens then stay hidden (0x60ca10). */
         if (s_replay_again) Audio_Flush();   /* 0x4ab130 */
-        else keep_wear();
+        else {
+            keep_wear();
+            char rf[40];   /* --param replaysave=<file>: the race's replay written as the race-over starts (tests) */
+            if (plat_param("replaysave", rf, sizeof rf)) Replay_Write(rf);
+        }
         s_replay_again = false;
         g_race_view = 2;
         g_replay_mode = 2;
@@ -533,4 +541,5 @@ void DRIVE_Shutdown(void)
     g_drive_result = 0;
     s_replay_again = false;
     s_wear_kept = false;
+    Replay_Unload();
 }

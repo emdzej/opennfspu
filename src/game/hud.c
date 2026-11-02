@@ -3977,12 +3977,18 @@ static HudVisual *replay_new(bool net)   /* 0x42c890 */
 
 void HUD_ReplayPlaying(void) { if (s_replay) ((HReplay *)s_replay)->paused = 0; }   /* 0x42df90 */
 
+static bool s_file_replay;   /* 0x60c9b4: a replay file's race */
+
 void HUD_Init(void)
 {
     HUD_Free();
     s_laps_done = s_bestlap = 0;   /* (0x426c50's reset) */
     g_mission_forced = -1;         /* 0x60c9ec */
     s_noscreens = false;           /* 0x60ca10 */
+    /* A replay file's race (the view 2 from the start): no race screens, the summary's button idle,
+       and the next song (0x4ae2a0). */
+    s_file_replay = g_race_view == 2;   /* 0x60c9b4 */
+    if (s_file_replay) Music_Play(NULL, 0);
     /* The player's name (the race description's +0x558 +0x17c), the layout chosen (0x657db8), the
        screen. */
     HudConfig_Load(g_race_player, 0, g_display.width, g_display.height);
@@ -4049,6 +4055,7 @@ static void push_modal(HudVisual *v)
 static void race_screens(bool again)
 {
     if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8) return;
+    if (s_file_replay) return;
     if (g_race_mode <= 5 && s_congrats && !again) {
         /* The place: a knockout's 1 (8 when the car was knocked out, +0xb50 3), the network race's by its
            standings (pending: the car's), else the camera's car's (+0xcd4). (0x60ca98 overrides it when
@@ -4191,7 +4198,7 @@ int HUD_HandleInput(int x, int y, int event)
     }
     if (a == 0xe) {
         close_modals(0);
-        if (nmodal == 0 && !g_race_quit && !g_race_derby) race_screens(true);   /* 0x426c50(1) */
+        if (nmodal == 0 && !g_race_quit && !s_file_replay && !g_race_derby) race_screens(true);   /* 0x426c50(1) */
         if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
         return 0xe;
     }
@@ -4234,14 +4241,16 @@ void HUD_RaceOver(void)
     }
     /* The records take the player's time first, when the player has a place (or in a mission). */
     Car *me = local_car();
-    if (s_records && ((me && *CAR_I(me, 0xcd4) != 0) || g_race_mode == 9)) {
-        if (g_race_mode == 4) {
-            tour_update();   /* 0x427620 */
-            if (s_standings) s_standings->vt->reset(s_standings);   /* 0x431ae0 */
+    if ((me && *CAR_I(me, 0xcd4) != 0) || g_race_mode == 9) {
+        if (s_records) {
+            if (g_race_mode == 4) {
+                tour_update();   /* 0x427620 */
+                if (s_standings) s_standings->vt->reset(s_standings);   /* 0x431ae0 */
+            }
+            s_records->vt->reset(s_records);   /* 0x433980 */
         }
-        s_records->vt->reset(s_records);   /* 0x433980 */
+        race_screens(false);   /* 0x426c50 */
     }
-    race_screens(false);   /* 0x426c50 */
     /* (port: the list's first is shown at once; the original's starts hidden and is passed) */
     if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
 }

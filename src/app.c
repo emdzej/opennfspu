@@ -8,6 +8,8 @@
 #include "game/car.h"
 #include "game/race_setup.h"
 #include "game/race_car.h"
+#include "game/replay_file.h"
+#include "game/track.h"
 #include "render/r3dcar.h"
 #include "game/race_progress.h"
 #include "game/mission.h"
@@ -76,6 +78,15 @@ bool app_init(void)
     if (!plat_param("screen", screen_name, sizeof screen_name)) screen_name[0] = 0;
     if (!plat_param("fe", fe_start, sizeof fe_start)) fe_start[0] = 0;
     if (!plat_param("fecb", fe_cb, sizeof fe_cb)) fe_cb[0] = 0;
+    {
+        /* --param replay=<file>: the race of a replay file, replayed (as the front end's load replay does) */
+        char rf[40];
+        if (plat_param("replay", rf, sizeof rf) && Replay_Load(rf)) {
+            Replay_Apply();
+            snprintf(drive_name, sizeof drive_name, "%s", g_track_name);
+            snprintf(car_name, sizeof car_name, "%s", (const char *)g_cardesc[0] + 0x228);   /* (FILENAME) */
+        }
+    }
     /* Without a viewer parameter the game starts as the original does: in the front end. */
     if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest) {
         snprintf(fe_start, sizeof fe_start, "gamesetup");
