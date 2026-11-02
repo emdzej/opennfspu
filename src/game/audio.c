@@ -11,6 +11,7 @@
 #include "game/track.h"
 #include "game/wtree.h"
 #include "game/input.h"
+#include "game/race_progress.h"
 #include "pending.h"
 #include "render/r3dcar.h"
 #include "real/locatbig.h"
@@ -153,6 +154,18 @@ static int8_t s_slotvel[0x50];    /* 0x5d17e8 */
 static uint32_t s_lastpick[17];   /* 0x65644c ..: the patch picked last in each set */
 
 /* A pan angle to a byte: the front half's (0x4a96b0, 0x4a99e0). */
+/* Whether the local car is open to the air (0x443e10 on its renderer, 0x5e8b34[0x65741c] +0x74c):
+   without a roof (+0x2bc) or with its description's slot 1 at its end (+0x50c, the top down). */
+static int32_t s_noise[4];   /* 0x5d1838: the road noise's volume, pitch and their steps */
+static bool s_noise_read;
+static bool car_open(void)
+{
+    Car *c = 0 <= g_race_local && g_race_local < CAR_MAX ? g_cars[g_race_local] : NULL;
+    const R3DCar *r = c ? c->p[CARP_R3D] : NULL;
+    if (!r) return false;
+    return r->noroof || (r->state && r->state->spec && r->state->spec->slot1end);
+}
+
 static int pan_byte(int a) { return (a < 0x4000 || 0xbfff < a) ? (int)((uint32_t)(a + 0x4000) >> 8 & 0xff) : (0xbfff - a) >> 8; }
 
 /* The bank's volume for the patch (by the options' volumes and their mixes 0x5d14bc ..). */
@@ -196,8 +209,8 @@ static int play_once(int bank, int patch, int angle, int vol, int bend, int pitc
     p.f09 = (int8_t)bend;
     p.patch = patch;
     if (bank != s_banks[0].slot && bank != s_banks[1].slot && g_sound_quality < 2 && (g_racecam[0].flags2 & 8) &&
-        g_racecam[0].mode != 0 && g_racecam[0].mode != 0xf)
-        p.f12 = 3000;   /* (0x443e10, the car's interior, taken as no) */
+        g_racecam[0].mode != 0 && g_racecam[0].mode != 0xf && !car_open())
+        p.f12 = 3000;   /* (muffled in a closed car's cockpit) */
     p.pan = opt(0x5d1760) ? (int8_t)pan_byte(angle) : 0x40;
     p.velocity = (int8_t)vel;
     if (bank < -1) {   /* the streamed ones: the cached bank's patch 0, else asked for (and silent now) */
@@ -1095,8 +1108,9 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
 {
     (void)heading;
     if (0 < s_level) s_level--;
-    if (g_racecam[0].mode == 0xc && 1 < g_replay_mode) PENDING_NOTE(0x4a9e20, "the TV camera's distances for the car's sounds");
-    int att = fixdiv(0x8000000, dist + 0x20000);
+    /* the attenuation: farther reaching (and doubled) for the replay's TV camera (mode 12) */
+    int att = g_racecam[0].mode == 0xc && 1 < g_replay_mode ? fixdiv(0x4e200000, dist + 0xf0000) << 1
+                                                              : fixdiv(0x8000000, dist + 0x20000);
     int a = (att + ((att >> 31) & 0xffff)) >> 0x10;
     /* The speed's term: |speed|, three times it for the others than the type 1 (+0x464). */
     float sp = *CAR_F(c, 0xd60);
@@ -1134,6 +1148,7 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     }
     if (*CAR_I(c, 0x540) != 0) type = 4;
     int view, wind = half;
+    bool open = false;   /* (the local car's open cockpit, in the views inside) */
     switch (g_racecam[0].mode) {
     case 0:
     case 0xf: view = 1; wind = speed; break;
@@ -1143,7 +1158,8 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     default:
         if (!(g_racecam[0].flags2 & 8)) view = 3;
         else {
-            view = 0;   /* (0x443e10, the car's interior, taken as no) */
+            open = car_open();
+            view = open;
             wind = speed;
         }
         break;
@@ -1165,6 +1181,10 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     int vol = (v * 0x7f) >> 7;
     int vol0 = vol;
     wind = wind - 0xf < 1 ? 0 : wind - 0xf;
+    if (g_racecam[0].mode == 0xc) {   /* (the TV camera's wind by its own distance) */
+        int w = fixdiv(0x640000, dist + 0x10000) * 0x80;
+        v = (w + ((w >> 31) & 0xffff)) >> 0x10;
+    }
     int windvol = (v * wind) >> 7;
     if (0x7a < windvol) windvol = 0x7a;
     if (speedv != 0 || g_racecam[0].mode == 0xb) vol = (vol0 << 0x10) / pitch;
@@ -1172,8 +1192,38 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
     if (windvol == 0) stop_slot(0x18);
     else play_slot(0x18, type + 0x11, windvel, pitch, windvol, pan, 0x7f);
     stop_slot(0x1c);
-    PENDING_NOTE(0x443e10, "the road's noise inside the car (slot 0x1a, the car's interior)");
-    stop_slot(0x1a);
+    /* The road's noise in an open car (slot 0x1a, patch 0x1f): by the speed (|+0x35c| x 5), its volume
+       and pitch wandering between bounds at random rates (0x5d1838 .. 0x5d1844, kept from race to
+       race). */
+    int noise = (int)(fabsf(*CAR_F(c, 0x35c)) * 5.0f);
+    if (!open || noise == 0) {
+        stop_slot(0x1a);
+    } else {
+        if (!s_noise_read) {
+            for (int i = 0; i < 4; i++) s_noise[i] = (int32_t)exe_u32(0x5d1838 + 4 * (uint32_t)i);
+            s_noise_read = true;
+        }
+        s_noise[0] += s_noise[2];
+        s_noise[1] += s_noise[3];
+        if (0x7f < s_noise[0]) {
+            s_noise[0] = 0x7f;
+            s_noise[2] = -1 - (int32_t)(REAL_rand() & 7);
+        }
+        if (s_noise[0] < 0x28) {
+            s_noise[0] = 0x28;
+            s_noise[2] = (int32_t)(REAL_rand() & 7) + 1;
+        }
+        if (0x105dc < s_noise[1]) {
+            s_noise[1] = 0x105dc;
+            s_noise[3] = -0x14 - (int32_t)(REAL_rand() % 0x50);
+        }
+        if (s_noise[1] < 0xfa24) {
+            s_noise[1] = 0xfa24;
+            s_noise[3] = (int32_t)(REAL_rand() % 0x32) + 10;
+        }
+        int nv = (noise * s_noise[0]) >> 7;
+        play_slot(0x1a, 0x1f, windvel, s_noise[1], 0x7e < nv ? 0x7f : nv, 0, 0x7f);
+    }
     int8_t shift = (int8_t)c->b[0xd84];
     if (shift && (int8_t)c->b[0xd81] < (int8_t)c->b[0xd82] && (int8_t)c->b[0xd81] != 1 && eased) {
         vol = ((shift * vol) / *SPEC_I(c, 0x54) + vol) >> 1;
@@ -1211,6 +1261,7 @@ static void car_sounds(Car *c, int dist, int rpmvol, int pitch, int pan, int hea
         if (wv < 1) wv = 0;
         play_slot(0, 0xf, 0x40, (int)lrintf(pf), wv, pan, 0x7f);
     }
+    if (open) vol /= 2;   /* (the engine half as loud with the top open) */
     int rpm16 = (int)(*CAR_F(c, 0xdb4) / *SPEC_F(c, 0x94) * 65536.0f);   /* 0x5b3e68 */
     int throttle = *CAR_I(c, 0xdb0) == 0 ? -1 : *CAR_I(c, 0x548) == 0 ? eased >> 1 : 0x7f;
     int engvol = ((opt(0x5d1748) * opt(0x5d14c8) * 0x55 >> 7) * vol) >> 0xe;
