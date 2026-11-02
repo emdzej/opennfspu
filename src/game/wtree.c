@@ -1145,6 +1145,78 @@ static bool load_edges(const char *path, WTreeElems *v)
     return true;
 }
 
+/* 0x4883b0: the first vertex of the side polygon a shares with b (two of a's vertices within 0x5b4960 of
+   two of b's in each axis; the second when they're the last and the first), -1 if they don't share one;
+   0 for the same polygon. */
+static int shared_side(const WTreeElem *a, const WTreeElem *b)
+{
+    if (a == b) return 0;
+    float eps = exe_f32(0x5b4960);
+    const float *const *va = a->vt->vertices(a), *const *vb = b->vt->vertices(b);
+    int m[4], n = 0;
+    for (int i = 0; i < a->vt->nvertices(a); i++)
+        for (int j = 0; j < b->vt->nvertices(b); j++) {
+            bool close = true;
+            for (int k = 0; k < 3 && close; k++) {
+                float d = va[i][k] - vb[j][k];
+                if (d <= 0) d = -d;   /* (0x5b23f8) */
+                close = d < eps;
+            }
+            if (close && n < 4) m[n++] = i;   /* (the original's four slots, unchecked) */
+        }
+    if (n != 2) return -1;
+    return m[0] + 1 == m[1] ? m[0] : m[1];
+}
+
+/* 0x488500: the road's edges where there's no .edg. In each cell of a tree of every polygon, each road
+   polygon (surface bits 0-3 set) gets an edge along each side it shares with a polygon off the road (bits
+   0-3 clear), in its winding's order and with the other's surface as its flag; of two edges in a row with
+   the same centre, the first one without a flag goes (else the second without one). */
+static void edges_from_polygons(WTreeCell *c, WTreeElems *out)
+{
+    for (; c; c = c->child[3]) {
+        WTreeList *l = c->list;
+        for (uint32_t i = 0; l && i < l->n; i++) {
+            WTreeElem *f = l->e[i].elem;
+            if (!f || f->kind != WTREE_POLY || !(f->flags & 0xf)) continue;
+            WTreeElem *made[16];   /* (the original's stack array; more would overrun it) */
+            int n = 0;
+            for (uint32_t j = 0; j < l->n && n < 16; j++) {
+                WTreeElem *g = l->e[j].elem;
+                if (!g || g->kind != WTREE_POLY || (g->flags & 0xf)) continue;
+                int k = shared_side(f, g);
+                if (k == -1) continue;
+                const float *v0 = f->vt->vertex(f, k), *v1 = f->vt->vertex(f, k + 1);
+                bool cw = (uint8_t)f->w8 != 0;
+                float pts[8];
+                memcpy(pts, cw ? v0 : v1, 4 * sizeof(float));
+                memcpy(pts + 4, cw ? v1 : v0, 4 * sizeof(float));
+                made[n++] = WTreeEdge_new(pts, g->flags);   /* 0x485070 */
+            }
+            for (int k = 0; k + 1 < n; k++) {
+                WTreeElem *a = made[k], *b = made[k + 1];
+                if (!a || !b) continue;
+                float ca[3], cb[3];
+                a->vt->centre(a, ca);
+                b->vt->centre(b, cb);
+                if (ca[0] != cb[0] || ca[1] != cb[1] || ca[2] != cb[2]) continue;
+                if (a->w8 == 0) {
+                    a->vt->dtor(a);
+                    made[k] = NULL;
+                } else if (b->w8 == 0) {
+                    b->vt->dtor(b);
+                    made[k + 1] = NULL;
+                }
+            }
+            for (int k = 0; k < n; k++)
+                if (made[k]) WTreeElems_push(out, made[k]);
+        }
+        edges_from_polygons(c->child[0], out);
+        edges_from_polygons(c->child[1], out);
+        edges_from_polygons(c->child[2], out);
+    }
+}
+
 void Track_LoadEdges(void *world)
 {
     BWorld *w = world;
@@ -1152,8 +1224,21 @@ void Track_LoadEdges(void *world)
     snprintf(path, sizeof path, "%s.edg", w->name);
     WTreeElems *edges = calloc(1, sizeof *edges);
     if (!edges) return;
-    if (!load_edges(path, edges))
-        PENDING_NOTE(0x488500, "the road edges made from the polygons (a track without its .edg)");
+    if (!load_edges(path, edges)) {
+        /* every bundle's polygons (not only the flagged ones) in a tree of their own */
+        WTree *t = WTree_new(8192.0f, 15);   /* 0x4835e0 (0x46000000) */
+        WTreeElems *all = calloc(1, sizeof *all);
+        if (t && all) {
+            for (int i = 0; i < w->nbundles; i++) {
+                W3DObjectBundle *b = w->bundles[i];
+                if (b && b->collide) PCollideArticleBundle_Build(b->collide, all, false);
+            }
+            WTree_Add(t, all);   /* 0x483870 */
+            edges_from_polygons(t->root, edges);
+        }
+        WTreeElems_free(all);
+        WTree_delete(t);
+    }
     WTreeElems *polys = calloc(1, sizeof *polys);
     if (polys) {
         for (int i = 0; i < w->nbundles; i++) {
