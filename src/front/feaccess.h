@@ -103,6 +103,19 @@ int FEData_TourTraffic(int16_t slots[7]);
 #include "game/race_setup.h"
 /* The dead zones into the save's accessor section, for its write. */
 void FEData_StoreDeadZones(Save *sv);
+/* A colour accessor's row's colour, its "custom" row (the palette's count; -1 without custom colours),
+   custom colours allowed (its box's data.allowcustom), a custom slot's colour chosen (0x4b8f00). */
+uint32_t FEAccess_ColourAt(const FEAccessor *a, int i);
+int FEAccess_CustomRow(const FEAccessor *a);
+void FEAccess_AllowCustom(FEAccessor *a, bool on);
+void FEAccess_ChooseCustom(FEAccessor *a, int slot);
+/* The player's eight custom colours (the save's, 0x691d98; 0 none) and those set: count, the i-th, a
+   slot's place among them. */
+uint32_t FEData_CustomSlot(int slot);
+void FEData_SetCustomSlot(int slot, uint32_t c);
+int FEData_CustomCount(void);
+uint32_t FEData_Custom(int i);
+int FEData_CustomIndex(int slot);
 /* An owned car's value in a year (0x4f83f0). */
 int32_t FEData_CarValue(const SaveCar *c, int year);
 /* A car's damage in per cent (0x4eefd0). */

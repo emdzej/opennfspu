@@ -6,6 +6,7 @@
 #include "front/fetrackmap.h"
 #include "front/fehudpreview.h"
 #include "front/fecd.h"
+#include "front/fecolour.h"
 #include "front/fectrl.h"
 #include "front/feshowcase.h"
 #include "front/fechronicle.h"
@@ -1127,11 +1128,9 @@ static void on_up(FertControl *c)
         combo_open(c);   /* (0x4c66c0, closed) */
         return;
     }
-    if (is_colourbox(c)) {
-        /* (FEColorBox opens its colour picker, FEColorSelectBox 0x4c3800: pending; the port steps to the
-           next colour) */
-        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
-        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + 1);
+    if (is_colourbox(c)) {   /* (FEColorSelectBox is a combo box: its colours' list) */
+        FEAccess_AllowCustom(FEAccess_Find(data_str(c, "accessor")), data_int_of(c, "allowcustom") != 0);   /* _v21 0x4c37c0 */
+        combo_open(c);
         return;
     }
     if (!strcmp(c->id, "NFS5.GRAPHICTABBUTTON") || !strcmp(c->id, "NFS5.TABBUTTON")) {
@@ -1243,6 +1242,15 @@ static void poll(void)   /* 0x529530 */
     int32_t mx, my;
     uint32_t b;
     if (!w || !MOUSE_state(&mx, &my, &b)) return;
+    if (FEColour_Box()) {   /* (the colour picker open has the mouse: its box keeps the focus) */
+        bool moved = mx != s_mouse[0] || my != s_mouse[1];
+        uint32_t ch = b ^ s_buttons;
+        s_mouse[0] = mx, s_mouse[1] = my, s_buttons = b;
+        if ((ch & 1) && (b & 1)) FEColour_Mouse(0, mx, my, true);
+        else if (ch & 1) FEColour_Mouse(2, mx, my, false);
+        else if (moved) FEColour_Mouse(1, mx, my, (b & 1) != 0);
+        return;
+    }
     if (mx != s_mouse[0] || my != s_mouse[1]) {
         s_mouse[0] = mx;
         s_mouse[1] = my;
@@ -2363,9 +2371,11 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
            the accessor's) as a 20 x 10 swatch 40 from its right and 4 down, outlined in black. (The custom
            colour picker, FEColorSelectBox_v17 0x4c3800, and the drop-down pend.) */
         if (c->feflags & 0x20) return true;
+        if (FEColour_Open_On(c)) return true;   /* (_v17 0x4c3800: the picker instead, drawn last) */
         FEControl_Draw(c, ox, oy);
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
         if (!a) return true;
+        FEAccess_AllowCustom(a, data_int_of(c, "allowcustom") != 0);   /* _v21 0x4c37c0 */
         int32_t r[4];
         control_rect(c, r);
         float x = (float)(r[2] + ox - 0x28), y = (float)(r[1] + oy + 4);
@@ -2767,7 +2777,10 @@ static bool combo_mouse(bool down, int32_t mx, int32_t my)
     if (s_combo.scroll && mx >= b.x + b.w - 0x10) return true;   /* (the bar's) */
     int row = first + (my - b.y) / 14;
     if (row < b.n) {
-        FEAccess_SetPos(a, row);   /* (slot 0x2c) */
+        /* (0x4c66c0: a colour box's "custom" row opens the picker, 0x4c35c0, the place kept) */
+        FertControl *c = s_combo.c;
+        if (is_colourbox(c) && row == FEAccess_CustomRow(a)) FEColour_Open(c);
+        else FEAccess_SetPos(a, row);   /* (slot 0x2c) */
         combo_close(5);
     }
     return true;
@@ -2806,6 +2819,18 @@ static void combo_draw(void)
         if (i == s_combo.hover) {
             FE2D_Gouraud(x + 1.0f, (float)yy, rw - 2.0f, 14.0f, hover_c, hover_c, hover_c, hover_c);
             fg = 0xffffffffu;   /* 0x4d8280 */
+        }
+        if (is_colourbox(s_combo.c)) {
+            /* FEColourAccessor_v15 0x4b8f70: a 20 wide swatch framed in black, the "custom" row its
+               text (0x263) */
+            if (i == FEAccess_CustomRow(a)) {
+                const char *t = FEStrings_Get(0x263);
+                if (t) list_text(f, x + 1.0f + 3.0f, (float)yy + 2.0f, t, fg, 0);
+            } else {
+                FE2D_Rect(x + 1.0f + 3.0f, (float)yy + 2.0f, 20.0f, 10.0f, FEAccess_ColourAt(a, i) | 0xff000000u);
+                FE2D_Frame(x + 1.0f + 3.0f, (float)yy + 2.0f, 20.0f, 10.0f, 0xff000000u);
+            }
+            continue;
         }
         list_text(f, x + 1.0f + 3.0f, (float)yy + 2.0f, FEAccess_TextAt(a, i), fg, 0);
     }
@@ -3147,6 +3172,7 @@ void FEApp_Frame(void)
         if (w == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
         draw_combos(w);
         if (w == FEApp_Top()) combo_draw();
+        if (w == FEApp_Top() && FEColour_Box()) FEColour_Draw(FEColour_Box(), 0, 0);
     }
     if (s_bar) {
         for (int i = 0; i < s_bar->nchildren; i++) {

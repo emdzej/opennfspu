@@ -38,6 +38,8 @@ struct FEAccessor {
     float fmin, fstep; int dec, slot;   /* ACC_SETUP: FEFloatAccessor's range, decimals; the car's float */
     int src;         /* ACC_OWNED: 1 the market's cars; ACC_COLOUR / ACC_INTCOLOUR: 1 the garage car's */
     uint32_t cval;   /* FEColourAccessor's colour (+0x2c) for the garage car's (src 1) */
+    bool custom;     /* ACC_COLOUR / ACC_INTCOLOUR: its box allows custom colours (+0x30, data.allowcustom) */
+    int pal;         /* (their palette's count) */
     bool nosel;      /* the CD player's lists: no row chosen (+0x1d, 0x4bc1f0; the position reads -1) */
     int32_t dz[16];  /* ACC_DEADZONE: each joystick's value (+0x28), the one shown (+0x68), the save's load */
     int dzpad;
@@ -817,7 +819,11 @@ bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4])
         FEAccessor *c = FEAccess_Find("GenericCar.Colour");
         if (c) ci = c->pos;
     }
-    record_colours(r, ci, ii, out);
+    /* (a custom colour, past the palette: the body that colour itself, FEColourAccessor's +0x2c) */
+    FEAccessor *body = a->kind == ACC_DEALER ? FEAccess_Find("DealerCar.Colour") : a->kind == ACC_MERGED ? FEAccess_Find("GenericCar.Colour") : NULL;
+    bool custom = body && body->custom && body->pos > body->pal;
+    record_colours(r, custom ? 0 : ci, ii, out);
+    if (custom) out[0] = body->cval | 0xff000000u;
     return true;
 }
 
@@ -1629,6 +1635,7 @@ static int owned_count(void)
 }
 
 static float recf(const uint8_t *r, int off);
+static uint32_t colour_row(const FEAccessor *a, int i);
 
 static SaveCar *garage_car(void)
 {
@@ -1693,7 +1700,9 @@ static void refresh(const FEAccessor *c)
             r = gc ? gc->rec + 4 : NULL;
         } else if (a->src == 2) r = generic_rec();
         int n = r ? rec16(r, a->kind == ACC_COLOUR ? 0x3e6 : 0x528) : 0;
-        a->count = n > 0 ? n : 1;
+        /* (_v2 0x4b8f30: with custom colours the palette, a "custom" row, then the player's own colours) */
+        a->pal = n;
+        a->count = a->custom ? n + 1 + FEData_CustomCount() : n > 0 ? n : 1;
         if (a->pos >= a->count) a->pos = 0;
         return;
     }
@@ -1800,11 +1809,24 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
         a->nosel = false;
         return;
     }
+    if ((a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) && a->custom) {
+        /* FEColourAccessor_v11 0x4b8e90: past the end 0; a palette row its colour; the "custom" row
+           nothing; a custom row that colour (0x500fa0) */
+        if (a->count <= pos || pos < 0) pos = 0;
+        if (pos < a->pal) {
+            a->pos = pos;
+            a->cval = colour_row(a, pos);
+        } else if (pos != a->pal) {
+            a->pos = pos;
+            a->cval = FEData_Custom(pos - a->pal - 1);
+        }
+        return;
+    }
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->kind == ACC_CDTITLE) FECD_SetPos(a->pos);   /* FECurrentSongSelection_v11 0x4be9a0: it plays */
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
-    if ((a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) && a->src == 1) a->cval = palette_colour(a, a->pos);
+    if (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) a->cval = colour_row(a, a->pos);
 }
 
 int FEAccess_Int(const FEAccessor *a) { return a ? a->min + a->pos : 0; }   /* (FEIntAccessor's slot 0x6c) */
@@ -2158,16 +2180,95 @@ void FEData_PaintShop(void)
     if (changed) FESave_Write();
 }
 
-uint32_t FEAccess_Colour(const FEAccessor *a)
+/* A row's colour: the palette's (the garage car's palettes for src 1, else the dealer's or the generic
+   car's), past it the custom colours (0 for the "custom" row). */
+static uint32_t colour_row(const FEAccessor *a, int i)
 {
-    if (!a || (a->kind != ACC_COLOUR && a->kind != ACC_INTCOLOUR)) return 0;
-    refresh(a);
-    if (a->src == 1) return a->cval;
+    if (a->custom && i >= a->pal) return i == a->pal ? 0 : FEData_Custom(i - a->pal - 1);
+    if (a->src == 1) return palette_colour(a, i);
     FEAccessor *d = FEAccess_Find("DealerCar.Car");   /* (the dealer car's palette entry) */
     const uint8_t *r = d && d->count ? s_car + CAR_SIZE * s_dealer[d->pos] : NULL;
     if (a->src == 2) r = generic_rec();
     if (!r) return 0;
-    return swap32((uint32_t)rec32(r, (a->kind == ACC_INTCOLOUR ? 0x530 : 0x3ec) + 0x10 * a->pos));
+    return swap32((uint32_t)rec32(r, (a->kind == ACC_INTCOLOUR ? 0x530 : 0x3ec) + 0x10 * i));
+}
+
+uint32_t FEAccess_Colour(const FEAccessor *a)
+{
+    if (!a || (a->kind != ACC_COLOUR && a->kind != ACC_INTCOLOUR)) return 0;
+    refresh(a);
+    if (a->src == 1 || (a->custom && a->pos > a->pal)) return a->cval;
+    return colour_row(a, a->pos);
+}
+
+uint32_t FEAccess_ColourAt(const FEAccessor *a, int i)
+{
+    if (!a || (a->kind != ACC_COLOUR && a->kind != ACC_INTCOLOUR)) return 0;
+    refresh(a);
+    return colour_row(a, i);
+}
+
+int FEAccess_CustomRow(const FEAccessor *a)
+{
+    if (!a || (a->kind != ACC_COLOUR && a->kind != ACC_INTCOLOUR) || !a->custom) return -1;
+    refresh(a);
+    return a->pal;
+}
+
+void FEAccess_AllowCustom(FEAccessor *a, bool on)   /* 0x4b9170 */
+{
+    if (a && (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR)) a->custom = on;
+}
+
+void FEAccess_ChooseCustom(FEAccessor *a, int slot)   /* FEColourAccessor_v27 0x4b8f00 */
+{
+    if (!a) return;
+    refresh(a);
+    FEAccess_SetPos(a, FEData_CustomIndex(slot) + 1 + a->pal);
+}
+
+/* The player's eight custom colours (the save's PlayerInfo 32 bytes, 0x691d98; 0 none): 0x500f60,
+   0x500f70; the count of those set (0x500f80), the i-th set (0x500fa0: past them the first), a slot's
+   place among them (0x500ff0). */
+uint32_t FEData_CustomSlot(int slot)
+{
+    Save *sv = FESave_Current();
+    uint32_t v = 0;
+    if (sv && 0 <= slot && slot < 8) memcpy(&v, sv->extra + 4 * slot, 4);
+    return v;
+}
+
+void FEData_SetCustomSlot(int slot, uint32_t c)
+{
+    Save *sv = FESave_Current();
+    if (sv && 0 <= slot && slot < 8) memcpy(sv->extra + 4 * slot, &c, 4);
+}
+
+int FEData_CustomCount(void)
+{
+    int n = 0;
+    for (int i = 0; i < 8; i++) n += FEData_CustomSlot(i) != 0;
+    return n;
+}
+
+uint32_t FEData_Custom(int i)
+{
+    if (FEData_CustomCount() <= i) i = 0;
+    for (int k = 0, j = 0; k < 8; k++) {
+        uint32_t v = FEData_CustomSlot(k);
+        if (v && j++ == i) return v;
+    }
+    return 0;
+}
+
+int FEData_CustomIndex(int slot)
+{
+    int n = 0;
+    for (int k = 0; k < 8; k++) {
+        if (k == slot) return n;
+        n += FEData_CustomSlot(k) != 0;
+    }
+    return 0;
 }
 
 int FEAccess_Percent(const FEAccessor *a, const char *arg)
