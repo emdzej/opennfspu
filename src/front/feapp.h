@@ -72,6 +72,8 @@ int FEApp_Grid(int pers[8], int start[9]);
 int FEApp_GameType(void);
 /* Factory Driver's opponents one by one (0x4eb830); -1 when the race has none such. */
 int FEApp_OpponentCars(RaceOpponent out[8]);
+/* The opponents' skill factor: the career race's difficulty (the tournament's +0x3cc), else 1. */
+float FEApp_Skill(void);
 /* A control's callback by name, as a click would run it (port addition: --param fecb=, tests). */
 void FEApp_Callback(const char *cb);
 /* A click at (x, y) on the top screen: a move there, the button down and up (port addition: tests). */

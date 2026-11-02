@@ -1894,28 +1894,79 @@ const char *FEAccess_CarFile(const FEAccessor *a)
     return NULL;
 }
 
-/* The tournament's standings (0x502c10): each racer's points (+0x3d2, shorts), times (+0x3e4) and
-   earnings (+0x404 + +0x424) summed over the races run (+0x3d0); the player's rank among the eight (1 ..;
-   8 when none is run). The port ranks by points, then time (the original's order is a sort of these). */
-static int tour_rank(const uint8_t *r)
+/* The tournament's standings place of racer k (0x502c10): each racer's points (+0x3d2, shorts), times
+   (+0x3e4) and earnings (+0x404 + +0x424) summed over the races run (+0x3d0), bubble sorted eight times
+   (0x501e30): by points, then earnings, then the shorter time; a rally (+0xe8) by the shorter time,
+   then the earnings. 1 .. 8; before any race run, k itself (the player, 0, 8th). */
+static int tour_standing(const uint8_t *r, int k)
 {
     int n = rec16(r, 0x39c), run = 0;
     if (n > 10) n = 10;
-    int32_t pts[8] = {0}, tim[8] = {0};
-    for (int i = 0; i < n; i++) {
-        const uint8_t *x = r + 0xa4 * i;
-        if (!x[0x3d0]) continue;
-        run++;
-        for (int k = 0; k < 8; k++) {
-            pts[k] += rec16(x, 0x3d2 + 2 * k);
-            tim[k] += rec32(x, 0x3e4 + 4 * k);
+    for (int i = 0; i < n; i++) run += r[0x3d0 + 0xa4 * i] != 0;
+    if (run == 0) return k == 0 ? 8 : k;
+    int32_t e[8][4] = {{0}};   /* points, time, earnings, racer */
+    for (int j = 0; j < 8; j++) {
+        e[j][3] = j;
+        for (int i = 0; i < n; i++) {
+            const uint8_t *x = r + 0xa4 * i;
+            if (!x[0x3d0]) continue;
+            e[j][0] += rec16(x, 0x3d2 + 2 * j);
+            e[j][1] += rec32(x, 0x3e4 + 4 * j);
+            e[j][2] += rec32(x, 0x424 + 4 * j) + rec32(x, 0x404 + 4 * j);
         }
     }
-    if (!run) return 8;
-    int rank = 1;
-    for (int k = 1; k < 8; k++)
-        if (pts[k] > pts[0] || (pts[k] == pts[0] && tim[k] && tim[k] < tim[0])) rank++;
-    return rank;
+    bool rally = r[0xe8] != 0;
+    for (int pass = 0; pass < 8; pass++)
+        for (int j = 0; j < 7; j++) {
+            int32_t *u = e[j], *v = e[j + 1];
+            bool swap = rally ? (v[1] < u[1] || (v[1] == u[1] && v[2] < u[2]))
+                              : (u[0] < v[0] || (v[0] == u[0] && (u[2] < v[2] || (v[2] == u[2] && v[1] < u[1]))));
+            if (swap)
+                for (int f = 0; f < 4; f++) {
+                    int32_t t = u[f];
+                    u[f] = v[f];
+                    v[f] = t;
+                }
+        }
+    for (int j = 0; j < 8; j++)
+        if (e[j][3] == k) return j + 1;
+    return k;
+}
+
+static int tour_rank(const uint8_t *r) { return tour_standing(r, 0); }
+
+int FEData_TourOpponents(RaceOpponent out[8], int start[9], float *skill)
+{
+    /* 0x4eb430 with 0: the tournament's racers (+0x114, 0x58 bytes from +0x118): the personality
+       (+0x118), the car by id (+0x11a, 0x4f39e0), its colours (+0x14c and +0x15c swapped, the short
+       +0x168 twice) and race number (+0x16a); the skills scaled by the race's difficulty (+0x3cc);
+       the grid (0x247) by the standings (0x502c10) */
+    memset(out, 0, sizeof(RaceOpponent) * 8);
+    const uint8_t *r = FEData_Tournament();
+    int race = FEData_TourRace();
+    if (!r || race < 0) return -1;
+    int n = rec16(r, 0x114);
+    if (n > 7) n = 7;
+    if (n < 0) n = 0;
+    for (int i = 0; i < n; i++) {
+        const uint8_t *x = r + 0x118 + 0x58 * i;
+        const uint8_t *c = FEData_CarById(rec16(x, 2));
+        out[i].pers = FEData_PersonalityIndex(rec16(x, 0));
+        if (c) snprintf(out[i].spec, sizeof out[i].spec, "%s", (const char *)c + 0xb1);
+        out[i].colours[0] = swap32((uint32_t)rec32(x, 0x34));
+        out[i].colours[1] = swap32((uint32_t)rec32(x, 0x44));
+        out[i].colours[2] = out[i].colours[3] = (uint32_t)(int32_t)rec16(x, 0x50);
+        out[i].stripe = 0;
+        out[i].racenum = rec16(x, 0x52);
+        int np = rec16(x, 4);   /* (its parts: +0x11c, the ids from +0x11e) */
+        for (int k = 0; k < np && k < 20; k++) out[i].parts[k] = rec16(x, 6 + 2 * k);
+        out[i].nparts = np < 20 ? (np < 0 ? 0 : np) : 20;
+    }
+    for (int k = 0; k < 9; k++) start[k] = k < 8 ? tour_standing(r, k) - 1 : 0;   /* (0-based) */
+    float f;
+    memcpy(&f, r + 0x3cc + 0xa4 * race, 4);
+    *skill = f;
+    return n;
 }
 
 /* A tournament's end (0x503080, for the era's tournaments): every race run and the player in the first

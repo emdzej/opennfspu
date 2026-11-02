@@ -35,6 +35,7 @@ int16_t g_race_traffic_slots[7];
 
 RaceOpponent g_race_opp[8];
 bool g_race_opp_set;
+float g_race_skill = 1.0f;
 char g_race_player[64];
 int32_t g_track_records[8], g_lap_records[8];
 char g_record_names[8][32], g_record_cars[8][32];
@@ -92,6 +93,27 @@ static void stock_parts(uint8_t *d, const uint8_t *rec)
         }
         put_i(d, 0x28 + 4 * i, id);
     }
+}
+
+/* Parts added to the car's (0x4ecf10): the same part (its kind +0x26 and name +0x28: the port, the
+   same id) taken out of the list first, the new one at its end; a zero id ends them. */
+static void add_parts(uint8_t *d, const int16_t *ids, int n)
+{
+    int32_t list[20];
+    memcpy(list, d + 0x28, sizeof list);
+    int np = 0;
+    while (np < 20 && list[np] != 0) np++;
+    for (int k = 0; k < n && ids[k] != 0; k++) {
+        for (int j = 0; j < np; j++)
+            if (list[j] == ids[k]) {
+                memmove(list + j, list + j + 1, sizeof list[0] * (size_t)(np - j - 1));
+                np--;
+                break;
+            }
+        if (np < 20) list[np++] = ids[k];
+    }
+    for (int j = np; j < 20; j++) list[j] = 0;
+    memcpy(d + 0x28, list, sizeof list);
 }
 
 bool RaceSetup_SingleCar(const char *name)
@@ -195,6 +217,7 @@ bool RaceSetup_Opponents(int n)
             car_fields(d, cr);
             cheat_fields(d);
             stock_parts(d, cr);
+            add_parts(d, g_race_opp[i - 1].parts, g_race_opp[i - 1].nparts);
             memcpy(d + 0x218, g_race_opp[i - 1].colours, 16);
             put_i(d, 0x510, g_race_opp[i - 1].racenum);
             put_i(d, 0x514, g_race_opp[i - 1].stripe);
@@ -203,7 +226,7 @@ bool RaceSetup_Opponents(int n)
         const uint8_t *r = per + 0x2c * pi;
         int16_t id;
         memcpy(&id, r, 2);
-        float k = 1.0f;   /* the event's difficulty (its record's +0x3cc, the front end's) */
+        float k = g_race_skill;   /* the event's difficulty (the tournament race's +0x3cc, 0x4eb430) */
         float sk[8];
         memcpy(sk, r + 0xc, sizeof sk);
         put_i(d, 0x8, 2);                                  /* CLASS: an opponent */

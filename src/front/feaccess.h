@@ -166,6 +166,9 @@ int FEData_KnockoutTraffic(void);
 /* The other race kinds' n opponents (0x4eb230): OpponentCar.Car's cars picked again (0x4f45c0), their
    personalities picked of Game.Difficutly's difficulty (0x4e2940); their count. */
 int FEData_RaceOpponents(int n, RaceOpponent out[8]);
+/* The career race's opponents from its tournament (0x4eb430), their places on the grid by the
+   standings (0x502c10, 0-based) and the race's skill factor (+0x3cc); -1 outside a tournament. */
+int FEData_TourOpponents(RaceOpponent out[8], int start[9], float *skill);
 void FEData_KnockoutResult(const int *places, int np);
 /* The data areas' lookups other modules share: an nfs5.prt record by its id (0x49c3e0), an nfs5.car
    record by its id (0x4f39e0: the first record when none has it), an nfs5.trk record by its id (0x4fb4b0). */

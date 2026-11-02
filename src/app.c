@@ -190,6 +190,7 @@ bool app_frame(void)
                     g_drive_traffic = FEApp_Traffic(g_race_traffic_slots);
                     g_race_grid_set = FEApp_Grid(g_race_grid_pers, g_race_grid_start) >= 0;
                     g_race_opp_set = FEApp_OpponentCars(g_race_opp) >= 0;
+                    g_race_skill = FEApp_Skill();
                     g_race_mode = FEApp_GameType();   /* (0x4eab10's option 0x30) */
                     if (g_race_mode == 4) FEData_TourRaceInfo(&g_race_tour);   /* (0x4ecc60 -> 0x4ebb70) */
                     else memset(&g_race_tour, 0, sizeof g_race_tour);

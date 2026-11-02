@@ -51,9 +51,13 @@ typedef struct {
     char spec[0x40];
     uint32_t colours[4];
     int32_t stripe, racenum;
+    int16_t parts[20];   /* parts added to the car's stock ones (a tournament racer's, 0x4ecf10) */
+    int nparts;
 } RaceOpponent;
 extern RaceOpponent g_race_opp[8];
 extern bool g_race_opp_set;
+/* The opponents' skill factor (SKILLSLOW .. : the career race's difficulty, 0x4eb430), else 1. */
+extern float g_race_skill;
 /* The player's name (the race description's +0x558 +0x17c: the front end's player, "" for none). */
 extern char g_race_player[64];
 /* The track's records the front end gives the race (its nfs5.trk record's eight, 0x4ec200; the race

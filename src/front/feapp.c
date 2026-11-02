@@ -84,7 +84,8 @@ static int s_gametype;                /* Game.GameType (0x690ad4): 0 quick race,
 static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
 static bool s_used_parts;             /* the used car screen's parts shown, not its damage (+0x290) */
-static int s_grid_pers[8], s_grid_start[8], s_ngrid = -1;   /* the knockout's grid for the race */
+static int s_grid_pers[8], s_grid_start[9], s_ngrid = -1;   /* the knockout's and the career's grid for the race */
+static float s_skill = 1.0f;   /* the opponents' skill factor (the career race's difficulty, +0x3cc) */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int s_testdrive_type;          /* 0x5dc1b8 */
 static bool s_factory_race;           /* the race Factory Driver's mission */
@@ -552,6 +553,8 @@ bool FEApp_Setup(float set[17])
 
 int FEApp_GameType(void) { return s_testdrive ? s_testdrive_type : s_gametype; }
 
+float FEApp_Skill(void) { return s_skill; }
+
 int FEApp_OpponentCars(RaceOpponent out[8])
 {
     if (s_nopp < 0) return -1;
@@ -838,6 +841,7 @@ static void callback(const char *cb)
         s_laps = fe_int("num_laps", 1);
         s_opponents = 0;
         s_ngrid = -1;
+        s_skill = 1.0f;
         s_testdrive = true;
         s_traffic = 5;   /* (0x4fb630 for the test drives, types 6 .. 8) */
         memset(s_traffic_slots, 0, sizeof s_traffic_slots);
@@ -848,6 +852,7 @@ static void callback(const char *cb)
         s_traffic = 0;
         memset(s_traffic_slots, 0, sizeof s_traffic_slots);
         s_ngrid = -1;
+        s_skill = 1.0f;
         s_nopp = -1;
         s_factory_race = false;
         if (!can_play()) return;
@@ -879,7 +884,9 @@ static void callback(const char *cb)
             snprintf(s_car, sizeof s_car, "%s", c);
             s_havecol = FEAccess_CarColours(FEAccess_Find("OwnedCars.Car"), s_colours);
             s_traffic = FEData_TourTraffic(s_traffic_slots);
-            PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
+            /* its racers, on the grid by the standings (0x4ec590's type 4: 0x4eb430, 0x502c10) */
+            s_nopp = FEData_TourOpponents(s_opp, s_grid_start, &s_skill);
+            s_ngrid = s_nopp;
         } else if (s_gametype == 2) {
             /* the knockout (0x4d5200 -> 0x4ecc60, 0x4ddc00): started with its first race, its slot's
                track and laps, the racers still in on their places' grid */

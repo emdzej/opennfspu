@@ -59,6 +59,19 @@ int main(void)
         for (int i = 0; i < k; i++) CHECK(q[i].spec[0] != 0);
         printf("%s: %s %s %s\n", FEAccess_Text(FEAccess_Find("OpponentCar.Car")), q[0].spec, q[1].spec, q[2].spec);
     }
+    /* The career race's opponents (0x4eb430): the tournament's racers in their cars, before any race
+       the player last on the grid and racer k k-th (0x502c10). */
+    {
+        RaceOpponent to[8];
+        int st[9];
+        float sk = 0;
+        int tn = FEData_TourOpponents(to, st, &sk);
+        printf("tournament: %d racers, skill %.3f, racer 1 %s (personality %d, colour %08x, number %d, %d parts)\n", tn, sk,
+               to[0].spec, to[0].pers, to[0].colours[0], to[0].racenum, to[0].nparts);
+        CHECK(tn == 7 && sk > 0);
+        CHECK(st[0] == 7 && st[1] == 0 && st[7] == 6);
+        for (int i = 0; i < tn; i++) CHECK(to[i].spec[0] != 0);
+    }
     /* Another tournament half run asks first (0x504110); ok resets it (0x504180). */
     Save *sv = FESave_Current();
     for (int i = 0; sv && i < sv->nsec; i++) {
