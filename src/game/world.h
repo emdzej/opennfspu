@@ -189,6 +189,8 @@ _Static_assert(sizeof(WPlaced) == 0x38 && sizeof(WVisWall) == 0x1c, "the placeme
    their nearest point by the pass's square-root estimate); else handed to its draw object (slot 1) with
    the squared distance. flags are its grid record's (wgrid.h), viewdist2 the pass's (+0xa0). */
 struct EaglView;
+/* The entries' flags from the bundle's draw and collision objects (0x489220). */
+void W3DObjectBundle_EntryFlags(W3DObjectBundle *b);
 void World_VisitObject(W3DObjectBundle *b, int index, uint32_t flags, struct EaglView *view, const float eye[3], float viewdist2,
                        const WVisWall *walls, const uint8_t *disabled, uint32_t nwalls);
 

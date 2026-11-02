@@ -126,16 +126,19 @@ void BWorld_BuildBundles(BWorld *w)
     add_objects(w, b);
 
     free(arts);
-    /* Then the line bundle (0x479890 with the 0x10 object), the links, Track_LoadEdges 0x488000, the
-       sync tasks, the visibility walls and the two 0x488820 passes (the edges here, the walls below). */
-    World_BuildBundles(w);
-    PENDING_NOTE(0x482e80, "0x487940's holder 0x628bd4");
+    /* Then the line bundle (0x479890 with the 0x10 object), the entries filed, Track_LoadEdges 0x488000,
+       the music stream's prebuffering waited for (0x4ad440, 0x4ad490 with the timer tasks 0x536450: the
+       port's stream is fed by the frames), the visibility walls and the two 0x488820 passes. */
+    /* (0x482e80 makes a holder at 0x628bd4 that nothing reads; 0x53c060 times the build) */
     Scene_PlaceGeometry();   /* 0x46d120 (0x487940's) */
     w->f10 = WGrid_Build(w);   /* 0x47b5f0 (after the static bundle; the scene's placings are the original's by then) */
     W3DObjectBundle *lb = WLineBundle_new(w->r3d, w->f10);   /* 0x479890: the skid marks' cells */
     if (lb) add_objects(w, lb);
-    /* Every bundle's entries filed in the grid, in the bundles' order (0x482ae0's entry flags pending). */
-    for (int i = 0; i < w->nbundles; i++) WGrid_FileBundle(w->f10, w->bundles[i]);   /* 0x4892a0 */
+    /* Every bundle's entries flagged (0x482ae0: 0x489220) and filed in the grid, in the bundles' order. */
+    for (int i = 0; i < w->nbundles; i++) {
+        W3DObjectBundle_EntryFlags(w->bundles[i]);
+        WGrid_FileBundle(w->f10, w->bundles[i]);   /* 0x4892a0 */
+    }
     Track_LoadEdges(w);                      /* 0x488000 */
     BWorld_LoadVis(w);
     add_bodies(w, w->scene);                 /* 0x488820 (0x478620) */

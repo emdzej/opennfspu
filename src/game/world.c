@@ -369,14 +369,27 @@ void WSceneBundle_Add(uint32_t type, const float pos[3], const float mat[9])   /
 /* 0x482fc0: the article caches refilled (slot 10); unless kept, its collision object (0x474b20) and the
    triggerable objects (+0x34) put 10000 above where they are, out of the way (0x482d80): a type 7
    trigger brings one back (WSceneBundle_Trigger); its knockable objects' state at +0x14 (0x475e10) made
-   anew. (The entries' flags from the draw and collision objects, 0x489220, aren't ported.) */
+   anew; the entries' flags from the draw and collision objects again (0x489220). */
+/* 0x489220: each entry's flags ORed with bit 0 for a transformed bundle, its draw object's (slot 6) and
+   its collision object's (slot 2: an article bundle's 0x474ad0, 0x100), and its own 0x400000 again. */
+void W3DObjectBundle_EntryFlags(W3DObjectBundle *b)
+{
+    for (uint32_t i = 0; i < b->count; i++) {
+        uint32_t *f = &b->entries[i].flags;
+        if (b->transformed) *f |= 1;
+        RDrawObject *d = b->draw;
+        if (d) *f |= d->vt->flags(d, (int)i);
+        if (b->collide) *f |= 0x100;
+    }
+}
+
 void WSceneBundle_Update(bool keep)
 {
     WSceneBundle *s = world_scene();
     if (!s) return;
     W3DObjectBundle *b = &s->a.base;
     b->vt->fillcache(b);
-    PENDING_NOTE(0x489220, "the scene bundle's entry flags from its draw and collision objects");
+    W3DObjectBundle_EntryFlags(b);   /* 0x489220 */
     if (keep) return;
     WAnimatable_free(b->smack);
     b->smack = WAnimatable_new(b);   /* 0x482d80: 0x475e10 */

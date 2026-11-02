@@ -1,5 +1,5 @@
-/* Calls of the track and world code into modules not ported yet (docs/internals/porting.md); defined in
-   src/game/pending.c. The drawing objects belong to the 3D renderer (0x437700-0x458000), the collision
+/* Calls of the track and world code into other modules (docs/internals/porting.md), all ported now and
+   defined in their modules. The drawing objects belong to the 3D renderer (0x437700-0x458000), the collision
    objects to the collision module, the rest to the scene and object-definition code. */
 #pragma once
 #include "game/scene.h"   /* Scene_CountGeom, Track_LoadScenes (ported: scene.c) */
@@ -15,7 +15,6 @@ void *RDrawLineBundle_new(struct W3DObjectBundle *b);          /* operator new(0
 void *RDrawAnimArticleBundle_new(struct W3DObjectBundle *b);   /* operator new(0x14) + 0x44fe30 */
 void *R3DTrack_new(void *desc);                                /* operator new(0x28) + 0x44a520 (the track renderer) */
 void R3DTrack_load(void *r3d, void *root);                     /* 0x44a6b0 */
-void World_BuildBundles(void *world);                          /* the rest of 0x487940 after the article bundles */
 /* The world's scene bundle as the scene's geometry elements fill it (Scene_PlaceGeometry 0x46d120; in
    world.c): */
 void WSceneBundle_Reset(void);                                 /* 0x482af0: the slots back to DFLT placeholders */
