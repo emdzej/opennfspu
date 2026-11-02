@@ -3737,6 +3737,232 @@ static HudVisual *yesno_new(void)
     return &q->bb.base;
 }
 
+/* ---- the replay's panel (HReplay, 0x19c bytes, vtable 0x5b2f3c; 0x42c890): a fading tray at the bottom
+   centre with seven buttons of replay.fsh's art (camera, restart, pause / play, quit, speed, summary, save
+   replay; a network game's only camera, the next and previous car to observe, summary), shown while the
+   mouse is over it or was within forty frames, their names after forty frames over them ---- */
+
+typedef struct {
+    HTray tray;
+    HudArt *camera, *pause, *play, *quit, *restart;   /* +0xc4 .. +0xd4: art 0, 1 (10 networked), 11, 2, 3 */
+    HudArt *speed_art[4];      /* +0xd8 .. +0xe4: art 5 .. 8 (their copies +0xf0 .. +0xfc) */
+    HudArt *summary, *save;    /* +0xe8, +0xec: art 4, 9 */
+    int32_t hover[8];          /* +0x108 .. +0x124: frames over each button (to 40), then off the tray */
+    HText *text;               /* +0x128 */
+    int32_t bx[7], by[7];      /* +0x12c .. +0x160: the buttons' corners */
+    int32_t tx, ty;            /* +0x164, +0x168: the tray's place */
+    int32_t lx, ly;            /* +0x16c, +0x170: the names' row */
+    int32_t speed;             /* +0x174: the speed's art, 5 .. 8 */
+    uint8_t keep;              /* +0x178: shown whatever the mouse (0x42d410, 0x42d420) */
+    uint8_t net;               /* +0x198 */
+    uint8_t paused;            /* +0x199: the play button in the pause's place */
+} HReplay;
+
+static HudVisual *s_replay;   /* 0x60ca58 */
+static uint8_t s_replay_down[7];   /* 0x60cb50 .. 0x60cb56: each button pressed and not yet released */
+static int32_t bw(void) { return exe_i32(0x5b2ef0); }
+static int32_t bh(void) { return exe_i32(0x5b2ef4); }
+
+/* The places (HReplay_v13 0x42de70): the seven buttons 30 apart along the bottom, centred. */
+static void replay_layout(HReplay *r, int w, int h, int lineoff)
+{
+    int x0 = g_display.width / 2 - (bw() * 7 + 0xb4) / 2, y = g_display.height - 0x1e;
+    r->lx = x0, r->ly = y;
+    for (int i = 0; i < 7; i++) r->bx[i] = x0 + (bw() + 0x1e) * i, r->by[i] = y;
+    r->ty = g_display.height - 0x21;
+    r->tx = x0 - 3;
+    tray_setsize(&r->tray, w, h, lineoff);   /* 0x434000 */
+    tray_place(&r->tray, r->tx, r->ty);      /* 0x434240 */
+}
+
+/* The alpha the fade gives (state 1 in, 2 out). */
+static uint32_t replay_alpha(HReplay *r, int of)
+{
+    HudVisual *v = &r->tray.base;
+    int p = v->state == 1 ? v->vt->progress(v) : v->state == 2 ? 100 - v->vt->progress(v) : 100;
+    return (uint32_t)(p * of / 100) << 24 | 0xfab400u;
+}
+
+/* A button's frame (0x42d440): its four edges, bright with the mouse over it. */
+static void replay_frame(HReplay *r, int x, int y)
+{
+    float q[16];
+    box(x, y, bw(), bh(), q);
+    uint32_t hi = replay_alpha(r, 0xff), lo = replay_alpha(r, 0x4c);
+    bool over = !(s_mouse_x < x || x + bw() < s_mouse_x || s_mouse_y < y || bh() + y < s_mouse_y);
+    uint32_t c[2] = {over ? hi : lo, over ? hi : lo};
+    float top[8] = {q[0], q[1], 0, 1, q[4], q[5], 0, 1};
+    Hud2D_Line(top, c);
+    float bottom[8] = {q[0], q[1] + (float)bh(), 0, 1, q[4], q[5] + (float)bh(), 0, 1};
+    Hud2D_Line(bottom, c);
+    float right[8] = {q[4], q[5], 0, 1, q[8], q[9] + 1.0f, 0, 1};
+    Hud2D_Line(right, c);
+    float left[8] = {q[12], q[13], 0, 1, q[0], q[1], 0, 1};
+    Hud2D_Line(left, c);
+}
+
+static void replay_art(HudArt *a, uint32_t c)
+{
+    if (!a) return;
+    HudArt_setcolours(a, c, c, c, c);
+    HudArt_draw(a);
+}
+
+/* The buttons' names (0x42dc90): over a button forty frames, its name on a light box above it. */
+static void replay_names(HReplay *r)
+{
+    const uint8_t *loc = HudConfig_loc();
+    const char *name[7] = {
+        LOC_string(loc, 0x46e3), LOC_string(loc, r->net ? 0x46f3 : 0x46e4),
+        LOC_string(loc, r->net ? 0x46f4 : r->paused ? 0x46fd : 0x46e5), LOC_string(loc, 0x4712),
+        LOC_string(loc, 0x46e6), LOC_string(loc, 0x46e7), LOC_string(loc, 0x46e8),
+    };
+    for (int i = 0; i < 7; i++) {
+        int x = r->lx + (bw() + 0x1e) * i, y = r->ty - 0x10;
+        if (r->hover[i] < 0x28 || !name[i] || !r->text || !r->text->font || !r->text->font->font) continue;
+        float a, b, w, h;
+        text_extent(r->text, name[i], &a, &b, &w, &h);
+        float q[16];
+        box(x, y, (int)(w + exe_f32(0x5b2608)), 0xe, q);
+        flat(q, 0x40ffffffu);
+        r->text->x = x + 4;
+        r->text->y = (int)((exe_f32(0x5b2450) - h) * exe_f32(0x5b23f0) + (float)y);
+        text_print(r->text, name[i], 1.0f, 1.0f);
+    }
+}
+
+/* HReplay_v1 0x42d160: in the race-over's replay, shown (fading in) while the mouse is about, faded out
+   after forty frames away; drawn while not hidden. */
+static void replay_draw(HudVisual *v)
+{
+    HReplay *r = (HReplay *)v;
+    if (g_race_view != 2) return;   /* (or a network game's observer: not ported) */
+    if (r->hover[7] < 0x28 || r->keep) {
+        if (v->state == 0 || v->state == 2) v->vt->setstate(v, 1);
+    } else if (v->state == 3 || v->state == 1) {
+        v->vt->setstate(v, 2);
+    }
+    if (v->state == 0) return;
+    tray_draw(&r->tray);   /* 0x434070 */
+    uint32_t c = replay_alpha(r, 0xff);
+    replay_art(r->camera, c);
+    replay_frame(r, r->bx[0], r->by[0]);
+    replay_art(r->paused ? r->play : r->pause, c);
+    replay_frame(r, r->bx[2], r->by[2]);
+    replay_art(r->restart, c);
+    replay_frame(r, r->bx[1], r->by[1]);
+    replay_art(r->summary, c);
+    replay_frame(r, r->bx[5], r->by[5]);
+    if (!r->net) {
+        replay_art(r->quit, c);
+        replay_frame(r, r->bx[3], r->by[3]);
+        replay_art(r->speed_art[r->speed - 5], c);
+        replay_frame(r, r->bx[4], r->by[4]);
+        replay_art(r->save, c);
+        replay_frame(r, r->bx[6], r->by[6]);
+    }
+    replay_names(r);
+}
+
+/* Over button i: its frames counted, and its action on the press (once until released). */
+static bool replay_over(HReplay *r, int i, int x, int y, int press, int *hit)
+{
+    if (x < r->bx[i] || bw() + r->bx[i] < x || y < r->by[i] || bh() + r->by[i] < y) {
+        r->hover[i] = 0;
+        return false;
+    }
+    bool now = false;
+    if (press == 2) {
+        if (!s_replay_down[i]) now = true, s_replay_down[i] = 1;
+    } else {
+        s_replay_down[i] = 0;
+    }
+    if (0x28 < ++r->hover[i]) r->hover[i] = 0x28;
+    (void)hit;
+    return now;
+}
+
+/* HReplay_v9 0x42d800: the mouse over the tray keeps it up; a press on a button gives its action: 6
+   camera, 7 restart (the network's 0x17 the previous car), 8 pause / play (0x16 the next car), 9 quit,
+   10 .. 13 the speeds in turn (2, 3, 1, 0: their art 5 .. 8), 0xe the summary, 0xf save the replay. */
+static int replay_input(HudVisual *v, int x, int y, int press)
+{
+    HReplay *r = (HReplay *)v;
+    HTray *t = &r->tray;
+    int a = 0;
+    bool in = !(x < t->x || t->x + t->w < x || y < t->y || t->y + t->h < y);   /* 0x434410 */
+    if (!in) {
+        if (0x28 < ++r->hover[7]) r->hover[7] = 0x28;
+    } else {
+        r->hover[7] = 0;
+    }
+    if (replay_over(r, 0, x, y, press, NULL)) a = 6;
+    if (replay_over(r, 1, x, y, press, NULL)) {
+        if (!r->net) r->speed = 5, a = 7;
+        else a = 0x17;
+    }
+    if (replay_over(r, 2, x, y, press, NULL)) {
+        if (!r->net) a = 8, r->paused = !r->paused;
+        else a = 0x16;
+    }
+    if (replay_over(r, 5, x, y, press, NULL)) a = 0xe;
+    if (!r->net) {
+        if (replay_over(r, 3, x, y, press, NULL)) a = 9;
+        if (replay_over(r, 4, x, y, press, NULL)) {
+            if (8 < ++r->speed) r->speed = 5;
+            a = r->speed == 5 ? 10 : r->speed == 6 ? 0xb : r->speed == 7 ? 0xc : 0xd;
+        }
+        if (replay_over(r, 6, x, y, press, NULL)) a = 0xf;
+    }
+    return a;
+}
+
+static void replay_destroy(HudVisual *v)   /* 0x42d080 */
+{
+    HReplay *r = (HReplay *)v;
+    HudArt *arts[] = {r->camera, r->pause, r->play, r->quit, r->restart, r->summary,
+                      r->speed_art[0], r->speed_art[1], r->speed_art[2], r->speed_art[3], r->save};
+    for (size_t i = 0; i < sizeof arts / sizeof arts[0]; i++) HudArt_free(arts[i]);
+    text_free(r->text);
+    free(r);
+}
+
+static void replay_setpos(HudVisual *v, int x, int y) { tray_corners(&((HReplay *)v)->tray, x, y); }
+
+static const HudVisualVtbl replay_vt = {
+    .destroy = replay_destroy, .draw = replay_draw, .setstate = tray_setstate, .setpos = replay_setpos,
+    .progress = tray_progress, .input = replay_input,
+};
+
+static HudArt *replay_load(HReplay *r, int index, int b, uint32_t size)
+{
+    int w = exe_i32(size), h = exe_i32(size + 4);
+    return HudArt_load(exe_str(0x5cce90), index, (bw() - w) / 2 + 1 + r->bx[b], (bh() - h) / 2 + 1 + r->by[b], w, h, false, false, false);   /* "replay" */
+}
+
+static HudVisual *replay_new(bool net)   /* 0x42c890 */
+{
+    HReplay *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    int w = bw() * 7 + 0xba, h = bh() + 6;   /* 0x60cb48, 0x60cb4c (0x42c840 .. 0x42c870) */
+    tray_init(&r->tray, &replay_vt, 0, 0, w, h, 0, false, 1, false, true);   /* 0x433ef0 */
+    r->net = net;
+    replay_layout(r, w, h, 0);
+    r->camera = replay_load(r, 0, 0, 0x5b2ef8);
+    r->pause = replay_load(r, net ? 10 : 1, 2, 0x5b2f00);
+    r->play = replay_load(r, 0xb, 2, 0x5b2f30);
+    r->quit = replay_load(r, 2, 3, 0x5b2f08);
+    r->restart = replay_load(r, 3, 1, 0x5b2f10);
+    for (int i = 0; i < 4; i++) r->speed_art[i] = replay_load(r, 5 + i, 4, 0x5b2f18);
+    r->summary = replay_load(r, 4, 5, 0x5b2f20);
+    r->save = replay_load(r, 9, 6, 0x5b2f28);
+    r->text = text_new(HudConfig_font(0x64), 0xff000000u, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    r->speed = 5;
+    return &r->tray.base;
+}
+
+void HUD_ReplayPlaying(void) { if (s_replay) ((HReplay *)s_replay)->paused = 0; }   /* 0x42df90 */
+
 void HUD_Init(void)
 {
     HUD_Free();
@@ -3786,6 +4012,8 @@ void HUD_Init(void)
     s_exit = menu_new(0x5b2af0, 0x5b2af8, 0x46ba, 4, exit_ids, exit_actions);      /* 0x4218c0 */
     s_yesno = yesno_new();   /* 0x437370 (0x60c9ac) */
     add(s_yesno, false, false);
+    s_replay = replay_new(g_race_mode == 3);   /* 0x42c890 (0x60ca58) */
+    add(s_replay, false, false);
     s_quit_asked = false;
     g_race_quit = 0;   /* (0x657e34) */
     add(s_exit, false, false);
@@ -3803,10 +4031,10 @@ static void push_modal(HudVisual *v)
 }
 
 /* The race over: the player's place congratulated, the results, the track's records. 0x426c50 */
-static void race_screens(void)
+static void race_screens(bool again)
 {
     if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8) return;
-    if (g_race_mode <= 5 && s_congrats) {
+    if (g_race_mode <= 5 && s_congrats && !again) {
         /* The place: a knockout's 1 (8 when the car was knocked out, +0xb50 3), the network race's by its
            standings (pending: the car's), else the camera's car's (+0xcd4). (0x60ca98 overrides it when
            set; nothing sets it here.) */
@@ -3829,7 +4057,7 @@ static void race_screens(void)
         push_modal(summary);
         if (summary) summary->flag = 1;
         int rank = standings_rank();   /* 0x431de0 */
-        if (g_race_tour.last_race && rank < 4 && s_standing_congrats) {
+        if (!again && g_race_tour.last_race && rank < 4 && s_standing_congrats) {
             /* the tournament won or placed: its standing congratulated (0x41e150, 0x41dd40(1)) */
             push_modal(s_standing_congrats);
             ((HCongrats *)s_standing_congrats)->which = rank;
@@ -3876,14 +4104,14 @@ static void close_modals(int32_t s)
     nmodal = 0;
 }
 
-int HUD_HandleInput(int x, int y, bool click)
+int HUD_HandleInput(int x, int y, int event)
 {
     MOUSE_state(&s_mouse_x, &s_mouse_y, &s_mouse_b);
     (void)x, (void)y;
     x = s_mouse_x, y = s_mouse_y;
-    int c = click ? 1 : 0;
-    if (nmodal == 0 || !modal[0]->vt->input) return 0;
-    int a = modal[0]->vt->input(modal[0], x, y, c);
+    int c = event;   /* (0x435370: 2 the left button went down, 1 it came up; the buttons act on 1) */
+    int a = 0;
+    if (nmodal && modal[0]->vt->input) a = modal[0]->vt->input(modal[0], x, y, c);
     switch (a) {
     case 2:   /* resume */
         close_modals(2);
@@ -3936,6 +4164,25 @@ int HUD_HandleInput(int x, int y, bool click)
     default:
         break;
     }
+    /* The race over (its replay): with no modal's action, the replay panel's. 7 restart (the summary not
+       shown again, the music, 0x4ae2a0: pending), 0xe the race's screens again, 0xf the save's
+       question (HReplaySave, pending). */
+    if (g_race_view != 2 || a != 0 || !s_replay) return a;
+    a = s_replay->vt->input(s_replay, x, y, c);
+    if (a == 7) {
+        PENDING_NOTE(0x4ae2a0, "the music's stop for the restart");
+        return 7;
+    }
+    if (a == 0xe) {
+        close_modals(0);
+        if (nmodal == 0 && !g_race_quit && !g_race_derby) race_screens(true);   /* 0x426c50(1) */
+        if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
+        return 0xe;
+    }
+    if (a == 0xf) {
+        close_modals(0);
+        PENDING_NOTE(0x42dfc0, "the replay's save (HReplaySave, Replay_Save 0x413ff0)");
+    }
     return a;
 }
 
@@ -3968,7 +4215,7 @@ void HUD_RaceOver(void)
         }
         s_records->vt->reset(s_records);   /* 0x433980 */
     }
-    race_screens();   /* 0x426c50 */
+    race_screens(false);   /* 0x426c50 */
     /* (port: the list's first is shown at once; the original's starts hidden and is passed) */
     if (nmodal && modal[0]->vt->setstate) modal[0]->vt->setstate(modal[0], 1);
 }
@@ -3977,6 +4224,7 @@ void HUD_Free(void)
 {
     nmodal = 0;
     s_pause = s_exit = NULL;
+    s_replay = NULL;
     summary = mission = s_time = NULL;
     s_congrats = NULL;
     s_yesno = NULL;

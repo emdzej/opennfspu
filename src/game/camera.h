@@ -78,3 +78,16 @@ void Camera_ReplayStart(void);
 void Camera_ReplayCuts(bool cut);
 /* Whether the replay's cameras follow the scene's cameras (0x606850 is 0x14). */
 bool Camera_ReplayDirected(void);
+/* The replay's controls (0x414870, Ghidra's Race_SetupSkidpad): 0 the replay again, 1 restart the race,
+   2 quit, 3 pause / play, 4 .. 7 the speeds 2 (normal), 3 (double), 1 (a quarter), 0 (a half), 8 the
+   next camera kind, 9 / 10 the next / previous human viewed. Returns 1 for the replay again, 2 for a
+   restart (the caller's to act on), else 0. */
+int Replay_Control(int what);
+int Replay_Speed(void);          /* 0x606864 */
+bool Replay_PauseWanted(void);   /* 0x606860 */
+bool Replay_ExitWanted(void);    /* 0x606868 */
+/* The game's pause in the replay (0x606a98): the cameras still, the simulation stopped. */
+void Replay_SetPaused(bool on);
+bool Replay_Paused(void);
+/* The cameras held this tick (0x606ad4: a slow replay's skipped tick). */
+void Camera_Hold(bool on);

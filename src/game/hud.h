@@ -44,8 +44,12 @@ void HUD_HideAll(void);
 void HUD_Pause(void);
 /* The mouse to the HUD (HUD_HandleInput 0x425eb0): the first modal visual's action, the menus' own
    moves done (resume 2 closes the pause, quit 0x1a opens the exit's, 0x18 goes back): the race loop's
-   to act on (2 resume, 3 restart, 4 / 5 / 0x15 the race's end). click: the left button went down. */
-int HUD_HandleInput(int x, int y, bool click);
+   to act on (2 resume, 3 restart, 4 / 5 / 0x15 the race's end); in the race-over's replay the replay
+   panel's (6 .. 0xd, 0x16, 0x17: Replay_Control's, 7 restart, 0xe summary). event: 2 the left button
+   went down, 1 it came up, 0 neither (the buttons act as it comes up, the replay's as it goes down). */
+int HUD_HandleInput(int x, int y, int event);
+/* The replay panel's play button back to pause (0x42df90). */
+void HUD_ReplayPlaying(void);
 
 /* A time of ticks as mm:ss.hh, signed if asked. 0x435640 */
 void HTime_Format(int t, char *out, bool sign);

@@ -20,6 +20,7 @@
 #include "render/r3dcar.h"
 #include <math.h>
 #include <string.h>
+#include <strings.h>
 
 RaceCamera g_racecam[2];
 int32_t g_look[4];
@@ -232,6 +233,7 @@ static bool inside_edges(RaceCamera *c, float p[3])
 static int32_t s_wander_t, s_wander_n;   /* 0x6280e0, 0x6280e4 */
 static float s_wander_to[3], s_wander[3];   /* 0x6280e8, 0x6280f8 */
 static int32_t s_replay_paused, s_replay_speed;   /* 0x606860, 0x606864 */
+static int32_t s_replay_exit, s_camkind;          /* 0x606868, 0x60686c */
 
 static void wander(RaceCamera *c)
 {
@@ -829,6 +831,67 @@ static void set_mode_fresh(int p, int mode)
     if (!(g_racecam[p].flags & 1)) Camera_SetMode(p, mode);
 }
 
+/* The camera kinds the replay's camera button goes through (0x5cc654, nine): 0x14 the scene's cameras,
+   then 10, 11, 8, 9, 6, 4, 15, 0. */
+static int32_t camkind(void) { return (int32_t)exe_u32(0x5cc654 + 4u * (uint32_t)s_camkind); }
+
+/* The next camera kind (a network game skipping the TV cameras, the skidpad the TV camera), on the
+   viewed human: the scene's cameras (else mode 3 and kind 3) or the kind's mode. */
+static void next_kind(void)
+{
+    bool net = g_race_mode == 3 && g_race_network;
+    if (net && (camkind() == 0xb || camkind() == 0x14)) s_camkind = (s_camkind + 1) % 9;
+    g_racecam[0].car = g_racecam[0].base = g_humans.c[s_viewed];
+    int mode;
+    if (camkind() == 0x14) {
+        s_tvmode = Scene_CameraCount() != 0 ? 0x14 : 3;
+        mode = 3;
+    } else {
+        if (camkind() == 0xb && !strcasecmp(g_track_name, exe_str(0x5cc54c))) s_camkind = (s_camkind + 1) % 9;   /* "skidpad" */
+        s_tvmode = camkind();
+        mode = s_tvmode;
+    }
+    set_mode_fresh(0, mode);
+}
+
+int Replay_Control(int what)
+{
+    int r = 0;
+    s_step = 0;
+    switch (what) {
+    case 0: r = 1; break;   /* the replay again (0x606a88, 0x5e99f4 2, 0x657424 2: the caller's) */
+    case 1: s_replay_exit = 1; r = 2; break;   /* restart (0x657428) */
+    case 2: s_replay_exit = 1; break;          /* quit */
+    case 3: s_replay_paused ^= 1; break;
+    case 4: s_replay_speed = 2; break;
+    case 5: s_replay_speed = 3; break;
+    case 6: s_replay_speed = 1; break;
+    case 7: s_replay_speed = 0; break;
+    case 8:
+        s_step = 1;
+        s_camkind = (s_camkind + 1) % 9;
+        next_kind();
+        break;
+    case 9: case 10:
+        s_step = 1;
+        s_viewed += what == 9 ? 1 : -1;
+        if (s_viewed < 0) s_viewed = g_humans.n - 1;
+        else if (g_humans.n <= s_viewed) s_viewed = 0;
+        next_kind();
+        break;
+    default: break;
+    }
+    if (s_paused) Camera_Update();
+    return r;
+}
+
+int Replay_Speed(void) { return s_replay_speed; }
+bool Replay_PauseWanted(void) { return s_replay_paused != 0; }
+bool Replay_ExitWanted(void) { return s_replay_exit != 0; }
+void Replay_SetPaused(bool on) { s_paused = on; }
+bool Replay_Paused(void) { return s_paused != 0; }
+void Camera_Hold(bool on) { s_hold = on; }
+
 void Camera_ReplayStart(void)
 {
     if (Scene_CameraCount() == 0) {
@@ -847,6 +910,9 @@ void Camera_ReplayStart(void)
     s_viewed = g_camera_car;
     s_replay_paused = 0;
     s_replay_speed = 2;
+    s_replay_exit = 0;
+    s_camkind = 0;
+    s_step = 0;
 }
 
 /* ---- the race's start (mode 14) ---- */

@@ -53,6 +53,7 @@ static RaceViews views;
 static float env[64];
 static double ticks_due;
 static int s_start;   /* the race's first tick (--param start) */
+static int s_slot;    /* 0x606aa0: the race loop's tick slots (the replay's speeds skip or double them) */
 
 static void set_env(void)   /* the track viewer's light until the sky's is ported */
 {
@@ -313,12 +314,21 @@ static void race_menus(void)
     int32_t mx, my;
     uint32_t b = 0;
     static uint32_t was;
-    bool click = false;
+    int event = 0;   /* (the window's mouse message: 2 the left button down, 1 up) */
     if (MOUSE_state(&mx, &my, &b)) {
-        click = (b & 1) && !(was & 1);
+        if ((b & 1) && !(was & 1)) event = 2;
+        else if (!(b & 1) && (was & 1)) event = 1;
         was = b;
     }
-    switch (HUD_HandleInput(0, 0, click)) {
+    int act = HUD_HandleInput(0, 0, event);
+    /* The replay panel's: RaceLoop's map onto the replay's controls (0x414870). */
+    static const int8_t replay_map[0x18] = {[6] = 8, [7] = 1, [8] = 3, [9] = 2, [10] = 4, [0xb] = 5, [0xc] = 6,
+                                            [0xd] = 7, [0x16] = 9, [0x17] = 10};
+    if (6 <= act && act < 0x18 && (replay_map[act] || act == 7)) {
+        if (Replay_Control(replay_map[act]) == 2) g_drive_result = 2;   /* restart (0x657428) */
+        return;
+    }
+    switch (act) {
     case 2:
         g_drive_paused = false;
         break;
@@ -351,11 +361,42 @@ bool DRIVE_selftest(const char *track, const char *car)
     }
     Car *c = g_cars[0];
     race_menus();
+    if (g_replay_mode == 2 && !g_drive_paused) {
+        /* RaceLoop's replay part: its quit ends the race; its pause stops it (the cameras updated once,
+           the sounds' pause pending) */
+        if (Replay_ExitWanted()) {
+            if (!g_drive_result) g_drive_result = 1;
+        } else if (Replay_Paused() != Replay_PauseWanted()) {
+            Replay_SetPaused(Replay_PauseWanted());
+            if (Replay_Paused()) Camera_Update();
+            PENDING_NOTE(0x4aaf20, "the sounds paused with the replay (0x4aaf20, 0x4aafd0)");
+        }
+    }
     /* The simulation's 64 Hz from the 60 Hz frames (none while paused). */
-    ticks_due += g_drive_paused ? 0.0 : 64.0 / 60.0;
+    bool held = g_drive_paused || (g_replay_mode == 2 && Replay_Paused());
+    ticks_due += held ? 0.0 : 64.0 / 60.0;
     int n = (int)ticks_due;
     ticks_due -= n;
     for (int i = 0; i < n && i < 4; i++) {
+        if (g_replay_mode == 2) {
+            /* The replay's slots (0x606aa0): at a quarter (speed 1) or half (0) speed the simulation
+               steps on every fourth or second, the others hold the cameras; at double (3) two steps. */
+            if (!(s_slot & 1)) {
+                read_controls();
+                Sim_HalfStep(s_slot >> 1);   /* 0x415f10 */
+            }
+            Camera_Hold(false);
+            int sp = Replay_Speed();
+            if ((sp == 1 && (s_slot & 3)) || (sp == 0 && (s_slot & 1))) {
+                Camera_Hold(true);   /* 0x606ad4 */
+                Camera_Update();
+            } else {
+                if (sp == 3) Sim_Step();
+                Sim_Step();   /* 0x415010 */
+            }
+            s_slot++;
+            continue;
+        }
         if (!(g_sim_tick & 1)) {
             read_controls();
             if (g_replay_mode < 2) Input_QueuePacket();   /* 0x413820 */
@@ -396,6 +437,8 @@ bool DRIVE_selftest(const char *track, const char *car)
         Race_Restart(s_start);
         Input_Reset(true);
         Camera_ReplayStart();   /* 0x413ec0 */
+        s_slot = g_sim_tick;    /* (0x414ed0 restarts the slots with the ticks) */
+        HUD_ReplayPlaying();
         if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;
         HUD_HideAll();      /* 0x425740 */
         HUD_RaceOver();     /* 0x426a40 */
