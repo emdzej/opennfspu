@@ -22,6 +22,7 @@
 #include "render/rlayers.h"
 #include "render/rmaterial.h"
 #include "render/rtex.h"
+#include "render/rlists.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -337,7 +338,7 @@ RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, 
     memset(r, 0, sizeof *r);
     r->znear = 0.15f;                   /* 0x3e19999a */
     r->zfar = 700.0f;                   /* 0x442f0000 */
-    PENDING_NOTE(0x466240, "the render system's lists (+0x14)");
+    RLists_Init();                       /* 0x466240: the draw lists (+0x14) */
     r->cpu = 0;                          /* CPU_detect: the port measures nothing */
     r->windowed = (uint8_t)windowed;
     r->mode = 1;
@@ -358,7 +359,8 @@ RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, 
     }
     Render_DisplayInit();
     r->textures = g->textures;
-    PENDING_NOTE(0x53c140, "MEM_info");
+    /* MEM_info 0x53c140 (GlobalMemoryStatus's physical memory) goes to the quality level's choice: the
+       port's machine is RTex_machine (render/rtex.h). */
     /* The 2D view: orthographic over the display, y down (scale 2/w, -2/h after a translation by -1). */
     EaglView *v = calloc(1, sizeof *v);
     EAGL_ViewInit(v, d);
@@ -406,8 +408,11 @@ void Render_Init(void)
         RenderSystem *r = malloc(sizeof *r);
         g_render = r ? Render_Construct(r, strdup(path), device, 0) : NULL;
     }
-    PENDING_NOTE(0x4b6ec0, "FE_SetRenderer (the front end's graphics)");
-    PENDING_NOTE(0x465cb0, "the render system's heap (0x62810c)");
+    /* FE_SetRenderer 0x4b6ec0: an empty call (0x516210), the debug frame-rate text's scale (0x5e517c 0.5,
+       0x5e5180 1), its counters cleared (0x569b00) and its place at the display's bottom less 128
+       (0x6afbbc, 0x6afbc0), the flag 0x65b398 set: none of them is read in this build. Then 0x465cb0: the
+       line object at 0x62810c (the 0x59ee20 material: a coordinates layer and the next layer), which
+       render/hud2d.c keeps as its material. */
     RLayers_Register();                          /* 0x449a60 */
 }
 

@@ -113,7 +113,6 @@ static bool load(const char *name)
     }
     place_camera(pos, m);
     set_env();
-    RLists_Init();
     return true;
 }
 

@@ -312,7 +312,6 @@ static bool load(const char *track, const char *carname)
     if (g_race_view == 2) HUD_RaceOver();   /* (RaceLoop's 0x426a40 with the view 2: a file's replay) */
     else HUD_RaceStart();   /* (RaceLoop's 0x426a40 with 0) */
     set_env();
-    RLists_Init();
     plat_set_frame_rate(60.0);
     return true;
 }
