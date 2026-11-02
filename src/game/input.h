@@ -32,3 +32,6 @@ void Sim_HalfStep(int n);
 /* The human car's controls from its packet (or the AI's when AI-driven, +0xda8), its command, its
    manual gear. 0x499150 */
 void CarSim_PacketTask(void *car);
+/* A key's character (the port's stand-in for the window's WM_CHAR, which the front end's and the HUD's
+   text boxes read): a DirectInput code on a US layout, shifted or not; 8 backspace, 13 return, 0 none. */
+int Input_KeyChar(uint8_t code, bool shift);

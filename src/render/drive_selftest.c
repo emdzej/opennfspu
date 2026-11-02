@@ -295,6 +295,43 @@ int DRIVE_PlayerPlace(void)
 }
 bool g_drive_paused;
 
+/* --param hudscript=<frame>@<x>:<y>,<frame>=<text>,...: the race's frames (from its start) at which the
+   mouse goes to (x, y) in the display mode's pixels, the left button down that frame and up the next,
+   or the text's keys are typed one a frame (tests of the HUD's menus). */
+static void hud_script(void)
+{
+    static char sc[256];
+    static int state = -1, frame;
+    if (state < 0) state = plat_param("hudscript", sc, sizeof sc) ? 1 : 0;
+    if (!state) return;
+    frame++;
+    for (const char *p = sc; *p;) {
+        int f = atoi(p);
+        const char *q = p;
+        while (*q >= '0' && *q <= '9') q++;
+        const char *end = strchr(q, ',');
+        if (!end) end = q + strlen(q);
+        if (*q == '@') {
+            int x = atoi(q + 1);
+            const char *c = strchr(q, ':');
+            int y = c && c < end ? atoi(c + 1) : 0;
+            if (frame == f) MOUSE_Override(true, x, y, 1);
+            else if (frame == f + 1) MOUSE_Override(true, x, y, 0);
+        } else if (*q == '=') {
+            int i = frame - f;
+            if (0 <= i && i < end - q - 1) {
+                static const char keys[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+                static const uint8_t dik[] = {0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26,
+                                              0x32, 0x31, 0x18, 0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11, 0x2d,
+                                              0x15, 0x2c, 0x0b, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a};
+                const char *k = strchr(keys, q[1 + i]);
+                if (k) HUD_TypeKey(dik[k - keys], false);
+            }
+        }
+        p = *end ? end + 1 : end;
+    }
+}
+
 /* The pause key (Input_Action 8: Escape) and the menus' mouse (0x415130, HUD_HandleInput 0x425eb0 in
    RaceLoop 0x415300). In the race Escape pauses when no modal screen is up; in the race-over (the
    replay) it ends the race. */
@@ -303,7 +340,12 @@ static void race_menus(void)
     uint8_t k[16];
     int nk = plat_key_presses(k, 16);
     bool esc = false;
-    for (int i = 0; i < nk; i++) esc |= k[i] == 0x01;
+    uint8_t held[KEY_COUNT] = {0};
+    bool shift = plat_keys(held) && (held[0x2a] || held[0x36]);
+    for (int i = 0; i < nk; i++) {
+        esc |= k[i] == 0x01;
+        HUD_TypeKey(k[i], shift);   /* (the window's WM_CHAR, 0x610a80) */
+    }
     if (esc && 0x20 < g_sim_tick) {
         if (g_replay_mode < 2) {
             if (!HUD_ModalShown()) {
@@ -316,6 +358,7 @@ static void race_menus(void)
             g_drive_result = 1;          /* Race_End(1) */
         }
     }
+    hud_script();
     int32_t mx, my;
     uint32_t b = 0;
     static uint32_t was;
@@ -493,11 +536,12 @@ bool DRIVE_selftest(const char *track, const char *car)
 
 /* The race's end (GameShutdown 0x4b66e0 with Render_RaceShutdown, as far as the port has them): the HUD,
    the AI, the sounds, the cars' renderers and tasks, the render module's art and lights, the world; a
-   later DRIVE_selftest loads a race again. (The replay's save, the sky object and the cars' memory stay:
-   their ends aren't ported.) */
+   later DRIVE_selftest loads a race again. (The sky object and the cars' memory stay: their ends aren't
+   ported.) */
 void DRIVE_Shutdown(void)
 {
     if (!ready) return;
+    Replay_Write("replay.rpl");   /* Replay_Save 0x413ff0: the default replay */
     HUD_Free();        /* 0x4252f0 */
     AI_Free();
     Police_FreeScript();    /* 0x4030d0 */

@@ -6,3 +6,6 @@
 
 /* False when there is no pointer. buttons: bit 0 the left. */
 bool MOUSE_state(int32_t *x, int32_t *y, uint32_t *buttons);
+/* Port addition for the headless tests: the state given instead of the pointer's (on false: the
+   pointer's again). */
+void MOUSE_Override(bool on, int32_t x, int32_t y, uint32_t buttons);

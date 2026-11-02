@@ -58,3 +58,6 @@ void HUD_ReplayPlaying(void);
 void HTime_Format(int t, char *out, bool sign);
 /* The HUD over camera c (the overlay view). 0x425910 */
 void HUD_Draw(RenderSystem *r, RCamera *c);
+/* A key typed (its DirectInput code) into the HUD's characters (the window's WM_CHAR queue 0x610a80),
+   which the replay's save takes its name from. */
+void HUD_TypeKey(uint8_t code, bool shift);

@@ -263,3 +263,32 @@ void CarSim_PacketTask(void *car)
     int8_t g = shift((int8_t)b[0xd82], *SPEC_I(c, 0x50));
     if (*CAR_F(c, 0xdb4) <= *SPEC_F(c, 0x94) || (int8_t)b[0xd82] <= g) b[0xd7e] = (uint8_t)g;
 }
+
+int Input_KeyChar(uint8_t code, bool shift)
+{
+    static const char row1[] = "1234567890", row1s[] = "!@#$%^&*()", rowq[] = "qwertyuiop", rowa[] = "asdfghjkl", rowz[] = "zxcvbnm";
+    static const uint8_t pad[] = {0x52, 0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, 0x48, 0x49};   /* keypad 0..9 */
+    for (int i = 0; i < 10; i++)
+        if (code == pad[i]) return '0' + i;
+    int ch = 0;
+    if (code >= 0x02 && code <= 0x0b) return shift ? row1s[code - 2] : row1[code - 2];
+    if (code >= 0x10 && code <= 0x19) ch = rowq[code - 0x10];
+    else if (code >= 0x1e && code <= 0x26) ch = rowa[code - 0x1e];
+    else if (code >= 0x2c && code <= 0x32) ch = rowz[code - 0x2c];
+    if (ch) return shift ? ch - 'a' + 'A' : ch;
+    switch (code) {
+    case 0x39: return ' ';
+    case 0x0e: return 8;
+    case 0x1c: case 0x9c: return 13;
+    case 0x0c: return shift ? '_' : '-';
+    case 0x0d: return shift ? '+' : '=';
+    case 0x33: return shift ? '<' : ',';
+    case 0x34: return shift ? '>' : '.';
+    case 0x27: return shift ? ':' : ';';
+    case 0x28: return shift ? '"' : '\'';
+    case 0x1a: return shift ? '{' : '[';
+    case 0x1b: return shift ? '}' : ']';
+    case 0x29: return shift ? '~' : '`';
+    }
+    return 0;
+}

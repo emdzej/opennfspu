@@ -22,6 +22,8 @@
 #include "real/loc.h"
 #include "real/random.h"
 #include "game/music.h"
+#include "game/input.h"
+#include "game/replay_file.h"
 #include "app.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -3751,6 +3753,175 @@ static HudVisual *yesno_new(void)
     return &q->bb.base;
 }
 
+/* ---- the replay's save (HReplaySave, 0x130 bytes, vtable 0x5b2f8c; 0x42dfc0): a billboard (500 x 325)
+   titled 0x46d8 asking for a name (0x46fa) above a text entry (HTextEntryVisual, 0x158 bytes, vtable
+   0x5b3160; 0x430bb0: an amber pressed button whose text is its own buffer, eleven characters, a grey
+   "I" blinking after it every sixteen ticks), then the save (0x46d9) and cancel (0x46da) buttons, all
+   142 x 19, 1.4 of their height apart (the question's), the entry half of three steps over the
+   screen's middle, the name a step and a half above the cancel ---- */
+
+typedef struct {
+    HButton *b;             /* (HButtonVisual 0x41b160) */
+    HText *cursor;          /* +0x104: 0xff808080 */
+    char text[0x40];        /* +0x108 */
+    int32_t len, cap;       /* +0x148, +0x14c */
+    int32_t blink_at;       /* +0x150 */
+    uint8_t blink;          /* +0x154 */
+} HTextEntry;
+
+typedef struct {
+    HBillBoard bb;
+    HTextEntry entry;       /* +0x120 */
+    HButton *save, *cancel; /* +0x124, +0x128 */
+    HText *label;           /* +0x12c */
+} HReplaySave;
+
+static HudVisual *s_replaysave;   /* 0x60c9b0 */
+static bool s_save_asked;         /* 0x60ca9d: the question is the overwrite's */
+
+/* The typed characters (the window's WM_CHAR queue, 0x610a80): taken from its end, one a call. */
+static int s_chars[0x40], s_nchars;
+
+void HUD_TypeKey(uint8_t code, bool shift)
+{
+    int ch = Input_KeyChar(code, shift);
+    if (ch && s_nchars < (int)(sizeof s_chars / sizeof *s_chars)) s_chars[s_nchars++] = ch;
+}
+
+static void chars_clear(void) { s_nchars = 0; }   /* 0x434fc0 */
+
+/* The last character typed: ok but for the control ones but backspace and those a file name can't
+   have, back the backspace. 0x435590 */
+static bool char_take(int *ch, bool *back)
+{
+    *back = false;
+    if (s_nchars == 0) return false;
+    int c = s_chars[--s_nchars];
+    *ch = c;
+    bool ok = !((c < 0x20 && c != 8) || strchr("\\/:*?\"<>|%", c));
+    if (c == 8) ok = *back = true;
+    return ok;
+}
+
+/* The race loop's tick for the cursor (0x606ac8, which runs on while the replay is paused): the
+   port's clock at 64 a second. */
+static int32_t loop_tick(void) { return (int32_t)((uint64_t)app_ticks_ms() * 64u / 1000u); }
+
+static void entry_draw(HTextEntry *e)   /* HTextEntryVisual_v6 0x430d00 */
+{
+    button_draw(e->b);
+    if (0x10 < loop_tick() - e->blink_at) {
+        e->blink_at = loop_tick();
+        e->blink = !e->blink;
+    }
+    if (e->blink && e->b->ttext && e->b->ttext->font && e->b->ttext->font->font) {
+        float a, c, w, h;   /* (0x41b290: the text's end) */
+        text_extent(e->b->ttext, e->text, &a, &c, &w, &h);
+        e->cursor->x = (int)((float)e->b->ttext->x + w) + 1;
+        e->cursor->y = e->b->ttext->y;
+        text_print(e->cursor, exe_str(0x5cd088), 1.0f, 1.0f);   /* "I" */
+    }
+}
+
+static void replaysave_draw(HudVisual *v)   /* HReplaySave_v1 0x42e220 */
+{
+    HReplaySave *r = (HReplaySave *)v;
+    bb_draw(&r->bb);
+    if (v->state == 0 || v->state == 1 || v->state == 2) return;
+    entry_draw(&r->entry);
+    button_draw(r->save);
+    button_draw(r->cancel);
+    const char *s = LOC_string(HudConfig_loc(), 0x46fa);
+    text_print(r->label, s ? s : "", 1.0f, 1.0f);
+}
+
+/* Open: the buttons' clicks, the last character typed into the name (backspace: out of it); the save
+   with a name: written ("%s.rpl" 0x5ccebc) when the save directory doesn't have it (0x10), else the
+   overwrite asked (0x11); the cancel 0x12. HReplaySave_v9 0x42e290 */
+static int replaysave_input(HudVisual *v, int x, int y, int click)
+{
+    (void)x, (void)y;
+    HReplaySave *r = (HReplaySave *)v;
+    if (v->state != 3) return 0;
+    button_input(r->entry.b, click);
+    button_input(r->save, click);
+    button_input(r->cancel, click);
+    int ch;
+    bool back;
+    if (char_take(&ch, &back)) {
+        HTextEntry *e = &r->entry;
+        if (!back) {
+            if (e->len < e->cap) e->text[e->len++] = (char)ch;   /* 0x430cb0 */
+        } else if (0 < e->len) {
+            e->text[--e->len] = 0;   /* 0x430ce0 */
+        }
+    }
+    if (r->save->clicked && r->entry.len != 0) {
+        char f[0x50];
+        snprintf(f, sizeof f, "%s.rpl", r->entry.text);   /* ("%s%s.rpl" 0x5ccec4 in 0x65b360 for the test) */
+        if (Replay_Exists(f)) return 0x11;
+        Replay_Write(f);
+        return 0x10;
+    }
+    if (r->cancel->clicked) return 0x12;
+    return 0;
+}
+
+/* The overwrite's yes: the name's file written whatever it holds. 0x42e400(1) */
+static void replaysave_overwrite(void)
+{
+    HReplaySave *r = (HReplaySave *)s_replaysave;
+    if (!r || r->entry.len == 0) return;
+    char f[0x50];
+    snprintf(f, sizeof f, "%s.rpl", r->entry.text);
+    Replay_Write(f);
+}
+
+static void replaysave_destroy(HudVisual *v)   /* HReplaySave_v0 0x42e1b0 */
+{
+    HReplaySave *r = (HReplaySave *)v;
+    text_free(r->entry.cursor);
+    button_free(r->entry.b);
+    button_free(r->save);
+    button_free(r->cancel);
+    text_free(r->label);
+    bb_free(&r->bb);
+    free(r);
+}
+
+static const HudVisualVtbl replaysave_vt = {replaysave_destroy, replaysave_draw, NULL, bb_setstate, bb_setpos, NULL, bb_done, replaysave_input};
+
+static HudVisual *replaysave_new(void)   /* 0x42dfc0 */
+{
+    HReplaySave *r = calloc(1, sizeof *r);
+    if (!r) return NULL;
+    const uint8_t *loc = HudConfig_loc();
+    const char *t = LOC_string(loc, 0x46d8);
+    bb_init(&r->bb, &replaysave_vt, exe_i32(0x5b2f78), exe_i32(0x5b2f7c), "", t ? t : "", false, false, false);
+    int bw = exe_i32(0x5b2f80), bh = exe_i32(0x5b2f84);
+    float step = (float)((double)bh * exe_f64(0x5b2938));
+    float three = step * exe_f32(0x5b2600);
+    int x = g_display.width / 2 - bw / 2;
+    int y = (int)((float)(g_display.height / 2) - three * exe_f32(0x5b23f0));
+    HTextEntry *e = &r->entry;
+    e->cap = 0xb;
+    e->blink = 1;
+    e->b = button_new(x, y, bw, bh, e->text, true);
+    if (e->b) {
+        e->b->colour = 0xfffab400u;   /* 0x41b300 */
+        e->b->pressed = 1;            /* 0x41b310 */
+    }
+    e->cursor = text_new(HudConfig_font(0x4c), 0xff808080u, (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);
+    y = (int)((float)y + step);
+    const char *ss = LOC_string(loc, 0x46d9), *cs = LOC_string(loc, 0x46da);
+    r->save = button_new(x, y, bw, bh, ss ? ss : "", true);
+    y = (int)((float)y + step);
+    r->cancel = button_new(x, y, bw, bh, cs ? cs : "", true);
+    y = (int)((float)y - three);
+    r->label = text_new(HudConfig_font(0x4c), 0xc0000000u, (uint32_t)HudConfig_i32(0x14), x, y, 0, 0, 0, false);
+    return &r->bb.base;
+}
+
 /* ---- the replay's panel (HReplay, 0x19c bytes, vtable 0x5b2f3c; 0x42c890): a fading tray at the bottom
    centre with seven buttons of replay.fsh's art (camera, restart, pause / play, quit, speed, summary, save
    replay; a network game's only camera, the next and previous car to observe, summary), shown while the
@@ -4031,6 +4202,9 @@ void HUD_Init(void)
     add(s_pause, false, false);
     static const int exit_ids[4] = {0x46b6, 0x46b7, 0x46b8, 0x46b9}, exit_actions[4] = {0x15, 4, 5, 0x18};
     s_exit = menu_new(0x5b2af0, 0x5b2af8, 0x46ba, 4, exit_ids, exit_actions);      /* 0x4218c0 */
+    s_replaysave = replaysave_new();   /* 0x42dfc0 (0x60c9b0) */
+    add(s_replaysave, false, false);
+    s_save_asked = false;
     s_yesno = yesno_new();   /* 0x437370 (0x60c9ac) */
     add(s_yesno, false, false);
     s_replay = replay_new(g_race_mode == 3);   /* 0x42c890 (0x60ca58) */
@@ -4165,15 +4339,34 @@ int HUD_HandleInput(int x, int y, int event)
             g_race_quit = 1;
             close_modals(0);
             a = 4;
-        } else {
-            PENDING_NOTE(0x425eb0, "the other question's yes (0x60ca9d: 0x42e400, 0x42df90)");
+        } else if (s_save_asked) {   /* the overwrite's: written, the replay on, the question closed */
+            s_save_asked = false;
+            a = 8;
+            replaysave_overwrite();   /* 0x42e400(1) */
+            HUD_ReplayPlaying();      /* 0x42df90 */
+            modal[0]->vt->setstate(modal[0], 2);
         }
+        break;
+    case 0x10:   /* the replay saved: the replay on again */
+    case 0x12:   /* the save cancelled */
+        modal[0]->vt->setstate(modal[0], 2);
+        a = 8;
+        HUD_ReplayPlaying();   /* 0x42df90 */
+        break;
+    case 0x11:   /* the name's file there: the overwrite asked (0x46db, 0x46dc) */
+        modal[0]->vt->setstate(modal[0], 2);
+        if (s_yesno && nmodal < 8) modal[nmodal++] = s_yesno;
+        yesno_settext(s_yesno, 0x46db, 0x46dc);
+        s_save_asked = true;
         break;
     case 0x1d:   /* no: the exit's menu again */
         if (s_quit_asked) {
             s_quit_asked = false;
             modal[0]->vt->setstate(modal[0], 2);
             if (nmodal < 8) modal[nmodal++] = s_exit;
+        } else if (s_save_asked) {   /* the save again (0x60ca9d left set) */
+            modal[0]->vt->setstate(modal[0], 2);
+            if (s_replaysave && nmodal < 8) modal[nmodal++] = s_replaysave;
         }
         break;
     case 0x18:   /* the exit's back: the pause again */
@@ -4203,8 +4396,16 @@ int HUD_HandleInput(int x, int y, int event)
         return 0xe;
     }
     if (a == 0xf) {
+        /* the save's billboard opened over the replay, the typed keys dropped (0x434fc0); the replay
+           paused (8, 0x42dfb0) unless it is */
         close_modals(0);
-        PENDING_NOTE(0x42dfc0, "the replay's save (HReplaySave, Replay_Save 0x413ff0)");
+        if (s_replaysave && nmodal < 8) modal[nmodal++] = s_replaysave;
+        if (s_replaysave) s_replaysave->vt->setstate(s_replaysave, 1);
+        chars_clear();
+        HReplay *r = (HReplay *)s_replay;
+        if (r->paused) return 0xf;   /* 0x42dfa0 */
+        r->paused = 1;
+        return 8;
     }
     return a;
 }
@@ -4260,6 +4461,7 @@ void HUD_Free(void)
     nmodal = 0;
     s_pause = s_exit = NULL;
     s_replay = NULL;
+    s_replaysave = NULL;
     summary = mission = s_time = NULL;
     s_congrats = NULL;
     s_yesno = NULL;
