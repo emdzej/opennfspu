@@ -47,6 +47,7 @@ static int32_t s_pointer_last;      /* 0x60ca8c: the tick of the last draw */
 static bool s_noscreens;     /* 0x60ca10: the race-over's screens skipped */
 static HudVisual *mission;   /* 0x60ca50 */
 static HudVisual *s_time;    /* 0x60ca1c */
+static HudVisual *s_multitime;   /* 0x60ca40 */
 static int s_cones_down;     /* 0x60ca04: the traffic objects knocked, last counted */
 static bool always;          /* 0x60c970: draw the front visuals whatever their state */
 
@@ -4255,7 +4256,8 @@ void HUD_Init(void)
     s_time = time_new(&time_vt, HUDPOS_TIME, HudConfig_i32(0xa4), HudConfig_i32(0xa8));   /* 0x4315d0 */
     add(s_time, true, false);
     s_cones_down = 0;
-    add(time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4)), true, false);   /* 0x42a0f0 */
+    s_multitime = time_new(&multitime_vt, HUDPOS_MULTITIME, HudConfig_choicei32(0), HudConfig_choicei32(4));   /* 0x42a0f0 */
+    add(s_multitime, true, false);
     add(tdamage_new(), true, false);   /* 0x42f880 */
     add(position_new(), true, false);
     add(gdamage_new(), true, false);   /* 0x421e20 */
@@ -4557,7 +4559,7 @@ void HUD_Free(void)
     s_pause = s_exit = NULL;
     s_replay = NULL;
     s_replaysave = NULL;
-    summary = mission = s_time = NULL;
+    summary = mission = s_time = s_multitime = NULL;
     s_congrats = NULL;
     s_yesno = NULL;
     s_records = NULL;
@@ -4644,6 +4646,13 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         if (!e->last && e->front && 0x1c0 < g_sim_tick && (always || e->v->state == 2) && (g_race_view == 0 || g_race_view == 1))
             e->v->vt->draw(e->v);
     }
+    /* A mission's replay: its times shown (sliding in) and drawn whatever their trays. */
+    if (g_race_view == 2 && g_race_mode == 9 && s_time && s_multitime) {
+        if (s_time->state == 0 && s_time->vt->setstate) s_time->vt->setstate(s_time, 1);
+        if (s_multitime->state == 0 && s_multitime->vt->setstate) s_multitime->vt->setstate(s_multitime, 1);
+        s_time->vt->draw(s_time);
+        s_multitime->vt->draw(s_multitime);
+    }
     Car *me = local_car();
     if (wrongway && me && *CAR_I(me, 0xd30) != 0 && g_race_mode != 9 && g_race_view != 2 && 0x1c0 < g_sim_tick) wrongway->vt->draw(wrongway);
     end_pass(r);
@@ -4678,7 +4687,18 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
             if (e->front && e->v->state == 3 && !(g_race_view == 2 && g_race_mode == 9) && e->v->vt->setstate) e->v->vt->setstate(e->v, 2);
         }
     }
-    PENDING_NOTE(0x425910, "HUD_Draw's modal visuals, replay and network parts");
+    /* The replay's panel: with a modal visual up it stays (0x42d410); once none is, it lets go and its
+       timer starts over (0x42d420). */
+    if (g_race_view == 2 && s_replay) {
+        HReplay *rp = (HReplay *)s_replay;
+        if (nmodal == 0) {
+            if (rp->keep) rp->hover[7] = 0, rp->keep = 0;   /* 0x42d430 */
+        } else rp->keep = 1;
+    }
+    /* The standings shown: the standing's congratulation goes. */
+    if (s_standings && s_standing_congrats && s_standings->state == 2 && s_standing_congrats->state != 0 && s_standing_congrats->vt->setstate)
+        s_standing_congrats->vt->setstate(s_standing_congrats, 0);
+    /* (and in a network race 0x427c30: its messages) */
     RenderState_SetZFunc(rs, zfunc);
     RenderState_SetFogMode(rs, fog);
     /* A mission with cones: when more traffic objects are down than last counted, one more cone (however
