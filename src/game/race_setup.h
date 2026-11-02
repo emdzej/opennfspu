@@ -46,6 +46,9 @@ extern bool g_race_setup_set;
    description's TRANSMISSION +0xc, ABS +0x24, TRACTION +0x20, CABRIODOWN +0x50c); without the front end
    automatic, the rest off. */
 extern int32_t g_race_car_settings[4];
+/* The player's RAMPS, RAMPG, RAMPB (the description's +0x14 .. +0x1c: its steering, gas, brake digital,
+   eased in): the front end's (FEControllerInputAccessor_v1 0x51c480: 0x222 .. 0x224), -1 fe.txt's. */
+extern int32_t g_race_ramps[3];
 /* The damage option the front end chose (DAMAGE, 0x657a2c; on without it). */
 extern int32_t g_race_fe_damage;
 /* The human player's name (0x500820: 0x691dc8, the save's player), the car's DRIVERNAME and LICENSE (the

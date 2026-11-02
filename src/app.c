@@ -30,6 +30,7 @@
 #include "front/feintro.h"
 #include "front/fesave.h"
 #include "front/fecd.h"
+#include "front/fectrl.h"
 #include "game/music.h"
 #include "front/feaccess.h"
 #include "render/render.h"
@@ -186,6 +187,7 @@ bool app_frame(void)
                         g_race_setup_set = FEApp_Setup(g_race_setup);
                         static const char *const cs[4] = {"Car.Transmission", "Car.ABS", "Car.Traction", "Car.Roof"};
                         for (int i = 0; i < 4; i++) g_race_car_settings[i] = FEData_CarSetting(cs[i]);
+                        FECtrl_Ramps(g_race_ramps);
                         g_race_fe_damage = FEApp_Damage();
                         Save *sv = FESave_Current();
                         snprintf(g_race_driver_name, sizeof g_race_driver_name, "%s", sv ? sv->player : "");

@@ -30,3 +30,6 @@ int FECtrl_ListDevice(int i);
    on c (true when c is one), and the mouse's moves over hover (or the release) for its handles. */
 bool FECtrl_DeadZonePress(FertControl *c, int mx);
 void FECtrl_DeadZoneMouse(FertControl *hover, int mx, bool up);
+/* The race's RAMPS, RAMPG, RAMPB from the steering's, gas's and brake's inputs (0x51c480's 0x222 .. 0x224:
+   1 unless an axis). */
+void FECtrl_Ramps(int32_t out[3]);

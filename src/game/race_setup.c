@@ -1,5 +1,6 @@
 /* The race's car descriptions (see race_setup.h). */
 #include "game/race_setup.h"
+#include "game/options.h"
 #include "game/car.h"
 #include "game/car_damage.h"
 #include "game/hud_config.h"
@@ -30,6 +31,7 @@ bool g_race_colours_set;
 float g_race_setup[17];
 bool g_race_setup_set;
 int32_t g_race_car_settings[4] = {1, 0, 0, 0};
+int32_t g_race_ramps[3] = {-1, -1, -1};
 int32_t g_race_fe_damage = 1;
 char g_race_driver_name[32];
 int g_race_grid_pers[8], g_race_grid_start[9];
@@ -174,6 +176,10 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x24, g_race_car_settings[1]);
     put_i(d, 0x20, g_race_car_settings[2]);
     put_i(d, 0x50c, g_race_car_settings[3]);
+    /* RAMPS, RAMPG, RAMPB (options 0x222 .. 0x224, the player's: fe.txt's car[0].ramps .., then the front
+       end's controls over them, a digital steering, gas or brake 1): the steering eased in (car_drive.c) */
+    static const char *const ramp[3] = {"car[0].ramps", "car[0].rampg", "car[0].rampb"};
+    for (int i = 0; i < 3; i++) put_i(d, 0x14 + 4 * i, g_race_ramps[i] < 0 ? Options_Get(ramp[i], 0) : g_race_ramps[i]);
     /* The colours (+0x218 COLORCONFIG: body, stripe, interior, wheels; the car viewer's silver), no race
        number, colour package 0. */
     static const uint32_t colours[4] = {0xffb8bcc0u, 0xff202020u, 0xff303030u, 0xffc0c0c0u};

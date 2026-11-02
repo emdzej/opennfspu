@@ -182,7 +182,16 @@ static void commit(void)
 {
     for (int i = 0; i < NCTRL; i++)
         if (to_binding(&s_in[i]) != Controls_Option(k_ctrl[i].id)) Controls_SetOption(k_ctrl[i].id, to_binding(&s_in[i]));
-    PENDING_NOTE(0x51c480, "the pedals' and the steering's analog options (0x222 .. 0x224)");
+}
+
+void FECtrl_Ramps(int32_t out[3])
+{
+    /* (0x51c480: SteerRight 0x151 -> 0x222, Accel 0x152 -> 0x223, Brake 0x153 -> 0x224, each 1 unless an axis) */
+    static const int id[3] = {0x151, 0x152, 0x153};
+    load();
+    for (int i = 0; i < 3; i++)
+        for (int k = 0; k < NCTRL; k++)
+            if (k_ctrl[k].id == id[i]) out[i] = s_in[k].type != 1;
 }
 
 static int find(const char *name)
