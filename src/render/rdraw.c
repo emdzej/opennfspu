@@ -1,6 +1,7 @@
 /* RDrawArticleBundle (vtable 0x5b3cf0) and its base RDrawBundle (0x44fca0); see rdraw.h. */
 #include "render/rdraw.h"
 #include "game/smack.h"
+#include "game/objdefs.h"
 #include "game/skid.h"
 #include "render/sprite.h"
 #include "render/particles.h"
@@ -239,11 +240,49 @@ static const uint8_t *lod_entry(const uint8_t *base, uint32_t key)
     return NULL;
 }
 
+/* A canned piece's vertex animation (in 0x450250): the frames' count is the second word of art3's 'Anim'
+   record; the frame is the clock (0x628938's) over the object's ticks a frame (WObjectDef +0x88), each
+   frame's vertices art3's 'vt' records of index frame << 4 | the level's own 'vt' index. The level's
+   vertices are this frame's blended toward the next by the remainder (x, y, z; w this frame's), standing
+   for its 'vt' stream (the original's override, made on the stack). */
+extern int32_t g_sim_tick;   /* (0x628938's clock) */
+static float (*s_frames)[4];
+static uint32_t s_nframes;
+
+static void vertex_frames(R3DPart *p, UData *art3, uint32_t rate, uint32_t vt)
+{
+    UData *r = UData_find(art3, 0x416e696du);   /* 'Anim' */
+    if (r == UData_itemsend(art3)) return;
+    uint32_t n = ((const uint32_t *)UData_data(r))[1];
+    if (!n || !rate) return;   /* (no rate faults the original) */
+    uint32_t now = (uint32_t)g_sim_tick;
+    uint32_t k = now / rate;
+    float f = (float)now / (float)(int32_t)rate - (float)(int32_t)k;
+    UData *own = UData_find(p->article, (kind_id(R3D_VT) & 0xffff0000u) | vt);
+    uint32_t count = own != p->end ? own->count : 0;
+    uint32_t id = kind_id(R3D_VT) & 0xffff0000u;
+    UData *ra = UData_find(art3, id | (k % n) << 4 | vt), *rb = UData_find(art3, id | ((k + 1) % n) << 4 | vt);
+    if (ra == UData_itemsend(art3) || rb == UData_itemsend(art3)) return;   /* (the original reads through NULL) */
+    const float (*a)[4] = UData_data(ra), (*b)[4] = UData_data(rb);
+    if (count > s_nframes) {
+        float (*grown)[4] = realloc(s_frames, count * sizeof *s_frames);
+        if (!grown) return;
+        s_frames = grown, s_nframes = count;
+    }
+    float g = 1.0f - f;
+    for (uint32_t i = 0; i < count; i++) {
+        for (int j = 0; j < 3; j++) s_frames[i][j] = g * a[i][j] + f * b[i][j];
+        s_frames[i][3] = a[i][3];
+    }
+    p->verts = s_frames;
+}
+
 /* An article under a matrix (0x450250): its level's primitive lists, each through its material with the
    colour stream 'Am' overridden to the colour (white but for a lit knockable object: the light at it;
-   the vertex stream 'vt' too: with no vertex animation, the article's own); then its markers ('ef'
-   type 2) as glows. */
-static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, const EaglMatrix *m, uint32_t colour)
+   the vertex stream 'vt' too: a canned piece's blended frames, else the article's own); then its
+   markers ('ef' type 2) as glows. */
+static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, const EaglMatrix *m, uint32_t colour,
+                         UData *art3, uint32_t rate)
 {
     R3DPart p;
     part_from(&p, c);
@@ -253,6 +292,7 @@ static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, 
         EaglMatStack *st = &g_eagl->view->model;
         EAGL_StackPush(st);
         EAGL_MatPreMul(EAGL_StackTopForWrite(st), m);
+        if (art3) vertex_frames(&p, art3, rate, rd16(lod + 8));
         R3DMaterialSet *ms = d->bundle->world;
         if (lod[0]) {
             uint32_t lo = rd16(lod + 4), hi = rd16(lod + 6);
@@ -318,7 +358,7 @@ static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
     EaglMatrix m;
     if (!a) {
         d->bundle->vt->matrix(d->bundle, index, m.m);
-        draw_article(d, entry_cache(d, index), e, &m, 0xffffffffu);
+        draw_article(d, entry_cache(d, index), e, &m, 0xffffffffu, NULL, 0);
         return;
     }
     const WSmackEntry *se = &a->e[index];
@@ -328,14 +368,9 @@ static void anim_draw(RDrawObject *o, int index, const RListEntry *e)
         if (WAnimatable_HasAnim(a, index, k)) WAnimatable_Matrix(a, index, k, false, &m);   /* 0x476970 */
         else d->bundle->vt->matrix(d->bundle, index, m.m);
         if (!pc->article) continue;
-        if (pc->art3) {
-            /* the vertex animation of art3's 'Anim' frames (its second word, the frames' count) */
-            UData *r = UData_find(pc->art3, 0x416e696du);
-            if (r != UData_itemsend(pc->art3) && ((const uint32_t *)UData_data(r))[1])
-                PENDING_NOTE(0x450250, "the canned pieces' vertex animation (their art3's frames)");
-        }
+        const WObjectDef *def = WObjectDefs_find(se->cur.type);   /* (the entry's current record's type) */
         WArticleCache c = {pc->article, UData_itemsend(pc->article), {{0}}};
-        draw_article(d, &c, e, &m, se->colour);
+        draw_article(d, &c, e, &m, se->colour, pc->art3, def ? (uint32_t)def->tickspervertframe : 0);
     }
     if (se->sounded) {
         /* the markers of the current record's article under its placing (the motion left out) */

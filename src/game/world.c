@@ -456,7 +456,10 @@ static int WInstanceBundle_load(W3DObjectBundle *b, UData **arts, int n)
         memcpy(m.m, tr, sizeof m.m);
         EAGL_MatToRotTrans(&m, in->placed[k].rot, in->placed[k].pos);   /* 0x539ab0 */
         const uint32_t *anim = item_data(arts[i], UData_find(arts[i], ANIM));
-        if (anim && anim[0]) placed_init(&in->placed[k]);
+        if (anim && anim[0]) {   /* (0x478130: the placing zeroed, the type kept) */
+            memcpy(in->placed[k].pos, vzero, sizeof in->placed[k].pos);
+            memcpy(in->placed[k].rot, rot_identity, sizeof in->placed[k].rot);
+        }
         k++;
         arts[i] = NULL;
     }
