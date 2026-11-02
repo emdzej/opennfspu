@@ -11,6 +11,7 @@
 #include "game/track.h"
 #include "game/wtree.h"
 #include "game/ai_data.h"
+#include "game/ai_lane.h"
 #include "game/race_progress.h"
 #include "render/camera_math.h"
 #include "pending.h"
@@ -35,7 +36,8 @@ int32_t g_ai_level = 1;   /* (the front end's difficulty option; its middle) */
 int32_t g_ai_drive;
 
 /* The task rates the controllers last asked for (0x5e6650, 0x5e6654, 0x5e66a0). */
-static int ai_rate, ai_ticks;
+static int ai_rate;
+int g_ai_ticks;
 static float ai_dt;
 
 /* The track's AI tuning (Track_Table 0x4a2ba0, not ported: its defaults): the road's width the speeds
@@ -545,7 +547,7 @@ static void speed_target(Car *c)
 static void normal_tick(AiState *s)
 {
     speed_target(s->car);   /* 0x40afd0 */
-    PENDING_NOTE(0x401060, "the lane driver (the lanes' scores, the cars about, the chosen lane 0x4012b0)");
+    AI_LaneDrive(s->car);   /* 0x401000, 0x401060, 0x4012b0 */
 }
 static const AiStateVtbl normal_vt = {normal_tick, no_done, not_ready};
 static void normal_init(AiState *s, Car *c)   /* 0x40b630 */
@@ -588,7 +590,7 @@ static void purgatory_tick(AiState *s)
     Car *c = s->car;
     *CAR_I(c, 0x1100) = 0;
     *CAR_I(c, 0x43c) = 0;
-    if (!(*CAR_I(c, CAR_FLAGS) & 0x20) && 0x3bf < g_sim_tick) *CAR_I(c, 0xee8) -= ai_ticks;
+    if (!(*CAR_I(c, CAR_FLAGS) & 0x20) && 0x3bf < g_sim_tick) *CAR_I(c, 0xee8) -= g_ai_ticks;
 }
 static bool in_range(int n, int lo, int hi) { return lo <= n && n <= hi; }
 static bool purgatory_ready(AiState *s)
@@ -958,7 +960,7 @@ void AI_TickAll(void)
         AiHigh *h = ctl[i];
         if (!h) continue;
         Car *c = g_cars[i];
-        if (!h->always && !Sim_TaskRate(1, 0, *CAR_F(c, 0x78), *CAR_I(c, 0), &ai_rate, &ai_ticks, &ai_dt, *CAR_I(c, 0x10b8) != 0))
+        if (!h->always && !Sim_TaskRate(1, 0, *CAR_F(c, 0x78), *CAR_I(c, 0), &ai_rate, &g_ai_ticks, &ai_dt, *CAR_I(c, 0x10b8) != 0))
             continue;
         if (h->kind == 2) opponent_tick(h);
         else if (h->kind == 3) traffic_tick(h);

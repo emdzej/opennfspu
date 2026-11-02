@@ -650,6 +650,8 @@ void AI_DriveTask(void *car)
     grip_back(c);
     indicators(c);
     F(0x1060) = dot3(CAR_F(c, 0x3b8), CAR_F(c, 0x33c));   /* 0x40ef90 */
+    /* (+0x7e, the wheels down the test reads, is only ever cleared in the exe: every AI car counts as out
+       of control and takes the forces; the along-the-road path 0x4088a0 is never reached) */
     bool ooc = Car_OutOfControl(c);
     lateral_target(c, ooc);
     if (I(0xecc) & 4) return;

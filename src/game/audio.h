@@ -5,6 +5,7 @@
    (0x4ac060)), and the odd ticks' update (Audio_Tick 0x4a7ef0: the listener at the camera, the player's
    car's sounds 0x4a7430, 0x4a9e20). The opponents' (0x4a6e50) and the track's sound elements (0x4aed00) follow; music and most speech are pending. */
 #pragma once
+#include "game/car.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -41,3 +42,8 @@ void Audio_Thunder(int delay, int angle);
 void Audio_Tick(void);
 /* A knocked object's sound at p: the nearest one-shot sound element within 5 triggered. 0x4af210 */
 void Audio_HitSound(const float p[3]);
+
+/* A near car's horn (0x4a6bb0): sounded `times` times for len ticks, gap between (when silent). */
+void Audio_Horn(Car *c, int times, int len, int gap);
+/* Held on (0x4a6b60), or let go after this tick. */
+void Audio_HornHold(Car *c, bool on);

@@ -1684,6 +1684,33 @@ static NearCar s_near[4];
 
 static void near_reset(NearCar *n, Car *c) { *n = (NearCar){.car = c, .dist2 = 0x1324}; }
 
+void Audio_Horn(Car *c, int times, int len, int gap)   /* 0x4a6bb0 */
+{
+    for (int i = 0; i < 4; i++) {
+        NearCar *n = &s_near[i];
+        if (n->car == c && n->horn == 0) {
+            n->horn = len;
+            n->horn_on = len;
+            n->horn_off = -gap;
+            n->horn_n = times;
+        }
+    }
+}
+
+void Audio_HornHold(Car *c, bool on)   /* 0x4a6b60 */
+{
+    for (int i = 0; i < 4; i++) {
+        NearCar *n = &s_near[i];
+        if (n->car != c) continue;
+        if (!on) {
+            if (n->horn != 0) n->horn = n->horn_on = n->horn_n = 1;
+        } else {
+            n->horn = 1;
+            n->horn_on = 0;
+        }
+    }
+}
+
 /* The race cars nearest the listener, up to n of them within 300 (50 for flag 0x10), the viewport's
    own car left out (split screen: the humans'); those within 400 have their lden bank asked for. The
    records of cars no longer near are let go (their sounds stopped), new cars take free ones (0x4a7b90). */
@@ -1835,7 +1862,7 @@ static void near_tick(int vp, int i)
     int type = DESC_I(c, 0);
     int hpatch = (type == 0x30) + 10, hvel = (int8_t)exe_data(0x5d1478 + (uint32_t)type, 1)[0];
     if (!(*CAR_I(c, CAR_FLAGS) & 4)) {
-        /* The others' horn by its countdowns (nothing in the exe sets them). */
+        /* The others' horn by its countdowns (the AI's, Audio_Horn and Audio_HornHold). */
         if (0 < n->horn) {
             if (0 < n->horn_on) n->horn--;
             if (n->horn == 0) {
