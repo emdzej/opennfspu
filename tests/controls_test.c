@@ -21,7 +21,7 @@ int main(void)
     CHECK(Controls_Parse("key,SC_UP") == 0x4803);          /* the arrows' scan codes without 0x80 */
     CHECK(Controls_Parse(" Key , sc_esc ") == 0x103);      /* names any case, spaces dropped */
     CHECK(Controls_Parse("Intface,0xc8") == 0xc804);
-    CHECK(Controls_Parse("analog,1,2,0,255") == (1u << 20 | 2u << 16 | 0u << 8 | 255u) << 8 | 1);
+    CHECK(Controls_Parse("analog,1,2,0,255") == ((1u << 20 | 2u << 16 | 0u << 8 | 255u) << 8 | 1));
     CHECK(Controls_Parse("button,0,5") == (5u << 8 | 2));
     CHECK(Controls_Parse("pov,0,2") == (2u << 8 | 5));
     CHECK(Controls_Parse("nonsense,12") == 12u << 8);      /* an unknown type is Null's */

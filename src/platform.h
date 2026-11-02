@@ -26,6 +26,10 @@ int plat_key_presses(uint8_t *codes, int cap);
 /* The mouse: its position in drawable pixels (plat_display_size's), its buttons held (1 left, 2 right,
    4 middle), the wheel's lines this frame (> 0 down). False without a pointer. */
 bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel);
+/* A game controller in slot 0..3, in connection order (gasm's raw gamepad; the W3C standard order when
+   it has one: buttons 0 south .. 12-15 the d-pad, axes 0/1 the left stick, 2/3 the right, y down): its
+   axes (-1..1) and buttons (0..1), its name (cap bytes, may be empty). False if none is connected. */
+bool plat_gamepad(int slot, float axes[16], float buttons[32], char *name, size_t cap);
 /* Launch parameter (gasm --param / URL query); false if unset. */
 bool plat_param(const char *name, char *dst, size_t cap);
 /* Calls per second of app_frame from now on; the audio per frame follows. */

@@ -28,6 +28,11 @@ void Controls_Load(void);
 uint32_t Controls_Binding(int id);
 /* An option value's binding: the type's name, ',', the value (0x4b5220, 0x4b5040). */
 uint32_t Controls_Parse(const char *text);
+/* The input devices as DirectInput lists them (the keyboard, the mouse, the pads): count, name, type
+   (2 mouse, 3 keyboard, 4 joystick). */
+int Controls_Devices(void);
+const char *Controls_DeviceName(int n);
+int Controls_DeviceType(int n);
 /* The players' packets (g_input_packet the first's) and the interface ring's next. 0x412e90 */
 void Input_Sample(void);
 /* The samples taken (0x5e99b8) and the race loop's cursor into the ring (0x606ac8). */

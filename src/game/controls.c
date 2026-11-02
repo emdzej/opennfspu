@@ -4,9 +4,10 @@
 #include "game/input.h"
 #include "game/options.h"
 #include "game/race_progress.h"
-#include "pending.h"
+#include "render/drive_selftest.h"
 #include "platform.h"
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 #include <strings.h>
 
@@ -36,14 +37,120 @@ static uint8_t s_key[256];           /* 0x5de028 */
 static uint32_t s_joyflags;          /* 0x5e8e58: the joysticks' directions and button while paused */
 int32_t g_input_samples, g_input_cursor;
 
-/* The joysticks (0x5e8e80, 10 words each: 8 axes, the hat, the state, whose buttons are at +0x34),
-   registered by the types' init functions (0x411ba0, 0x411a40, 0x411ae0) when a binding names one. */
+/* The real library's input devices (\real\patch3\pc\input.c, 0x6bdf80, 0x10c bytes each; INPUT_init
+   0x5328f0): DirectInput's in its enumeration order, the keyboard, the mouse, then the game controllers
+   (the port: gasm's pads, connected ones in slot order). Getstate 6 (0x532b80) polls one into its
+   record: the device type's low byte (2 mouse, 3 keyboard, 4 joystick), then its state: a joystick's
+   DIJOYSTATE (8 axes 0..0xffff from +4, the hats from +0x24 in hundredths of a degree, -1 centred, 32
+   buttons from +0x34, 0x80 held), the keyboard's 256 keys. */
+typedef struct {
+    int32_t type;
+    int pad;                     /* (port: the gasm slot) */
+    char name[64];
+    uint8_t rec[4 + 0x100];
+} InputDevice;
+static InputDevice s_devices[NDEV];
+static int32_t s_ndevices;       /* 0x5e8e5c (0x69cb0c) */
+static int8_t s_polled[NDEV];    /* 0x5e8e60: the devices the bindings name, -1 the end */
+
+/* The table the readers go through (0x5e8e80, 10 words a device): the 8 axes, the hat, the record;
+   filled for a device when it is polled (0x4118c0), cleared with the bindings (0x4116e0). */
 typedef struct {
     const int32_t *axis[8];
     const int32_t *pov;
     const uint8_t *state;
 } JoyDev;
 static JoyDev s_dev[NDEV];
+
+static int32_t rec_i32(const uint8_t *r, int off) { int32_t v; memcpy(&v, r + off, 4); return v; }
+static void rec_set(uint8_t *r, int off, int32_t v) { memcpy(r + off, &v, 4); }
+
+/* (port: the devices as DirectInput would list them, each race: a browser shows a pad only after its
+   first press, so the list isn't kept from the start as INPUT_init's is) */
+static void enumerate(void)
+{
+    memset(s_devices, 0, sizeof s_devices);
+    s_devices[0].type = 3;
+    snprintf(s_devices[0].name, sizeof s_devices[0].name, "Keyboard");
+    s_devices[1].type = 2;
+    snprintf(s_devices[1].name, sizeof s_devices[1].name, "Mouse");
+    s_ndevices = 2;
+    float ax[16], bt[32];
+    for (int slot = 0; slot < 4 && s_ndevices < NDEV; slot++) {
+        InputDevice *d = &s_devices[s_ndevices];
+        if (!plat_gamepad(slot, ax, bt, d->name, sizeof d->name)) continue;
+        d->type = 4;
+        d->pad = slot;
+        if (!d->name[0]) snprintf(d->name, sizeof d->name, "Gamepad %d", slot + 1);
+        s_ndevices++;
+    }
+}
+
+static int32_t axis16(float a) { return a <= -1.0f ? 0 : a >= 1.0f ? 0xffff : (int32_t)((a + 1.0f) * 32767.5f); }
+
+/* Getstate 6 (0x532b80): the device polled into its record. A pad's axes: the sticks' x, y, the right
+   stick's x, the triggers, the right stick's y, then its axes 4 and 5; the d-pad the hat; its buttons. */
+static const uint8_t *getstate(int n)
+{
+    if (n < 0 || n >= s_ndevices) return NULL;
+    InputDevice *d = &s_devices[n];
+    uint8_t *r = d->rec;
+    memset(r, 0, sizeof d->rec);
+    rec_set(r, 0, d->type);
+    if (d->type == 3) {
+        uint8_t keys[KEY_COUNT] = {0};
+        if (plat_keys(keys))
+            for (int k = 0; k < KEY_COUNT; k++) r[4 + k] = keys[k] ? 0x80 : 0;
+    } else if (d->type == 4) {
+        float ax[16] = {0}, bt[32] = {0};
+        if (plat_gamepad(d->pad, ax, bt, NULL, 0)) {
+            const float a[8] = {ax[0], ax[1], ax[2], bt[6] * 2.0f - 1.0f, bt[7] * 2.0f - 1.0f, ax[3], ax[4], ax[5]};
+            for (int i = 0; i < 8; i++) rec_set(r, 4 + 4 * i, axis16(a[i]));
+            bool u = bt[12] > 0.5f, dn = bt[13] > 0.5f, l = bt[14] > 0.5f, rt = bt[15] > 0.5f;
+            int32_t pov = -1;
+            if (u && rt) pov = 4500;
+            else if (dn && rt) pov = 13500;
+            else if (dn && l) pov = 22500;
+            else if (u && l) pov = 31500;
+            else if (u) pov = 0;
+            else if (rt) pov = 9000;
+            else if (dn) pov = 18000;
+            else if (l) pov = 27000;
+            for (int i = 0; i < 4; i++) rec_set(r, 0x24 + 4 * i, -1);
+            rec_set(r, 0x24, pov);
+            for (int i = 0; i < 32; i++) r[0x34 + i] = bt[i] > 0.5f ? 0x80 : 0;
+        }
+    }
+    return r;
+}
+
+/* 0x4118c0: a device polled and its table entry pointed into its record. */
+static void poll(int n)
+{
+    const uint8_t *r = getstate(n);
+    if (n < 0 || n >= NDEV) return;
+    s_dev[n].state = r;
+    for (int i = 0; i < 8; i++) s_dev[n].axis[i] = r ? (const int32_t *)(const void *)(r + 4 + 4 * i) : NULL;
+    s_dev[n].pov = r ? (const int32_t *)(const void *)(r + 0x24) : NULL;
+}
+
+/* The types' init functions (0x411ba0 Analog, 0x411a40 Button, 0x411ae0 Pov): a device that exists added
+   to the polled list once. (The button's also clears its bit in 0x5e9380, which nothing reads.) */
+static void use_device(uint32_t n)
+{
+    if ((int)n >= s_ndevices) return;
+    for (int i = 0; i < NDEV; i++) {
+        if (s_polled[i] < 0) {
+            s_polled[i] = (int8_t)n;
+            return;
+        }
+        if ((uint32_t)s_polled[i] == n) return;
+    }
+}
+
+int Controls_Devices(void) { return s_ndevices; }
+const char *Controls_DeviceName(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].name : ""; }
+int Controls_DeviceType(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].type : 0; }
 
 static int read_null(uint32_t p) { (void)p; return 0; }   /* 0x508530 */
 
@@ -206,7 +313,10 @@ uint32_t Controls_Binding(int id) { return id >= FIRST && id < FIRST + NBIND ? s
 
 void Controls_Load(void)
 {
-    /* 0x412e20 (with INPUT_init and the devices' reset, 0x4116e0) */
+    /* 0x412e20: INPUT_init, the devices' reset (0x4116e0) */
+    enumerate();
+    memset(s_polled, -1, sizeof s_polled);
+    memset(s_dev, 0, sizeof s_dev);
     memset(s_bind, 0, sizeof s_bind);
     memset(s_count, 0, sizeof s_count);
     memset(s_modifier, 0, sizeof s_modifier);
@@ -218,9 +328,11 @@ void Controls_Load(void)
         const char *v = s_names[i] ? Options_Str(exe_str(s_names[i])) : NULL;
         if (v) s_bind[i] = Controls_Parse(v);
     }
-    for (int i = 0; i < NBIND; i++)
-        if ((s_bind[i] & 0xff) == 1 || (s_bind[i] & 0xff) == 2 || (s_bind[i] & 0xff) == 5)
-            PENDING_NOTE(0x411ba0, "the joysticks' registration (Analog, Button, Pov bindings: 0x411ba0, 0x411a40, 0x411ae0)");
+    for (int i = 0; i < NBIND; i++) {   /* (the options' apply: the type's init) */
+        uint32_t t = s_bind[i] & 0xff, p = (uint32_t)((int32_t)s_bind[i] >> 8);
+        if (t == 1) use_device(p >> 20);
+        else if (t == 2 || t == 5) use_device(p >> 16);
+    }
     /* 0x4117c0: the interface's own keys over the file's */
     static const struct { uint8_t slot; uint32_t code; } defs[] = {
         {8, 0x103}, {9, 0}, {1, 0xc804}, {2, 0xd004}, {3, 0xcb04}, {4, 0xcd04}, {5, 0x1c04},
@@ -232,10 +344,25 @@ void Controls_Load(void)
     s_bind[S_PLAIN + 15] = 0x4303;   /* C1_SWITCHMUSIC (0x5e970c): F9 */
 }
 
-/* 0x411970: the joysticks polled (0x4118c0); while paused their stick's directions and a button. */
+/* 0x411970: the devices polled; while paused (and Tab not held) the first joystick's directions and
+   its button (the stick's x, y past 0x7f / 0x17d of 0xffff: so nearly always right and down; the
+   button's test is of its address, so always). */
 static void poll_devices(void)
 {
     s_joyflags = 0;
+    for (int i = 0; i < s_ndevices && i < NDEV; i++) {
+        if (s_polled[i] < 0) continue;
+        poll(s_polled[i]);
+        if (!g_drive_paused || s_key[0xf]) continue;
+        const uint8_t *r = s_dev[(int)s_polled[i]].state;
+        if (!r) continue;
+        int32_t x = rec_i32(r, 4), y = rec_i32(r, 8);
+        if (x < 0x7f) s_joyflags |= 4;
+        else if (0x17d < x) s_joyflags |= 8;
+        if (y < 0x7f) s_joyflags |= 1;
+        else if (0x17d < y) s_joyflags |= 2;
+        s_joyflags |= 0x10;
+    }
 }
 
 /* The key table as the window's key messages leave it (WndProc 0x53b1c0 / 0x53b420): the scan code
@@ -309,8 +436,8 @@ static void flags(uint8_t *pk, const uint32_t *S, const bool *ok)
 
 void Input_Sample(void)
 {
+    read_keys();      /* (the window's key messages keep the table current) */
     poll_devices();
-    read_keys();
     bool iface_ok[NIFACE], psx_ok[NPSX];
     memset(iface_ok, 1, sizeof iface_ok);
     memset(psx_ok, 1, sizeof psx_ok);

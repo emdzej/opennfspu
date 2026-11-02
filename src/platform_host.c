@@ -25,6 +25,12 @@ bool plat_param(const char *name, char *dst, size_t cap)
 
 void plat_set_frame_rate(double hz) {}
 void plat_display_size(int *w, int *h) { *w = 640; *h = 480; }
+bool plat_gamepad(int slot, float axes[16], float buttons[32], char *name, size_t cap)
+{
+    (void)slot, (void)axes, (void)buttons, (void)name, (void)cap;
+    return false;
+}
+
 bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel)
 {
     *x = *y = *wheel = 0;

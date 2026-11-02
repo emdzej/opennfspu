@@ -44,6 +44,22 @@ void plat_display_size(int *w, int *h)
 }
 bool plat_frame_shown(void) { return gasm_gl_frame_shown() != 0; }
 
+bool plat_gamepad(int slot, float axes[16], float buttons[32], char *name, size_t cap)
+{
+    uint8_t b[GASM_GAMEPAD_BYTES];
+    uint32_t flags;
+    if (slot < 0 || slot > 3 || gasm_gamepad((uint32_t)slot, b, sizeof b) != GASM_GAMEPAD_BYTES) return false;
+    memcpy(&flags, b + GASM_GAMEPAD_OFF_FLAGS, 4);
+    if (!(flags & GASM_GAMEPAD_CONNECTED)) return false;
+    memcpy(buttons, b + GASM_GAMEPAD_OFF_BUTTONS, 4 * GASM_GAMEPAD_BUTTONS);
+    memcpy(axes, b + GASM_GAMEPAD_OFF_AXES, 4 * GASM_GAMEPAD_AXES);
+    if (name && cap) {
+        int32_t n = gasm_gamepad_name((uint32_t)slot, name, (uint32_t)cap - 1);
+        name[n > 0 && (size_t)n < cap ? n : 0] = 0;
+    }
+    return true;
+}
+
 bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel)
 {
     uint8_t p[GASM_POINTER_BYTES];

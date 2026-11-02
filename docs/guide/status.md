@@ -29,8 +29,9 @@ Without parameters, `gasm-run opennfspu.wasm --asset-dir <game folder>` (or `--a
   the original reads them (by default the arrow keys, space the handbrake, A and Z the gears, R back on the road, C the
   camera, B looking back, Escape the pause menu, F1 the pause menu hidden, F11 the view distance, F5 the HUD, F6 the mirror, F7 the map, Tab
   its modes, keypad minus and plus its zoom, F8 the trays, F9 the next song, F10 the effects off and on, F12 the horizon; a
-  short and a long press of the same key can be two commands). Joysticks and pads don't drive yet (their bindings wait for
-  the controller setup). `cam=<mode>` picks the camera (0 hood, 1 driver's seat, 2-4 near chase, 5-7 far chase, 8, 9, 13), `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid). A race starts with the track's fly-in camera before the countdown, as the original; `start=<tick>` starts it later with the camera straight in its mode (the hash tests use 384).
+  short and a long press of the same key can be two commands). Pads are the original's joysticks (DirectInput's devices: the keyboard 0, the
+  mouse 1, the pads from 2), bound in fe.txt as `button,2,<n>`, `analog,2,<axis>,<low>,<high>` or `pov,2,<direction>`;
+  the controller setup screens that bind them are still to come. `cam=<mode>` picks the camera (0 hood, 1 driver's seat, 2-4 near chase, 5-7 far chase, 8, 9, 13), `opponents=<n>` adds AI opponents, `follow=<n>` puts the camera behind car n, `laps=<n>` sets the laps, `aidrive=1` lets the AI drive your car, `finish=<tick>` finishes you there (a test aid). A race starts with the track's fly-in camera before the countdown, as the original; `start=<tick>` starts it later with the camera straight in its mode (the hash tests use 384).
 
 Nothing on this page is a promise of dates. Progress is tracked in the
 [repository](https://github.com/emdzej/opennfspu).
