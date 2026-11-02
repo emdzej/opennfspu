@@ -138,6 +138,8 @@ int FEData_QuickFix(void);
 /* The advanced repair (FEPartsRepairCBL): its screen made (0x518850), and its callbacks fixpart,
    replacepart, clearlist, removeitem, acceptlist: -1 not one, 0 done, else a message's string id. */
 void FEData_RepairOpen(void);
+/* CARCOMPARE.<car> (0x50d340 ..): the car the car compare compares; true when it was one. */
+bool FEData_CompareCallback(const char *cb);
 int FEData_RepairCallback(const char *cb);
 void FEData_QuickFixClear(void);
 /* The owned car an accessor's position is (its index in the save), -1 when it isn't one. */

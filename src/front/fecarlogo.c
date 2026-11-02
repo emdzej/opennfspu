@@ -1,5 +1,6 @@
 /* The car logo: see fecarlogo.h. */
 #include "front/fecarlogo.h"
+#include "exe.h"
 #include "app.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
@@ -112,7 +113,8 @@ static const uint8_t *logo_car(const FertControl *c)
     const char *acc = data_str(c, "accessor");
     FEAccessor *a = acc && *acc ? FEAccess_Find(acc) : NULL;
     if (a) return FEAccess_CarRecord(a);
-    /* CarCompare1: the comparison's car (0x50df80, the car compare screen: pending) */
+    /* CarCompare1: the compared car (0x50df80's accessor's) */
+    if (!strcmp(src, exe_str(0x5d7c28))) return FEAccess_CarRecord(FEAccess_Find("CarCompare.Data"));
     return NULL;
 }
 

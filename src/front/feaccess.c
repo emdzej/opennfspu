@@ -27,7 +27,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST, ACC_CMPCAR, ACC_CMPDATA } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -58,6 +58,8 @@ static int s_avail[32], s_navail;     /* 0x691d04: the ones to choose (0x4fb190)
 static int s_looped[32], s_nlooped;   /* 0x691d08: those of them looped (+0x6e 1) */
 static int s_fe_gametype;             /* Game.GameType as the front end set it */
 static int s_cars[160], s_ncars;      /* (0x6919f0) */
+static int s_cmp[160], s_ncmp;        /* 0x6919f4: the car compare's cars (GenericCar2.Car) */
+static const char *s_compare;         /* 0x699fe0: the accessor whose car is compared ("" GenericCar.Car's) */
 static void pick_opponent_cars(void);
 static char s_nameinput[9];           /* UserList.NameInput's string (+0x14, 8 characters) */
 static int s_dealer[160], s_ndealer;  /* 0x691a00: the cars the dealer sells this year */
@@ -907,6 +909,10 @@ bool FEAccess_CarDamage(const FEAccessor *a, float out[10])
 bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4])
 {
     if (!a) return false;
+    if (a->kind == ACC_CMPDATA) {   /* (the compared accessor's) */
+        if (!s_compare || !*s_compare) return false;
+        return FEAccess_CarColours(FEAccess_Find(s_compare), out);
+    }
     refresh(a);
     if (!a->count) return false;
     Save *sv = FESave_Current();
@@ -982,12 +988,78 @@ static void dealer_list(size_t n)
             }
 }
 
+/* The car compare's list (FE_LoadCarLists 0x4f34c0's 0x6919f4): the racers (+0x1f4 0) with a model, in the
+   career those of a first year (+0x1f8) up to the career's, a model or not; sorted as the others
+   (0x4f05c0). */
+static void cmp_list(void)
+{
+    s_ncmp = 0;
+    for (size_t i = 0; s_car && (i + 1) * CAR_SIZE <= s_car_size && s_ncmp < 160; i++) {
+        const uint8_t *r = s_car + CAR_SIZE * i;
+        if (rec16(r, 0x1f4) != 0) continue;
+        bool in = false;
+        if (s_fe_gametype == 4) in = rec16(r, 0x1f8) <= career_year();
+        else for (int k = 0; k < s_ncars && !in; k++) in = s_cars[k] == (int)i;
+        if (in) s_cmp[s_ncmp++] = (int)i;
+    }
+    for (int i = 0; i < s_ncmp; i++)
+        for (int j = i + 1; j < s_ncmp; j++)
+            if (car_before(s_car + CAR_SIZE * s_cmp[j], s_car + CAR_SIZE * s_cmp[i])) {
+                int t = s_cmp[i];
+                s_cmp[i] = s_cmp[j];
+                s_cmp[j] = t;
+            }
+    FEAccessor *a = FEAccess_Find("GenericCar2.Car");
+    if (a) {
+        a->count = s_ncmp;
+        if (a->pos >= a->count) a->pos = 0;
+    }
+}
+
+/* The CARCOMPARE.<car> callbacks (0x50d340, 0x50d280, 0x50d2c0, 0x50d300, 0x50d380): the car compared,
+   the accessor's (0x50df70); the screen is the button's destination. SHOWCASE.MERGEDCAR sets it too
+   (0x50d230). */
+bool FEData_CompareCallback(const char *cb)
+{
+    static const struct { const char *cb, *acc; } k[5] = {
+        {"CARCOMPARE.DEALERCAR", "DealerCar.Car"}, {"CARCOMPARE.GENERICCAR", ""},
+        {"CARCOMPARE.OWNEDCAR", "OwnedCars.Car"},  {"CARCOMPARE.USEDCAR", "UsedCar.Car"},
+        {"CARCOMPARE.MERGEDCAR", "zMergedList.Car"}};
+    for (int i = 0; i < 5; i++)
+        if (!strcmp(cb, k[i].cb)) {
+            s_compare = k[i].acc;
+            return true;
+        }
+    if (!strcmp(cb, "SHOWCASE.MERGEDCAR")) s_compare = "zMergedList.Car";
+    return false;
+}
+
+/* The compared car's record (CarCompare.Data's slots 27 .. 35 pass to its accessor's) and car 2's. */
+static const uint8_t *compare_rec(int car)
+{
+    if (car == 2) return FEAccess_CarRecord(FEAccess_Find("GenericCar2.Car"));
+    if (!s_compare) return NULL;
+    return *s_compare ? FEAccess_CarRecord(FEAccess_Find(s_compare)) : FEData_GenericCar();
+}
+
+/* CarCompare.Data(<stat><CarCompareCar1 | CarCompareCar2>): the car's stat 0 .. 4 (+0x324 .. +0x32c:
+   acceleration, top speed, braking, handling, overall), -1 for another argument. */
+static int compare_stat(const char *arg)
+{
+    if (!arg || arg[0] < '0' || arg[0] > '9') return -1;
+    int n = arg[0] - '0', car = !strcmp(arg + 1, exe_str(0x5d878c)) ? 1 : !strcmp(arg + 1, exe_str(0x5d877c)) ? 2 : 0;
+    if (!car || n > 4) return -1;
+    const uint8_t *r = compare_rec(car);
+    return r ? rec16(r, 0x324 + 2 * n) : -1;
+}
+
 void FEData_RefreshCars(void)
 {
     /* FE_LoadCarLists 0x4f34c0 again: the dealer's and the market's cars back to their first, the track
        lists, the car lists by the game type and the career's year (the port's generic cars don't depend
        on them; the original's all-cars flag 0x691a04, CHEATALLCARS 0x50d430, no layout names) */
     dealer_list(s_car_size);
+    cmp_list();
     FEAccessor *d = FEAccess_Find("DealerCar.Car"), *u = FEAccess_Find("UsedCar.Car");
     if (d) d->count = s_ndealer, d->pos = 0;
     if (u) u->pos = 0;
@@ -1804,6 +1876,9 @@ void FEData_Init(void)
     pick_opponent_cars();
     dealer_list(n);
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
+    add("GenericCar2.Car", ACC_CMPCAR, 0, 0, 0);   /* (0x4f2560 on 0x4f1d40's list) */
+    add("CarCompare.Data", ACC_CMPDATA, 1, 0, 0);   /* FECarCompareDataAccessor 0x50df90 */
+    cmp_list();
     /* The settings screen's (FEdaCar_v0's last): its car (FECarSettingsCarAccessor 0x4b83c0, vtable
        0x5b4ce0: each call handed to 0x4b84c0's car), the transmission (FEListAccessor of 0x5dab54, put at
        1: automatic) and ABS, traction control and the roof (of 0x5daa18, 0x5daa04, 0x5da9e8; the race car
@@ -2161,6 +2236,11 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_DEALER:
         snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x34);
         return b;
+    case ACC_CMPCAR:
+        snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_cmp[a->pos] + 0x34);
+        return b;
+    case ACC_CMPDATA:
+        return "";
     case ACC_MERGED: {
         const uint8_t *r = FEAccess_CarRecord(a);
         snprintf(b, sizeof b, "%s", r ? (const char *)r + 0x34 : "");
@@ -2393,6 +2473,12 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         if (!strcmp(arg, "OVERALLDAMAGECOST")) return FE_MoneyText(total);
         if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
     }
+    if (a->kind == ACC_CMPDATA) {   /* (_v5 0x50e050: "%02d" 0x5dc4d0, else "") */
+        int v = compare_stat(arg);
+        if (v < 0) return "";
+        snprintf(b, sizeof b, "%02d", v);
+        return b;
+    }
     if (a->kind == ACC_REPAIRLIST && arg) {   /* (_v5 0x516de0: TOTAL "%d", else "NOT FOUND" 0x5d73bc) */
         if (strcmp(arg, exe_str(0x5dcdfc))) return exe_str(0x5d73bc);
         snprintf(b, sizeof b, "%d", repair_total());
@@ -2562,6 +2648,10 @@ int FEAccess_Percent(const FEAccessor *a, const char *arg)
         }
         return 0;
     }
+    if (a->kind == ACC_CMPDATA) {   /* (0x4ca270: the stat itself) */
+        int v = compare_stat(arg);
+        return v < 0 ? 0 : v;
+    }
     return a->count ? a->pos * 100 / a->count : 0;   /* (FEGouraudIndicatorBar's 0x4ca270 without one) */
 }
 
@@ -2576,6 +2666,8 @@ const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
         return s_car + CAR_SIZE * s_cars[a->pos - a->owned];
     }
     if (a->kind == ACC_DEALER) return s_car + CAR_SIZE * s_dealer[a->pos];
+    if (a->kind == ACC_CMPCAR) return s_car + CAR_SIZE * s_cmp[a->pos];
+    if (a->kind == ACC_CMPDATA) return compare_rec(1);
     if (a->kind == ACC_OWNED) {
         const SaveCar *c = acc_car(a);
         return c ? c->rec + 4 : NULL;
@@ -2598,7 +2690,8 @@ const char *FEAccess_CarFile(const FEAccessor *a)
     if (!a) return NULL;
     refresh(a);
     if (!a->count) return NULL;
-    if (a->kind == ACC_MERGED || a->kind == ACC_FDCAR || a->kind == ACC_FDPRIZE) {
+    if (a->kind == ACC_CMPDATA && s_compare && *s_compare) return FEAccess_CarFile(FEAccess_Find(s_compare));
+    if (a->kind == ACC_MERGED || a->kind == ACC_FDCAR || a->kind == ACC_FDPRIZE || a->kind == ACC_CMPCAR || a->kind == ACC_CMPDATA) {
         const uint8_t *r = FEAccess_CarRecord(a);
         return r ? (const char *)r + 0x7f : NULL;
     }

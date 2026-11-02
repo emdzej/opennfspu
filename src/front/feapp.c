@@ -794,6 +794,7 @@ static void callback(const char *cb)
 {
     if (player_callback(cb)) return;
     if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE") && FEChronicle_Callback(cb)) return;
+    if (FEData_CompareCallback(cb)) return;   /* (and SHOWCASE.MERGEDCAR's compared car) */
     if (FEShowcase_Callback(cb)) return;   /* (the base list's SHOWCASE.<car> functors) */
     if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "IDS_ADVREPAIRCBL")) {
         int m = FEData_RepairCallback(cb);
@@ -2418,6 +2419,42 @@ static bool factory_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* The gouraud bar (0x521530) from..to per cent of w: up to 50 c0 to c50, past it c50 to c100 (without
+   c100: c0, their half-way mix, c50), each half's end colour by how far it reaches; going left the first
+   half's start colour by how far it starts in. Its drop shadow (0x520780) at 3, 4, going left from its
+   right end back, at -4, 4. */
+static void gouraud_bar(int from, int to, float x, float y, float w, float h, uint32_t c0, uint32_t c50,
+                        uint32_t c100, bool shadow, bool left)
+{
+    if (to < from) return;
+    float wi = (float)(int)w, half = wi * 0.5f;
+    uint32_t A = c0, B = c100 ? c50 : mix(c0, c50, 0x80 / 255.0f), C = c100 ? c100 : c50;
+    float sx = (float)from * wi * 0.01f + x;
+    float s1 = ((float)(to < 50 ? to : 50) - (float)from) * wi * 0.01f;
+    s1 = s1 < 0 ? 0 : s1 > half ? half : s1;
+    float s2 = ((float)to - (float)(from > 50 ? from : 50)) * wi * 0.01f;
+    s2 = s2 < 0 ? 0 : s2 > half ? half : s2;
+    int t1 = (int)(s1 * 255.0f / half), t2 = (int)(s2 * 255.0f / half);
+    uint32_t e = C;
+    if (left) {
+        A = mix(A, B, (float)(int)(255.0f - s1 * 255.0f / half) / 255.0f);
+        if (from < 1) B = mix(B, C, (float)(int)(255.0f - s2 * 255.0f / half) / 255.0f);
+        else e = mix(B, C, (float)t2 / 255.0f);
+    } else {
+        if (from < 1) B = mix(A, B, (float)t1 / 255.0f);
+        else A = mix(A, B, (float)(int)(255.0f - s1 * 255.0f / half) / 255.0f);
+        e = mix(B, C, (float)t2 / 255.0f);
+    }
+    FE2D_DepthStep();
+    if (s1 > 0) FE2D_Gouraud(sx, y, s1, h, A, B, A, B);
+    if (s2 > 0) FE2D_Gouraud(s1 + sx, y, s2, h, B, e, B, e);
+    float tw = s1 + s2;
+    if (tw > 4.0f && shadow) {
+        if (left) FEStyle_DropShadow(tw + sx, y, -tw, h, 0xff, -4, 4);
+        else FEStyle_DropShadow(sx, y, tw, h, 0xff, 3, 4);
+    }
+}
+
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (!strcmp(c->id, "NFS5.CheckBox")) {
@@ -2470,29 +2507,31 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     }
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
     if (c->feflags & 0x20) return true;
+    /* FEGouraudIndicatorBar_v15 0x4ca170: its value (0x4ca270: the accessor's, or without one
+       data.othersource for the car compare's stats), drawn 0 .. it, or going left 100 less it .. 100 */
     const char *path = data_str(c, "accessor");
-    FEAccessor *a = FEAccess_Find(path);
-    if (!a) return true;
-    char arg[32] = "";
-    const char *pp = path ? strchr(path, '(') : NULL;
-    if (pp) {
-        snprintf(arg, sizeof arg, "%s", pp + 1);
-        char *e = strchr(arg, ')');
-        if (e) *e = 0;
+    FEAccessor *a = path && *path ? FEAccess_Find(path) : NULL;
+    int pct;
+    if (a) {
+        char arg[32] = "";
+        const char *pp = strchr(path, '(');
+        if (pp) {
+            snprintf(arg, sizeof arg, "%s", pp + 1);
+            char *e = strchr(arg, ')');
+            if (e) *e = 0;
+        }
+        pct = FEAccess_Percent(a, arg);
+    } else {
+        const char *src = data_str(c, "othersource");
+        if (!src || !*src) return true;
+        pct = FEAccess_Percent(FEAccess_Find("CarCompare.Data"), src);
     }
-    float pct = (float)FEAccess_Percent(a, arg);
+    bool left = data_int_of(c, "goingleft") != 0;
     int32_t r[4];
     control_rect(c, r);
-    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
-    uint32_t c0 = data_colour(c, "c0"), c50 = data_colour(c, "c50"), c100 = data_colour(c, "c100");
-    if (c50 == 0) c50 = c100 ? mix(c0, c100, 0.5f) : c0;
-    else if (!c100) c100 = c50;
-    float half = w * 0.5f, l1 = pct < 50 ? pct * w / 100.0f : half, l2 = pct > 50 ? (pct - 50) * w / 100.0f : 0;
-    uint32_t e1 = mix(c0, c50, l1 / half), e2 = mix(c50, c100, l2 / half);
-    FE2D_DepthStep();
-    if (l1 > 0) FE2D_Gouraud(x, y, l1, h, c0, e1, c0, e1);
-    if (l2 > 0) FE2D_Gouraud(x + l1, y, l2, h, c50, e2, c50, e2);
-    if (l1 + l2 > 4.0f && data_int_of(c, "hasshadow")) FEStyle_DropShadow(x, y, l1 + l2, h, 0xff, 4, 4);
+    gouraud_bar(left ? 100 - pct : 0, left ? 100 : pct, (float)(r[0] + ox), (float)(r[1] + oy), (float)(r[2] - r[0]),
+                (float)(r[3] - r[1]), data_colour(c, "c0"), data_colour(c, "c50"), data_colour(c, "c100"),
+                data_int_of(c, "hasshadow") != 0, left);
     return true;
 }
 
