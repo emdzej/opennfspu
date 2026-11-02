@@ -852,7 +852,9 @@ static struct { int32_t mode; const uint8_t *preset; } s_fx[32];
 static void fx_apply(uint32_t bits)
 {
     int mode = s_fx[bits & 0x1f].mode;
-    if (bits & 0x80) PENDING_NOTE(0x58e530, "the hardware (DirectSound 3D) reverb");
+    /* 0x80: the hardware's, EAX environments through DirectSound 3D's property set (0x58e530), which only
+       a card answering EAX's property set has (0x6ad6b1, probed at 0x58e830): the port mixes in software,
+       as on a card without EAX, where 0x58e530 returns -1 having done nothing. */
     if (bits & 0x20) {
         if (mode == 0) SndMix_ReverbOff();
         else SndMix_ReverbSet(s_rate, mode == 1 && s_fx[0].preset ? s_fx[0].preset : exe_data(0x5e25b0, 0x30));
