@@ -185,7 +185,8 @@ void AI_LoadData(void)
     traffic_config();
     for (int i = 0; i < g_ncars; i++) AI_MoodsReset(g_cars[i]);   /* 0x40ab60 */
     load_personalities();
-    PENDING_NOTE(0x4032b0, "the cops' objects' reset (0x5e66bc ..)");
+    /* (0x4032b0: the AI data records (0x5e66bc ..) loaded, slot 1: the only one, the racing line
+       AIDataRecord_LineSpeed_t 0x4033d0, is AI_Load's) */
     memset(s_has_squares, 0, sizeof s_has_squares);
     for (int i = 0; i < g_ncars; i++) {
         Car *c = g_cars[i];

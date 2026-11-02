@@ -175,7 +175,7 @@ void CarSim_Init(Car *c, int32_t id, float mass, float hx, float hy, float hz)
     c->b[0x7e] = 0;
     c->b[0x7d] = 0;
     c->b[0x7c] = 1;
-    PENDING_NOTE(0x531f60, "the car's start time (+0x74, 0x531f60)");
+    /* (+0x74: the car's critical section, 0x531f60; the port runs on one thread and needs none) */
     memset(c->b + 0x5c, 0, 0x18);         /* +0x5c .. +0x70 */
     memset(c->b + 0x330, 0, 0x18);        /* the position and velocity */
     *CAR_F(c, 0x35c) = 0;
