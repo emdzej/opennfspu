@@ -83,9 +83,32 @@ static void set_env(void)   /* the track viewer's light until the sky's is porte
    the place so that its centre comes out as the original's, and the cull flipped back around the draw.
    To fold into R3DCar_Draw and the front end's objects (fe3d.c's half turn) when the race's car draw
    (0x43f610) is ported. */
+/* A car's draw object (its renderer's +0xc object, vtable slot 2 R3DObject_Draw 0x4433c0): the entry
+   the queue puts into the opaque list draws the car at the lists' flush. */
+typedef struct { RDrawObject base; R3DCar *r; } CarDrawObject;
+static CarDrawObject s_cardraw[64];
+static RCamera *s_carcam;   /* (the view the cars were queued for) */
+
+static void car_entry_draw(RDrawObject *o, int index, const RListEntry *e)
+{
+    (void)index, (void)e;
+    CarDrawObject *d = (CarDrawObject *)o;
+    Render_SetCull(g_render);
+    R3DCar_Draw(d->r, &s_carcam->view->model);
+    Render_SetCull(g_render);
+}
+
+static const RDrawVtbl car_draw_vtbl = {NULL, NULL, car_entry_draw, NULL, NULL, NULL, NULL};
+
+/* 0x443540 (the view's +0x11b: alpha reference 10, then 0x442fd0 for each car): its render ticks; the
+   viewed car not in its own mirror (the camera's flag 0x10) and, unless the camera's flag 8 says so, the
+   car's sphere (+0x330, radius +0x3b4) in the view; then queued into the opaque list (0x466950) by its
+   squared distance to the eye, rounded, to be drawn there among the world's objects. */
 static void draw_cars(RCamera *c)
 {
-    for (int i = 0; i < g_ncars; i++) {
+    THRASH.fn.setstate(0x24, 10);
+    s_carcam = c;
+    for (int i = 0; i < g_ncars && i < 64; i++) {
         Car *car = g_cars[i];
         R3DCar *r = car ? car->p[CARP_R3D] : NULL;
         if (!r || !r->state) continue;
@@ -100,12 +123,20 @@ static void draw_cars(RCamera *c)
         CarLight_Update(&r->light, car);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
         r->lit = true;
         R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */
-        if (*CAR_I(car, CAR_INDEX) == g_camera_car && (g_racecam[0].flags2 & 0x10)) continue;   /* (0x442fd0: not in its own mirror) */
-        Render_SetCull(g_render);
-        R3DCar_Draw(r, &c->view->model);
-        Render_SetCull(g_render);
+        bool viewed = *CAR_I(car, CAR_INDEX) == g_camera_car, nocull = false;
+        if (viewed) {
+            if (g_racecam[0].flags2 & 0x10) continue;   /* (0x442fd0: not in its own mirror) */
+            nocull = (g_racecam[0].flags2 & 8) != 0;
+        }
+        if (!nocull && !EAGL_ViewSphereVisible(c->view, p, *CAR_F(car, 0x3b4))) continue;
+        PENDING_NOTE(0x439ec0, "R3DCar_v13: the car's test at its distance before it's queued");
+        const float *eye = c->frame.eye;
+        float dx = p[0] - eye[0], dy = p[1] - eye[1], dz = p[2] - eye[2];
+        s_cardraw[i] = (CarDrawObject){{&car_draw_vtbl}, r};
+        RListEntry q = {NULL, &s_cardraw[i].base, 0, 0, (uint32_t)(int64_t)rintf(dx * dx + dy * dy + dz * dz)};
+        RLists_Insert(RLIST_OPAQUE, &q);   /* 0x466950 */
         /* R3DCar_v7's particles: not the viewed car's in the in-car and hood views. */
-        if (*CAR_I(car, CAR_INDEX) != g_camera_car || (g_racecam[0].mode != 0 && g_racecam[0].mode != 1))
+        if (!viewed || (g_racecam[0].mode != 0 && g_racecam[0].mode != 1))
             CarParticles_Update(r->particles, true);   /* 0x43eeb0 */
     }
 }

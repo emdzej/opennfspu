@@ -257,13 +257,10 @@ void Render_PendingWorld(RCamera *c)
     Sprite_CameraGround();   /* 0x451f70 */
     if (c->v12c != 0) Sky_DrawBefore();   /* (and 0x657db4, 0x619799 clear: replay / front-end flags) */
     if (c->flags[2]) world_pass(c);                            /* +0x11a */
-    if (c->flags[3]) PENDING_NOTE(0x534000, "THRASH_setstate_glue (+0x11b)");
+    if (c->flags[3] && g_render_cars) g_render_cars(c);       /* +0x11b: the cars queued (0x443540) */
     rs_set39(g_render->device->rs, 1);
     rs_set28(g_render->device->rs, 3);
     RLists_Flush();                                            /* 0x4671d0 */
-    /* The cars: the original's are entries of the render lists (R3DObject_Draw 0x4433c0, flushed above);
-       the game's car list draws them through the hook until their entries are ported. */
-    if (g_render_cars) g_render_cars(c);
     Particles_Draw();                                          /* 0x455130 */
     CarParticles_DrawAll();                                    /* 0x43f610 */
     if (c->v12c == 2) Sky_DrawAfter();
