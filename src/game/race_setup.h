@@ -18,6 +18,9 @@ bool RaceSetup_Opponents(int n);
    in one random colour, named "Traffic". */
 bool RaceSetup_Traffic(int n, const char *track);
 extern int g_race_ntraffic;
+/* The career race's own traffic cars when any is set (0x4ec590 with the tournament's +0x380): the first
+   n slots that hold a car id (n at most 7), all four colours 0xffff0000. */
+extern int16_t g_race_traffic_slots[7];
 /* The front end's cheats (0x65b940, the bits FE_Cheat reads) the descriptions follow (0x4ee430). */
 extern uint32_t g_race_cheats;
 /* The human car's colours the front end chose (the description's +0x218 order), when set. */

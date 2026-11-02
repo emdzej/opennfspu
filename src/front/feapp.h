@@ -58,8 +58,9 @@ int FEApp_Parts(int32_t ids[20]);
 bool FEApp_Setup(float set[17]);
 int FEApp_Laps(void);
 int FEApp_Opponents(void);
-/* The race's traffic cars (0 none .. 3 heavy). */
-int FEApp_Traffic(void);
+/* The race's traffic count (0x4fb630's fifth) and the career race's own traffic cars (0 slots: the
+   track's models). */
+int FEApp_Traffic(int16_t slots[7]);
 /* The race's kind (RACE_TYPE, 0x6573ec) for the mode chosen. */
 int FEApp_RaceType(void);
 /* The knockout's grid (its racers' personalities, the starting places, start[0] the player's); -1 for none. */

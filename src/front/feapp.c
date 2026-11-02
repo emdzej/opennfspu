@@ -42,6 +42,7 @@ static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu,
 static FEResult s_result;
 static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents, s_traffic;
+static int16_t s_traffic_slots[7];   /* the career race's own traffic cars (0x4ec590's +0x382) */
 static char s_car[64] = "964";
 static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
@@ -561,7 +562,11 @@ const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 int FEApp_Opponents(void) { return s_opponents; }
-int FEApp_Traffic(void) { return s_traffic; }
+int FEApp_Traffic(int16_t slots[7])
+{
+    memcpy(slots, s_traffic_slots, sizeof s_traffic_slots);
+    return s_traffic;
+}
 
 /* The race's kind for the game type (0x4ec... option 0x10 RACE_TYPE): a quick race 0 (1 with the
    flag 5 of 0x65b940: pending), a quick knockout 3 (the laps knock the last car out), the knockout and
@@ -832,12 +837,14 @@ static void callback(const char *cb)
         s_opponents = 0;
         s_ngrid = -1;
         s_testdrive = true;
-        s_traffic = 0;
+        s_traffic = 5;   /* (0x4fb630 for the test drives, types 6 .. 8) */
+        memset(s_traffic_slots, 0, sizeof s_traffic_slots);
         s_testdrive_type = cb[9] == 'U' ? 7 : cb[9] == 'N' ? 6 : 8;
         s_result = FE_PLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
         s_testdrive = false;
         s_traffic = 0;
+        memset(s_traffic_slots, 0, sizeof s_traffic_slots);
         s_ngrid = -1;
         s_nopp = -1;
         s_factory_race = false;
@@ -869,6 +876,7 @@ static void callback(const char *cb)
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", c);
             s_havecol = FEAccess_CarColours(FEAccess_Find("OwnedCars.Car"), s_colours);
+            s_traffic = FEData_TourTraffic(s_traffic_slots);
             PENDING_NOTE(0x4d2e70, "the career race's laps and opponents from its tournament (the port: seven)");
         } else if (s_gametype == 2) {
             /* the knockout (0x4d5200 -> 0x4ecc60, 0x4ddc00): started with its first race, its slot's
@@ -884,7 +892,7 @@ static void callback(const char *cb)
             s_owned_race = FEData_OwnedIndex("zMergedList.Car");
             s_laps = laps;
             s_opponents = s_ngrid;
-            PENDING_NOTE(0x4fb630, "the knockout slot's traffic (Track<n>.Traffic)");
+            s_traffic = FEData_KnockoutTraffic();
             s_testdrive = false;
             s_result = FE_PLAY;
             return;
@@ -897,7 +905,12 @@ static void callback(const char *cb)
             const SaveCar *fc = FEFactory_Car();
             const uint8_t *m = FEFactory_Mission();
             if (!t || !fc || !m) return;
-            PENDING_NOTE(0x4fb630, "the mission's reverse direction (+0x28 == 2), traffic (0x5db440[+0x54])");
+            PENDING_NOTE(0x4fb630, "the mission's reverse direction (+0x28 == 2)");
+            {
+                int16_t lvl;   /* (its traffic level +0x54: 0x5db440's count) */
+                memcpy(&lvl, m + 0x54, 2);
+                s_traffic = 0 <= lvl && lvl < 4 ? (int)exe_u32(0x5db440 + 4u * (uint32_t)lvl) : 0;
+            }
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", (const char *)fc->rec + 4 + 0x7f);
             s_havecol = FEAccess_CarColours(FEAccess_Find("FactoryDriver.Car"), s_colours);

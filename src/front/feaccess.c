@@ -568,6 +568,25 @@ int FEData_TourLaps(void)   /* (0x4fb630 for the career: the race's +0x3a2, 1 wh
     return laps ? laps : 1;
 }
 
+int FEData_TourTraffic(int16_t slots[7])
+{
+    /* (0x4fb630 for the career: without the record's own traffic (+0x380) the count by its traffic
+       level +0xe0 (0x5db430: none, light, medium, heavy), else its slots +0x382 that hold a car) */
+    memset(slots, 0, 7 * sizeof *slots);
+    const uint8_t *r = FEData_Tournament();
+    if (!r) return 0;
+    if (!r[0x380]) {
+        int lvl = rec16(r, 0xe0);
+        return 0 <= lvl && lvl < 4 ? (int)exe_u32(0x5db430 + 4u * (uint32_t)lvl) : 0;
+    }
+    int n = 0;
+    for (int i = 0; i < 7; i++) {
+        slots[i] = rec16(r, 0x382 + 2 * i);
+        if (slots[i]) n++;
+    }
+    return n;
+}
+
 const char *FEData_TourTrack(void)
 {
     const uint8_t *r = FEData_Tournament();
@@ -2603,6 +2622,16 @@ int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[
             start[++n] = ko_get(KO_PLACE + 4 * i) - 1;
         }
     return n;
+}
+
+int FEData_KnockoutTraffic(void)
+{
+    /* (0x4fb630 for the knockout: its race's Track<n>.Traffic, none before it is on, 0x4dd9b0) */
+    if (!FEData_KnockoutOn()) return 0;
+    char nm[32];
+    snprintf(nm, sizeof nm, "Track%d.Traffic", ko_get(KO_RACE) + 1);
+    FEAccessor *a = FEAccess_Find(nm);
+    return a ? FEAccess_Pos(a) : 0;
 }
 
 void FEData_KnockoutOpponent(int racer, RaceOpponent *o)

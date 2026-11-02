@@ -31,6 +31,7 @@ float g_race_setup[17];
 bool g_race_setup_set;
 int g_race_grid_pers[8], g_race_grid_start[9];
 bool g_race_grid_set;
+int16_t g_race_traffic_slots[7];
 
 RaceOpponent g_race_opp[8];
 bool g_race_opp_set;
@@ -254,9 +255,20 @@ bool RaceSetup_Traffic(int n, const char *track)
         memcpy(&kind, db + i + 0x1f4, 2);
         if (kind == 1) first = db + i;
     }
-    for (int i = 0; i < n; i++) {
+    /* The career race's own cars: its slots in turn up to n (at most seven), the empty ones skipped (the
+       original leaves their descriptions' places unwritten), red. */
+    bool own = false;
+    for (int i = 0; i < 7; i++) own |= g_race_traffic_slots[i] != 0;
+    int slot = 0, last = own ? (n < 7 ? n : 7) : n;
+    for (int i = 0; i < last; i++) {
         int16_t id;
-        memcpy(&id, tr + 0x7c + 2 * (i % 7), 2);
+        if (own) {
+            if (!g_race_traffic_slots[i]) continue;
+            id = g_race_traffic_slots[i];
+        } else {
+            memcpy(&id, tr + 0x7c + 2 * (slot % 7), 2);
+        }
+        slot++;
         const uint8_t *rec = first;   /* 0x4f3a80: the first when none has the id */
         for (size_t k = 0; k + FECAR_SIZE <= cn; k += FECAR_SIZE) {
             int16_t kind, rid;
@@ -268,9 +280,13 @@ bool RaceSetup_Traffic(int n, const char *track)
             }
         }
         if (!rec) break;
-        /* One colour at random for all four (0x537db0 four times: its low bytes, the first the top). */
-        uint32_t a = REAL_rand(), r = REAL_rand(), g = REAL_rand(), b = REAL_rand();
-        uint32_t col = (b & 0xff) | (g & 0xff) << 8 | (r & 0xff) << 16 | a << 24;
+        /* One colour at random for all four (0x537db0 four times: its low bytes, the first the top); the
+           career's own are 0xffff0000. */
+        uint32_t col = 0xffff0000u;
+        if (!own) {
+            uint32_t a = REAL_rand(), r = REAL_rand(), g = REAL_rand(), b = REAL_rand();
+            col = (b & 0xff) | (g & 0xff) << 8 | (r & 0xff) << 16 | a << 24;
+        }
         uint8_t *d = g_cardesc[g_nracecars];
         memcpy(d, g_cardesc[0], CARDESC_SIZE);
         const char *name = exe_str(exe_u32(0x5da6c0));   /* "Traffic" */

@@ -74,6 +74,9 @@ void FEData_TourResult(int race, const int *places, const int *times, const bool
 void FEData_TourEnd(void);
 /* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
 int FEData_TourLaps(void);
+/* The career race's traffic count (0x4fb630); slots[] its own traffic cars' ids (nfs5.car kind 1) when
+   the tournament has its own (all 0 otherwise: the track's). */
+int FEData_TourTraffic(int16_t slots[7]);
 #include "front/fesave.h"
 #include "game/race_setup.h"
 /* An owned car's value in a year (0x4f83f0). */
@@ -158,6 +161,8 @@ void FEData_KnockoutStart(void);
 int FEData_KnockoutRace(char *track, int cap, int *laps, int pers[8], int start[8]);
 /* Knockout racer i's (pers[] above) personality and car (0x4ddc00: OpponentCar.Car's car i - 1). */
 void FEData_KnockoutOpponent(int racer, RaceOpponent *o);
+/* The knockout race's traffic count (its Track<n>.Traffic, 0x4fb630). */
+int FEData_KnockoutTraffic(void);
 /* The other race kinds' n opponents (0x4eb230): OpponentCar.Car's cars picked again (0x4f45c0), their
    personalities picked of Game.Difficutly's difficulty (0x4e2940); their count. */
 int FEData_RaceOpponents(int n, RaceOpponent out[8]);

@@ -46,12 +46,6 @@ static float u2f(uint32_t u)
     memcpy(&f, &u, 4);
     return f;
 }
-static uint32_t f2u(float f)
-{
-    uint32_t u;
-    memcpy(&u, &f, 4);
-    return u;
-}
 
 /* The globals the functions write: the width, the zones' pairs and their factors. */
 static uint32_t *global(uint32_t va)
