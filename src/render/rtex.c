@@ -2,6 +2,7 @@
 #include "render/rtex.h"
 #include "exe.h"
 #include "real/depthconv.h"
+#include "render/render.h"
 #include "real/dtex.h"
 #include "real/file.h"
 #include "real/mem.h"
@@ -55,8 +56,11 @@ int RTex_layoutfor(const RTexMachine *m)
 
 void RTex_detectquality(const RTexMachine *m)
 {
-    RTex_level = detected_level = RTex_levelfor(m);
-    if (RTex_level == 3 && m->depth < 0x20) RTex_level = 2;
+    /* the display's depth is the open mode's (0x61978c), not the machine's */
+    RTexMachine at = *m;
+    at.depth = g_display.bpp;
+    RTex_level = detected_level = RTex_levelfor(&at);
+    if (RTex_level == 3 && at.depth < 0x20) RTex_level = 2;
 }
 
 /* ---- DTEX preference lists the game sets per class (exe 0x5ce48c..0x5ce54c, 0-terminated) ---- */

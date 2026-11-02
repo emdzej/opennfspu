@@ -37,11 +37,12 @@ typedef struct { int32_t cpuhz; int64_t memory; uint32_t vram; int32_t depth; } 
 /* The level for a machine: 0..3. 0x44e240 */
 int RTex_levelfor(const RTexMachine *m);
 /* The port's machine (the original measures it): one above every threshold, 1 GHz, 256 MB, 64 MB of
-   video memory, a 32-bit display. */
+   video memory; its depth (32) is replaced by the display's when the quality is chosen. */
 extern const RTexMachine RTex_machine;
 /* The HUD's screen layout for a machine (0x44e3d0): 0 a fast one, 3 a slow one, else 2. */
 int RTex_layoutfor(const RTexMachine *m);
-/* Sets RTex_level from a machine (3 only with a display deeper than 16 bits). RTex_DetectQuality 0x44de80 */
+/* Sets RTex_level from a machine and the open display's depth (3 only with a 32-bit display, else 2).
+   RTex_DetectQuality 0x44de80 */
 void RTex_detectquality(const RTexMachine *m);
 
 /* The result of RTex_convertshape (0x1c bytes, on the stack in the original). */

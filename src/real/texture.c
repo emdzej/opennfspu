@@ -184,9 +184,12 @@ Texture *Texture_fromshape(Texture *t, const uint8_t *shape, TexManager *m, uint
     t->flags = flags;
     t->manager = m;
     t->dtex = DTEX_new(t->width, t->height, t->format, t->clutformat, flags, t->name);
-    /* The conversion reads every mip level the flags ask for from after the pixels. A shape without them
-       (a car page's window: one level) has other memory there in the original, levels the pages never
-       sample (their mipmapping is off); the port reads zeros there instead of past the block. */
+    /* The conversion reads every mip level the flags ask for from after the pixels. The game's shapes
+       have none of their own (its .fsh images, the cars' pages), so the original's levels are whatever
+       memory follows: the next shapes or bytes of other heap blocks, sampled wherever the class turns
+       mipmapping on (class 0 from texture quality 2: the cars' pages and the garage). The port makes
+       the missing levels from the one above them as the library's own halving does (every other pixel
+       and row, DTEX_halve 0x555530); 4-bit ones stay zero. */
     uint8_t *pad = NULL;
     int want = (int)(flags & 0xff), own = shape[15] >> 4;
     if (want > own) {
@@ -199,6 +202,20 @@ Texture *Texture_fromshape(Texture *t, const uint8_t *shape, TexManager *m, uint
             have += (size_t)bits * (size_t)w * (size_t)h / 8;
         pad = calloc(1, total > have ? total : have);
         if (pad) memcpy(pad, shape, have);
+        if (pad && bits >= 8) {
+            size_t bp = (size_t)bits / 8, at = 0x10;
+            int w = t->width, h = t->height;
+            for (int l = 0; l < want; l++) {
+                int nw = w > 1 ? w / 2 : 1, nh = h > 1 ? h / 2 : 1;
+                size_t next = at + (size_t)w * (size_t)h * bp;
+                if (l >= own)
+                    for (int y = 0; y < nh; y++)
+                        for (int x = 0; x < nw; x++)
+                            memcpy(pad + next + ((size_t)y * (size_t)nw + (size_t)x) * bp,
+                                   pad + at + ((size_t)(2 * y) * (size_t)w + (size_t)(2 * x)) * bp, bp);
+                at = next, w = nw, h = nh;
+            }
+        }
     }
     DTEX_load(t->dtex, (pad ? pad : shape) + 0x10, clut ? clut + 0x10 : NULL);
     free(pad);
