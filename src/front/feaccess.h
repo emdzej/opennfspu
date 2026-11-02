@@ -48,6 +48,11 @@ bool FEData_TrackRecords(const char *track, int32_t race[8], int32_t lap[8], cha
 void FEData_TrackRecordEnter(const char *track, const char *name, const char *car, int32_t t);
 /* zMergedList.Car's car one of the player's (0x4f4420: its place before the owned cars' count). */
 bool FEData_MergedOwned(void);
+/* The settings screen's car record (CARSETTINGS.CAR, 0x4b84c0 by the game type), NULL none. */
+const uint8_t *FEData_SettingsCar(void);
+/* A car setting's value for the race car description: Car.Transmission's, Car.ABS's, Car.Traction's,
+   Car.Roof's place, the last three 0 on a car without them. */
+int FEData_CarSetting(const char *name);
 /* GenericCar.Car's nfs5.car record (the merged list's car past the owned ones), NULL on an owned car. */
 const uint8_t *FEData_GenericCar(void);
 /* The track a game type races a circuit (0x4fb4f0: its nfs5.trk record's +0x6e 1): quick race Track1,

@@ -638,6 +638,16 @@ int FEApp_RaceType(void)
     }
 }
 
+int FEApp_Damage(void)
+{
+    /* 0x4eab10's DAMAGE (0x20) by the race type: Game.Damage's for 0 and 1, and for 2 in game type 2;
+       else on (1, or for some types the stream's address: not 0 either) */
+    int t = FEApp_RaceType();
+    FEAccessor *d = FEAccess_Find("Game.Damage");
+    if (t == 0 || t == 1 || (t == 2 && s_gametype == 2)) return d ? FEAccess_Pos(d) : 1;
+    return 1;
+}
+
 static int play_mode(void)   /* (0x4d5df0: data.canplaygame: 1 a race of the choices, 2 the career's) */
 {
     FertControl *w = FEApp_Top();
@@ -2683,8 +2693,8 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     if (base_cbl(cbl)) {
         /* FECallBackList_v1 0x50c2f0 (the base list's; its derived ones' run it first): the colour box for
            a new car, the garage for an owned one; the replays' buttons with replays; damage but in the career and Factory Driver; the laps on a circuit. (Its dialogs,
-           +0x270 / +0x274: the delete replay's in FEApp_Frame; the car settings car's ABS, traction and roof (CARSETTINGS.CAR, +0x27c: not
-           ported) and the multiplayer's collision pend.) */
+           +0x270 / +0x274: the delete replay's in FEApp_Frame; the settings car's ABS, traction control and roof where the car has them (CARSETTINGS.CAR, +0x27c:
+           its +0x2e2, +0x2e3, +0x1bf); the multiplayer's collision pends.) */
         bool owned = FEData_MergedOwned();
         hide(w, "ID_MERGEDLISTCOLOR", owned);
         hide(w, "ID_MERGEDLISTCARSETUP", !owned);
@@ -2694,6 +2704,12 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
         enable(w, "ID_REMOVEREPLAYBUTTON", replays);
         enable(w, "ID_DAMAGE", s_gametype != 4 && s_gametype != 9 && s_gametype != 3);   /* (3: 0x48c9d0, no session) */
         enable(w, "ID_LAPSSELECTOR", FEData_TrackLooped(s_gametype));
+        const uint8_t *sc = FEData_SettingsCar();
+        if (sc) {
+            enable(w, "ID_ABS", sc[0x2e2] != 0);
+            enable(w, "ID_TRACTION", sc[0x2e3] != 0);
+            enable(w, "ID_ROOF", sc[0x1bf] != 0);
+        }
     }
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);

@@ -42,6 +42,12 @@ extern bool g_race_parts_set;
    new car's (0x4ee230). */
 extern float g_race_setup[17];
 extern bool g_race_setup_set;
+/* The settings screen's for the human car (Car.Transmission, Car.ABS, Car.Traction, Car.Roof: the
+   description's TRANSMISSION +0xc, ABS +0x24, TRACTION +0x20, CABRIODOWN +0x50c); without the front end
+   automatic, the rest off. */
+extern int32_t g_race_car_settings[4];
+/* The damage option the front end chose (DAMAGE, 0x657a2c; on without it). */
+extern int32_t g_race_fe_damage;
 /* A grid the front end chose (the knockout's, 0x4ddc00): the opponents' personalities (1-based) and
    the starting places (start[0] the player's), when g_race_grid_set. */
 extern int g_race_grid_pers[8], g_race_grid_start[9];

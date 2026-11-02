@@ -46,12 +46,18 @@ static bool interactive(const FertControl *c)
     return true;
 }
 
-/* A new control (v20 0x4bf870): every part shut, the camera outside. */
+/* A new control (v20 0x4bf870): every part shut, the camera outside; then (v21 0x4bf9a0) Car.Roof's
+   place kept, the roof down already when it is. */
 static void attach(FertControl *c)
 {
     if (s.c == c) return;
+    FertControl *w = s.window;
     memset(&s, 0, sizeof s);
     s.c = c;
+    s.window = w;
+    FEAccessor *roof = FEAccess_Find("Car.Roof");
+    s.roof = roof ? FEAccess_Pos(roof) : 0;
+    if (s.roof) s.open[ROOF] = 0xff;
 }
 
 static void rect(const FertControl *c, int32_t r[4])   /* 0x4c8240 */

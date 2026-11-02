@@ -29,6 +29,8 @@ bool g_race_parts_set;
 bool g_race_colours_set;
 float g_race_setup[17];
 bool g_race_setup_set;
+int32_t g_race_car_settings[4] = {1, 0, 0, 0};
+int32_t g_race_fe_damage = 1;
 int g_race_grid_pers[8], g_race_grid_start[9];
 bool g_race_grid_set;
 int16_t g_race_traffic_slots[7];
@@ -166,7 +168,11 @@ bool RaceSetup_SingleCar(const char *name)
         memcpy(&k, &kb, 4);
         for (int i = 0; i < 17; i++) put_i(d, field[i], (int32_t)(set[i] * k));
     }
-    put_i(d, 0xc, 1);                                     /* TRANSMISSION: automatic */
+    /* TRANSMISSION, ABS, TRACTION, CABRIODOWN (the settings screen's accessors write their tags) */
+    put_i(d, 0xc, g_race_car_settings[0]);
+    put_i(d, 0x24, g_race_car_settings[1]);
+    put_i(d, 0x20, g_race_car_settings[2]);
+    put_i(d, 0x50c, g_race_car_settings[3]);
     /* The colours (+0x218 COLORCONFIG: body, stripe, interior, wheels; the car viewer's silver), no race
        number, colour package 0. */
     static const uint32_t colours[4] = {0xffb8bcc0u, 0xff202020u, 0xff303030u, 0xffc0c0c0u};
@@ -182,8 +188,7 @@ bool RaceSetup_SingleCar(const char *name)
     h->tach = g[12], h->tach_start = g[15], h->tach_deg = g[16], h->tach_units = g[13];
     h->needle = g[14], h->pivot = g[17];
     free(db);
-    /* Damage on (0x657a2c, the front end's damage option; a stand-in until the options are ported). */
-    g_race_damage = 1;
+    g_race_damage = g_race_fe_damage;   /* DAMAGE (0x657a2c, the front end's) */
     g_race_laps = 2;   /* 0x6573f0: two laps (the front end's choice; a stand-in) */
     g_nracecars = 1;
     g_ntrafficcars = 0;

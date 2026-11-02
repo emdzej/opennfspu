@@ -69,6 +69,8 @@ int FEApp_Traffic(int16_t slots[7]);
 /* The police cars of a Factory Driver mission with police (0x4ec590: its +0x26 gives two), else 0. */
 int FEApp_Cops(void);
 /* The race's kind (RACE_TYPE, 0x6573ec) for the mode chosen. */
+/* The race's damage option (0x4eab10's DAMAGE): Game.Damage's where the race type takes it, else on. */
+int FEApp_Damage(void);
 int FEApp_RaceType(void);
 /* The knockout's grid (its racers' personalities, the starting places, start[0] the player's); -1 for none. */
 int FEApp_Grid(int pers[8], int start[9]);

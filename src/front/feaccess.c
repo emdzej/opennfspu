@@ -23,7 +23,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -1333,6 +1333,7 @@ void FEData_Init(void)
     /* (and the replays: FECharVectAccessor 0x4b8560, the save directory's *.rpl) */
     FESave_ListReplays();
     add("Replay.List", ACC_REPLAYS, 0, 0, 0);
+    add("Game.Damage", ACC_BOOL, 2, 0, 1);   /* FEBoolAccessor 0x4b82f0: on */
     FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
     if (df) df->list = 0x5d9f08;
     /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
@@ -1374,6 +1375,20 @@ void FEData_Init(void)
     pick_opponent_cars();
     dealer_list(n);
     add("DealerCar.Car", ACC_DEALER, s_ndealer, 0, 0);   /* FEdaCar_v0 0x4f1520 -> 0x4f2560 */
+    /* The settings screen's (FEdaCar_v0's last): its car (FECarSettingsCarAccessor 0x4b83c0, vtable
+       0x5b4ce0: each call handed to 0x4b84c0's car), the transmission (FEListAccessor of 0x5dab54, put at
+       1: automatic) and ABS, traction control and the roof (of 0x5daa18, 0x5daa04, 0x5da9e8; the race car
+       description's tags 0x23a, 0x23b, 0x24b; at 0). */
+    add("CARSETTINGS.CAR", ACC_CARSET, 1, 0, 0);
+    {
+        static const struct { const char *name; uint32_t list; int pos; } cs[4] = {
+            {"Car.Transmission", 0x5dab54, 1}, {"Car.ABS", 0x5daa18, 0}, {"Car.Traction", 0x5daa04, 0},
+            {"Car.Roof", 0x5da9e8, 0}};
+        for (int i = 0; i < 4; i++) {
+            FEAccessor *x = add(cs[i].name, ACC_LIST, list_count(cs[i].list), 0, cs[i].pos);
+            if (x) x->list = cs[i].list;
+        }
+    }
     add("DealerCar.Colour", ACC_COLOUR, 1, 0, 0);        /* 0x4b8dd0 on the car's slots 0xa0 / 0xa8 */
     add("DealerCar.IntColour", ACC_INTCOLOUR, 1, 0, 0);  /* (slots 0xa4 / 0xac) */
     /* GenericCar.Colour (0x4b8dd0 with 0x4f0260 / 0x4f0290 on GenericCar.Car, the merged list's cars past
@@ -1631,6 +1646,8 @@ const char *FEAccess_Text(const FEAccessor *a)
     }
     case ACC_LIST:
         return FEStrings_Get((int32_t)exe_u32(a->list + 4u * (unsigned)a->pos));
+    case ACC_BOOL:   /* FEBoolAccessor_v12 0x4b8340 */
+        return FEStrings_Get(a->pos == 1 ? 0x2c0 : 0x2c1);
     case ACC_DEALER:
         snprintf(b, sizeof b, "%s", (const char *)s_car + CAR_SIZE * s_dealer[a->pos] + 0x34);
         return b;
@@ -1650,6 +1667,7 @@ const char *FEAccess_Text(const FEAccessor *a)
         snprintf(b, sizeof b, "%.*f", a->dec, (double)v);
         return b;
     }
+    case ACC_CARSET:   /* (the car accessor's, 0x4b84c0's car) */
     case ACC_FDCAR:
     case ACC_FDPRIZE: {
         const uint8_t *r = FEAccess_CarRecord(a);
@@ -1930,6 +1948,7 @@ const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
         const SaveCar *c = acc_car(a);
         return c ? c->rec + 4 : NULL;
     }
+    if (a->kind == ACC_CARSET) return FEData_SettingsCar();
     if (a->kind == ACC_FDCAR) {   /* FEFactoryDriverCarAccessor (0x519370): the mission's car object */
         const SaveCar *c = FEFactory_Car();
         return c ? c->rec + 4 : NULL;
@@ -2413,6 +2432,29 @@ int FEData_BuyCar(void)
     sv->money -= cost;
     FESave_Write();
     return 0;
+}
+
+/* The settings screen's car (0x4b84c0): the career's owned car, the Factory Driver's, else the merged
+   list's. */
+const uint8_t *FEData_SettingsCar(void)
+{
+    const char *n = s_fe_gametype == 4 ? "OwnedCars.Car" : s_fe_gametype == 9 ? "FactoryDriver.Car" : "zMergedList.Car";
+    return FEAccess_CarRecord(FEAccess_Find(n));
+}
+
+/* What the race car description gets from a car setting (FEPositionableAccessor_v1's write of its tag):
+   its place, but ABS, traction control and the roof 0 on a car without them (their callbacks 0x4f1420,
+   0x4f1470, 0x4f14c0: the settings car's +0x2e2, +0x2e3, +0x1bf). */
+int FEData_CarSetting(const char *name)
+{
+    FEAccessor *a = FEAccess_Find(name);
+    if (!a) return 0;
+    int off = !strcmp(name, "Car.ABS") ? 0x2e2 : !strcmp(name, "Car.Traction") ? 0x2e3 : !strcmp(name, "Car.Roof") ? 0x1bf : -1;
+    if (off >= 0) {
+        const uint8_t *r = FEData_SettingsCar();
+        if (!r || !r[off]) return 0;
+    }
+    return a->pos;
 }
 
 bool FEData_MergedOwned(void)   /* 0x4f4420 on zMergedList.Car */

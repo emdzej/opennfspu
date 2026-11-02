@@ -179,6 +179,9 @@ bool app_frame(void)
                         if (col) memcpy(g_race_colours, col, sizeof g_race_colours);
                         g_race_parts_set = FEApp_Parts(g_race_parts) >= 0;
                         g_race_setup_set = FEApp_Setup(g_race_setup);
+                        static const char *const cs[4] = {"Car.Transmission", "Car.ABS", "Car.Traction", "Car.Roof"};
+                        for (int i = 0; i < 4; i++) g_race_car_settings[i] = FEData_CarSetting(cs[i]);
+                        g_race_fe_damage = FEApp_Damage();
                     }
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */
@@ -198,7 +201,8 @@ bool app_frame(void)
                         snprintf(race_track, sizeof race_track, "%s", exe_str(0x5da6d0));   /* "Skidpad" */
                         g_drive_race_type = 3;
                         g_race_linear = 0;   /* (its LINEAR_TRACK 0) */
-                        PENDING_NOTE(0x4ecc60, "the derby's DAMAGE 1, NOCOLLISION 0 (the port's options)");
+                        g_race_fe_damage = 1;   /* (its DAMAGE 1) */
+                        PENDING_NOTE(0x4ecc60, "the derby's NOCOLLISION 0 (the port's options)");
                     }
                     /* (0x4ec590: Fuzzyfuz gives the quick race four police cars; a mission with police two) */
                     g_drive_cops = FE_Cheat(5) && FEApp_GameType() == 0 ? 4 : FEApp_GameType() == 9 ? FEApp_Cops() : 0;
