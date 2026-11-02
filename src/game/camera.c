@@ -14,6 +14,7 @@
 #include "game/scene.h"
 #include "render/camera_math.h"
 #include "render/drive_selftest.h"
+#include "render/particles.h"
 #include "render/r3dcar.h"
 #include <math.h>
 #include <string.h>
@@ -223,6 +224,26 @@ static bool inside_edges(RaceCamera *c, float p[3])
 
 /* ---- the look-at basis (0x464ab0) ---- */
 
+/* The replay's wander of the look-at point about the car (0x6280e0 .. 0x628100): every 3 .. 6 ticks a
+   new random offset within the car's speed / 20 either way (the render's random numbers), eased to at
+   the replay speed's rate (1/400, 1/200 or 1/100 a frame for 1, 0, 2) unless paused. */
+static int32_t s_wander_t, s_wander_n;   /* 0x6280e0, 0x6280e4 */
+static float s_wander_to[3], s_wander[3];   /* 0x6280e8, 0x6280f8 */
+static int32_t s_replay_paused, s_replay_speed;   /* 0x606860, 0x606864 */
+
+static void wander(RaceCamera *c)
+{
+    if (s_wander_n < g_sim_tick - s_wander_t) {
+        float f = *CAR_F(c->base, 0x35c) * K(0x5b3f6c), h = f * K(0x5b23f0);
+        for (int k = 0; k < 3; k++) s_wander_to[k] = (float)Render_Rand() * f * K(0x5b253c) - h;
+        s_wander_t = g_sim_tick;
+        s_wander_n = (int32_t)lrintf((float)Render_Rand() * K(0x5b2600) * K(0x5b253c)) + 3;
+    }
+    float r = s_replay_speed == 1 ? K(0x5b3f88) : s_replay_speed == 0 ? K(0x5b2738) : K(0x5b27a8);
+    if (!s_replay_paused && !g_drive_paused && !s_paused)
+        for (int k = 0; k < 3; k++) s_wander[k] = s_wander_to[k] * r + (K(0x5b24a8) - r) * s_wander[k];
+}
+
 
 /* The orientation looking from the eye at target (the car looked at when NULL; during the replay's
    cameras, a random wander about it): the up row the world's, or the previous one when looking nearly
@@ -232,9 +253,12 @@ static void look_at(RaceCamera *c, const float *target, const float eye[3], floa
     float up[3] = {0, 1, 0}, t[3];
     if (!target) {
         if (g_replay_mode == 2 && !((c->mode >= 2 && c->mode <= 7) || c->mode == 10 || c->mode == 11)) {
-            PENDING_NOTE(0x464ab0, "the replay cameras' wander about the car");
+            wander(c);
+            for (int k = 0; k < 3; k++) t[k] = s_wander[k] + car_pos(c->base)[k];
+            target = t;
+        } else {
+            target = car_pos(c->base);
         }
-        target = car_pos(c->base);
     }
     memcpy(t, target, sizeof t);
     float *fw = orient + 6;
@@ -817,12 +841,19 @@ void Camera_ReplayStart(void)
         s_tvmode = 0x14;
     }
     s_viewed = g_camera_car;
+    s_replay_paused = 0;
+    s_replay_speed = 2;
 }
 
 /* ---- the modes' state ---- */
 
-/* The replay wander's state (0x6280e0 .. 0x628100) cleared: the wander is pending (look_at). */
-static void clear_shake(void) {}
+/* The replay wander's state (0x6280e0 .. 0x628100) cleared. */
+static void clear_shake(void)
+{
+    s_wander_t = s_wander_n = 0;
+    memset(s_wander_to, 0, sizeof s_wander_to);
+    memset(s_wander, 0, sizeof s_wander);
+}
 
 /* The chase cameras' first offset: 4 behind the car (0x465bb0, bit 0 camera 0, bit 1 camera 1). */
 static void initial_offset(int mask)
