@@ -69,16 +69,3 @@ void Car_RegisterTasks(Car *c)
     TaskList_Add(&g_tasks_tick, *slot(c, T_E28), c, 0x1e);
 }
 
-float Track_TableFactor(const char *aispec)
-{
-    (void)aispec;
-    PENDING_NOTE(0x4a2ba0, "Track_Table (the track's AI tuning)");
-    return 1.0f;
-}
-
-float Track_CarFactor(const char *aispec)
-{
-    (void)aispec;
-    PENDING_NOTE(0x4a2730, "the track's factor for a car (0x4a2730)");
-    return 1.0f;
-}

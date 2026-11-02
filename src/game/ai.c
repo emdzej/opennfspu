@@ -1,5 +1,6 @@
 /* The AI (see ai.h). */
 #include "game/ai.h"
+#include "game/track_table.h"
 #include "exe.h"
 #include "game/car_drive.h"
 #include "game/car_ground.h"
@@ -41,11 +42,6 @@ static int ai_rate;
 int g_ai_ticks;
 static float ai_dt;
 
-/* The track's AI tuning (Track_Table 0x4a2ba0, not ported: its defaults): the road's width the speeds
-   scale by (0x5e6e34) and ten speed zones, node ranges with factors (0x5e74ac, 0x5e74fc). */
-static float road_width = 12.0f;
-static int32_t zone[10][2];
-static float zone_factor[10] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 /* The racing line (the AIDataRecord_LineSpeed_t at 0x5e671c): the file, its points from +4. */
 static uint8_t *line;
@@ -113,7 +109,6 @@ void AI_Load(void)
     /* "%s%s%d.lsp" (0x5cbda8): the directory (0x65b2e4), the track, reversed or not. */
     snprintf(path, sizeof path, "GameData\\Track\\racer\\work\\%s%d.lsp", g_track_name, g_race_reverse);
     line = vfs_read_all(path, &line_size);
-    PENDING_NOTE(0x4a2ba0, "Track_Table: the track's AI speed zones and road width");
 }
 
 void AI_Free(void)
@@ -153,7 +148,7 @@ void AI_Plan(Car *c)
     int node = car_node(c);
     float fw[3];
     node_vec(node, 0x1c, fw);
-    float wide = (node_f(node, 0x44) + node_f(node, 0x40)) / road_width;
+    float wide = (node_f(node, 0x44) + node_f(node, 0x40)) / g_track_road_width;
     if (K(0x5b24a8) <= wide) wide = 1.0f;
     float s = *CAR_F(c, 0x35c) * K(0x5b2694) * *SPEC_F(c, 0x13c);
     if (K(0x5b2690) <= s) s = 23.0f;
@@ -213,7 +208,7 @@ void AI_Plan(Car *c)
     }
     float f = 1.0f;
     for (int z = 0; z < 10; z++)
-        if (zone[z][0] < node && node < zone[z][1]) f = zone_factor[z];
+        if (g_track_zone[z][0] < node && node < g_track_zone[z][1]) f = g_track_zone_f[z];
     float bend = f * (right + left) * *SPEC_F(c, 0x144);
     if (K(0x5b25fc) <= bend) bend = K(0x5b25fc);
     float bendi = bend * K(0x5b2680);
@@ -293,7 +288,7 @@ void AI_Steer(Car *c)
     /* The look-ahead in nodes: the wheels' speed's share, at least a few (more on a wide road), less
        when slow after the start. */
     int node = car_node(c);
-    float wide = (node_f(node, 0x44) + node_f(node, 0x40)) / road_width;
+    float wide = (node_f(node, 0x44) + node_f(node, 0x40)) / g_track_road_width;
     if (K(0x5b24a8) <= wide) wide = 1.0f;
     float L = fabsf(*SPEC_F(c, 0x140) * *CAR_F(c, 0xd60)) * K(0x5b26ac);
     if (wide < K(0x5b24a8)) {

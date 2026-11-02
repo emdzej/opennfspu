@@ -1,5 +1,6 @@
 /* The race's cars (see car.h). */
 #include "game/car.h"
+#include "game/track_table.h"
 #include "game/traffic.h"
 #include "game/skid.h"
 #include "render/carparticle.h"
@@ -34,7 +35,7 @@ static float exe_f32(uint32_t va)
 #define K(va) exe_f32(va)   /* the float constant the original reads at va */
 
 CarList g_racers, g_humans, g_opponents, g_viewed, g_rivals, g_roadcars, g_chasers, g_ranked, g_ordered;
-int32_t g_race_view_opponents;
+int32_t g_race_cops;
 static int g_created;   /* 0x5e8bd0 */
 
 static void list_add(CarList *l, Car *c)
@@ -204,7 +205,7 @@ void Sim_LoadCarAis(Car *c)
         float v;
         memcpy(&v, d + 0x80 + 4 * i, 4);
         v = (v - lo) * *CAR_F(c, CAR_10D8) + lo;
-        v = Track_TableFactor((const char *)CAR_DESCB(c) + 0x2a8) * v;
+        v = Track_Table((const char *)CAR_DESCB(c) + 0x2a8) * v;
         memcpy(d + 0x80 + 4 * i, &v, 4);
     }
     *SPEC_F(c, 0x140) = Track_CarFactor((const char *)CAR_DESCB(c) + 0x2a8) * *SPEC_F(c, 0x140);
@@ -419,7 +420,7 @@ static void Car_AddToLists(Car *c)
         *f |= 8;
         list_add(&g_racers, c);
         *f |= 1;
-        if (g_race_view_opponents) {
+        if (g_race_cops) {
             list_add(&g_viewed, c);
             *f |= 0x100;
         }

@@ -97,7 +97,7 @@ extern CarList g_roadcars;    /* 0x5e8b60, 0x5e8e24: class 4, the road traffic (
 extern CarList g_chasers;     /* 0x5e8ac4, 0x5e8abc: the police, class 8 or 0x10 (flags 0x20; 0x10 also 0x40) */
 extern CarList g_ranked;      /* 0x5e8b88: the race's cars by their race distance less laps (0x417730), rank +0x528 */
 extern CarList g_ordered;     /* 0x5e8bac: by race distance (+0x550 the car swapped with, +0x554 when) */
-extern int32_t g_race_view_opponents;   /* 0x657414 (class-2 opponents viewed too) */
+extern int32_t g_race_cops;   /* 0x657414: COPS (option 0x15: police in the race; the class-2 opponents are viewed too) */
 
 /* The race's state the simulation reads: the tick counter (0x606ac4, 64 Hz), the RALLY option (0x6573f8: the Dakar cheat's road grip), a
    network game (0x657408). */
@@ -141,8 +141,6 @@ void Car_RegisterTasks(Car *c);
 
 /* The track's factor for a car's AI speeds (Track_Table 0x4a2ba0) and for its +0x140 (0x4a2730): AI
    tuning; pending (1.0) until the AI is ported. */
-float Track_TableFactor(const char *aispec);
-float Track_CarFactor(const char *aispec);
 
 /* Every car of the race: parts, objects, lists, specs, renderers, tasks. 0x411190 */
 void Car_Construct(void);
