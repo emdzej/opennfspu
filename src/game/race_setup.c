@@ -96,6 +96,8 @@ static void stock_parts(uint8_t *d, const uint8_t *rec)
 
 bool RaceSetup_SingleCar(const char *name)
 {
+    g_race_cops = 0;
+    g_race_ncops = 0;
     size_t n = 0;
     uint8_t *db = vfs_read_all("FEData\\Data\\nfs5.car", &n);
     if (!db) return false;
@@ -233,11 +235,79 @@ static const uint8_t *find_track(const uint8_t *db, size_t n, const char *name)
     return NULL;
 }
 
+int g_race_ncops;
+
+/* A road car's description after the racers' (0x4ee430 for the police and the traffic): car 0's with
+   the record's car, its stock parts, the class and the colours (+0x218 order). */
+static uint8_t *road_desc(const uint8_t *rec, int cls, const char *name, const uint32_t col[4], bool cheats)
+{
+    uint8_t *d = g_cardesc[g_nracecars];
+    memcpy(d, g_cardesc[0], CARDESC_SIZE);
+    put_i(d, 0x150, 0);                               /* DRIVER: rand() & 7 in the original */
+    put_str(d, 0x17c, name);                          /* DRIVERNAME */
+    put_str(d, 0x1c0, name);                          /* LICENSE */
+    car_fields(d, rec);
+    put_i(d, 0x518, 0);
+    put_i(d, 0x51c, 0);
+    if (cheats) cheat_fields(d);                      /* (not for traffic) */
+    stock_parts(d, rec);
+    put_i(d, 0x8, cls);                               /* CLASS */
+    put_i(d, 0x14c, 0);                               /* PERSONALITY */
+    put_i(d, 0x174, 0);                               /* STARTINGPOS */
+    memcpy(d + 0x218, col, 16);
+    put_i(d, 0x510, -1);
+    put_i(d, 0x514, 0);
+    g_nracecars++;
+    return d;
+}
+
+bool RaceSetup_Cops(int n, const char *track)
+{
+    g_race_ncops = 0;
+    g_race_cops = 0;
+    if (CAR_MAX < g_nracecars + n) n = CAR_MAX - g_nracecars;
+    if (n <= 0) return false;
+    size_t tn = 0, cn = 0;
+    uint8_t *trk = vfs_read_all("FEData\\Data\\nfs5.trk", &tn);
+    uint8_t *db = vfs_read_all("FEData\\Data\\nfs5.car", &cn);
+    const uint8_t *tr = trk ? find_track(trk, tn, track) : NULL;
+    /* The police's records (0x6919f8: the database's kind 2 cars), by their id. */
+    const uint8_t *first = NULL;
+    for (size_t i = 0; db && i + FECAR_SIZE <= cn && !first; i += FECAR_SIZE) {
+        int16_t kind;
+        memcpy(&kind, db + i + 0x1f4, 2);
+        if (kind == 2) first = db + i;
+    }
+    if (!tr || !first) {
+        free(trk);
+        free(db);
+        return false;
+    }
+    static const uint32_t col[4] = {0xffffffffu, 0xff000000u, 0xffffff00u, 0xffffffffu};
+    for (int i = 0; i < n; i++) {
+        int16_t id;
+        memcpy(&id, tr + 0x8a + 2 * (i % 5), 2);
+        const uint8_t *rec = NULL;   /* 0x4f3a20: "Cop not found: %d" and the first */
+        for (size_t k = 0; k + FECAR_SIZE <= cn && !rec; k += FECAR_SIZE) {
+            int16_t kind, rid;
+            memcpy(&kind, db + k + 0x1f4, 2);
+            memcpy(&rid, db + k, 2);
+            if (kind == 2 && rid == id) rec = db + k;
+        }
+        if (!rec) rec = first;
+        road_desc(rec, 8, exe_str(exe_u32(0x5da6bc)), col, true);
+        g_race_ncops++;
+    }
+    g_race_cops = 1;   /* COPS (option 0x15) */
+    free(trk);
+    free(db);
+    return true;
+}
+
 bool RaceSetup_Traffic(int n, const char *track)
 {
     g_race_ntraffic = 0;
-    int cops = 0;   /* (the police before them: Fuzzyfuz's four, pending) */
-    if (9 < n + cops + g_nracecars) n = 9 - cops - g_nracecars;
+    if (9 < n + g_nracecars) n = 9 - g_nracecars;   /* (the racers and the police before them) */
     if (n <= 0 || CAR_MAX < g_nracecars + n) return false;
     size_t tn = 0, cn = 0;
     uint8_t *trk = vfs_read_all("FEData\\Data\\nfs5.trk", &tn);
@@ -287,23 +357,8 @@ bool RaceSetup_Traffic(int n, const char *track)
             uint32_t a = REAL_rand(), r = REAL_rand(), g = REAL_rand(), b = REAL_rand();
             col = (b & 0xff) | (g & 0xff) << 8 | (r & 0xff) << 16 | a << 24;
         }
-        uint8_t *d = g_cardesc[g_nracecars];
-        memcpy(d, g_cardesc[0], CARDESC_SIZE);
-        const char *name = exe_str(exe_u32(0x5da6c0));   /* "Traffic" */
-        put_i(d, 0x150, 0);                               /* DRIVER: rand() & 7 in the original */
-        put_str(d, 0x17c, name);                          /* DRIVERNAME */
-        put_str(d, 0x1c0, name);                          /* LICENSE */
-        car_fields(d, rec);                               /* (no cheats for traffic) */
-        put_i(d, 0x518, 0);
-        put_i(d, 0x51c, 0);
-        stock_parts(d, rec);
-        put_i(d, 0x8, 4);                                 /* CLASS: traffic */
-        put_i(d, 0x14c, 0);                               /* PERSONALITY */
-        put_i(d, 0x174, 0);                               /* STARTINGPOS */
-        for (int k = 0; k < 4; k++) memcpy(d + 0x218 + 4 * k, &col, 4);
-        put_i(d, 0x510, -1);
-        put_i(d, 0x514, 0);
-        g_nracecars++;
+        const uint32_t cols[4] = {col, col, col, col};
+        road_desc(rec, 4, exe_str(exe_u32(0x5da6c0)), cols, false);   /* "Traffic" */
         g_race_ntraffic++;
     }
     free(trk);

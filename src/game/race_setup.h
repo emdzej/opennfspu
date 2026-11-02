@@ -17,6 +17,12 @@ bool RaceSetup_Opponents(int n);
    record's seven traffic models (nfs5.trk +0x7c, ids of the car database's kind 1 records) in turn, each
    in one random colour, named "Traffic". */
 bool RaceSetup_Traffic(int n, const char *track);
+/* n police cars (CLASS 8, 0x4ec590: four for the quick race with the Fuzzyfuz cheat, two for a mission
+   with police) after the racers, before the traffic: the track's record's five police models (nfs5.trk
+   +0x8a, ids of the car database's kind 2 records) in turn, white, black, yellow and white, named by
+   0x5da6bc; COPS (g_race_cops) on. */
+bool RaceSetup_Cops(int n, const char *track);
+extern int g_race_ncops;
 extern int g_race_ntraffic;
 /* The career race's own traffic cars when any is set (0x4ec590 with the tournament's +0x380): the first
    n slots that hold a car id (n at most 7), all four colours 0xffff0000. */

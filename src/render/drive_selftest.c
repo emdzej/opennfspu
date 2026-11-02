@@ -137,6 +137,8 @@ static bool load(const char *track, const char *carname)
     int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : g_drive_opponents;   /* --param opponents=<n> */
     g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
     if (0 < opponents) RaceSetup_Opponents(opponents);
+    int cops = plat_param("cops", v, sizeof v) ? atoi(v) : g_drive_cops;   /* --param cops=<n> */
+    if (0 < cops) RaceSetup_Cops(cops, g_track_name);   /* (0x4ec590: before the traffic) */
     int traffic = plat_param("traffic", v, sizeof v) ? atoi(v) : g_drive_traffic;   /* --param traffic=<n> */
     if (0 < traffic) RaceSetup_Traffic(traffic, g_track_name);   /* (0x4ec590) */
     if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
@@ -217,7 +219,7 @@ static void read_controls(void)
     g_input_packet[3] = down ? 0x7f : 0;
 }
 
-int g_drive_opponents, g_drive_laps, g_drive_race_type, g_drive_traffic;
+int g_drive_opponents, g_drive_laps, g_drive_race_type, g_drive_traffic, g_drive_cops;
 int g_drive_result;
 
 int DRIVE_Results(int places[8], int times[8], bool clean[8])
