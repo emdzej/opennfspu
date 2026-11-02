@@ -1,5 +1,6 @@
 /* The AI (see ai.h). */
 #include "game/ai.h"
+#include "game/ai_internal.h"
 #include "game/track_table.h"
 #include "exe.h"
 #include "game/car_drive.h"
@@ -434,33 +435,20 @@ void AI_Steer(Car *c)
 /* A state (the pool's 0xa0-byte objects, 0x5e6e38: ten, 0x40b590): its car, the idle state's target
    offset and hold. Its slots: the tick, the deleting destructor's work (when a controller replaces it)
    and whether it is done (the purgatory's: ready to come back). */
-typedef struct AiState AiState;
-typedef struct {
-    void (*tick)(AiState *s);
-    void (*done)(AiState *s);
-    bool (*ready)(AiState *s);
-} AiStateVtbl;
-struct AiState {
-    const AiStateVtbl *vt;
-    Car *car;      /* +4 */
-    float target;  /* +8: the idle state's lateral offset */
-    int32_t hold;  /* +0xc: the idle state keeps the car's offset */
-};
-
 static void no_done(AiState *s) { (void)s; }
 static bool not_ready(AiState *s) { (void)s; return false; }   /* 0x403e10 */
 
 /* The cars in the purgatory (0x5e747c, the traffic's). */
 static int s_purgatory;
 
-static Car *car_by_index(int i)
+Car *AIi_CarByIndex(int i)
 {
     if (0 <= i && i < g_ncars) return g_cars[i];
     if (g_ncars <= i && i < g_ncars + g_ntraffic) return g_traffic[i - g_ncars];
     return NULL;
 }
 /* The car a traffic car keeps near (+0xed4, as its index + 1). */
-static Car *followed(Car *c) { return car_by_index(*CAR_I(c, 0xed4) - 1); }
+static Car *followed(Car *c) { return AIi_CarByIndex(*CAR_I(c, 0xed4) - 1); }
 static void follow(Car *c, Car *o) { *CAR_I(c, 0xed4) = o ? *CAR_I(o, CAR_INDEX) + 1 : 0; }
 static float absf(float v) { return v < K(0x5b23f8) ? -v : v; }
 /* The octagonal ground distance (x and z) the AI measures with. */
@@ -642,29 +630,32 @@ static void purgatory_init(AiState *s, Car *c)   /* 0x40de30 */
     if (*CAR_I(c, CAR_FLAGS) & 0x10) s_purgatory++;
 }
 
-/* A controller (AIHigh_*): its car, its state, the state's phase, ticked always (+0x10) or by the task
-   rate; the traffic's flags (+0x18: past the police's first check, +0x1c: sent back). */
-typedef struct {
-    int kind;          /* 0 none, 1 human, 2 opponent, 3 traffic */
-    Car *car;          /* +0x04 */
-    AiState state;     /* +0x08 (the pool's) */
-    int32_t phase;     /* +0x0c */
-    int32_t always;    /* +0x10 */
-    int32_t node;      /* +0x14: the car's node when made */
-    int32_t seen;      /* +0x18 */
-    int32_t back;      /* +0x1c */
-} AiHigh;
-
 static AiHigh *ctl[CAR_MAX];   /* 0x5e6774 */
 
-static void set_state(AiHigh *h, AiState s)
+AiHigh *AIi_Ctl(int i) { return 0 <= i && i < CAR_MAX ? ctl[i] : NULL; }
+
+AiState AIi_Normal(Car *c)
+{
+    AiState s;
+    normal_init(&s, c);
+    return s;
+}
+AiState AIi_Idle(Car *c) { return (AiState){&idle_vt, c, 0, 1}; }
+AiState AIi_Purgatory(Car *c)
+{
+    AiState s;
+    purgatory_init(&s, c);
+    return s;
+}
+
+void AIi_SetState(AiHigh *h, AiState s)
 {
     h->state.vt->done(&h->state);
     h->state = s;
 }
 
 /* The driver's moods by the AI's ticks (0x40abe0), then the state. 0x40b530 */
-static void state_tick(AiState *s)
+void AIi_StateTick(AiState *s)
 {
     Car *c = s->car;
     if (c->b[0x7f] && !(*CAR_I(c, CAR_FLAGS) & 4) && *(int16_t *)(void *)(c->b + 0x41a) == 0)
@@ -678,7 +669,7 @@ static void opponent_tick(AiHigh *h)
 {
     if (h->phase != 0) {
         if (h->phase == 2) PENDING_NOTE(0x405dd0, "the opponent's catch-up (0x405dd0, 0x4057a0)");
-        state_tick(&h->state);
+        AIi_StateTick(&h->state);
         return;
     }
     h->state = (AiState){&racing_vt, h->car, 0, 0};
@@ -851,44 +842,44 @@ static void traffic_tick(AiHigh *h)
         float off[3] = {0, 100.0f, 0};
         if (!(*CAR_I(c, CAR_FLAGS) & 0x400)) {
             purgatory_init(&s, c);
-            set_state(h, s);
+            AIi_SetState(h, s);
             h->phase = 1;
         } else {
-            set_state(h, (AiState){&idle_vt, c, 0, 1});
+            AIi_SetState(h, (AiState){&idle_vt, c, 0, 1});
             h->phase = 3;
         }
         CarSim_Place(c, 0, off, 1);
         return;
     }
     case 1:
-        if (h->state.vt->ready(&h->state) && h->back == 0) {
+        if (h->state.vt->ready(&h->state) && HW(h, 0x1c).i == 0) {
             normal_init(&s, c);
-            set_state(h, s);
+            AIi_SetState(h, s);
             h->phase = 2;
             come_back(c);
-            state_tick(&h->state);
+            AIi_StateTick(&h->state);
             return;
         }
         break;
     case 2:
-        if (too_far(c) || h->back != 0) {
+        if (too_far(c) || HW(h, 0x1c).i != 0) {
             purgatory_init(&s, c);
-            set_state(h, s);
+            AIi_SetState(h, s);
             h->phase = 1;
-            state_tick(&h->state);
+            AIi_StateTick(&h->state);
             return;
         }
         if (!police_near(h, &close)) {
-            h->seen = 0;
-            state_tick(&h->state);
+            HW(h, 0x18).i = 0;
+            AIi_StateTick(&h->state);
             return;
         }
-        if (h->seen == 0) {
+        if (HW(h, 0x18).i == 0) {
             uint32_t r = (SimRand_Next() * 10) >> 16;
             if (r < 8) {
                 int16_t n;
                 memcpy(&n, c->b + 8, 2);
-                set_state(h, (AiState){&idle_vt, c, 0, 1});
+                AIi_SetState(h, (AiState){&idle_vt, c, 0, 1});
                 h->phase = 3;
                 if (r != 0) {
                     float t = *CAR_I(c, 0xeb0) == 1 ? node_f(n, 0x4c) * (float)node_i(n, 0x3c) : node_f(n, 0x48) * (float)node_i(n, 0x38);
@@ -896,30 +887,30 @@ static void traffic_tick(AiHigh *h)
                     h->state.target = t;
                 }
             } else {
-                h->seen = 1;
+                HW(h, 0x18).i = 1;
             }
-            state_tick(&h->state);
+            AIi_StateTick(&h->state);
             return;
         }
         break;
     case 3:
         if (too_far(c)) {
             purgatory_init(&s, c);
-            set_state(h, s);
+            AIi_SetState(h, s);
             h->phase = 1;
-            state_tick(&h->state);
+            AIi_StateTick(&h->state);
             return;
         }
         if (police_near(h, &close) || (*CAR_I(c, CAR_FLAGS) & 0x400)) break;
         normal_init(&s, c);
-        set_state(h, s);
+        AIi_SetState(h, s);
         h->phase = 2;
         break;
     case 6:
         PENDING_NOTE(0x406080, "the traffic's phase 6");
         break;
     }
-    state_tick(&h->state);
+    AIi_StateTick(&h->state);
 }
 
 void AI_MakeControllers(void)
@@ -934,7 +925,7 @@ void AI_MakeControllers(void)
         if (!h) continue;
         h->car = c;
         h->state = (AiState){&none_vt, c, 0, 0};
-        h->node = car_node(c);
+        HW(h, 0x14).i = car_node(c);
         if (f & 4) {
             h->kind = 1;   /* AIHigh_Human (0x405740) */
             PENDING_NOTE(0x405740, "the human's AI controller (AIHigh_Human: its catch-up)");
