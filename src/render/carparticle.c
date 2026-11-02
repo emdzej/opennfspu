@@ -24,9 +24,13 @@ static double f64(uint32_t va)
     return d;
 }
 
-/* The queue of the cars drawn (a set by address, 0x6115c0). */
+/* The queue of the cars drawn (a set by address, 0x6115c0). The port orders it by creation instead: the
+   original's heap hands the objects out at rising addresses in that order, and the port's addresses
+   depend on the data source's allocations (a folder and a disc image would draw the spray in different
+   orders). */
 static CarParticles **s_queue;
 static int s_nqueue, s_capqueue;
+static unsigned s_serial;
 
 CarParticles *CarParticles_New(Car *car)
 {
@@ -34,6 +38,7 @@ CarParticles *CarParticles_New(Car *car)
     CarParticles *cp = calloc(1, sizeof *cp);
     if (!cp) return NULL;
     cp->car = car;
+    cp->serial = ++s_serial;
     for (int i = 0; i < 11; i++) {
         PartEmitter *e = &cp->rec[i];
         e->tag = exe_u32(0x5b3724 + 4u * (uint32_t)i);   /* "SMRTSMRTSMRTSMRTCSPKWTSPWTSPRDDTRDDTRDDTRDDT" */
@@ -66,7 +71,7 @@ void CarParticles_Free(CarParticles *cp)
 static void queue(CarParticles *cp)
 {
     int i = 0;
-    while (i < s_nqueue && (uintptr_t)s_queue[i] < (uintptr_t)cp) i++;
+    while (i < s_nqueue && s_queue[i]->serial < cp->serial) i++;
     if (i < s_nqueue && s_queue[i] == cp) return;
     if (s_nqueue == s_capqueue) {
         int cap = s_capqueue ? s_capqueue * 2 : 16;

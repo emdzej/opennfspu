@@ -11,6 +11,7 @@ typedef struct CarParticles {
     PartEmitter rec[11];    /* +0x04: 0x210 bytes */
     PartSystem *sys[11];    /* +0x08 */
     Car *car;               /* +0x34 */
+    unsigned serial;        /* (the port's: its creation order, for the queue) */
 } CarParticles;
 
 /* R3DCar_ctor's (0x43ed40): the systems primed at the world's origin, then off; the sparks about the
