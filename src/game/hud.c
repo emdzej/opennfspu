@@ -40,6 +40,10 @@ static bool hidden;          /* 0x60ca00 */
 static HudVisual *modal[8];
 static int nmodal;
 static HudVisual *summary;   /* 0x60ca4c */
+static HudArt *s_pointer;           /* 0x60ca7c: the mouse's pointer (DashHud\Pointer.fsh) */
+static int32_t s_mousex, s_mousey;  /* 0x60ca80, 0x60ca84: where the mouse was */
+static int32_t s_pointer_ticks;     /* 0x60ca88: the ticks left showing it after the mouse moved */
+static int32_t s_pointer_last;      /* 0x60ca8c: the tick of the last draw */
 static bool s_noscreens;     /* 0x60ca10: the race-over's screens skipped */
 static HudVisual *mission;   /* 0x60ca50 */
 static HudVisual *s_time;    /* 0x60ca1c */
@@ -4259,7 +4263,7 @@ void HUD_Init(void)
     add(tach_new(), true, false);
     add(tachdigital_new(), true, false);
     add(map_new(), true, true);   /* 0x431e50 (drawn last) */
-    PENDING_NOTE(0x428490, "HLeader (the leader's picture, 0x60ca38)");
+    PENDING_NOTE(0x428490, "HLeader (0x60ca38): the network race leader's picture (draws only in a network session)");
     add(rearview_new(), true, true);   /* 0x42c470 (0x60ca3c) */
     add(countdown_new(), false, false);
     s_congrats = congrats_new();   /* 0x41cb10 (0x60ca64) */
@@ -4297,7 +4301,13 @@ void HUD_Init(void)
     add(s_exit, false, false);
     nmodal = 0;
     wrongway = wrongway_new();   /* 0x436dd0 (drawn on its own) */
+    s_pointer = HudArt_load(exe_str(0x5cccd8), 0, 0, 0, exe_i32(0x5b2be8), exe_i32(0x5b2bec), false, false, false);   /* "Pointer" */
     Hud2D_Init();   /* 0x419d70 */
+    {
+        uint32_t b;
+        if (!MOUSE_state(&s_mousex, &s_mousey, &b)) s_mousex = s_mousey = 0;   /* (MOUSE_getstate 6) */
+    }
+    s_pointer_ticks = 0;
     HudConfig_trays(true);   /* (0x657de4, the trays option: on) */
 }
 
@@ -4541,6 +4551,8 @@ void HUD_RaceOver(void)
 
 void HUD_Free(void)
 {
+    HudArt_free(s_pointer);
+    s_pointer = NULL;
     nmodal = 0;
     s_pause = s_exit = NULL;
     s_replay = NULL;
@@ -4583,6 +4595,36 @@ static void letterbox(void)
     float bot[16] = {0, h - b, 65000, 1, w, h - b, 65000, 1, w, h, 65000, 1, 0, h, 65000, 1};
     flat(top, 0xff000000u);
     flat(bot, 0xff000000u);
+}
+
+/* The overlay (0x4257d0): the mouse's pointer, at the mouse for 128 ticks after it moves, all the time
+   with a modal visual up or in the replay's view. (Then the cheat menu's two map flags, HCheat's +0x170
+   and +0x171 onto the map's +0x108 and +0x109: the cheat menu isn't ported.) The depth function is
+   left at 7, as the original leaves it. */
+void HUD_DrawOverlay(RenderSystem *r, RCamera *c)
+{
+    if (!r || !c) return;
+    pass(r, c);
+    if (s_pointer_ticks != 0) {
+        s_pointer_ticks += s_pointer_last - g_sim_tick;   /* (0x606ac4) */
+        if (s_pointer_ticks < 0) s_pointer_ticks = 0;
+    }
+    int32_t x = s_mousex, y = s_mousey;
+    uint32_t b;
+    if (!MOUSE_state(&x, &y, &b)) x = s_mousex, y = s_mousey;   /* (MOUSE_getstate 6) */
+    bool moved = false;
+    if (s_mousex != x || s_mousey != y) {
+        moved = true;
+        s_pointer_ticks = 0x80;
+        s_mousex = x, s_mousey = y;
+    }
+    if ((g_race_view == 2 || nmodal != 0 || moved || s_pointer_ticks != 0) && s_pointer) {
+        HudArt_place(s_pointer, x, y);   /* 0x423b10 */
+        HudArt_draw(s_pointer);
+    }
+    Hud2D_Flush();   /* 0x41a350 */
+    View_End(r);
+    s_pointer_last = g_sim_tick;
 }
 
 void HUD_Draw(RenderSystem *r, RCamera *c)

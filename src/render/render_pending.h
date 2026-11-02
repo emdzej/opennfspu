@@ -7,4 +7,3 @@
 extern void (*g_render_cars)(RCamera *c);
 void Render_PendingWorld(RCamera *c);          /* 0x468a20: the world, cars and objects of the view */
 void Render_PendingAfterViews(void);           /* 0x44fd70 */
-void Render_PendingHud(RCamera *c);            /* HUD_DrawOverlay 0x4257d0 */

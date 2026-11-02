@@ -37,6 +37,8 @@ void HUD_Free(void);
 void HUD_RaceOver(void);
 /* The race's start (0x426a40 with 0): the cars' damage kept for the career's safe-driving bonus. */
 void HUD_RaceStart(void);
+/* The overlay over the mirror's view: the mouse's pointer. 0x4257d0 */
+void HUD_DrawOverlay(RenderSystem *r, RCamera *c);
 /* Whether the rear-view mirror is on and fully shown (its view is then drawn). 0x427560 */
 bool HUD_RearViewShown(void);
 /* Whether a modal visual (a race screen, the pause menu) is up. 0x426a20 */

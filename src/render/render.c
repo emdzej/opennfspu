@@ -707,7 +707,7 @@ void Render_Frame(RaceViews *rv)
     View_End(g_render);
     HUD_Draw(g_render, rv->overlay);                     /* 0x425910 */
     Render_RearView();                                   /* 0x468be0 */
-    Render_PendingHud(rv->overlay);                      /* HUD_DrawOverlay 0x4257d0 */
+    HUD_DrawOverlay(g_render, rv->overlay);              /* 0x4257d0 */
     View_Begin(g_render, rv->overlay);
     View_End(g_render);
     Render_EndFrame(g_render);
