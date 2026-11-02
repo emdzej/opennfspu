@@ -433,6 +433,7 @@ void FEControl_Draw(FertControl *c, int32_t ox, int32_t oy)
 
 /* A window at its origin: its own position (a panel's screen's is the panel's) on its parent's. */
 static void draw_control(FertControl *c, int32_t ox, int32_t oy);
+static void FERadioItem_Draw(FertControl *c, int32_t ox, int32_t oy);
 
 static void draw_at(FertControl *w, int32_t ox, int32_t oy)
 {
@@ -472,6 +473,7 @@ static void draw_control(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
     else if (!strcmp(c->id, "NFS5.GlintyRectangle")) FEGlintyBox_Draw(c, ox, oy);
     else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
+    else if (!strcmp(c->id, "NFS5.TABBUTTON") || !strcmp(c->id, "NFS5.GRAPHICTABBUTTON")) FERadioItem_Draw(c, ox, oy);
     else FEControl_Draw(c, ox, oy);
 }
 
@@ -852,6 +854,42 @@ void FEGoTo_Draw(FertControl *c, int32_t ox, int32_t oy)
         allow = (c->feflags & (4 | 8 | 0x40)) != 0;
     }
     FEGlint_Draw(&gg->g, (int)x, (int)y, a, allow && !disabled_now);
+}
+
+/* A tab button (FERadioItem 0x4cfd80, FEGraphicalTabButton's too): its parts; with data.dropshadow
+   (+0x144) the drop shadow and the shine, or hovered the inset; with data.glintybox (+0x154) its glinty
+   box, data.width by 18 in black (FERadioItem_v20 0x4cfaf0, 0x4cfb50), run as a GoTo button's (+0x158
+   seen), the selected one's also. */
+static void FERadioItem_Draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return;   /* 0x4c7aa0: hidden */
+    FEControl_Draw(c, ox, oy);   /* 0x4c7e30 */
+    int32_t r[4];
+    FertControl_rect(c, r);   /* 0x4c8240 */
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy), w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
+    int a = 0xff;   /* (0x4c8410: the control's fade, g_fe_fade's in the 2D) */
+    bool hover = (c->feflags & 4) != 0, disabled = (c->feflags & 0x10) != 0;
+    if (data_int(c, "dropshadow", 0)) {
+        if (!hover || disabled) {
+            FEStyle_DropShadow(x, y, w, h, a, 4, 4);
+            FEStyle_Shine(x, y, w, h, a);
+        } else {
+            FEStyle_Inset(x, y, w, h, a, 3);
+        }
+    }
+    int mode = data_int(c, "glintybox", -1);
+    if (mode == -1) return;
+    GoToGlint *gg = ctl_glint(c, 0xff000000u, data_int(c, "width", 0), 0x12, mode);
+    if (!gg) return;
+    bool allow;
+    if (disabled) gg->seen = true;
+    if (!gg->seen) {
+        allow = trans_done();   /* 0x4c83f0 */
+        if (allow) gg->seen = true;
+    } else {
+        allow = (c->feflags & (4 | 8 | 0x40)) != 0;   /* 0x4c7860, 0x4c7920, 0x4c79a0 */
+    }
+    FEGlint_Draw(&gg->g, (int)x, (int)y, a, allow && !disabled);
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name);
