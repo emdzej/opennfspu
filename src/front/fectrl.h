@@ -18,3 +18,11 @@ void FECtrl_Tick(FertControl *w);
 /* A control of the window waiting for an input, NULL none; the frame's key presses to it (slot 4). */
 FertControl *FECtrl_Waiting(FertControl *w);
 void FECtrl_Keys(FertControl *c, const uint8_t *k, int nk);
+/* Controller.AllControllers (pads false: the devices but the mice) and Controller.AllPads: count, names. */
+int FECtrl_ListCount(bool pads);
+const char *FECtrl_ListName(bool pads, int i);
+/* The defaults for device dev (FEControllers_Map 0x51ca50; the DEFAULTCONTROLS button's with the
+   AllControllers' device, 0x511820). */
+void FECtrl_Map(int dev);
+/* AllControllers' i-th device (0x51eab0). */
+int FECtrl_ListDevice(int i);

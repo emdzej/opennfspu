@@ -266,6 +266,82 @@ static bool joy_change(CtrlInput *in)
     return false;
 }
 
+/* ---- the controller lists and the defaults ---- */
+
+/* Controller.AllControllers (the devices but the mice, in the list's order: the options screen's, 0x510ed0)
+   and Controller.AllPads (the joysticks). */
+static int list_device(bool pads, int i)
+{
+    int k = 0;
+    for (int d = 0; d < Controls_Devices(); d++) {
+        int t = Controls_DeviceType(d);
+        if (t == 2 || (pads && t != 4)) continue;
+        if (k++ == i) return d;
+    }
+    return -1;
+}
+
+int FECtrl_ListCount(bool pads)
+{
+    load();
+    int n = 0;
+    while (list_device(pads, n) >= 0) n++;
+    return n;
+}
+
+int FECtrl_ListDevice(int i) { int d = list_device(false, i); return d < 0 ? 0 : d; }
+
+const char *FECtrl_ListName(bool pads, int i) { return Controls_DeviceName(list_device(pads, i)); }   /* (getstate 8) */
+
+/* FEControllers_Map (0x51ca50): a joystick's stick x the steering, y the gas (up) and brake, buttons
+   0, 3, 5, 2, 7, 8 the handbrake, reset, camera, look behind and the gears (each that it has; any other
+   control with the same input left without); then the keys for the rest: the arrows, space, H, A, Z,
+   B, L, R, C, P, W, E, T, Y, I, U, by the keyboard's language (French: Q, W, Z for A, Z, W; German: Y and
+   Z swapped). */
+void FECtrl_Map(int dev)
+{
+    load();
+    bool done[NCTRL] = {0};
+    if (Controls_DeviceType(dev) == 4) {
+        CtrlInput in;
+        in = (CtrlInput){1, dev, 0, -1, 0, 0};
+        assign(3, &in);
+        in.dir = 1;
+        assign(4, &in);
+        done[3] = done[4] = true;
+        in = (CtrlInput){1, dev, 1, -1, 0, 0};
+        assign(0, &in);
+        in.dir = 1;
+        assign(1, &in);
+        done[0] = done[1] = true;
+        static const struct { int8_t k, button; } b[6] = {{2, 0}, {10, 3}, {11, 5}, {8, 2}, {6, 7}, {7, 8}};
+        for (int i = 0; i < 6; i++) {
+            if (b[i].button >= 32) continue;
+            in = (CtrlInput){2, dev, b[i].button, 0, 0, 0};
+            assign(b[i].k, &in);
+            done[(int)b[i].k] = true;
+        }
+    }
+    int lang = FEApp_Language();
+    lang = lang < 0 ? 6 : lang >= 7 ? 0 : lang;   /* (0x690710) */
+    const int16_t keys[NCTRL][2] = {
+        {0x4800, 0x48}, {0x5000, 0x50}, {0x20, 0x39}, {0x4b00, 0x4b}, {0x4d00, 0x4d}, {'h', 0x23},
+        {lang == 1 ? 'q' : 'a', 0x1e}, {lang == 2 ? 'y' : lang == 1 ? 'w' : 'z', 0x2c}, {'b', 0x30}, {'l', 0x26},
+        {'r', 0x13}, {'c', 0x2e}, {'p', 0x19}, {lang == 1 ? 'z' : 'w', 0x11}, {'e', 0x12}, {'t', 0x14},
+        {lang == 2 ? 'z' : 'y', 0x15}, {'i', 0x17}, {'u', 0x16}};
+    for (int i = 0; i < NCTRL; i++) {
+        if (done[i]) continue;
+        char name[52];
+        int arc;
+        if (!key_name(keys[i][0], name, sizeof name, &arc)) continue;   /* (0x51c920 with 0) */
+        CtrlInput in = {3, 0, keys[i][1], 0, 0, keys[i][0]};
+        for (int j = 0; j < NCTRL; j++)
+            if (same(&s_in[j], &in)) s_in[j].type = 0;
+        s_in[i] = in;
+    }
+    commit();
+}
+
 /* ---- the control (FEControllerSetupControl, vtable 0x5bac84) ---- */
 
 static const char *data(const FertControl *c, const char *name)

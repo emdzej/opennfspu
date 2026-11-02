@@ -759,6 +759,9 @@ static void callback(const char *cb)
         else FEApp_Back();
     } else if (!strcmp(cb, "OPTIONS")) {
         FEApp_GotoScreen("options", true);
+    } else if (!strcmp(cb, "DEFAULTCONTROLS")) {   /* 0x511820: the chosen controller's defaults */
+        FEAccessor *a = FEAccess_Find("Controller.AllControllers");
+        FECtrl_Map(FECtrl_ListDevice(a ? FEAccess_Pos(a) : 0));
     } else if (!strcmp(cb, "SHOWPLAYLISTPANEL") || !strcmp(cb, "HIDEPLAYLISTPANEL")) {
         /* the audio area's (0x4f6ca0, 0x4f6cb0): the CD player's play list or the audio settings */
         FertControl *w = FEApp_Top();

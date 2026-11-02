@@ -1,5 +1,6 @@
 /* The front end's data accessors (feaccess.h). */
 #include "front/feaccess.h"
+#include "front/fectrl.h"
 #include "support/crt.h"
 #include "real/random.h"
 #include "front/fe_parts.h"
@@ -23,7 +24,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -1383,6 +1384,12 @@ void FEData_Init(void)
     /* (and the replays: FECharVectAccessor 0x4b8560, the save directory's *.rpl) */
     FESave_ListReplays();
     add("Replay.List", ACC_REPLAYS, 0, 0, 0);
+    /* FEdaControllers' lists (FECharVectAccessor 0x4b8560, filled by the options screen 0x510ed0): the
+       devices but the mice (at the first joystick when there is one), the joysticks */
+    FEAccessor *ac = add("Controller.AllControllers", ACC_DEVICES, 0, 0, 0);
+    if (ac) ac->src = 0, ac->owned = -1;
+    FEAccessor *ap = add("Controller.AllPads", ACC_DEVICES, 0, 0, 0);
+    if (ap) ap->src = 1, ap->owned = -1;
     add("Game.Damage", ACC_BOOL, 2, 0, 1);   /* FEBoolAccessor 0x4b82f0: on */
     FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
     if (df) df->list = 0x5d9f08;
@@ -1531,6 +1538,15 @@ static void refresh(const FEAccessor *c)
         FESave_Current();
         a->count = FESave_PlayerCount();
         a->pos = FESave_PlayerChosen() < 0 ? 0 : FESave_PlayerChosen();
+        return;
+    }
+    if (a->kind == ACC_DEVICES) {
+        a->count = FECtrl_ListCount(a->src == 1);
+        if (a->owned != a->count) {   /* (the list made again: AllControllers at its first joystick) */
+            a->owned = a->count;
+            a->pos = a->src == 0 && a->count > 1 ? 1 : 0;
+        }
+        if (a->pos >= a->count) a->pos = 0;
         return;
     }
     if (a->kind == ACC_REPLAYS) {
@@ -1697,6 +1713,8 @@ const char *FEAccess_Text(const FEAccessor *a)
         return s_nameinput;
     case ACC_REPLAYS:
         return FESave_ReplayStem(a->pos);
+    case ACC_DEVICES:
+        return FECtrl_ListName(a->src == 1, a->pos);
     case ACC_OPPCAR: {   /* FEOpponentCarAccessor_v12 0x4f4d40 */
         static const int16_t id[5] = {0x280, 0x282, 0x283, 0x284, 0x281};
         return FEStrings_Get(id[a->pos < 5 ? a->pos : 0]);
