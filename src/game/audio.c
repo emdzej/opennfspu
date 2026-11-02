@@ -648,7 +648,7 @@ static void stream_tick(void)
     }
 }
 
-static int32_t s_uicount;   /* 0x656864: the front end's sounds played */
+/* (each play also counts in 0x656864, a tally of the plays the port doesn't keep) */
 void Audio_UI(int patch)
 {
     if (!s_on) return;
@@ -662,7 +662,6 @@ void Audio_UI(int patch)
     p.f0a = 0;
     p.f0b = 0;
     SND_Play(s_banks[7].slot, patch, &p);
-    s_uicount++;
 }
 
 void Audio_Gate(void) { play_once(s_banks[3].slot, 2, 0, 0x7f, 0x40, 0x10000, 0x7f); }       /* 0x4aac00 */

@@ -1,4 +1,5 @@
 /* The race's progress (see race_progress.h). */
+#include "game/car_respawn.h"
 #include "game/audio.h"
 #include "game/race_progress.h"
 #include "exe.h"
@@ -74,7 +75,7 @@ void Race_CountLap(Car *c)
                 return;
             }
         } else if (d <= *CAR_F(c, 0xb04)) {
-            if (d < *CAR_F(c, 0xb08)) PENDING_NOTE(0x40f5a0, "the car back at the start of a point-to-point race (0x40f5a0)");
+            if (d < *CAR_F(c, 0xb08)) CarSim_Respawn(c, 3);   /* 0x40f5a0: back behind the start, put on it */
             *old = d;
             return;
         }

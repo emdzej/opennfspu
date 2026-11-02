@@ -180,8 +180,7 @@ bool app_frame(void)
                         PENDING_NOTE(0x4ecc60, "the derby's LINEAR_TRACK 0, DAMAGE 1, NOCOLLISION 0 (the port's options)");
                     }
                     /* (0x4ec590: Fuzzyfuz gives the quick race four police cars; a mission with police two) */
-                    g_drive_cops = FE_Cheat(5) && FEApp_GameType() == 0 ? 4 : 0;
-                    if (FEApp_GameType() == 9) PENDING_NOTE(0x4ec590, "a Factory Driver mission's police (+0x26: two)");
+                    g_drive_cops = FE_Cheat(5) && FEApp_GameType() == 0 ? 4 : FEApp_GameType() == 9 ? FEApp_Cops() : 0;
                     if (!FEData_TrackRecords(race_track, g_track_records, g_lap_records, g_record_names, g_record_cars)) {
                         memset(g_track_records, 0, sizeof g_track_records);
                         memset(g_lap_records, 0, sizeof g_lap_records);

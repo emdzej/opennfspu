@@ -41,7 +41,7 @@ static int s_nsaved;
 static FertControl *s_bar;            /* +0xe0: the bottom bar (FEBottomBarMenu, bottombar.lay) */
 static FEResult s_result;
 static char s_track[64] = "coastal";
-static int s_laps = 1, s_opponents, s_traffic;
+static int s_laps = 1, s_opponents, s_traffic, s_cops;
 static int16_t s_traffic_slots[7];   /* the career race's own traffic cars (0x4ec590's +0x382) */
 static char s_car[64] = "964";
 static int s_depth;
@@ -562,6 +562,8 @@ const char *FEApp_Track(void) { return s_track; }
 const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 int FEApp_Opponents(void) { return s_opponents; }
+int FEApp_Cops(void) { return s_cops; }
+
 int FEApp_Traffic(int16_t slots[7])
 {
     memcpy(slots, s_traffic_slots, sizeof s_traffic_slots);
@@ -911,6 +913,7 @@ static void callback(const char *cb)
                 memcpy(&lvl, m + 0x54, 2);
                 s_traffic = 0 <= lvl && lvl < 4 ? (int)exe_u32(0x5db440 + 4u * (uint32_t)lvl) : 0;
             }
+            s_cops = m[0x26] ? 2 : 0;   /* (0x4ec590: two police cars for a mission with police) */
             snprintf(s_track, sizeof s_track, "%s", t);
             snprintf(s_car, sizeof s_car, "%s", (const char *)fc->rec + 4 + 0x7f);
             s_havecol = FEAccess_CarColours(FEAccess_Find("FactoryDriver.Car"), s_colours);

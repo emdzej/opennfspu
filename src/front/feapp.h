@@ -61,6 +61,8 @@ int FEApp_Opponents(void);
 /* The race's traffic count (0x4fb630's fifth) and the career race's own traffic cars (0 slots: the
    track's models). */
 int FEApp_Traffic(int16_t slots[7]);
+/* The police cars of a Factory Driver mission with police (0x4ec590: its +0x26 gives two), else 0. */
+int FEApp_Cops(void);
 /* The race's kind (RACE_TYPE, 0x6573ec) for the mode chosen. */
 int FEApp_RaceType(void);
 /* The knockout's grid (its racers' personalities, the starting places, start[0] the player's); -1 for none. */

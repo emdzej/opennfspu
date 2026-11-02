@@ -63,6 +63,9 @@ void Camera_Init(int p, Car *car, int mode);
 void Camera_SetMode(int p, int mode);        /* 0x465650 */
 void Camera_NextMode(int p);                 /* 0x465920: the car's camera list's next */
 void Camera_Update(void);                    /* 0x463af0 */
+/* Camera p put at once at its mode's offset in the car's frame (a car put back on the road: 0x461770,
+   the fixed cameras' placing). */
+void Camera_Snap(int p);
 /* The race view's frame, field of view and near plane from camera p (type: the view's, 1 the car's own
    eye). 0x464e40 */
 void Camera_ToView(int p, RCamera *c, int type);

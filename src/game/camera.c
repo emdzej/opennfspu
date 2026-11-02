@@ -402,6 +402,8 @@ static void mode_fixed(int p)
     }
 }
 
+void Camera_Snap(int p) { if (g_racecam[p].car) mode_fixed(p); }
+
 /* The crash camera (0x461450): 3 up and 10 behind (in front when its flag says so) in the road's frame
    at the car, under ceilings, eased at 0.02 a frame; it takes the flags 0x7a. */
 static void mode_crash(int p)

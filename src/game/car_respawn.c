@@ -1,4 +1,6 @@
 /* A race car's hits and its return to the road (see car_respawn.h). */
+#include "game/input.h"
+#include "game/camera.h"
 #include "game/car_respawn.h"
 #include "render/carparticle.h"
 #include "render/r3dcar.h"
@@ -84,10 +86,10 @@ void CarSim_Respawn(Car *c, int kind)
             *CAR_I(c, 0x1104) = 0;
             return;
         }
-    } else if (kind == 3) {
-        PENDING_NOTE(0x40f5a0, "the respawn at a given distance (kind 3)");
     }
-    int n = car_node(c);
+    /* kind 3: at the node the race starts from (+0xafc, the point-to-point race's car back behind
+       its start) */
+    int n = kind == 3 ? (int)*CAR_F(c, 0xafc) : car_node(c);
     for (int guard = 0; !node_free(c, n) && guard < g_road->nnodes; guard++) n = Road_Step(g_road, n, g_race_reverse ? -1 : 1, -1);
     CarSim_ResetDrive(c);   /* 0x49e010 */
     if (*CAR_I(c, CAR_FLAGS) & 8) {
@@ -98,7 +100,7 @@ void CarSim_Respawn(Car *c, int kind)
         off[2] = lp[1];
     }
     CarSim_Place(c, n, off, dir);   /* 0x49b000 */
-    if (g_race_players < 2 && *CAR_I(c, CAR_INDEX) == g_race_local) PENDING_NOTE(0x461770, "the player's camera after a reset");
+    if (g_replay_mode < 2 && *CAR_I(c, 0x520) == g_camera_car) Camera_Snap(0);   /* 0x461770 */
     memset(CAR_F(c, 0x33c), 0, 12);
     still(c);
 }
