@@ -1925,7 +1925,7 @@ static void bb_setstate(HudVisual *v, int32_t s)   /* 0x41adf0 */
     b->frames = 0;
     v->state = s;
     if (s == 1) b->opened = g_sim_tick;
-    if (s == 1 || s == 2) PENDING_NOTE(0x4aab80, "the billboards' sound (4)");
+    if (s == 1 || s == 2) Audio_UI(4);   /* 0x4aab80 */
 }
 
 /* The dark band along a bar at x: two quads to its sides. */
@@ -2071,7 +2071,7 @@ static void button_free(HButton *b)
 static void button_input(HButton *b, int click)
 {
     b->clicked = click == 1 && b->hover;
-    if (b->clicked) PENDING_NOTE(0x4aab80, "the buttons' sound (9)");
+    if (b->clicked) Audio_UI(9);   /* 0x4aab80 */
 }
 
 /* A shadow d pixels to the right and below (x, y, w, h). 0x435ee0 (with d twice) */
@@ -4065,7 +4065,7 @@ void HUD_Draw(RenderSystem *r, RCamera *c)
         for (int i = 0; i < g_ntrafficcars; i++)   /* (0x65807c's count over 0x5e8c24) */
             if (g_traffic[i] && *CAR_I(g_traffic[i], 0x42c) != 0) n++;
         if (n != s_cones_down) {
-            PENDING_NOTE(0x4aac20, "the cone's sound");
+            Audio_Cone();   /* 0x4aac20 */
             s_cones_down = n;
             g_mission_knocked++;   /* 0x4297e0 */
             if (s_time) {

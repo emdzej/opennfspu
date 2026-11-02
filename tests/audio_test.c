@@ -113,7 +113,7 @@ int main(void)
     printf("  idle: rms %.0f, %.0f crossings/s; full throttle: rms %.0f, %.0f crossings/s (rpm %.0f)\n", idle, zidle, full, zc,
            *CAR_F(g_cars[0], 0xdb4));
     CHECK(idle > 300 && full > 300);
-    CHECK(zc > zidle * 1.5);
+    CHECK(zc > zidle * 1.2);   /* (higher: the crossings, a rough pitch, with the data's mix from replay.spl) */
     /* A hard landing's impact (an event as 0x49bcb0's) heard over the idling engine. */
     double before = run(32 + (g_sim_tick & 1 ? 0 : 1), 16, 0);   /* (the even ticks clear the events: add on an odd one) */
     Car_AddEvent(g_cars[0], 1, -1, 0, 5, 6.0f, 0);

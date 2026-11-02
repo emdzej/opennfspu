@@ -18,6 +18,8 @@
 #include <string.h>
 #include <strings.h>
 
+void Audio_UI(int patch);   /* game/audio.h (whose car.h this file's CAR_SIZE clashes with) */
+
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
 typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_STRING, ACC_SHOWCASE } AccKind;
@@ -2248,7 +2250,7 @@ int FEData_BuyUsed(void)
                 sv->cars[i] = sv->cars[j];
                 sv->cars[j] = t;
             }
-    PENDING_NOTE(0x4aab80, "the front end's purchase sound (0xb)");
+    Audio_UI(0xb);   /* 0x4aab80 */
     refresh(u);
     FESave_Write();
     return 0;
@@ -2803,7 +2805,7 @@ bool FEData_CheatCode(const char *name)
     for (int k = 0; k < 7; k++) {
         const uint8_t *e = exe_data(0x5d9618 + 0xc * (uint32_t)k, 0xc);
         if (!e || memcmp(e, code, 8)) continue;
-        PENDING_NOTE(0x4aab80, "the front end's cheat sound (0xc)");
+        Audio_UI(0xc);   /* 0x4aab80 */
         int32_t id;
         memcpy(&id, e + 8, 4);
         if (id == 4) {

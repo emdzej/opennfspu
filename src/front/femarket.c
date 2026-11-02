@@ -1,4 +1,5 @@
 /* The used car market (see femarket.h). */
+#include "game/audio.h"
 #include "front/femarket.h"
 #include "app.h"
 #include "exe.h"
@@ -281,7 +282,7 @@ void Market_Accept(int owned)   /* 0x501740 */
     if (offer > 999999999) offer = 999999999;
     if (offer < -999999999) offer = -999999999;
     sv->money += offer;
-    PENDING_NOTE(0x4aab80, "the front end's sale sound (10)");
+    Audio_UI(10);   /* 0x4aab80 */
     Market_Unlist(owned);
     free(sv->cars[owned].parts);
     memmove(&sv->cars[owned], &sv->cars[owned + 1], (size_t)(sv->ncars - owned - 1) * sizeof *sv->cars);

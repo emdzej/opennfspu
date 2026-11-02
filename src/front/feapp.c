@@ -993,7 +993,7 @@ static void on_up(FertControl *c)
         return;
     }
     if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.BOTTOMBARBUTTON")) {   /* 0x4c8f50 */
-        PENDING_NOTE(0x4aab80, "the front end's click sound (5)");
+        Audio_UI(5);   /* 0x4aab80 */
         const char *cb = data_str(c, "callback");
         if (cb && *cb) callback(cb);
         if (s_result != FE_RUNNING) return;
@@ -1421,7 +1421,7 @@ static void dialog_key(uint8_t code)
     for (int i = 0; i < 10; i++)
         if (code == pad[i]) ch = '0' + i;
     if (!ch) return;
-    PENDING_NOTE(0x4aab80, "the front end's key sound (9)");
+    Audio_UI(9);   /* 0x4aab80 */
     size_t n = strlen(s_dialog.input);
     if (ch == 8) {
         if (n) s_dialog.input[n - 1] = 0;
@@ -1801,8 +1801,8 @@ static bool slider_down(ListSlider *s, int x, int y)
     bool on = true;
     switch (s->hover) {
     case 0: on = false; break;
-    case 1: s->step = -1; PENDING_NOTE(0x4aab80, "the slider's sound (8)"); break;
-    case 2: s->step = 1; PENDING_NOTE(0x4aab80, "the slider's sound (8)"); break;
+    case 1: s->step = -1; Audio_UI(8);   /* 0x4aab80 */ break;
+    case 2: s->step = 1; Audio_UI(8);   /* 0x4aab80 */ break;
     case 3: s->drag_y = y, s->drag_pos = s->pos; break;
     case 4:   /* the knob's top to the mouse, then dragged from there */
         s->drag_y = s->knob[1], s->drag_pos = s->pos;
@@ -2101,7 +2101,7 @@ static bool listbox_click(FertControl *c, int32_t mx, int32_t my)
         int top = yy + (row.label ? 13 : 0);
         if (my >= top && my < top + 14) {
             FEAccess_SetPos(a, i);
-            PENDING_NOTE(0x4aab80, "the front end's click sound (5)");
+            Audio_UI(5);   /* 0x4aab80 */
             return true;
         }
         yy += row.height;
@@ -2387,7 +2387,7 @@ static void inputbox_keys(FertControl *c, const uint8_t *k, int nk)
         } else {
             FEAccess_TypeChar(a, ch);
         }
-        PENDING_NOTE(0x4aab80, "the front end's key sound (9)");
+        Audio_UI(9);   /* 0x4aab80 */
     }
 }
 

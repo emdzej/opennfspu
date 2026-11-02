@@ -35,6 +35,14 @@ void Audio_SayFinalLap(void);
 void Audio_SayPlace(int place);
 void Audio_SayBehind(int s);
 void Audio_SayLead(int s);
+/* The front end's and the HUD's sounds (0x4aab80): fesfx's patch (5 a click, 8 a slider, 9 a key or
+   button, 4 a billboard) at the mix's volume. */
+void Audio_UI(int patch);
+/* The race's bank-3 one-shots: a gate passed (0x4aac00, patch 2), a cone hit (0x4aac20, 0), the wrong
+   way's warning (0x4aac40, 1, quieter). */
+void Audio_Gate(void);
+void Audio_Cone(void);
+void Audio_WrongWay(void);
 /* A lightning strike's thunder (0x4a8110): one of track.viv's 991 .. 999 after 0x87 - delay odd ticks,
    from the angle. */
 void Audio_Thunder(int delay, int angle);

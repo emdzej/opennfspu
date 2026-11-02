@@ -26,7 +26,15 @@ int32_t g_sound_quality;
 int32_t g_audio_fx = 0x7f;   /* 0x5d1744: the effects' volume (the start ramps it up) */
 
 static const char *sound_dir(void) { return "GameData\\Sounds\\"; }   /* 0x65b318 (the install's) */
-static int32_t opt(uint32_t va) { return (int32_t)exe_u32(va); }      /* the options' starting values */
+/* The mix (0x5d14b0 .. 0x5d14ec, fifteen words): the exe's, then GameData\Sounds\replay.spl's 0x3c
+   bytes over them once the sound is on (0x4a8950). Other options read their starting values. */
+static int32_t s_mix[15];
+static bool s_mix_read;
+static int32_t opt(uint32_t va)
+{
+    if (0x5d14b0 <= va && va < 0x5d14ec && s_mix_read) return s_mix[(va - 0x5d14b0) / 4];
+    return (int32_t)exe_u32(va);
+}
 
 /* 0x5d1764: a 129-step fade in; read from its end, 0x5d17e4 - i, the fade out. */
 static int fade_in(int i) { return (int8_t)exe_data(0x5d1764 + (uint32_t)i, 1)[0]; }
@@ -53,6 +61,27 @@ typedef struct {
 } AudioBank;
 static AudioBank s_banks[8];
 
+static int load_bank(const char *name, int k);
+
+/* 0x4a8950: the mix from <sounds>replay<.spl> (0x59d900: at most 0x3c bytes over 0x5d14b0), then the
+   front end's sounds into bank 7 (fesfx, Lilfesfx at the low qualities). */
+static void load_mix_and_fe(void)
+{
+    if (3 <= g_sound_quality) return;
+    for (int i = 0; i < 15; i++) s_mix[i] = (int32_t)exe_u32(0x5d14b0 + 4u * (uint32_t)i);
+    char path[160];
+    snprintf(path, sizeof path, "%s%s%s", sound_dir(), exe_str(0x5cce90), exe_str(0x5d1a04));
+    size_t n = 0;
+    uint8_t *b = vfs_read_all(path, &n);
+    if (b) {
+        memcpy(s_mix, b, n < sizeof s_mix ? n : sizeof s_mix);
+        free(b);
+    }
+    s_mix_read = true;
+    snprintf(path, sizeof path, "%s%s%s", sound_dir(), 1 < g_sound_quality ? exe_str(0x5d1a1c) : "", exe_str(0x5d1a14));
+    load_bank(path, 7);
+}
+
 bool Audio_Init(void)
 {
     g_audio_fx = Options_Int(0x5d6180, opt(0x5d1744));   /* SFXLEVEL (the front end's Audio.SfxLevel, 0x5d1744) */
@@ -70,7 +99,7 @@ bool Audio_Init(void)
     s_revlevel = 0;
     s_revset = false;
     if (s_on) Music_Init(0x40000, 0x8000, exe_str(0x5d13f8));   /* (the game calls Audio_Init with 0x40000, 0x8000) */
-    PENDING_NOTE(0x4ab280, "the speech (0x4ab280)");
+    if (s_on) load_mix_and_fe();
     return s_on;
 }
 
@@ -78,6 +107,8 @@ void Audio_Shutdown(void)
 {
     Music_Free();
     stream_close();
+    /* 0x4ab280: the effects off (and a buffer at 0x6568e4 freed that nothing allocates) */
+    if (s_on) SND_SetFx(0, 0, 0, NULL);
     SND_Shutdown();
     engines_free();
     for (int i = 0; i < 8; i++) {
@@ -616,6 +647,27 @@ static void stream_tick(void)
         s_req_rd = (s_req_rd + 1) & 0x3f;
     }
 }
+
+static int32_t s_uicount;   /* 0x656864: the front end's sounds played */
+void Audio_UI(int patch)
+{
+    if (!s_on) return;
+    SndParams p;
+    SND_ParamsDefault(&p);
+    p.patch = patch;
+    p.bank = (int8_t)s_banks[7].slot;
+    p.vol = (int8_t)((opt(0x5d14b8) * g_audio_fx * g_audio_fx * 0x55) >> 0x15);
+    p.pan = 0x40;
+    p.f09 = 0x40;
+    p.f0a = 0;
+    p.f0b = 0;
+    SND_Play(s_banks[7].slot, patch, &p);
+    s_uicount++;
+}
+
+void Audio_Gate(void) { play_once(s_banks[3].slot, 2, 0, 0x7f, 0x40, 0x10000, 0x7f); }       /* 0x4aac00 */
+void Audio_Cone(void) { play_once(s_banks[3].slot, 0, 0, 0x7f, 0x40, 0x10000, 0x7f); }       /* 0x4aac20 */
+void Audio_WrongWay(void) { play_once(s_banks[3].slot, 1, 0, 0x28, 0x40, 0x10000, 0x7f); }   /* 0x4aac40 */
 
 void Audio_Countdown(int step) { stream_request(2, step, false); }   /* 0x4a6010 */
 

@@ -1,4 +1,5 @@
 /* The race's progress (see race_progress.h). */
+#include "game/audio.h"
 #include "game/race_progress.h"
 #include "exe.h"
 #include "game/car_drive.h"
@@ -384,7 +385,7 @@ void Race_WrongWay(void)
             *n = 0;
         } else if (*(int16_t *)(void *)(c->b + 0x418) == 0 && *CAR_I(c, 0x1104) == 0) {
             (*n)++;
-            if (0x3f < *n && (*n & 0x1f) == 0 && *n < 0x94) PENDING_NOTE(0x4aac40, "the wrong way's speech");
+            if (0x3f < *n && (*n & 0x1f) == 0 && *n < 0x94) Audio_WrongWay();   /* 0x4aac40 */
         }
     }
 }

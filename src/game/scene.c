@@ -1,5 +1,6 @@
 /* The scene module (see scene.h). Field reads go through crt_fscanf with the original's format strings,
    read from the exe at runtime (exe_str), and destinations at the original object offsets. */
+#include "game/audio.h"
 #include "game/scene.h"
 #include "exe.h"
 #include "game/track.h"
@@ -799,7 +800,7 @@ bool Scene_TriggerTakes(const SceneElem *t, void *car) { return trigger_takes(t,
 void Scene_TriggerSound(const SceneElem *t)
 {
     if (scene_i32(t, 0xe0) == 1 && (scene_i32(t, TRIG_TYPE) == 0 || scene_i32(t, TRIG_TYPE) == 1)) {
-        PENDING_NOTE(0x4aac00, "the gate's sound (0x4a96b0 of bank 0x6564d0, sound 2)");
+        Audio_Gate();   /* 0x4aac00 */
         return;
     }
     /* the linked sound element (+0xd8): a one-shot (kind 1) with a sound has its trigger set (0x4abea0,
