@@ -347,7 +347,7 @@ GASM_EXPORT("gasm_init") int32_t pu_gasm_init(void)
 {
     gasm_set_frame_rate(APP_FRAME_HZ);
     gasm_audio_config(APP_AUDIO_RATE, 2);
-    gasm_input_mode(GASM_INPUT_KEYS_RAW);
+    gasm_input_mode(GASM_INPUT_KEYS_RAW | GASM_INPUT_POINTER_HIDDEN);   /* (the front end draws its own pointer) */
     init_keys();
     if (!mount_game()) {
         plat_log("OpenNFSPU: game data not found. Pass the installed game folder (gasm-run opennfspu.wasm "

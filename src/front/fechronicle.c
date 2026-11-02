@@ -1,11 +1,11 @@
 /* The Porsche Chronicle (see fechronicle.h). */
 #include "front/fechronicle.h"
+#include "front/fepointer.h"
 #include "exe.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
 #include "front/feaccess.h"
 #include "front/feapp.h"
-#include "pending.h"
 #include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -355,7 +355,7 @@ static void pic_draw(FertControl *c, int32_t ox, int32_t oy)
     if (ey < s_pic.scroll[1]) s_pic.scroll[1] = ey;
     if (s_pic.scroll[0] < 0) s_pic.scroll[0] = 0;
     if (s_pic.scroll[1] < 0) s_pic.scroll[1] = 0;
-    if ((0 < ex || 0 < ey) && (c->feflags & 4)) PENDING_NOTE(0x4e1630, "the front end's drag cursor (4)");
+    if ((0 < ex || 0 < ey) && (c->feflags & 4)) FEPointer_Want(4);   /* (0x4e1630: the pointer to drag) */
     int ty = 0, at = 2;
     for (int row = 0; row < rows + 1; row++) {
         int tx = 0;

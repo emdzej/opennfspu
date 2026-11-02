@@ -4,6 +4,7 @@
 #include "exe.h"
 #include "front/fe3d.h"
 #include "front/feaccess.h"
+#include "front/fepointer.h"
 #include "game/audio.h"
 #include "render/r3dcar.h"
 #include <string.h>
@@ -239,6 +240,22 @@ void FECar3D_Tick(FertControl *c, const float *damage)
         }
     }
     if (!car) return;
+    /* the pointer (v15 0x4c0570, each frame; v24 0x4c0520 the hand): in the car the one for inside,
+       else over it by the part under the mouse, a door opened by a click the one to get in; the original
+       none while a dialog is up, 0x511a40, which the port's dialogs cover anyway) */
+    if (car->loaded) {
+        s.part_over = pick(c, s.mouse[0], s.mouse[1]);
+        if (c->feflags & 4) FEPointer_Want(1);
+        if (FECar3D_Captured()) FEPointer_Want(7);
+        else if (c->feflags & 4) {
+            switch (s.part_over) {
+            case ROOF: FEPointer_Want(6); break;
+            case DOOR1:
+            case DOOR2: FEPointer_Want(s.armed[s.part_over != DOOR1] ? 8 : 5); break;
+            default: FEPointer_Want(3); break;
+            }
+        }
+    }
     /* the roof's slot by its amount (0x4d13e0), the doors' hinges */
     R3DCar_AnimReset(car, 1, car->anim[1].frames * (float)s.open[ROOF] * exe_f32(0x5b3888));
     FE3D_CarHinge(6, 0, (float)s.open[DOOR1] * exe_f32(0x5b58e8), 0);

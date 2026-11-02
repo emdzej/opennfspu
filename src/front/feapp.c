@@ -14,6 +14,7 @@
 #include "front/fe3d.h"
 #include "front/fesave.h"
 #include "front/fecar3d.h"
+#include "front/fepointer.h"
 #include "front/femarket.h"
 #include "front/fefactory.h"
 #include "support/crt.h"
@@ -428,6 +429,7 @@ void FEApp_End(void)
     FE3D_Free();
     FEChronicle_Free();    /* 0x506920 (0x4d5d40) */
     FEEndOfEra_Free();
+    FEPointer_Free();      /* 0x4e1450 */
     FEShowcase_Load(NULL); /* 0x5081e0 (the port's: the race's memory) */
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
     Render_FreeCommonFsh();   /* 0x448af0 */
@@ -2511,6 +2513,17 @@ static void update_watches(FertControl *w)
     }
 }
 
+/* The controls under the mouse asking for the pointer's hand (FEControl's tick 0x4c7b20: hovered, not
+   disabled or hidden, its slot 24 0x4c7b10; the 3D car control's own, front/fecar3d.c). */
+static void hover_pointer(FertControl *w)
+{
+    for (int i = 0; w && i < w->nchildren; i++) {
+        FertControl *c = w->children[i];
+        if (c->sub && !(c->feflags & 0x20)) hover_pointer(c->sub);
+        if ((c->feflags & 4) && !(c->feflags & 0x30) && strcmp(c->id, "NFS5.3DCAR")) FEPointer_Want(1);
+    }
+}
+
 static void update_all(FertControl *w)
 {
     for (int i = 0; w && i < w->nchildren; i++) {
@@ -2827,6 +2840,7 @@ void FEApp_Frame(void)
     FEMovieBox_Update();
     FertControl *w = FEApp_Top();
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
+    FEPointer_Begin();   /* (0x4d2980: 0x4e1460 first) */
     sync_room(w);
     Render_BeginFrame(g_render);
     if (tm) TexManager_begin(tm);
@@ -2862,6 +2876,7 @@ void FEApp_Frame(void)
         screen_update(w);
         update_watches(w);
         update_all(w);   /* (the controls' ticks) */
+        hover_pointer(w);
         FEWindow_Draw(w);
         if (w == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
         draw_combos(w);
@@ -2871,9 +2886,11 @@ void FEApp_Frame(void)
             FertControl_Update(s_bar->children[i]);
             if (!strcmp(s_bar->children[i]->id, "NFS5.BOTTOMBARBUTTON")) anim_update(s_bar->children[i]);
         }
+        hover_pointer(s_bar);
         FEWindow_Draw(s_bar);   /* (0x4d2980: the bottom bar over the screens) */
     }
     dialog_draw();
+    FEPointer_Draw();   /* (0x4d2980, after the windows: 0x4e1470 at the mouse) */
     FE2D_Flush();
     View_End(g_render);
     if (tm) TexManager_end(tm);
