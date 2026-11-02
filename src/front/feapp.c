@@ -398,7 +398,8 @@ void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int 
     }
     s_tour_race = -1;
     if (s_gametype == 2 && !quit) FEData_KnockoutResult(places, n);   /* (0x4ddb10) */
-    if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */
+    FEData_RefreshCars();   /* (FEApplication_Run's 0x4ed390: 0x4f34c0, then the career's market) */
+    if (s_gametype == 4) Market_Update(FEData_CareerYear());
     if (s_factory_race && !quit) {
         /* 0x4ed590's type 9: the verdict (0x657834) and the results into the mission (0x51a770: the
            local racer's time, damage and cones from the results' stats, 0x5e75a0), or the cheat's skip
@@ -680,7 +681,7 @@ static bool player_callback(const char *cb)
     FEAccessor *users = FEAccess_Find("UserList.UserList"), *in = FEAccess_Find("UserList.NameInput");
     if (!strcmp(cb, "SETNAMETHENBACK")) {   /* _v55 0x50ffa0: the chosen player's save loaded */
         if (users && FEAccess_Count(users)) {
-            PENDING_NOTE(0x4f34c0, "the car list's refresh (owned and era)");
+            FEData_RefreshCars();   /* (0x4f34c0, before the load: the year it had) */
             if (FESave_LoadStem(FESave_PlayerStem(FEAccess_Pos(users)), false)) {
                 FEData_KnockoutStop();   /* (0x4ddaf0) */
                 FEApp_Back();
@@ -831,6 +832,7 @@ static void callback(const char *cb)
         s_gametype = !strcmp(cb, "SETTYPEQUICKKNOCKOUT") ? 1 : !strcmp(cb, "SETTYPEKNOCKOUT") ? 2
                    : !strcmp(cb, "SETTYPEMULTIPLAYER") ? 3 : !strcmp(cb, "SETTYPEFACTORYDRIVER") ? 9 : 0;
         FEData_SetGameType(s_gametype);
+        FEData_RefreshCars();   /* (0x4f34c0) */
         if (s_gametype == 9) {
             /* FEMainScreen_v64 0x510600: its missions (0x4f34c0), then their screen, factdone once all
                are done */
@@ -865,6 +867,7 @@ static void callback(const char *cb)
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
         s_gametype = 4;
         FEData_SetGameType(4);
+        FEData_RefreshCars();
         /* FEMainScreen_v63 0x510430: the career (Game.GameType 4, the car lists again), its tournaments when
            it was started (PlayerInfo's 0x691dd5), else its first screen, which starts it */
         Save *sv = FESave_Current();

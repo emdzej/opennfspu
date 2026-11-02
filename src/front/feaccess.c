@@ -719,6 +719,18 @@ static void dealer_list(size_t n)
             }
 }
 
+void FEData_RefreshCars(void)
+{
+    /* FE_LoadCarLists 0x4f34c0 again: the dealer's and the market's cars back to their first, the track
+       lists, the car lists by the game type and the career's year (the port's generic cars don't depend
+       on them; the original's all-cars flag 0x691a04, CHEATALLCARS 0x50d430, no layout names) */
+    dealer_list(s_car_size);
+    FEAccessor *d = FEAccess_Find("DealerCar.Car"), *u = FEAccess_Find("UsedCar.Car");
+    if (d) d->count = s_ndealer, d->pos = 0;
+    if (u) u->pos = 0;
+    track_lists();
+}
+
 /* A car's price this year (0x4ed8b0): its price (+0x208), after its first year that times its year's
    factor (+0x20c, one a year) over 100. */
 static int32_t car_price(const uint8_t *r)
