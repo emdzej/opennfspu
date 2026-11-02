@@ -205,7 +205,8 @@ bool app_frame(void)
                         g_drive_race_type = 3;
                         g_race_linear = 0;   /* (its LINEAR_TRACK 0) */
                         g_race_fe_damage = 1;   /* (its DAMAGE 1) */
-                        PENDING_NOTE(0x4ecc60, "the derby's NOCOLLISION 0 (the port's options)");
+                        /* (and NOCOLLISION 0x29 at 0: the cars' collisions skip only in a network game
+                           with it set, 0x657408 and 0x65740c in 0x498f60's pair test, so alone it is a no-op) */
                     }
                     /* (0x4ec590: Fuzzyfuz gives the quick race four police cars; a mission with police two) */
                     g_drive_cops = FE_Cheat(5) && FEApp_GameType() == 0 ? 4 : FEApp_GameType() == 9 ? FEApp_Cops() : 0;
