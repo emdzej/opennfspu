@@ -27,7 +27,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -1441,6 +1441,110 @@ bool FEData_InstallState(bool *fitted)
     return true;
 }
 
+/* The advanced repair's shopping list (FEPartsDamageRepairShoppingList +0x24): the owned car's parts
+   (their index among the car's) to repair or to replace, in the order they were added; the car it was
+   made for (0x69a110). */
+static struct { int idx; bool replace; } s_rlist[64];
+static int s_nrlist, s_rlist_car = -1;
+
+static const SaveCar *dmg_car(const FEAccessor *a)   /* (+0x24: UsedCar.Car's, or OwnedCars.Car's) */
+{
+    return acc_car(FEAccess_Find(a->src == 1 ? "OwnedCars.Car" : "UsedCar.Car"));
+}
+
+static SaveCar *repair_car(void) { return acc_car(FEAccess_Find("OwnedCars.Car")); }
+
+/* A replacement's cost (0x5181e0): the part's price with the years' inflation (0x5ba4a4, from its
+   year +0x46), less (100 - w) per cent of it, w its wear x 2 + 20 (0x5ba4a0, 0x5b2470) at most 100;
+   none below 1. */
+static int32_t part_replace(int32_t id, int32_t saved, int year)
+{
+    const uint8_t *p = part_rec(id);
+    if (!p) return 0;
+    int n = year - rec16(p, 0x46), sum = 0;
+    for (int i = 0; i < n && i < 0x3e; i++) sum += (int32_t)exe_u32(0x5ba4a4 + 4u * (unsigned)i);
+    int32_t price = rec32(p, 0x5c);
+    float wf;
+    memcpy(&wf, &saved, 4);
+    int w = (int)(wf * 2.0f + 20.0f);
+    if (w > 100) w = 100;
+    if (w < 0) w = 0;
+    int32_t full = (price * sum) / 100 + price, cost = (price * sum) / 100 - (100 - w) * full / 100 + price;
+    return cost < 1 ? 0 : cost;
+}
+
+static int32_t repair_item_cost(const SaveCar *c, int k)   /* (0x518160 or 0x5181e0) */
+{
+    const int32_t *pt = c->parts[s_rlist[k].idx];
+    return s_rlist[k].replace ? part_replace(pt[0], pt[1], career_year()) : part_repair(pt[0], pt[1], career_year());
+}
+
+static int32_t repair_total(void)   /* (_v6 0x516e60, TOTAL) */
+{
+    const SaveCar *c = repair_car();
+    int32_t t = 0;
+    for (int k = 0; c && k < s_nrlist; k++) t += repair_item_cost(c, k);
+    return t;
+}
+
+void FEData_RepairOpen(void)   /* (FEPartsRepairCBL 0x518850: the list let go when the car isn't its) */
+{
+    FEAccessor *a = FEAccess_Find("OwnedCars.Car");
+    int car = a ? FEAccess_Pos(a) : -1;
+    if (car != s_rlist_car) s_nrlist = 0;
+    s_rlist_car = car;
+}
+
+int FEData_RepairCallback(const char *cb)
+{
+    SaveCar *c = repair_car();
+    FEAccessor *od = FEAccess_Find("Parts.OwnedDamageRepairList"), *rl = FEAccess_Find("Parts.RepairShoppingList");
+    if (!strcmp(cb, "fixpart") || !strcmp(cb, "replacepart")) {
+        /* _v55 0x518a40 / _v56 0x518a70: the chosen part (0x516820) on the list to repair or replace
+           (0x516b90: not without wear; twice if added twice) */
+        if (!c || !od) return 0;
+        refresh(od);
+        if (od->pos < 0 || od->pos >= c->nother || s_nrlist == 64) return 0;
+        int idx = c->ninstalled + od->pos;
+        float w;
+        memcpy(&w, &c->parts[idx][1], 4);
+        if (w == 0.0f) return 0;
+        s_rlist[s_nrlist].idx = idx;
+        s_rlist[s_nrlist++].replace = cb[0] == 'r';
+    } else if (!strcmp(cb, "clearlist")) {   /* _v57 0x518aa0 -> 0x516d80 */
+        s_nrlist = 0;
+    } else if (!strcmp(cb, "removeitem")) {   /* _v58 0x518ab0 -> 0x516d20: the chosen item */
+        if (!rl) return 0;
+        refresh(rl);
+        if (rl->pos < 0 || rl->pos >= s_nrlist) return 0;
+        memmove(&s_rlist[rl->pos], &s_rlist[rl->pos + 1], (size_t)(s_nrlist - rl->pos - 1) * sizeof *s_rlist);
+        s_nrlist--;
+    } else if (!strcmp(cb, "acceptlist")) {
+        /* _v59 0x518ad0 -> 0x516f10: the total against the money (0x32a when short); each item repaired
+           (0x5182d0) or replaced (0x518360) in turn, paying its cost then, the body part's (0x4efa70) also
+           clearing the ten body zones (+0x6a8); the list emptied */
+        Save *sv = FESave_Current();
+        if (!sv || !c) return 0;
+        if (sv->money < repair_total()) return 0x32a;
+        int body = -1;
+        for (int i = c->ninstalled; i < c->ninstalled + c->nother && body < 0; i++) {
+            const uint8_t *p = part_rec(c->parts[i][0]);
+            if (p && rec16(p, 0x26) == 10 && !strcmp((const char *)p + 0x28, exe_str(0x5da740))) body = i;
+        }
+        for (int k = 0; k < s_nrlist; k++) {
+            if (s_rlist[k].idx == body) memset(c->rec + 0x6a8, 0, 40);
+            sv->money -= repair_item_cost(c, k);
+            c->parts[s_rlist[k].idx][1] = 0;
+        }
+        s_nrlist = 0;
+        FESave_Write();
+    } else {
+        return -1;
+    }
+    if (rl) refresh(rl);
+    return 0;
+}
+
 bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
 {
     memset(out, 0, sizeof *out);
@@ -1488,8 +1592,10 @@ bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
         if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
         return true;
     }
-    if (a->kind == ACC_USEDDMG) {   /* FEPartsDamageRepairAccessor_v15 0x516640 */
-        const SaveCar *uc = acc_car(FEAccess_Find("UsedCar.Car"));
+    if (a->kind == ACC_USEDDMG) {
+        /* FEPartsDamageRepairAccessor_v15 0x516640: the car's fitted part (0x4efaf0), at 0x40 when it has
+           no wear or (the owned car's, with the shopping list) a part of its id is on the list */
+        const SaveCar *uc = dmg_car(a);
         if (!uc || row < 0 || row >= uc->nother) return false;
         const uint8_t *p = part_rec(uc->parts[uc->ninstalled + row][0]);
         if (!p) return false;
@@ -1500,9 +1606,28 @@ bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
         out->status_pos = "ID_DAMAGEPOS";
         out->status_align = 2;
         out->dim = wear == 0.0f;   /* (none: at 0x40) */
+        for (int k = 0; a->src == 1 && k < s_nrlist; k++)
+            if (uc->parts[s_rlist[k].idx][0] == uc->parts[uc->ninstalled + row][0]) out->dim = true;
         out->height = 0xe;
         out->category = part_category(p);
         const uint8_t *prev = row ? part_rec(uc->parts[uc->ninstalled + row - 1][0]) : NULL;
+        if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
+        return true;
+    }
+    if (a->kind == ACC_REPAIRLIST) {
+        /* FEPartsDamageRepairShoppingList_v15 0x516990: the item's part and its cost ("%d" 0x5cd1b0 at
+           ID_COSTPOS), its category's label when the item before is of another */
+        const SaveCar *c = repair_car();
+        if (!c || row < 0 || row >= s_nrlist) return false;
+        const uint8_t *p = part_rec(c->parts[s_rlist[row].idx][0]);
+        if (!p) return false;
+        snprintf(out->text, sizeof out->text, "%s %s", (const char *)p + 8, FEStrings_Get(rec32(p, 4)));
+        snprintf(out->status, sizeof out->status, "%d", repair_item_cost(c, row));
+        out->status_pos = "ID_COSTPOS";
+        out->status_align = 2;
+        out->height = 0xe;
+        out->category = part_category(p);
+        const uint8_t *prev = row ? part_rec(c->parts[s_rlist[row - 1].idx][0]) : NULL;
         if (!prev || part_category(prev) != out->category) out->height += 0xd, out->label = true;
         return true;
     }
@@ -1717,6 +1842,9 @@ void FEData_Init(void)
     add("Parts.ShoppingList", ACC_BASKET, 0, 0, 0);     /* FEPartsShoppingBasket 0x5156c0 */
     add("Parts.InstallList", ACC_INSTALL, 0, 0, 0);     /* FEPartsCarSetupInventoryAccessor 0x515e70 */
     add("Parts.UsedDamageList", ACC_USEDDMG, 0, 0, 0);  /* FEPartsDamageRepairAccessor 0x5164e0 on UsedCar.Car */
+    add("Parts.RepairShoppingList", ACC_REPAIRLIST, 0, 0, 0);   /* FEPartsDamageRepairShoppingList 0x5168b0 */
+    FEAccessor *od = add("Parts.OwnedDamageRepairList", ACC_USEDDMG, 0, 0, 0);   /* (0x5164e0 on OwnedCars.Car) */
+    if (od) od->src = 1;
     add("OwnedCars.Car", ACC_OWNED, 0, 0, 0);
     {
         FEAccessor *u = add("UsedCar.Car", ACC_OWNED, 0, 0, 0);   /* (0x4f5080(.., 0x33, 0, 0x4f85b0)) */
@@ -1845,9 +1973,14 @@ static void refresh(const FEAccessor *c)
         if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
         return;
     }
-    if (a->kind == ACC_USEDDMG) {   /* (_v2 0x516520: the used car's fitted parts, 0x4efaf0) */
-        const SaveCar *uc = acc_car(FEAccess_Find("UsedCar.Car"));
+    if (a->kind == ACC_USEDDMG) {   /* (_v2 0x516520: the car's fitted parts, 0x4efaf0) */
+        const SaveCar *uc = dmg_car(a);
         a->count = uc ? uc->nother : 0;
+        if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
+        return;
+    }
+    if (a->kind == ACC_REPAIRLIST) {   /* (_v2 0x516970: its items) */
+        a->count = s_nrlist;
         if (a->pos >= a->count) a->pos = a->count ? a->count - 1 : 0;
         return;
     }
@@ -2060,6 +2193,7 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_ALLPARTS:    /* (the item's text, slot 12 0x515590) */
     case ACC_INSTALL:
     case ACC_USEDDMG:
+    case ACC_REPAIRLIST:
     case ACC_BASKET: {
         FEPartsRow r;
         if (!FEData_PartsRow(a, a->pos, &r)) return "";
@@ -2258,6 +2392,11 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         }
         if (!strcmp(arg, "OVERALLDAMAGECOST")) return FE_MoneyText(total);
         if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
+    }
+    if (a->kind == ACC_REPAIRLIST && arg) {   /* (_v5 0x516de0: TOTAL "%d", else "NOT FOUND" 0x5d73bc) */
+        if (strcmp(arg, exe_str(0x5dcdfc))) return exe_str(0x5d73bc);
+        snprintf(b, sizeof b, "%d", repair_total());
+        return b;
     }
     if (a->kind == ACC_OPPCAR && arg && !strcmp(arg, "SHORT") && a->pos == 3) return FEStrings_Get(0x285);   /* (v13 0x4f4dc0) */
     if (!arg || !*arg || !strcmp(arg, "SHORT")) return FEAccess_Text(a);

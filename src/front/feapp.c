@@ -298,6 +298,7 @@ static FertControl *load_screen(const char *name)
     }
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_USEDCARCBL")) s_used_parts = false;   /* (0x4f6790) */
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_BUYPARTSCBL")) FEData_PartsOpen();   /* (0x518ba0) */
+    if (!strcmp(screen_attr(w, "callbacklist"), "IDS_ADVREPAIRCBL")) FEData_RepairOpen();   /* (0x518850) */
     if (!strcmp(screen_attr(w, "callbacklist"), "ID_OPTIONSSCREEN")) {
         /* (FEScreenOptions' constructor 0x510ed0: the menu song faded out over 1.5 s, the CD player's
            song unchosen, so its first tick plays the one shown) */
@@ -794,6 +795,11 @@ static void callback(const char *cb)
     if (player_callback(cb)) return;
     if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE") && FEChronicle_Callback(cb)) return;
     if (FEShowcase_Callback(cb)) return;   /* (the base list's SHOWCASE.<car> functors) */
+    if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "IDS_ADVREPAIRCBL")) {
+        int m = FEData_RepairCallback(cb);
+        if (m > 0) FEApp_Message(m);
+        if (m >= 0) return;
+    }
     if (!strcmp(cb, "GOBACK") || !strcmp(cb, "TESTDRIVECHECK")) {
         /* the car setup's (FECarSetupCallbackList_v45 0x4f1360, 0x4f1100 for TESTDRIVECHECK): only with the
            car's required parts (0x5019d0 -> 0x4ef890, else its message, 0x512e70) */

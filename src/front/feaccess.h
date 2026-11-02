@@ -135,6 +135,10 @@ bool FEAccess_CarColours(const FEAccessor *a, uint32_t out[4]);
 /* The repair screen's quick fix of the owned car's ticked categories (0x50e9f0): 0 done, else the
    message's string id; and its boxes all off (GOTOQUICKFIX 0x50e960). */
 int FEData_QuickFix(void);
+/* The advanced repair (FEPartsRepairCBL): its screen made (0x518850), and its callbacks fixpart,
+   replacepart, clearlist, removeitem, acceptlist: -1 not one, 0 done, else a message's string id. */
+void FEData_RepairOpen(void);
+int FEData_RepairCallback(const char *cb);
 void FEData_QuickFixClear(void);
 /* The owned car an accessor's position is (its index in the save), -1 when it isn't one. */
 int FEData_OwnedIndex(const char *accessor);
