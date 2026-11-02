@@ -127,7 +127,16 @@ bool CAR_selftest(const char *name)
     RenderState_SetCull(g_render->device->rs, g_r3d_mirror ? 1 : 2);
     View_Begin(g_render, camera);
     R3DCar_Dents(&car, false);   /* (R3DCar_v7's 0x438160) */
+    /* The original's matrix draws the model mirrored here (the port's deviation the race's cars make up
+       for, drive_selftest.c draw_cars); this viewer's camera keeps its own up, so it takes the mirror
+       out alone: the rows' x column negated and the cull flipped back around the draw. */
+    float rot[9];
+    memcpy(rot, state.rot, sizeof rot);
+    for (int k = 0; k < 9; k++) state.rot[k] = k % 3 == 0 ? -rot[k] : rot[k];
+    Render_SetCull(g_render);
     R3DCar_Draw(&car, &camera->view->model);
+    Render_SetCull(g_render);
+    memcpy(state.rot, rot, sizeof rot);
     View_End(g_render);
     if (tm) TexManager_end(tm);
     Render_EndFrame(g_render);
