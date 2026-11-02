@@ -1416,17 +1416,25 @@ static void sync_room(FertControl *w)
     bool havecol = false;
     FertControl *ctl = NULL;
     FEAccessor *ctl_acc = NULL;
+    FE3D_BeginControlCars();
     for (int i = 0; w && i < w->nchildren; i++) {
         FertControl *c = w->children[i];
         if (strcmp(c->id, "NFS5.3DCAR")) continue;
         const char *pt = data_str(c, "positiontype");
-        if (pt && atoi(pt) != 0) continue;
+        if (pt && atoi(pt) != 0) {
+            FEAccessor *acc = FEAccess_Find(data_str(c, "accessor"));
+            uint32_t cc[4];
+            bool hc = FEAccess_CarColours(acc, cc);
+            FE3D_SetControlCar(atoi(pt), FEAccess_CarFile(acc), hc ? cc : NULL);
+            continue;
+        }
         FEAccessor *acc = FEAccess_Find(data_str(c, "accessor"));
         car = FEAccess_CarFile(acc);
         havecol = FEAccess_CarColours(acc, col);
         if (acc) FE3D_SetIndex(FEAccess_Pos(acc), FEAccess_Count(acc));
         ctl = c, ctl_acc = acc;
     }
+    FE3D_EndControlCars();
     FE3D_SetCar(car, havecol ? col : NULL);
     /* its doors, lids and roof, the camera into the car, the damage shown (FECar3DControl_v1 0x4c0100) */
     float dmg[10];
@@ -3213,6 +3221,27 @@ static void menu_music(void)
     }
 }
 
+/* A screen of the stack, its watches and controls ticked; the top one's own ticks, pointer and lists. */
+static void draw_screen(FertControl *s, FertControl *top)
+{
+    if (s != top) {
+        update_watches(s);
+        update_all(s);
+        FEWindow_Draw(s);
+        return;
+    }
+    screen_update(s);
+    update_watches(s);
+    FECtrl_Tick(s);   /* (the controller setups' ticks) */
+    update_all(s);   /* (the controls' ticks) */
+    hover_pointer(s);
+    FEWindow_Draw(s);
+    if (s == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
+    draw_combos(s);
+    if (s == FEApp_Top()) combo_draw();
+    if (s == FEApp_Top() && FEColour_Box()) FEColour_Draw(FEColour_Box(), 0, 0);
+}
+
 void FEApp_Frame(void)
 {
     poll();
@@ -3257,11 +3286,15 @@ void FEApp_Frame(void)
     sync_room(w);
     Render_BeginFrame(g_render);
     if (tm) TexManager_begin(tm);
-    /* the room first, in the 3D camera (0x4d2980); then the 2D over it */
+    /* 0x4d2980: the room first in the 3D camera; the base screen's 2D and the bottom bar over it
+       (FEBIGOLOVALENABLED 0, the default); the z-buffer cleared and the screen's control cars (the
+       second 3D view); the 2D cleared again (FEZBUFFERCLEARENABLED 0) and the popups, dialog and
+       pointer over all */
     s_camera->clear = FE3D_Draw() ? 0 : 0xff000000u;
     View_Begin(g_render, s_camera);
     RCamera_Setup2D(s_camera);
     g_fe_depth = 0.99998474f;   /* 0x4d2980 */
+    FE2D_Clear();
     if (s_bar) {
         /* the play button enabled with the screen's canplaygame (0x4d7c70 -> 0x4c79c0 / 0x4c79e0) */
         for (int i = 0; i < s_bar->nchildren; i++) {
@@ -3277,34 +3310,28 @@ void FEApp_Frame(void)
         for (int i = 0; i < s_overlay->nchildren; i++) FertControl_Update(s_overlay->children[i]);
         FEWindow_Draw(s_overlay);
     }
-    if (w) {
-        /* (a popup over its screen: the screens under the popups drawn first) */
-        int base = s_depth - 1;
-        while (base > 0 && is_popup(s_stack[base])) base--;
-        for (int i = base; i < s_depth - 1; i++) {
-            update_watches(s_stack[i]);
-            update_all(s_stack[i]);
-            FEWindow_Draw(s_stack[i]);
-        }
-        screen_update(w);
-        update_watches(w);
-        FECtrl_Tick(w);   /* (the controller setups' ticks) */
-        update_all(w);   /* (the controls' ticks) */
-        hover_pointer(w);
-        FEWindow_Draw(w);
-        if (w == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
-        draw_combos(w);
-        if (w == FEApp_Top()) combo_draw();
-        if (w == FEApp_Top() && FEColour_Box()) FEColour_Draw(FEColour_Box(), 0, 0);
-    }
+    /* (a popup over its screen: the screens under the popups drawn first) */
+    int base = s_depth - 1;
+    while (w && base > 0 && is_popup(s_stack[base])) base--;
+    if (w) draw_screen(s_stack[base], w);
     if (s_bar) {
         for (int i = 0; i < s_bar->nchildren; i++) {
             FertControl_Update(s_bar->children[i]);
             if (!strcmp(s_bar->children[i]->id, "NFS5.BOTTOMBARBUTTON")) anim_update(s_bar->children[i]);
         }
         hover_pointer(s_bar);
-        FEWindow_Draw(s_bar);   /* (0x4d2980: the bottom bar over the screens) */
+        FEWindow_Draw(s_bar);   /* (0x4d2980: the bottom bar over the base screen) */
     }
+    FE2D_Flush();
+    FE2D_Clear();
+    View_End(g_render);
+    FE3D_DrawControlCars();
+    s_camera->clear = 0;
+    View_Begin(g_render, s_camera);
+    RCamera_Setup2D(s_camera);
+    FE2D_Clear();
+    if (w)
+        for (int i = base + 1; i < s_depth; i++) draw_screen(s_stack[i], w);
     dialog_draw();
     FEPointer_Draw();   /* (0x4d2980, after the windows: 0x4e1470 at the mouse) */
     FE2D_Flush();

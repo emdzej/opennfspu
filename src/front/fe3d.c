@@ -14,6 +14,7 @@
 #include "render/r3dcar.h"
 #include <math.h>
 #include <stdio.h>
+#include "platform.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -660,11 +661,83 @@ void FE3D_SetCar(const char *file, const uint32_t *colours)
     FE3DObject_SetPos(s_room->car, s_room->pos[0], s_room->pos[1], s_room->pos[2]);   /* 0x4e98a0 */
 }
 
+/* The cars the screens' 3D car controls of position types 1 .. 3 own (FECar3DControl +0x198, made by
+   v21 0x4bf9a0 with 0x4d0bb0): type 1 the car compare's left car, 2 its right one, 3 another's. */
+static struct {
+    FE3DObject *o;
+    char file[64];
+    uint32_t col[4];
+    bool havecol, used;
+} s_ctl[3];
+
+void FE3D_SetControlCar(int type, const char *file, const uint32_t *colours)
+{
+    if (type < 1 || type > 3) return;
+    typeof(s_ctl[0]) *c = &s_ctl[type - 1];
+    c->used = true;
+    if (!file) file = "";
+    const uint32_t *col = colours ? colours : s_silver;
+    if (c->o && !strcmp(c->file, file) && c->havecol == (colours != NULL) && !memcmp(c->col, col, sizeof c->col)) return;
+    FE3DObject_Free(c->o);
+    c->o = NULL;
+    snprintf(c->file, sizeof c->file, "%s", file);
+    memcpy(c->col, col, sizeof c->col);
+    c->havecol = colours != NULL;
+    if (!*file) return;
+    c->o = car_new(file, colours);
+    if (!c->o) return;
+    /* v21: its LOD (the R3D car's +0x2c0: 2 for types 1 and 2, 1 for 3) and its place (0x4d1150) */
+    c->o->car.curlod = type == 3 ? 1 : 2;
+    static const float at[3][3] = {{-2.4f, 0.2f, 8.1f}, {2.4f, 0.2f, 8.1f}, {2.4f, -1.2f, 6.2f}};
+    FE3DObject_SetPos(c->o, at[type - 1][0], at[type - 1][1], at[type - 1][2]);
+}
+
+/* The control cars' tick and draw (FECar3DControl_v1 0x4c0100, _v25 0x4c0670): a turn every 20 s of
+   the clock (0x5deb48 x 20; type 2 the other way) tipped -0.02 turns about x, the car's fixed light. */
+static bool control_cars_draw(EaglMatStack *model)
+{
+    bool any = false;
+    int32_t t = ticks();
+    for (int k = 0; k < 3; k++) {
+        FE3DObject *o = s_ctl[k].o;
+        if (!o) continue;
+        float turns = (float)t / ((float)TICKS_HZ * 20.0f);
+        if (k == 1) turns = -turns;
+        FE3DObject_RotY(o, turns);
+        FE3DObject_RotX(o, -0.02f);
+        light(NULL, o, true);
+        FE3DObject_Draw(o, model);
+        any = true;
+    }
+    return any;
+}
+
+/* The screen's control cars are named again each frame; those not named are let go. */
+void FE3D_BeginControlCars(void)
+{
+    for (int k = 0; k < 3; k++) s_ctl[k].used = false;
+}
+
+void FE3D_EndControlCars(void)
+{
+    for (int k = 0; k < 3; k++)
+        if (!s_ctl[k].used && s_ctl[k].o) {
+            FE3DObject_Free(s_ctl[k].o);
+            s_ctl[k].o = NULL;
+            s_ctl[k].file[0] = 0;
+        }
+}
+
+static RCamera *camera(void)
+{
+    if (!s_camera && g_render)
+        s_camera = Render_CreateCamera(g_render, 6, 0, 0, 1, 1, 0, g_render->znear, g_render->zfar);
+    return s_camera;
+}
+
 bool FE3D_Draw(void)
 {
-    if (!s_room || !s_room->model || !g_render) return false;
-    if (!s_camera) s_camera = Render_CreateCamera(g_render, 6, 0, 0, 1, 1, 0, g_render->znear, g_render->zfar);
-    if (!s_camera) return false;
+    if (!s_room || !s_room->model || !g_render || !camera()) return false;
     s_camera->halffov = s_room->fov;   /* 0x4e7b40 -> 0x4d5d10 */
     s_camera->clear = 0xff000000u;     /* (the frame's clear, 0x538a00) */
     View_Begin(g_render, s_camera);
@@ -674,8 +747,23 @@ bool FE3D_Draw(void)
     return true;
 }
 
+bool FE3D_DrawControlCars(void)
+{
+    if (!(s_ctl[0].o || s_ctl[1].o || s_ctl[2].o) || !g_render || !camera()) return false;
+    s_camera->clear = 0;   /* (over the 2D drawn before, its z-buffer cleared) */
+    View_Begin(g_render, s_camera);
+    RenderState_SetCull(g_render->device->rs, 2);
+    control_cars_draw(&s_camera->view->model);
+    View_End(g_render);
+    return true;
+}
+
 void FE3D_Free(void)
 {
+    for (int k = 0; k < 3; k++) {
+        FE3DObject_Free(s_ctl[k].o);
+        memset(&s_ctl[k], 0, sizeof s_ctl[k]);
+    }
     room_free(s_room);
     s_room = NULL;
     s_carfile[0] = 0;

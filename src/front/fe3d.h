@@ -42,11 +42,19 @@ void FE3D_SetRoom(const char *id);
 /* The car a screen's 3D car control shows in the room (its car file; NULL: none) in its colours (the
    description's order, +0x218: body, slots 0x7c, 0x80, interior; NULL the port's silver). */
 void FE3D_SetCar(const char *file, const uint32_t *colours);
+/* The cars of the screen's 3D car controls of position types 1 .. 3 (their own, placed and turning
+   without a room: the car compare's), named between Begin and End each frame; NULL file: none. */
+void FE3D_BeginControlCars(void);
+void FE3D_SetControlCar(int type, const char *file, const uint32_t *colours);
+void FE3D_EndControlCars(void);
 /* The dealer car shown and the list's cars (the dealership's segments follow the list's position, +0x30c,
    and slide when it moves). */
 void FE3D_SetIndex(int index, int count);
 /* The room's tick and draw in the front end's 3D camera (0x4d2980's first view); whether a room drew. */
 bool FE3D_Draw(void);
+/* The control cars in the same camera, the frame's second 3D view (0x4d2980: the screens' slot 39,
+   0x4e0840, after the base screen's 2D and a z-buffer clear); whether any drew. */
+bool FE3D_DrawControlCars(void);
 void FE3D_Free(void);
 
 /* For the screen's 3D car control (FECar3DControl): the room's car's yaw in turns (slot 45, 0x4e7f30:
