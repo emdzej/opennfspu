@@ -6,6 +6,7 @@
 #include "front/fesave.h"
 #include "game/hud_config.h"
 #include "render/render.h"
+#include "render/rtex.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -47,6 +48,19 @@ static void load(void)
         FEAccessor *a = acc(k);
         if (a) FEAccess_SetPos(a, HudConfig_choicei32(k_choice[k].off));   /* (v0x2c) */
     }
+}
+
+void FEHudPreview_ResetChoices(void)
+{
+    /* FEdaDisplay_v1 0x4e4910: the screen layout for the machine (0x44e3d0), its layout loaded for the
+       player and the choices from it, the layout let go (HUD_LoadLayout, 0x41e2e0) */
+    int layout = RTex_layoutfor(&RTex_machine);
+    FEAccessor *a = acc(LAYOUT);
+    if (a) FEAccess_SetPos(a, layout);
+    HudConfig_Load(player(), layout, g_display.width, g_display.height);
+    for (int k = SPEEDO; k < NCHOICES; k++)
+        if ((a = acc(k))) FEAccess_SetPos(a, HudConfig_choicei32(k_choice[k].off));
+    HudConfig_Free();
 }
 
 /* The choices into the layout (0x4cb320), the files written (0x41ea70) and the layout let go (0x41e2e0). */

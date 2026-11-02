@@ -13,3 +13,6 @@
 bool FEHudPreview_Draw(FertControl *c, int32_t ox, int32_t oy);
 /* The preview no longer on screen let go (slot 22 0x4cb2e0), keep(c) telling whether it stays. */
 void FEHudPreview_Drop(bool (*keep)(const FertControl *c));
+/* The display choices from the player's HUD layout for the machine's screen layout (FEdaDisplay_v1
+   0x4e4910, the data areas' reset 0x4e53c0 of a new player). */
+void FEHudPreview_ResetChoices(void);

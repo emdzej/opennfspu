@@ -123,7 +123,7 @@ static bool load(const char *track, const char *carname)
        The original measures the machine; the port's is one above every threshold (1 GHz, 256 MB, 64 MB
        of video memory) on THRASH's 32-bit display: level 3. Until the first race the front end runs at
        the level's initial 0, as the original's does. */
-    RTex_detectquality(&(RTexMachine){1000000000, 256ll << 20, 64u << 20, 32});
+    RTex_detectquality(&RTex_machine);
     Track_Load();
     if (!g_world || !g_world->root) return false;
     Render_LoadViewKeys(g_track_name);  /* 0x44f9b0 */

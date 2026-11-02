@@ -42,6 +42,17 @@ int RTex_levelfor(const RTexMachine *m)
     return 2;
 }
 
+const RTexMachine RTex_machine = {1000000000, 256ll << 20, 64u << 20, 32};
+
+int RTex_layoutfor(const RTexMachine *m)
+{
+    int mhz = m->cpuhz / 1000000, mem = mbytes(m->memory);
+    uint32_t vram = m->vram >> 20;
+    int r = vram < 4 || mhz < 0xfa || mem < 0x21 ? 3 : 0;
+    if (vram > 3 && mhz > 400 && mem > 0x41) return r;
+    return 2;
+}
+
 void RTex_detectquality(const RTexMachine *m)
 {
     RTex_level = detected_level = RTex_levelfor(m);

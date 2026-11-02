@@ -1,5 +1,6 @@
 /* The player's save (fesave.h). */
 #include "front/fesave.h"
+#include "front/fehudpreview.h"
 #include "exe.h"
 #include "front/fe_parts.h"
 #include "pending.h"
@@ -410,7 +411,9 @@ bool FESave_Create(const char *name, int pic)
         if (ok) ok = plat_save_user_file(dst, d, n);
         free(d);
     }
-    PENDING_NOTE(0x4e53c0, "the data areas' resets (their slot 1)");
+    /* 0x4e53c0, copies made or not: the data areas' slot 1, FEdaDisplay's alone doing anything (the
+       choices from the template player's layout, so the defaults just copied) */
+    FEHudPreview_ResetChoices();
     if (!ok) return false;
     s_save.info = pic;
     if (!save_write(name, s_save.info)) return false;
