@@ -202,10 +202,72 @@ bool GLIDE_env(bool windowed, const char *driver, int display, int mode)
 
 /* ---- display mode and quality ---- */
 
-static int card_type;               /* 0x6197b0: Render_DetectCard's card (pending: 0, never 0xe) */
+static int card_type;               /* 0x6197b0: Render_DetectCard's card */
 uint8_t g_render_modalpha;          /* 0x6197aa */
+RenderCaps g_rcaps;
 
 int Render_CardType(void) { return card_type; }
+
+/* Whether the driver takes a state's test value (setstate's answer), the state put back. */
+static bool takes(uint32_t state, uintptr_t value)
+{
+    intptr_t was = THRASH.fn.getstate(state);
+    bool ok = THRASH.fn.setstate(state, value) != 0;
+    THRASH.fn.setstate(state, (uintptr_t)was);
+    return ok;
+}
+
+void Render_DetectCard(void)
+{
+    const ThrashAbout *a = THRASH.fn.about();
+    g_rcaps.b799 = 0;
+    g_rcaps.colourkey = takes(0x24, 0x80);
+    g_rcaps.b79d = 1;
+    g_rcaps.state2f = takes(0x2f, 1);
+    g_rcaps.state6 = takes(6, 2);
+    g_rcaps.noglobalclut = ~(a->flags >> 6) & 1;
+    g_rcaps.state15 = takes(0x15, 1);
+    g_rcaps.state7 = takes(7, 1);
+    g_rcaps.b7a3 = g_rcaps.b7a4 = 0;
+    g_rcaps.mipmap = takes(0xb, 1);
+    g_rcaps.trilinear = takes(0xb, 3);
+    g_rcaps.state38 = takes(0x38, 1);
+    g_rcaps.texmax = a->texheightmax <= a->texwidthmax ? a->texheightmax : a->texwidthmax;
+    g_rcaps.stages = a->numstages;
+    RTex_mipsallowed = g_renderopts.nomip == 0;   /* 0x6197ae */
+    g_rcaps.trident = 0;
+    g_rcaps.fogtable = takes(4, 2);
+    /* the blend states 6 and 8 tried and put back (their answers unused) */
+    takes(0x29, 6);
+    takes(0x29, 8);
+    RTex_flagsallowed = false;                    /* 0x6197a8 */
+    g_rcaps.vramtotal = (uint32_t)a->textureramsize;
+    if (strstr(a->device, exe_str(0x5ce924))) {   /* "Trident Blade" */
+        g_rcaps.trident = 1;
+        THRASH.fn.setstate(0x3c, 1);
+    }
+    if (a->signature == 0x33444632u || a->signature == 0x33444658u) {   /* '2FD3', 'XFD3': Glide */
+        g_rcaps.vram = (uint32_t)a->textureramsize;
+        g_rcaps.glide = 1;
+        g_render_modalpha = 1;
+        g_rcaps.b7a9 = 1;
+        card_type = 0;
+        return;
+    }
+    if (a->subtype == 1) RTex_mipsallowed = false;
+    if (a->subtype == 9 || a->subtype == 10) {
+        g_rcaps.vram = (uint32_t)a->textureramsize;
+        g_rcaps.glide = 1;
+    } else {
+        /* ("Voodoo" and subtype 0xf clear the flags allowed again) */
+        g_rcaps.glide = 0;
+        g_rcaps.vram = (uint32_t)(a->textureramsize + (g_display.bpp >> 3) * g_display.height * g_display.width * -3);
+    }
+    g_rcaps.b7a9 = 0;
+    card_type = a->subtype;
+    g_render_modalpha = THRASH.fn.setstate(THRASH_STATE_MODULATEALPHA, 0) != 0;
+    if (card_type == 3 || card_type == 0xe || card_type == 2) g_render_modalpha = 0;
+}
 
 void Render_DisplayInit(void)
 {
@@ -220,11 +282,7 @@ void Render_DisplayInit(void)
     g_display.bpp = bpp == 15 ? 16 : bpp;
     g_display.width = w;
     g_display.height = h;
-    PENDING_NOTE(0x44e760, "Render_DetectCard");
-    /* (of it: whether the driver modulates alpha, setstate 0x1c3, except on the card types 2, 3 and 0xe;
-       the port's card is type 0) */
-    g_render_modalpha = THRASH.fn.setstate(THRASH_STATE_MODULATEALPHA, 0) != 0 && card_type != 2 && card_type != 3 &&
-                        card_type != 0xe;
+    Render_DetectCard();   /* 0x44e760 */
     Render_SetupQuality();
     EAGL_SetDisplaySize((float)w, (float)h);             /* 0x537370: the 2D window's size */
 }
@@ -260,7 +318,7 @@ void Render_SetupQuality(void)
         g_render_specials = 3;
         g_render_precip = 300;
         g_render_particles = 0x100;
-        PENDING_NOTE(0x6197a6, "the card's trilinear flag (Render_DetectCard)");
+        if (g_rcaps.trilinear) TEXTURE_settrilinear(true);   /* 0x5358b0 */
         break;
     }
     if (g_renderopts.carchrome == 0) g_rmethod_key |= 1;

@@ -23,6 +23,7 @@ static struct { const char *name; int *v; } ints[] = {
     {"lensflare", &g_renderopts.lensflare},
     {"gammacorrection", &g_renderopts.gammacorrection}, {"drawsync", &g_renderopts.drawsync},
     {"viewdistance", &g_renderopts.viewdistance}, {"skyrendering", &g_renderopts.skyrendering},
+    {"nomip", &g_renderopts.nomip},
 };
 
 void RenderOptions_Load(void)

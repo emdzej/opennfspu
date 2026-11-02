@@ -184,7 +184,24 @@ Texture *Texture_fromshape(Texture *t, const uint8_t *shape, TexManager *m, uint
     t->flags = flags;
     t->manager = m;
     t->dtex = DTEX_new(t->width, t->height, t->format, t->clutformat, flags, t->name);
-    DTEX_load(t->dtex, shape + 0x10, clut ? clut + 0x10 : NULL);
+    /* The conversion reads every mip level the flags ask for from after the pixels. A shape without them
+       (a car page's window: one level) has other memory there in the original, levels the pages never
+       sample (their mipmapping is off); the port reads zeros there instead of past the block. */
+    uint8_t *pad = NULL;
+    int want = (int)(flags & 0xff), own = shape[15] >> 4;
+    if (want > own) {
+        int bits = SHAPE_typevalid(shape);
+        if (bits == 15) bits = 16;
+        int size = t->width > t->height ? t->width : t->height;
+        size_t total = 0x10, have = 0x10, b = (size_t)bits * (size_t)size * (size_t)size / 8;
+        for (int l = 0; l <= want; l++, b /= 4) total += b;
+        for (int l = 0, w = t->width, h = t->height; l <= own; l++, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
+            have += (size_t)bits * (size_t)w * (size_t)h / 8;
+        pad = calloc(1, total > have ? total : have);
+        if (pad) memcpy(pad, shape, have);
+    }
+    DTEX_load(t->dtex, (pad ? pad : shape) + 0x10, clut ? clut + 0x10 : NULL);
+    free(pad);
     DtexInfo info;
     DTEX_info(t->dtex, &info);
     t->format = info.format;

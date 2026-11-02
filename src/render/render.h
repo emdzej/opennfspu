@@ -41,6 +41,7 @@ typedef struct {
                                    Sky\<name>.txt count, and the light slot); a front-end option, so not in
                                    fe.txt: the port uses 2 (high) unless fe.txt or --param sky_detail says */
     int drawsync;               /* 0x657da0 */
+    int nomip;                  /* 0x657da4 NOMIP: no mip levels (Render_DetectCard) */
     int viewdistance;
 } RenderOptions;
 extern RenderOptions g_renderopts;
@@ -175,7 +176,33 @@ typedef struct {
 extern RenderSystem *g_render;      /* 0x628130 */
 extern uint8_t g_render_skiplod0;   /* 0x6197e5: draw objects start at their second LOD */
 extern uint8_t g_render_carlights, g_render_carenv;   /* 0x6197ca, 0x6197cb (the chrome option 2) */
-int Render_CardType(void);           /* 0x6197b0: Render_DetectCard's card (0 in the port) */
+int Render_CardType(void);           /* 0x6197b0: Render_DetectCard's card (the about block's subtype) */
+/* What Render_DetectCard (0x44e760) found the driver takes: each a state set to a test value and back
+   (setstate's answer), and the about block's figures. */
+typedef struct {
+    uint32_t vram;              /* 0x619790: texture memory less three display pages (all of it on Glide) */
+    uint32_t vramtotal;         /* 0x619794 */
+    uint8_t glide;              /* 0x619798 */
+    uint8_t b799;               /* 0x619799: 0 */
+    uint8_t fogtable;           /* 0x61979b: state 4 = 2 */
+    uint8_t colourkey;          /* 0x61979c: state 0x24 = 0x80 */
+    uint8_t b79d;               /* 0x61979d: 1 */
+    uint8_t state2f;            /* 0x61979e: state 0x2f = 1 */
+    uint8_t state6;             /* 0x61979f: state 6 = 2 */
+    uint8_t noglobalclut;       /* 0x6197a0: the about flags' bit 6 clear */
+    uint8_t state15;            /* 0x6197a1: state 0x15 = 1 */
+    uint8_t state7;             /* 0x6197a2: state 7 = 1 */
+    uint8_t b7a3, b7a4;         /* 0x6197a3, 0x6197a4: 0 */
+    uint8_t mipmap;             /* 0x6197a5: state 0xb = 1 */
+    uint8_t trilinear;          /* 0x6197a6: state 0xb = 3 */
+    uint8_t state38;            /* 0x6197a7: state 0x38 = 1 */
+    uint8_t b7a9;               /* 0x6197a9 */
+    uint8_t trident;            /* 0x6197ad: a "Trident Blade" (state 0x3c set) */
+    int32_t texmax;             /* 0x6197b4: the smaller of the largest texture width and height */
+    int32_t stages;             /* 0x6197b8 */
+} RenderCaps;
+extern RenderCaps g_rcaps;
+void Render_DetectCard(void);        /* 0x44e760 */
 extern uint8_t g_render_modalpha;   /* 0x6197aa: the driver modulates alpha (Render_DetectCard) */
 extern uint8_t g_render_extras;     /* 0x6197e6: the extra 'pr' lists (0x40000) and the effects lists */
 extern uint8_t g_render_skidmarks;  /* 0x6197e7: skid marks (special effects 2 and up) */
