@@ -23,7 +23,7 @@ static double two_pi(void)
 }
 
 /* 0x532570: the sine and cosine of an angle in turns (0x532550 / 0x532560). */
-static void sincos_turns(float t, float *s, float *c)
+void Math_SinCosTurns(float t, float *s, float *c)
 {
     *s = (float)sin((double)t * two_pi());
     *c = (float)cos((double)t * two_pi());
@@ -33,7 +33,7 @@ void Mat3_TurnX(float m[9], float t)
 {
     float s, c, a[9];
     memcpy(a, m, sizeof a);
-    sincos_turns(t, &s, &c);
+    Math_SinCosTurns(t, &s, &c);
     for (int k = 0; k < 3; k++) {
         m[3 + k] = a[6 + k] * s + a[3 + k] * c;
         m[6 + k] = a[6 + k] * c - a[3 + k] * s;
@@ -44,7 +44,7 @@ void Mat3_TurnY(float m[9], float t)
 {
     float s, c, a[9];
     memcpy(a, m, sizeof a);
-    sincos_turns(t, &s, &c);
+    Math_SinCosTurns(t, &s, &c);
     for (int k = 0; k < 3; k++) {
         m[k] = c * a[k] - a[6 + k] * s;
         m[6 + k] = s * a[k] + a[6 + k] * c;
@@ -55,7 +55,7 @@ void Mat3_TurnZ(float m[9], float t)
 {
     float s, c, a[9];
     memcpy(a, m, sizeof a);
-    sincos_turns(t, &s, &c);
+    Math_SinCosTurns(t, &s, &c);
     for (int k = 0; k < 3; k++) {
         m[k] = c * a[k] + a[3 + k] * s;
         m[3 + k] = a[3 + k] * c - s * a[k];
@@ -75,7 +75,7 @@ void Vec3_AddArray(int n, const float *src, const float add[3], float *dst)
 void Mat3_RotX(float m[9], float t)
 {
     float s, c;
-    sincos_turns(t, &s, &c);
+    Math_SinCosTurns(t, &s, &c);
     m[4] = c;
     m[1] = m[2] = m[3] = m[6] = 0;
     m[7] = -s;
@@ -87,7 +87,7 @@ void Mat3_RotX(float m[9], float t)
 void Mat3_RotY(float m[9], float t)
 {
     float s, c;
-    sincos_turns(t, &s, &c);
+    Math_SinCosTurns(t, &s, &c);
     m[0] = c;
     m[1] = m[3] = m[5] = m[7] = 0;
     m[4] = 1;
@@ -99,7 +99,7 @@ void Mat3_RotY(float m[9], float t)
 void Mat3_RotZ(float m[9], float t)
 {
     float s, c;
-    sincos_turns(t, &s, &c);
+    Math_SinCosTurns(t, &s, &c);
     m[0] = c;
     m[1] = s;
     m[3] = -s;

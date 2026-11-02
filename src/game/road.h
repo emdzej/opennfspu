@@ -80,6 +80,9 @@ int Road_SegmentOf(const Road *r, int n);
    segment's end on through the junction there (branch: its road, -1 the one going the same way), else
    the segment's end. 0x481670 */
 int Road_Step(const Road *r, int n, int by, int branch);
+/* The junction that node n `by` nodes on (back if negative) runs into: when n + by is past either end of
+   n's segment, the junction at that end, else NULL. 0x481590 */
+const RoadJunction *Road_JunctionPast(const Road *r, int n, int by);
 /* Node n's segment as the race's progress runs along it: the progress at its first and last nodes (the
    last's 1 when it is 0), its length and first node; 0, 0, 1 for a node in no segment. 0x481a10 */
 void Road_SegmentRange(const Road *r, int n, float *start, float *end, int *count, int *first);

@@ -389,10 +389,11 @@ bool DRIVE_selftest(const char *track, const char *car)
         World_Restart();   /* 0x471ac0 */
         Race_Restart(0x1c0 - 0x40);
         Input_Reset(true);
+        Camera_ReplayStart();   /* 0x413ec0 */
         if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;
         HUD_HideAll();      /* 0x425740 */
         HUD_RaceOver();     /* 0x426a40 */
-        PENDING_NOTE(0x415300, "the replay's speeds and cameras");
+        PENDING_NOTE(0x415300, "the replay's speeds");
     }
     Camera_Update();   /* 0x463af0 (the race loop's, after the ticks) */
     char lv[4];

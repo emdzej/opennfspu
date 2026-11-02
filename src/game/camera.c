@@ -1,6 +1,7 @@
 /* The race cameras (see camera.h). */
 #include "game/camera.h"
 #include "exe.h"
+#include "game/car_drive.h"
 #include "game/car_ground.h"
 #include "game/hud.h"
 #include "game/input.h"
@@ -10,7 +11,9 @@
 #include "game/sim_math.h"
 #include "game/world.h"
 #include "pending.h"
+#include "game/scene.h"
 #include "render/camera_math.h"
+#include "render/drive_selftest.h"
 #include "render/r3dcar.h"
 #include <math.h>
 #include <string.h>
@@ -513,6 +516,309 @@ static void orbit(int p)
     for (int k = 0; k < 3; k++) c->eye[k] = w[k] + car_pos(c->car)[k];
 }
 
+/* ---- the replay's cameras ---- */
+
+static void clear_shake(void);
+
+static int32_t s_tvmode;    /* 0x606850: 10 circling the car, 0x14 the scene's cameras */
+static int32_t s_viewed;    /* 0x606858: the human the replay's camera cuts with */
+static float s_rise_x[2], s_rise_y[2];   /* 0x628098, 0x6280a4: mode 12's camera's x and height kept */
+
+/* The words the scene camera's flags are copied into (+0x34, +0x3c): tested as integers. */
+static bool on(const float *f) { uint32_t u; memcpy(&u, f, 4); return u != 0; }
+static const float *node_vec(int n, int off) { return (const float *)(const void *)(g_road->nodes + n * ROAD_NODE_SIZE + off); }
+
+/* The way the car goes along the road: 1 forward along the node's direction (+0x1c), -1 back (with the
+   reverse race's and backing up's turns). */
+static int car_way(const Car *car)
+{
+    int16_t node;
+    memcpy(&node, car->b + 8, 2);
+    float d = dot3(CAR_F((Car *)car, 0x37c), node_vec(node, 0x1c));
+    if (g_race_reverse) d = -d;
+    return d < 0 ? -1 : 1;
+}
+
+/* The TV camera's place ahead of the car (0x463120, 0x4632d0): up to 8 nodes the way it goes (fewer
+   with the follow, short of a junction), its height the camera's (3 without one), no look ahead. */
+static void tv_place(RaceCamera *c, int16_t node, int way)
+{
+    int n = (int)((1.0f - c->tvspeed) * K(0x5b243c));
+    int m = n + 1;
+    if (8 < m) m = 8;
+    if (way < 0) m = -m;
+    int k = m, i = 0 < m ? 0 : m;
+    while (m < 1 ? i < 1 : i < m) {
+        if (Road_JunctionPast(g_road, node, i)) {
+            k = i;
+            break;
+        }
+        i++;
+    }
+    int at = Road_Step(g_road, node, k - way, -1);
+    c->surf.node = (int16_t)at;
+    memcpy(c->eye, Road_NodePos(g_road, at), sizeof c->eye);
+    c->eye[1] = (c->f30 != 0 ? c->f30 : K(0x5b2600)) + c->eye[1];
+    memset(c->f60, 0, sizeof c->f60);
+}
+
+/* The TV camera's start (mode 11, 0x463120): placed ahead of the car unless the scene's cameras place
+   it. */
+static void tv_start(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    int way = car_way(c->car);
+    if (*CAR_F(c->car, 0xd60) < 0) way = -way;
+    int16_t node;
+    memcpy(&node, c->car->b + 8, 2);
+    if (s_tvmode != 0x14) tv_place(c, node, way);
+    WSurface_Update(&c->surf, c->eye, true);   /* 0x473fc0 */
+}
+
+/* The zoom (0x462a40): to the scene camera's field of view at +0x48 a frame (the near plane brought
+   in for the narrow ones), or by the distance to the car past +0x40, eased in by +0x44. */
+static void tv_zoom(int p, float dist)
+{
+    RaceCamera *c = &g_racecam[p];
+    float fov = 37.5f, zn = K(0x5b23f0);
+    if ((s_paused && !s_step) || s_hold) return;
+    if (!on(&c->f3c)) {
+        if (on(&c->f34)) {
+            if (c->f44 != 0) {
+                c->fov = c->f38;
+                c->f44 = 0;
+            }
+            float v = c->fov;
+            c->f38 = v;
+            if (v < c->f78) c->f38 = v + c->f48;
+            else if (c->f78 < v) c->f38 = v - c->f48;
+            fov = c->f38;
+            if (fov < K(0x5b3c9c) && (zn = (K(0x5b3c9c) - fov) * (K(0x5b24a8) / fov)) <= K(0x5b23f4)) zn = K(0x5b23f4);
+        }
+    } else {
+        if (dist < c->f40) return;
+        float t = dist * c->f38 * K(0x5b3f70);
+        if (K(0x5b3c9c) < c->f38) dist += fabsf(dist - t);
+        else if (c->f38 < K(0x5b3c9c)) dist -= fabsf(dist - t);
+        float e = fabsf(dist - c->f40), v;
+        if (c->f40 < dist) v = dist - e * c->f44;
+        else if (dist < c->f40) v = e * c->f44 + dist;
+        else {
+            /* (the original reads its camera index's bits as the float here) */
+            int32_t pi = p;
+            memcpy(&v, &pi, 4);
+        }
+        fov = v * c->f38 / dist;
+        if (fov < K(0x5b3c9c) && (zn = (K(0x5b3c9c) - fov) * (K(0x5b24a8) / fov)) <= K(0x5b23f4)) zn = K(0x5b23f4);
+        uint64_t u = (uint64_t)exe_u32(0x5b3f7c) << 32 | exe_u32(0x5b3f78);
+        double lo;
+        memcpy(&lo, &u, 8);
+        float a = (float)((1.0 - (double)c->f44) * (double)c->f48 + (double)c->f44);
+        if (1.0 <= (double)a) a = 1.0f;
+        else if (!((double)a > lo)) a = (float)lo;
+        c->f44 = a;
+    }
+    c->fov = fov;
+    c->znear = zn;
+}
+
+/* Circling the car (mode 10, 0x462840): 4.5 across and 6 along at 1/1024 of a turn a frame, the height
+   going 1, 2, 3 by a quarter turn's ease every half turn, under ceilings. */
+static void mode_circle(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    static const float h[3] = {1.0f, 2.0f, 3.0f};
+    if (!can_move() || g_drive_paused) return;
+    c->look++;
+    float sn, cs;
+    Math_SinCosTurns((float)c->look * K(0x5b25b8), &sn, &cs);
+    float o[3] = {cs * K(0x5b369c), 0, sn * K(0x5b2460)};
+    int16_t *phase = (int16_t *)(void *)c->padc4;   /* +0xc4 */
+    if (((c->look - 0x100) & 0x1ff) == 0) (*phase)++;
+    if (((c->look - 0x80) & 0x1ff) < 0x80)
+        o[1] = (float)(c->look & 0x7f) * (h[(*phase + 1) % 3] - h[*phase % 3]) * K(0x5b273c) + h[*phase % 3];
+    else
+        o[1] = h[*phase % 3];
+    float w[3];
+    vec_mat(o, car_rows(c->car), w);
+    float a = w[1], b = w[1];
+    under_ceiling(c, car_pos(c->car), &a);
+    under_ceiling(c, c->eye, &b);
+    w[1] = b <= a ? b : a;
+    for (int k = 0; k < 3; k++) c->eye[k] = w[k] + car_pos(c->car)[k];
+}
+
+/* The TV camera (mode 11, 0x4632d0): placed again ahead when the car has passed it (more than the
+   follow's nodes on, unless it follows fully, is within 25 or the scene places it); then moved towards
+   the road a node on its way (through a junction the way it goes; the look ahead's offsets along the
+   node's vectors) by the car's speed along the road times the follow; then the zoom. */
+static void mode_tv(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    Car *car = c->car;
+    float dist = len3((float[3]){car_pos(c->base)[0] - c->eye[0], car_pos(c->base)[1] - c->eye[1], car_pos(c->base)[2] - c->eye[2]});
+    int16_t cnode;
+    memcpy(&cnode, car->b + 8, 2);
+    float d = dot3(CAR_F(car, 0x37c), node_vec(cnode, 0x1c));
+    if (g_race_reverse) d = -d;
+    int way = d < 0 ? -1 : 1;
+    if (g_race_reverse ? 0 < *CAR_F(car, 0xd60) : *CAR_F(car, 0xd60) < 0) way = -way;
+    if (!can_move()) return;
+    WSurface_TrackNode(&c->surf, c->eye);   /* 0x4743a0 */
+    int gap = cnode - c->surf.node;
+    if (gap < 0) gap = -gap;
+    if (g_road->nnodes / 2 < gap) gap = g_road->nnodes - gap;
+    int n = (int)((1.0f - c->tvspeed) * K(0x5b243c));
+    if (gap <= n + 3 || K(0x5b24a8) <= c->tvspeed || dist <= K(0x5b24dc) || s_tvmode == 0x14) {
+        WSurface_Update(&c->surf, c->eye, true);
+    } else {
+        tv_place(c, cnode, way);
+        WSurface_Update(&c->surf, c->eye, true);
+    }
+    float from[3];
+    if (s_tvmode == 0x14) {
+        memcpy(from, Road_NodePos(g_road, c->surf.node), sizeof from);
+        from[1] += c->f30 == 0 ? K(0x5b2600) : c->f30;
+    } else {
+        memcpy(from, c->eye, sizeof from);
+    }
+    int to = c->surf.node + way;
+    const RoadJunction *j = Road_JunctionPast(g_road, c->surf.node, way);
+    if (j)
+        for (int i = 0; i < j->count; i++)
+            if ((0 < way && j->end[i]->dir == 0) || (way < 0 && j->end[i]->dir == 1)) to = Road_Step(g_road, c->surf.node, way, i);
+    float fn = (float)to, top = (float)(g_road->nnodes - 1);
+    if (top < fn) fn = top;
+    if (fn < 0) fn = 0;
+    int at = (int)fn;
+    float t[3];
+    memcpy(t, Road_NodePos(g_road, at), sizeof t);
+    t[1] += c->f30 != 0 ? c->f30 : K(0x5b2600);
+    static const int vec[3] = {0x28, 0x10, 0x1c};
+    for (int k = 0; k < 3; k++) {
+        const float *v = node_vec(at, vec[k]);
+        float s = (float)way * c->f60[k];
+        for (int q = 0; q < 3; q++) t[q] += v[q] * s;
+    }
+    float dir[3] = {t[0] - from[0], t[1] - from[1], t[2] - from[2]};
+    if (dir[0] != 0 || dir[1] != 0 || dir[2] != 0) unit3(dir);
+    float sp = dot3(CAR_F(car, 0x33c), node_vec(cnode, 0x1c)) * (float)way;
+    if (g_race_mode == 3 && g_race_network) sp = 0;
+    for (int k = 0; k < 3; k++) c->eye[k] = dir[k] * (sp * c->tvspeed) * K(0x5b2828) + c->eye[k];
+    tv_zoom(p, dist);
+}
+
+/* The rising camera (mode 12, 0x462cf0): the scene camera's place, its height over where it was put
+   rising with a quarter of the distance to the car times its height setting, up to that; then the
+   zoom. */
+static void mode_rise(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    const float *cp = car_pos(c->car);
+    float dist = len3((float[3]){c->eye[0] - cp[0], c->eye[1] - cp[1], c->eye[2] - cp[2]});
+    if (s_rise_x[p] != c->eye[0]) {
+        s_rise_x[p] = c->eye[0];
+        s_rise_y[p] = c->eye[1];
+    }
+    float h = c->f30 * K(0x5b2468) * dist - K(0x5b2468);
+    if (c->f30 <= h) h = c->f30;
+    if (h < 0) h = 0;
+    c->eye[1] = h + s_rise_y[p];
+    tv_zoom(p, dist);
+}
+
+/* The scene camera `index` on camera 0 (0x413980): a cut (its +0x7c) takes its mode, place, field of
+   view and orientation (unless it looks at the car, +0x88); else only its zoom and look. Then its
+   distance zoom, its height, and for the TV camera its lift, follow and look ahead. */
+static void scene_camera(int index)
+{
+    SceneElem *e = Scene_Camera(index);
+    if (!e) return;
+    RaceCamera *c = &g_racecam[0];
+    if (g_race_mode == 3 && g_race_network && scene_i32(e, 0x78) == 0xb) {
+        if (c->mode == 10) return;
+        Camera_SetMode(0, 10);
+        c->flags |= 8;
+        return;
+    }
+    if (scene_i32(e, 0x7c) == 0) {
+        c->f44 = 0;
+        if (scene_i32(e, 0x8c)) scene_pos(e, c->campos);
+        memcpy(&c->f34, e->b + 0x98, 4);
+        if (scene_i32(e, 0x98)) c->f78 = scene_f32(e, 0x9c);
+        if (scene_i32(e, 0x88) == 0) c->flags &= 0xf7;
+    } else {
+        Camera_SetMode(0, scene_i32(e, 0x78));
+        if (scene_i32(e, 0x8c)) {
+            scene_pos(e, c->eye);
+            memcpy(c->campos, c->eye, sizeof c->campos);
+        }
+        memcpy(&c->f34, e->b + 0x98, 4);
+        if (scene_i32(e, 0x98)) c->f38 = c->f78 = scene_f32(e, 0x9c);
+        if (scene_i32(e, 0x88) == 0) {
+            scene_mat(e, c->orient);
+            c->flags &= 0xf7;
+        }
+    }
+    memcpy(&c->f3c, e->b + 0x90, 4);
+    if (scene_i32(e, 0x90)) c->f40 = scene_f32(e, 0x94);
+    c->f30 = scene_f32(e, 0x84);
+    if (c->mode == 0xb) {
+        if (scene_i32(e, 0x80)) c->eye[1] += c->f30;
+        c->tvspeed = scene_f32(e, 0xa0);
+        memcpy(c->f60, e->b + 0xb4, sizeof c->f60);
+    }
+}
+
+void Camera_ReplayCuts(bool cut)
+{
+    SceneList *l = Scene_CameraTriggers();
+    if (!l) return;
+    for (int k = 0; k < g_humans.n; k++) {
+        Car *h = g_humans.c[k];
+        for (int i = 0; i < l->n; i++) {
+            SceneElem *t = l->e[i];
+            if (!Scene_TriggerTakes(t, h)) continue;
+            int link = scene_i16(t, TRIG_LINK2);
+            if (*CAR_I(h, 0x10e4) == link) continue;
+            *CAR_I(h, 0x10e4) = link;
+            if (cut && k == s_viewed) {
+                g_racecam[0].car = g_racecam[0].base = g_humans.c[s_viewed];
+                scene_camera(*CAR_I(g_racecam[0].car, 0x10e4));
+            }
+        }
+    }
+}
+
+bool Camera_ReplayDirected(void) { return s_tvmode == 0x14; }
+
+/* The camera's mode set afresh (0x4658a0): the wander and the hold off, unless the mode's flags are
+   about to be reloaded. */
+static void set_mode_fresh(int p, int mode)
+{
+    clear_shake();
+    s_hold = 0;
+    if (!(g_racecam[p].flags & 1)) Camera_SetMode(p, mode);
+}
+
+void Camera_ReplayStart(void)
+{
+    if (Scene_CameraCount() == 0) {
+        s_tvmode = 10;
+        set_mode_fresh(0, 10);
+    } else if (g_race_mode == 9) {
+        set_mode_fresh(0, 10);
+        s_tvmode = 0x14;
+    } else {
+        for (int k = 0; k < g_humans.n; k++) {
+            *CAR_I(g_humans.c[k], 0x10e4) = Scene_FirstCamera(g_race_reverse != 0);
+            scene_camera(*CAR_I(g_humans.c[k], 0x10e4));
+        }
+        s_tvmode = 0x14;
+    }
+    s_viewed = g_camera_car;
+}
+
 /* ---- the modes' state ---- */
 
 /* The replay wander's state (0x6280e0 .. 0x628100) cleared: the wander is pending (look_at). */
@@ -529,7 +835,7 @@ static void initial_offset(int mask)
 static void mode_changed(int p)
 {
     RaceCamera *c = &g_racecam[p];
-    if (c->mode == 0xb) PENDING_NOTE(0x463120, "the TV camera's start");
+    if (c->mode == 0xb) tv_start(p);
     c->ease = 0x32;
     c->look = 0;
     c->lookspeed = 0;
@@ -636,7 +942,7 @@ void Camera_Update(void)
             c->flags &= 0xfe;
             /* No replay controller (0x628c70): the camera back on the viewed car (0x5e8c00[0x65741c]). */
             if (0 <= g_camera_car && g_camera_car < g_ncars) c->car = c->base = g_cars[g_camera_car];
-            if (1 < g_replay_mode) PENDING_NOTE(0x413ba0, "the replay's camera cuts");
+            if (1 < g_replay_mode) Camera_ReplayCuts(s_tvmode == 0x14);
         }
         switch (c->mode) {
         case 0: mode_incar(p); break;
@@ -645,9 +951,9 @@ void Camera_Update(void)
         case 5: case 6: case 7: mode_chase(p, c->mode - 5, true); break;
         case 8: case 9: case 0xf: mode_fixed(p); break;
         case 0xd: mode_overhead(p); break;
-        case 10: PENDING_NOTE(0x462840, "camera mode 10"); break;
-        case 0xb: PENDING_NOTE(0x4632d0, "the TV camera (mode 11)"); break;
-        case 0xc: PENDING_NOTE(0x462cf0, "camera mode 12"); break;
+        case 10: mode_circle(p); break;
+        case 0xb: mode_tv(p); break;
+        case 0xc: mode_rise(p); break;
         case 0xe: PENDING_NOTE(0x462df0, "camera mode 14"); break;
         case 0x11: PENDING_NOTE(0x463910, "camera mode 17"); break;
         case 0x12: case 0x13: PENDING_NOTE(0x463a20, "camera modes 18, 19"); break;

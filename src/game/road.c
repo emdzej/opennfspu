@@ -395,6 +395,17 @@ int Road_Step(const Road *r, int n, int by, int branch)
     }
 }
 
+const RoadJunction *Road_JunctionPast(const Road *r, int n, int by)
+{
+    int s = Road_SegmentOf(r, n);
+    if (s < 0) return NULL;   /* (the original reads the segment before its first) */
+    const RoadSegment *g = &r->seg[s];
+    int to = n + by;
+    if (g->first <= to && to <= g->last) return NULL;
+    int end = g->last < to ? g->last : g->first;
+    return r->node_end[end] < 0 ? NULL : &r->junctions[r->node_end[end]];
+}
+
 void Road_SegmentRange(const Road *r, int n, float *start, float *end, int *count, int *first)
 {
     int s = Road_SegmentOf(r, n);

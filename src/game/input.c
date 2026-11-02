@@ -1,6 +1,8 @@
 /* The race's input packets and the replay (see input.h). */
 #include "game/input.h"
 #include "game/ai.h"
+#include "game/camera.h"
+#include "game/scene.h"
 #include "game/race_progress.h"
 #include "pending.h"
 #include "render/r3dcar.h"
@@ -172,7 +174,7 @@ static void play(int p)
         memset(packet, 0, 4);
     }
     (*i)++;
-    PENDING_NOTE(0x413ba0, "the replay's camera cuts");
+    if (Scene_CameraCount() != 0) Camera_ReplayCuts(Camera_ReplayDirected());   /* 0x413ba0 */
     if (*i == 8) *i = 0;
 }
 

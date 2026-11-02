@@ -3,8 +3,9 @@
    the view's update Camera_Track 0x461060). The modes (the table at 0x5cf610: an offset in the car's
    frame and six flags): 0 on the hood (forward of the car's centre), 1 the driver's seat (its offset and tilt the car's
    drivercampos and drivercamrot), 2 .. 4 the near chase cameras, 5 .. 7 the far
-   ones, 8, 9 and 15 fixed on the car, 13 overhead; the replay's TV cameras (10 .. 12, 14, 17 .. 19) are
-   pending. A car that leaves the ground with a mode flagged so gets the crash camera (0x461450). */
+   ones, 8, 9 and 15 fixed on the car, 13 overhead; the replay's: 10 circling the car, 11 a TV camera
+   following the road, 12 a fixed one rising with the distance (the track's scene cameras, cut to as
+   the cars cross the camera triggers: 0x413ba0); 14, 17 .. 19 are pending. A car that leaves the ground with a mode flagged so gets the crash camera (0x461450). */
 #pragma once
 #include "game/car.h"
 #include "game/wtree.h"
@@ -18,15 +19,16 @@ typedef struct {
     float lookat[3];          /* +0x14 */
     void *f20;                /* +0x20 */
     float eye[3];             /* +0x24 */
-    float f30;                /* +0x30: 3 */
-    float f34, f38, f3c, f40; /* +0x34: 0, 37.5, 0, 37.5 */
-    float f44, f48;           /* +0x44: 1, 0.02 */
+    float f30;                /* +0x30: 3; the TV cameras' height over the road */
+    float f34, f38, f3c, f40; /* +0x34: 0, 37.5, 0, 37.5; the TV cameras' zoom: to a field of view (+0x34
+                                 on, +0x38 the current), or by the distance (+0x3c on, +0x40 from) */
+    float f44, f48;           /* +0x44: 1, 0.02: the zoom's ease and its rate */
     float tilt[3];            /* +0x4c: the hood camera's turns about x, y and z (degrees) */
     float fov;                /* +0x58: the half field of view (degrees), 37.5 */
     float znear;              /* +0x5c: 0.5 */
-    float f60[3];             /* +0x60 */
-    uint8_t pad6c[0xc];
-    float f78;                /* +0x78: 37.5 */
+    float f60[3];             /* +0x60: the TV camera's look ahead (across, up, along the road) */
+    float campos[3];          /* +0x6c: the scene camera's position */
+    float f78;                /* +0x78: 37.5: the field of view zoomed to */
     float orient[9];          /* +0x7c: rows left, up, forward */
     float shake[3];           /* +0xa0: the replay's up vector */
     uint8_t padac[0x10];
@@ -42,7 +44,9 @@ typedef struct {
     uint8_t padc4[2];
     int16_t look;             /* +0xc6: the turn about the car (degrees) */
     int16_t lookspeed;        /* +0xc8 */
-    uint8_t padca[0x12];
+    uint8_t padca[2];
+    float tvspeed;            /* +0xcc: the TV camera's follow along the road (0 .. 1) */
+    uint8_t padd0[0xc];
     WSurface surf;            /* +0xdc: the eye's road node */
 } RaceCamera;
 
@@ -62,3 +66,12 @@ void Camera_Update(void);                    /* 0x463af0 */
 /* The race view's frame, field of view and near plane from camera p (type: the view's, 1 the car's own
    eye). 0x464e40 */
 void Camera_ToView(int p, RCamera *c, int type);
+
+/* The replay's cameras at its start (0x413ec0's replay part): mode 10 without scene cameras, else every
+   human's camera the race direction's first and the TV direction on. */
+void Camera_ReplayStart(void);
+/* The camera triggers the humans cross (0x413ba0): their scene camera; the viewed one's camera cut to it
+   when cut. */
+void Camera_ReplayCuts(bool cut);
+/* Whether the replay's cameras follow the scene's cameras (0x606850 is 0x14). */
+bool Camera_ReplayDirected(void);
