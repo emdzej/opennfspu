@@ -41,8 +41,9 @@ void FE3D_SetRoom(const char *id);
 /* The car a screen's 3D car control shows in the room (its car file; NULL: none) in its colours (the
    description's order, +0x218: body, slots 0x7c, 0x80, interior; NULL the port's silver). */
 void FE3D_SetCar(const char *file, const uint32_t *colours);
-/* The dealer car shown (the dealership's segments follow the list's position, +0x30c). */
-void FE3D_SetIndex(int index);
+/* The dealer car shown and the list's cars (the dealership's segments follow the list's position, +0x30c,
+   and slide when it moves). */
+void FE3D_SetIndex(int index, int count);
 /* The room's tick and draw in the front end's 3D camera (0x4d2980's first view); whether a room drew. */
 bool FE3D_Draw(void);
 void FE3D_Free(void);

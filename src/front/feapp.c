@@ -1197,7 +1197,7 @@ static void sync_room(FertControl *w)
         FEAccessor *acc = FEAccess_Find(data_str(c, "accessor"));
         car = FEAccess_CarFile(acc);
         havecol = FEAccess_CarColours(acc, col);
-        if (acc) FE3D_SetIndex(FEAccess_Pos(acc));
+        if (acc) FE3D_SetIndex(FEAccess_Pos(acc), FEAccess_Count(acc));
     }
     FE3D_SetCar(car, havecol ? col : NULL);
 }

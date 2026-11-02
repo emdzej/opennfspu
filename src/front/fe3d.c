@@ -144,6 +144,16 @@ typedef struct {
     FE3DObject *seg[3];       /* +0x2ec .. +0x2f4: dealer2a, dealer2b, dealer2c */
     float step[2];            /* +0x2d4, +0x2d8: one car's place to the next (x, z) */
     int index;                /* +0x30c: the dealer car shown */
+    int want, count;          /* the dealer accessor's (+0x2fc) position (v0x28) and its cars (v0x24) */
+    FE3DObject *oldcar;       /* +0x2f8: the car slid away from */
+    bool sliding;             /* +0x308 */
+    int prev;                 /* +0x310: the car slid from */
+    int32_t slide_start;      /* +0x314 */
+    char shown[64];           /* +0x32c: the car shown at the last tick, its colours (+0x324, +0x320 ..) */
+    uint32_t showncol[4];
+    bool havecol;
+    int slide_len;            /* +0x318: 256 ticks */
+    float slide;              /* +0x31c: 0 .. 1 */
     /* the track select's (FETrackSelect3DRoom 0x4e9a30) */
     bool track;
     FE3DObject *wall;         /* +0x318: trackwall (the model +0x314 is "track") */
@@ -249,7 +259,6 @@ static FE3DRoom *dealer_new(void)
     static const char *const names[3] = {"dealer2a", "dealer2b", "dealer2c"};
     for (int i = 0; i < 3; i++) r->seg[i] = FE3DObject_New(2, names[i], none, 0, -1, 0, NULL);
     r->model = r->seg[0];
-    PENDING_NOTE(0x4e8310, "the dealership's slide between cars and its reflection pass");
     return r;
 }
 
@@ -315,6 +324,7 @@ static void room_free(FE3DRoom *r)
     if (r->dealer) {
         FE3DObject_Free(r->seg[1]);
         FE3DObject_Free(r->seg[2]);
+        FE3DObject_Free(r->oldcar);
     }
     FEMovie_Free(r->movie);   /* FEVictory3DRoom_v0 0x4eaa30 */
     FE3DObject_Free(r->model);
@@ -377,30 +387,146 @@ static void place(FE3DRoom *r, FE3DObject *o)
 
 /* FEGarage3DRoom_v1 0x4e92e0 (the tick) and FEGarage3DRoom_v15 0x4e9380 -> FESpinning3DRoom's draw
    0x4e9690. */
-/* FEDealership3DRoom_v15 0x4e8310: the segments a half turn round, at the car's place and a step to
-   either side (those of a car the list has), lit by the room; the car turning in the middle. */
-static void dealer_draw(FE3DRoom *r, EaglMatStack *model)
+static uint32_t s_carcol[4];
+static bool s_carcol_set;
+static FE3DObject *car_new(const char *file, const uint32_t *colours);
+
+/* FEDealership3DRoom_v1 0x4e8a50: a slide between cars when the dealer's list moves (not during one):
+   256 ticks, the car slid from made of the car shown at the last tick (0x4d0bb0, its hinge 1 the car's)
+   and drawn a step away; the slide's end; then the car shown kept for the next. */
+static void dealer_tick_slide(FE3DRoom *r);
+static void dealer_tick(FE3DRoom *r)
+{
+    dealer_tick_slide(r);
+    snprintf(r->shown, sizeof r->shown, "%s", s_carfile);
+    memcpy(r->showncol, s_carcol, sizeof r->showncol);
+    r->havecol = s_carcol_set;
+}
+
+static void dealer_tick_slide(FE3DRoom *r)
 {
     int32_t t = ticks();
-    if (r->spin != 0) r->rot[1] = (float)t / ((float)TICKS_HZ * r->spin);
-    float x = r->pos[0], y = r->pos[1], z = r->pos[2];
-    for (int i = -1; i <= 1; i++) {
-        if (r->index + i < 0) continue;
-        FE3DObject *o = r->seg[(r->index + i) % 3];
-        if (!o) continue;
-        light(r, o, false);
-        FE3DObject_RotY(o, 0.5f);
-        FE3DObject_RotX(o, r->rot[0]);
-        FE3DObject_SetPos(o, (float)i * r->step[0] + x, y, (float)i * r->step[1] + z);
-        FE3DObject_Draw(o, model);
+    if (r->sliding && r->slide_len < t - r->slide_start) {
+        r->sliding = false;
+        r->prev = r->index;
     }
-    if (r->car) {
-        light(r, r->car, true);
-        FE3DObject_RotY(r->car, r->rot[1]);
-        FE3DObject_RotX(r->car, r->rot[0]);
+    if (!r->sliding) {
+        r->index = r->want;
+        if (r->index != r->prev) {
+            FE3DObject_Free(r->oldcar);
+            r->oldcar = r->shown[0] ? car_new(r->shown, r->havecol ? r->showncol : NULL) : NULL;
+            if (r->oldcar && r->car && r->car->car.hinge && r->oldcar->car.hinge)
+                memcpy(r->oldcar->car.hinge[1], r->car->car.hinge[1], sizeof r->car->car.hinge[1]);   /* 0x4d1430, 0x4d13e0 */
+            r->sliding = true;
+            r->slide_start = t;
+            r->slide_len = 0x100;
+        }
+        if (!r->sliding) return;
+    }
+    float f = (float)(t - r->slide_start) / (float)r->slide_len;
+    r->slide = f < 0 ? 0 : f > 1.0f ? 1.0f : f;
+}
+
+static float minf(float a, float b) { return b <= a ? b : a; }
+static float clamp01(float v) { return v < 0 ? 0 : v > 1.0f ? 1.0f : v; }
+
+/* The segment of the list's place k: dealer2a for the first car, dealer2c from the last on, dealer2b
+   between. */
+static FE3DObject *dealer_seg(FE3DRoom *r, int k) { return r->seg[k == 0 ? 0 : k >= r->count - 1 ? 2 : 1]; }
+
+/* One object reflected (0x4d1040: its +0x471 set, the LOD list's +0x2c8 drawn with 0x30) or plainly
+   (0x4d1030); each drawn at once (0x4671d0). */
+static void draw_reflected(FE3DObject *o, EaglMatStack *model, int lod)
+{
+    o->car.cockpitlod = lod;
+    o->car.interior = true;
+    FE3DObject_Draw(o, model);
+    o->car.interior = false;
+}
+
+/* FEDealership3DRoom_v15 0x4e8310: lit by the room, the car turning; the segments a half turn round, at
+   the car's place and a step to either side (none before the first car). Not sliding: the room's zoom.
+   Sliding to the next car (the previous one +1): the place eases a step back across (0.6 of the slide,
+   at 4/3 the rate, 0x5b5fbc) and along (after 0.6, at 2.5, 0x5b7028), and a segment more on that side;
+   to the one before, the other way (0.4 the split). Then (the rooms' detail on, 0x4e2da0) the
+   reflections: each segment's LOD 1, the car's 3 (its LOD set to 1, kept for its own draw), the car
+   slid from at its place; then the same plainly, the car slid from with the car's hinges 6 and 7. */
+static void dealer_draw(FE3DRoom *r, EaglMatStack *model)
+{
+    dealer_tick(r);
+    for (int i = 0; i < 3; i++) light(r, r->seg[i], false);
+    light(r, r->car, true);
+    light(r, r->oldcar, true);
+    int32_t t = ticks();
+    if (r->spin != 0) r->rot[1] = (float)t / ((float)TICKS_HZ * r->spin);   /* +0x300 */
+    for (int i = 0; i < 3; i++) {
+        if (!r->seg[i]) continue;
+        FE3DObject_RotY(r->seg[i], 0.5f);
+        FE3DObject_RotX(r->seg[i], r->rot[0]);
+    }
+    FE3DObject *cars[2] = {r->car, r->oldcar};
+    for (int i = 0; i < 2; i++) {
+        if (!cars[i]) continue;
+        FE3DObject_RotY(cars[i], r->rot[1]);
+        FE3DObject_RotX(cars[i], r->rot[0]);
+    }
+    if (r->car) hinge(r->car, 1, 0, r->rot[1], 0);
+    float x = r->pos[0], y = r->pos[1], z = r->pos[2];
+    int lo = -1, hi = 1;
+    if (!r->sliding) {
+        float k = 1.0f - r->zoom;
+        x = k * x;
+        y = k * y - r->zoom * 0.8f;     /* 0x5b24e8 */
+        z = r->zoom * 0.3f + k * z;     /* 0x5b25f0 */
+    } else {
+        int d = r->prev - r->index;
+        if (d == 1) {
+            float a = minf(r->slide, 0.6f);                         /* 0x5b2678 */
+            float c = clamp01((r->slide - 0.6f) * 2.5f);
+            x -= (1.0f - a * 1.6666666f) * r->step[0];              /* 0x5b5fbc */
+            hi = 2;
+            z -= (1.0f - c) * r->step[1];
+        } else if (d == -1) {
+            float a = minf(r->slide, 0.4f);                         /* 0x5b261c */
+            float c = clamp01((r->slide - 0.4f) * 1.6666666f);
+            lo = -2;
+            x += (1.0f - c) * r->step[0];
+            z += (1.0f - a * 2.5f) * r->step[1];
+        } else {
+            r->prev = r->index;
+            r->sliding = false;
+        }
+    }
+    for (int pass = 0; pass < 2; pass++) {
+        bool refl = pass == 0;   /* (the reflections with the rooms' detail on, 0x4e2da0: the port's is) */
+        for (int i = lo; i <= hi; i++) {
+            if (r->index + i < 0) continue;
+            FE3DObject *o = dealer_seg(r, r->index + i);
+            if (!o) continue;
+            FE3DObject_SetPos(o, (float)i * r->step[0] + x, y, (float)i * r->step[1] + z);
+            if (refl) draw_reflected(o, model, 1);
+            else FE3DObject_Draw(o, model);
+        }
+        if (!r->car) continue;
         FE3DObject_SetPos(r->car, x, y, z);
-        hinge(r->car, 1, 0, r->rot[1], 0);
-        FE3DObject_Draw(r->car, model);
+        if (refl) {
+            r->car->car.curlod = 1;
+            draw_reflected(r->car, model, 3);
+        } else {
+            FE3DObject_Draw(r->car, model);
+        }
+        if (r->sliding && r->oldcar) {
+            float d = (float)(r->prev - r->index);
+            if (refl) {
+                r->oldcar->car.curlod = 1;
+            } else if (r->car->car.hinge && r->oldcar->car.hinge) {
+                memcpy(r->oldcar->car.hinge[6], r->car->car.hinge[6], sizeof r->car->car.hinge[6]);   /* R3DCar_Hinge, 0x443e60 */
+                memcpy(r->oldcar->car.hinge[7], r->car->car.hinge[7], sizeof r->car->car.hinge[7]);
+            }
+            FE3DObject_SetPos(r->oldcar, d * r->step[0] + x, y, d * r->step[1] + z);
+            if (refl) draw_reflected(r->oldcar, model, 3);
+            else FE3DObject_Draw(r->oldcar, model);
+        }
     }
 }
 
@@ -495,28 +621,37 @@ void FE3D_SetRoom(const char *id)
     else if (*id) PENDING_NOTE(0x4e6f10, "a room of another id");
 }
 
-void FE3D_SetIndex(int index)
+void FE3D_SetIndex(int index, int count)
 {
-    if (s_room) s_room->index = index;
+    if (!s_room) return;
+    s_room->want = index;
+    s_room->count = count;
+    if (!s_room->dealer) s_room->index = index;
 }
 
-static uint32_t s_carcol[4];
+static const uint32_t s_silver[4] = {0xffb8bcc0u, 0xffc0c0c0u, 0xff202020u, 0xff303030u};
+
+/* A car of a file in its colours (the description's order; NULL the port's silver). */
+static FE3DObject *car_new(const char *file, const uint32_t *colours)
+{
+    /* the accessor's colours (0x4bfbb0) in 0x4d0bb0's argument order: +0x218, +0x224, +0x21c, +0x220 */
+    const uint32_t args[4] = {colours ? colours[0] : 0, colours ? colours[3] : 0, colours ? colours[1] : 0, colours ? colours[2] : 0};
+    return FE3DObject_New(0, file, colours ? args : s_silver, 0, -1, 0, NULL);
+}
 
 void FE3D_SetCar(const char *file, const uint32_t *colours)
 {
     if (!s_room) return;
     if (!file) file = "";
-    static const uint32_t silver[4] = {0xffb8bcc0u, 0xffc0c0c0u, 0xff202020u, 0xff303030u};
-    if (!colours) colours = silver;
-    if (!strcmp(s_carfile, file) && !memcmp(s_carcol, colours, sizeof s_carcol)) return;
-    memcpy(s_carcol, colours, sizeof s_carcol);
+    const uint32_t *col = colours ? colours : s_silver;
+    if (!strcmp(s_carfile, file) && !memcmp(s_carcol, col, sizeof s_carcol)) return;
+    memcpy(s_carcol, col, sizeof s_carcol);
+    s_carcol_set = colours != NULL;
     snprintf(s_carfile, sizeof s_carfile, "%s", file);
     FE3DObject_Free(s_room->car);
     s_room->car = NULL;
     if (!*file) return;
-    /* the accessor's colours (0x4bfbb0) in 0x4d0bb0's argument order: +0x218, +0x224, +0x21c, +0x220 */
-    const uint32_t args[4] = {colours[0], colours[3], colours[1], colours[2]};
-    s_room->car = FE3DObject_New(0, file, colours == silver ? silver : args, 0, -1, 0, NULL);   /* FECar3DControl_v21 0x4bf9a0 */
+    s_room->car = car_new(file, colours);   /* FECar3DControl_v21 0x4bf9a0 */
     FE3DObject_SetPos(s_room->car, s_room->pos[0], s_room->pos[1], s_room->pos[2]);   /* 0x4e98a0 */
 }
 
