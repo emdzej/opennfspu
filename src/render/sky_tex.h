@@ -22,6 +22,8 @@ _Static_assert(sizeof(SkyTextures) == 0x238, "the original's layout");
 extern SkyTextures *g_skytex;         /* 0x627e4c */
 
 SkyTextures *SkyTextures_ctor(SkyTextures *t, const uint8_t *fsh);   /* 0x460910 */
+/* The blank texture and the slots' textures freed (the object itself stays). 0x460970 */
+void SkyTextures_dtor(SkyTextures *t);
 /* A new file for the same names (shapes looked up again, textures reloaded). 0x460b90 */
 void SkyTextures_reload(SkyTextures *t, const uint8_t *fsh);
 /* The slot of a shape name: the one that has it, else the shape found in the file in the first free slot;

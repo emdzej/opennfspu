@@ -25,6 +25,18 @@ SkyTextures *SkyTextures_ctor(SkyTextures *t, const uint8_t *fsh)
     return t;
 }
 
+void SkyTextures_dtor(SkyTextures *t)
+{
+    t->fsh = NULL;
+    if (t->blank) t->blank->vt->destroy(t->blank, 1);
+    for (int i = 0; i < SKYTEX_MAX; i++)
+        if (t->shape[i]) {
+            if (t->tex[i]) t->tex[i]->vt->destroy(t->tex[i], 1);
+            t->tex[i] = NULL;
+            t->shape[i] = NULL;
+        }
+}
+
 void SkyTextures_reload(SkyTextures *t, const uint8_t *fsh)
 {
     t->fsh = fsh;

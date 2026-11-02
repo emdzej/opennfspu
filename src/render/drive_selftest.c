@@ -719,7 +719,7 @@ void DRIVE_Shutdown(void)
     CarEnv_Free();          /* 0x440fd0 */
     SpriteBank_Free();      /* 0x4520c0 */
     Weather_Free();         /* 0x458a80 */
-    Sun_Free();             /* 0x4600e0 */
+    Sky_Free();             /* 0x45dbd0 (the sun with it) */
     DynLights_Free();       /* 0x455ec0 */
     Sprites_Free();         /* 0x451480 */
     Render_FreeViewKeys();  /* 0x44f9e0 */

@@ -18,6 +18,12 @@ static uint8_t *g_sky_fsh;           /* 0x627e50 */
 SkyConfig *Sky_Config(void) { return g_sky_config; }
 const uint8_t *Sky_Fsh(void) { return g_sky_fsh; }
 
+void Sky_FreeFsh(void)
+{
+    MEM_purge(g_sky_fsh);
+    g_sky_fsh = NULL;
+}
+
 static void put(uint8_t *b, int word, uint32_t v) { memcpy(b + word * 4, &v, 4); }
 static void putf(uint8_t *b, int word, float v) { memcpy(b + word * 4, &v, 4); }
 static void copy_words(uint8_t *b, int dst, int src, int n) { memmove(b + dst * 4, b + src * 4, (size_t)n * 4); }
@@ -171,7 +177,7 @@ const uint8_t *Sky_LightSlot(void) { return g_sky_light ? *g_sky_light : NULL; }
 
 /* Sky_LoadFsh 0x45da90: the texture file, then the sky's texture object (0x460910, a new one; on a
    reload 0x460b90 gives the existing one the new file) and the sky (0x45d6c0, its layers from
-   Sky\<name>.txt). Those objects are pending. */
+   Sky\<name>.txt; on a reload the old sky freed first). */
 void Sky_LoadFsh(const char *name, bool reload)
 {
     if (reload) {

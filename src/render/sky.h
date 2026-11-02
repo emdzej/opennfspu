@@ -42,10 +42,13 @@ float Sky_GlowLevel(void);                    /* the slot index the above picks 
 /* The keys' +0x20 the same way: the snow (the weather's snow volume; +0x18 above is its rain). 0x45ce90 */
 float Sky_SnowLevel(void);
 
-/* Sky\<name>.fsh (else Sky\default.fsh) as a file (global 0x627e50), and the sky objects made from it
-   (pending). `reload` frees the previous one first. Sky_LoadFsh 0x45da90 */
+/* Sky\<name>.fsh (else Sky\default.fsh) as a file (global 0x627e50), and the sky objects made from it.
+   `reload` frees the previous one first. Sky_LoadFsh 0x45da90 */
 void Sky_LoadFsh(const char *name, bool reload);
 const uint8_t *Sky_Fsh(void);                    /* 0x627e50 */
+void Sky_FreeFsh(void);                          /* MEM_purge of the above */
+/* The race's end (0x45dbd0): the texture object (0x460970), the sky (0x45d9d0) and the file. */
+void Sky_Free(void);
 
 /* The sky object (0x45d6c0, the global 0x627e48), made by Sky_LoadFsh: the texture object first (0x460910,
    or on a reload 0x460b90 for the new file), then the sky (render/sky_draw.c). */

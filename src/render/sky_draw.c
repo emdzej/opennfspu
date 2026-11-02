@@ -348,6 +348,12 @@ static void lightning_create(SkyConfig *c)   /* 0x45cb00 */
     g_lightning->config = c;
 }
 
+static void lightning_free(void)   /* 0x45cb70 (the colour grid is static here) */
+{
+    free(g_lightning);
+    g_lightning = NULL;
+}
+
 /* A strike (0x45cc50): it lasts 60 to 120 ticks; the flash at a random angle and distance by the level
    (0x5cf0c8 + 0x5cf0d4 * r, times half the configuration's +0x40), on the sky's grid (x 15 / +0x40),
    with a chance of one in ten of its thunder (0x4a8110). */
@@ -434,6 +440,21 @@ static Sky *Sky_ctor(Sky *s, const char *name)
     return s;
 }
 
+/* 0x45d9d0: the layers (their destructor slot), the three tracks (an empty destructor, 0x516210), then
+   the light slot, the sun, the lightning and the configuration. */
+static void Sky_dtor(Sky *s)
+{
+    for (int i = 0; i < 10; i++)
+        if (s->layer[i]) s->layer[i]->vt->dtor(s->layer[i], 1);
+    free(s->cover);
+    free(s->colour);
+    free(s->blend);
+    Sky_FreeLight();    /* 0x459890 */
+    Sun_Free();         /* 0x4600e0 */
+    lightning_free();   /* 0x45cb70 */
+    Sky_FreeConfig();   /* 0x459500 */
+}
+
 void Sky_Create(const char *name, bool reload)
 {
     if (!reload || !g_skytex) {
@@ -442,10 +463,29 @@ void Sky_Create(const char *name, bool reload)
         if (g_skytex) SkyTextures_ctor(g_skytex, Sky_Fsh());   /* 0x460910 */
     } else {
         SkyTextures_reload(g_skytex, Sky_Fsh());               /* 0x460b90 */
-        PENDING_NOTE(0x45d9d0, "the old sky object's destructor on a reload");
+        if (g_sky) {
+            Sky_dtor(g_sky);                                   /* 0x45d9d0 */
+            free(g_sky);
+        }
+        g_sky = NULL;
     }
     Sky *s = malloc(sizeof *s);
     g_sky = s ? Sky_ctor(s, name) : NULL;
+}
+
+void Sky_Free(void)
+{
+    if (g_skytex) {
+        SkyTextures_dtor(g_skytex);   /* 0x460970 */
+        free(g_skytex);
+    }
+    g_skytex = NULL;
+    if (g_sky) {
+        Sky_dtor(g_sky);              /* 0x45d9d0 */
+        free(g_sky);
+    }
+    g_sky = NULL;
+    Sky_FreeFsh();
 }
 
 /* 0x45cef0: the elapsed ticks (half the simulation ticks since the last update, at least 1, at most 64),
