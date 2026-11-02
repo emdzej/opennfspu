@@ -434,9 +434,9 @@ bool FECtrl_Draw(FertControl *c, int32_t ox, int32_t oy)
     if (c->feflags & 0x20) return true;
     load();
     bool waiting = (c->feflags & 0x40) != 0;
-    if (!waiting && s_in[k].type && !attached(s_in[k].dev)) {
-        PENDING_NOTE(0x51ca50, "FEControllers_Map (a missing device's inputs back to the defaults)");
-    }
+    /* (FEControllerSetupControl_v15 0x51bef0: whatever its type, an input of a device not attached
+       0x51eb10 maps all the controls back to the keyboard's defaults) */
+    if (!waiting && !attached(s_in[k].dev)) FECtrl_Map(0);
     FEControl_Draw(c, ox, oy);
     int32_t p[2] = {0, 0}, r[4];
     FertAttr *pa = FertAttrList_find(&c->attrs, "pos");   /* 0x524b90 */
