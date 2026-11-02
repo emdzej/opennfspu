@@ -507,7 +507,8 @@ RaceViews *RaceViews_ctor(RaceViews *rv)
     if (g_renderopts.widescreen) { rv->main->y0 = 0.15f; rv->main->y1 = 0.85f; }   /* 0x466df0 */
     rv->overlay = Render_CreateCamera(g_render, 3, 0, 0, 1, 1, 0, g_render->znear, g_render->zfar);
     rv->mirror = Render_CreateCamera(g_render, 4, 0.5f, 0.5f, 1, 1, 0xff000000u, g_render->znear, g_render->zfar);
-    PENDING_NOTE(0x628140, "the race views' global");
+    /* (0x628140 keeps rv for 0x464e40 and the listener 0x465360, which read its main camera; the port
+       hands the views to them) */
     return rv;
 }
 
