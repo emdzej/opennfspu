@@ -92,9 +92,7 @@ static void bundle_s4(RDrawObject *o) {}   /* 0x44fe50 */
 static void bundle_sphere(RDrawObject *o, int index, float out[4])
 {
     RDrawBundle *d = (RDrawBundle *)o;
-    /* Slot 3 of the article and animated bundles is 0x477d40 (the entry's matrix when transformed); the
-       instance and scene bundles' 0x478630 and the mid-ground's 0x47cdc0 aren't ported apart from it. */
-    WArticleBundle_sphere((WArticleBundle *)d->bundle, index, out);
+    W3DObjectBundle_Sphere(d->bundle, index, out);
 }
 
 /* The entry's draw flags from its Base flags. 0x4511b0 */

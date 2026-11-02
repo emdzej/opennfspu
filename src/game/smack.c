@@ -284,6 +284,20 @@ static bool anim_recent(const WSmackPiece *p)
     if (p->canned) return ((const QuatAnim *)p->anim)->state == 1;
     return g_sim_tick - ((const WSmackAnim *)p->anim)->moved <= 0x40;
 }
+/* slot 8: how far a SmackAnim's body has moved in x and z from its placing (0x471370; the square root
+   the bit trick's), 0 before its first move; a QuatAnim's 0 (0x4710b0). */
+static float anim_drift(const WSmackPiece *p)
+{
+    if (p->canned) return 0;
+    const WSmackAnim *s = p->anim;
+    if (s->lastpos[0] == 0 && s->lastpos[2] == 0) return 0;   /* (0x5b23f8) */
+    float dx = s->body->pos0[0] - s->lastpos[0], dz = s->body->pos0[2] - s->lastpos[2];
+    union { float f; int32_t i; } u = {dz * dz + dx * dx};
+    u.i = (u.i >> 1) + 0x1fc00000;
+    return u.f;
+}
+float WAnimatable_Drift(const WAnimatable *a, int i) { return a->e[i].cur.anim ? anim_drift(&a->e[i].cur) : 0; }
+
 static void anim_reset(WSmackPiece *p)   /* slot 7 (0x471360): still */
 {
     if (p->canned) ((QuatAnim *)p->anim)->state = 0;
@@ -549,7 +563,7 @@ void WAnimatable_Tick(WAnimatable *a)   /* 0x4767a0 */
                 e->marked = 1;
                 e->sounded = e->cur.article;
                 float sp[4];
-                WArticleBundle_sphere((WArticleBundle *)b, (int)i, sp);   /* slot 3 */
+                b->vt->sphere(b, (int)i, sp);   /* slot 3 */
                 Audio_HitSound(sp);   /* 0x4af210 */
             }
         } else {
@@ -562,7 +576,7 @@ void WAnimatable_Tick(WAnimatable *a)   /* 0x4767a0 */
             WSurface t;
             WSurface_Init(&t);
             float sp[4], l[4];
-            WArticleBundle_sphere((WArticleBundle *)b, (int)i, sp);
+            b->vt->sphere(b, (int)i, sp);   /* slot 3 */
             WSurface_Light(&t, sp, l);   /* 0x474600 */
             int32_t ca = (int32_t)(l[0] * -255.0f), cr = (int32_t)(l[1] * -255.0f), cg = (int32_t)(l[2] * -255.0f);
             int32_t cb = (int32_t)(l[3] * 255.0f);   /* (0x5b38e8, 0x5b3710: the first three negated) */

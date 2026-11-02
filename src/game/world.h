@@ -75,10 +75,15 @@ typedef struct W3DObjectBundle W3DObjectBundle;
 typedef struct {
     void (*dtor)(W3DObjectBundle *b, int free_self);                     /* 0 */
     int (*load)(W3DObjectBundle *b, UData **articles, int count);        /* 1: takes its articles; the count */
-    void (*s2)(void), (*s3)(void), (*s4)(void);
-    /* 5: the entry's own matrix (transformed bundles; NULL for the others in the port) */
+    void (*corners)(W3DObjectBundle *b, int entry, float c[8][4]);       /* 2: 0x4892d0 */
+    void (*sphere)(W3DObjectBundle *b, int entry, float out[4]);         /* 3 */
+    void (*box)(W3DObjectBundle *b, int entry, float bmin[3], float bmax[3]);   /* 4: 0x477ed0 */
+    /* 5: the entry's own matrix (transformed bundles; NULL for the others in the port, the identity
+       0x4893f0 in the original) */
     void (*matrix)(W3DObjectBundle *b, int entry, float out[16]);
-    void (*s6)(void), (*s7)(void), (*s8)(void);
+    void (*s6)(W3DObjectBundle *b);                                      /* 6: 0x4477a0, empty */
+    int (*s7)(W3DObjectBundle *b);                                       /* 7: 0x489410, 0 */
+    void (*sphere2)(W3DObjectBundle *b, int entry, float out[4]);        /* 8: 0x489420, slot 3's copy */
     void (*buildcache)(W3DObjectBundle *b);                              /* 9: 0x477ca0 */
     void (*fillcache)(W3DObjectBundle *b);                               /* 10: 0x477cd0 */
 } W3DObjectBundleVtbl;
@@ -149,7 +154,14 @@ W3DObjectBundle *WMidGroundBundle_new(void *world);  /* 0x47cb40 */
 W3DObjectBundle *WStaticBundle_new(void *world);     /* 0x483350 */
 void W3DObjectBundle_delete(W3DObjectBundle *b);
 /* Slot 2: the entry's eight box corners (x, y, z, 1), moved by its matrix when transformed. 0x4892d0 */
-void W3DObjectBundle_Corners(W3DObjectBundle *b, int entry, float c[8][4]);     /* vt->dtor(b, 1) */
+static inline void W3DObjectBundle_Corners(W3DObjectBundle *b, int entry, float c[8][4]) { b->vt->corners(b, entry, c); }
+/* Slot 3: the entry's bounding sphere (x, y, z, radius). */
+static inline void W3DObjectBundle_Sphere(W3DObjectBundle *b, int entry, float out[4]) { b->vt->sphere(b, entry, out); }
+/* The generic slots 2, 6, 7 and 8 (the line bundle's too). */
+void W3DObjectBundle_corners(W3DObjectBundle *b, int entry, float c[8][4]);   /* 0x4892d0 */
+void W3DObjectBundle_nop(W3DObjectBundle *b);                                 /* 0x4477a0 */
+int W3DObjectBundle_zero(W3DObjectBundle *b);                                 /* 0x489410 */
+void W3DObjectBundle_sphere2(W3DObjectBundle *b, int entry, float out[4]);    /* 0x489420 */
 void W3DObjectBundle_init(W3DObjectBundle *b, uint32_t kind, void *world);   /* 0x489090 */
 
 /* An article's Base item (through its cache slot), NULL without one. */

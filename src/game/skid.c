@@ -387,7 +387,8 @@ static void line_dtor(W3DObjectBundle *b, int free_self)   /* WLineBundle_v0 0x4
     if (free_self) free(b);
 }
 
-static const W3DObjectBundleVtbl vt_line = {line_dtor, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};   /* 0x5b4750 */
+static const W3DObjectBundleVtbl vt_line = {line_dtor, NULL, W3DObjectBundle_corners, WLineBundle_Sphere, WLineBundle_Box, NULL,
+                                            W3DObjectBundle_nop, W3DObjectBundle_zero, W3DObjectBundle_sphere2, NULL, NULL};   /* 0x5b4750 */
 
 /* 0x479890: the strips' size (192 vertices on grids under 1200 wide, 0x5b4748, else 12), the line level (the
    last whose cells are 100 wide, 0x5b242c), a cell per node down to it (entries with the far flag

@@ -428,8 +428,7 @@ static void file_entry(WGrid *g, W3DObjectBundle *b, int i)   /* 0x489460 */
     /* A moving entry: the node holding its sphere (slot 3), kept with the sphere's centre; filed again
        only when the centre moved, in the new node, out of the old. */
     float s[4];
-    if (b->kind == 0x3039) WLineBundle_Sphere(b, i, s);
-    else WArticleBundle_sphere((WArticleBundle *)b, i, s);
+    W3DObjectBundle_Sphere(b, i, s);
     if (!b->place) {
         b->place = calloc(b->count ? b->count : 1, sizeof *b->place);
         if (!b->place) return;

@@ -155,6 +155,25 @@ const WBase *WArticleBundle_base(WArticleBundle *a, int i)
 
 /* 0x477d40. The transformed case (entries with their own matrix: the scene, instance and animated
    bundles) moves the centre by the entry's matrix and scales the radius by it. */
+/* The sphere through entry i's matrix (slot 5): the centre moved; the radius the largest of (r, r, r)'s
+   components through it less its translation (0x5591d0). */
+static void sphere_through(W3DObjectBundle *b, int i, float out[4])
+{
+    EaglMatrix m;
+    b->vt->matrix(b, i, m.m);
+    float c[4] = {out[0], out[1], out[2], 1.0f};
+    EAGL_MatTransform4(&m, 1, c, 0x10, c, 0x10);
+    float r = out[3], v[3];
+    for (int k = 0; k < 3; k++) v[k] = r * m.m[k] + r * m.m[4 + k] + r * m.m[8 + k] + m.m[12 + k];
+    float rr = v[0] - m.m[12];
+    if (rr < v[1] - m.m[13]) rr = v[1] - m.m[13];
+    if (rr < v[2] - m.m[14]) rr = v[2] - m.m[14];
+    out[0] = c[0];
+    out[1] = c[1];
+    out[2] = c[2];
+    out[3] = rr;
+}
+
 void WArticleBundle_sphere(WArticleBundle *a, int i, float out[4])
 {
     const WBase *bs = WArticleBundle_base(a, i);
@@ -162,23 +181,44 @@ void WArticleBundle_sphere(WArticleBundle *a, int i, float out[4])
     out[1] = bs->centre[1];
     out[2] = bs->centre[2];
     out[3] = bs->radius;
-    if (a->base.transformed && a->base.vt->matrix) {
-        /* the centre through the entry's matrix; the radius the largest of (r, r, r)'s components through
-           it less its translation (0x5591d0) */
-        EaglMatrix m;
-        a->base.vt->matrix(&a->base, i, m.m);
-        float c[4] = {out[0], out[1], out[2], 1.0f};
-        EAGL_MatTransform4(&m, 1, c, 0x10, c, 0x10);
-        float r = out[3], v[3];
-        for (int k = 0; k < 3; k++) v[k] = r * m.m[k] + r * m.m[4 + k] + r * m.m[8 + k] + m.m[12 + k];
-        float rr = v[0] - m.m[12];
-        if (rr < v[1] - m.m[13]) rr = v[1] - m.m[13];
-        if (rr < v[2] - m.m[14]) rr = v[2] - m.m[14];
-        out[0] = c[0];
-        out[1] = c[1];
-        out[2] = c[2];
-        out[3] = rr;
+    if (a->base.transformed && a->base.vt->matrix) sphere_through(&a->base, i, out);
+}
+
+/* WInstanceBundle's and WSceneBundle's slot 3 (0x478630): the Base of the entry's article, or of its
+   first piece's when the entry has knockable pieces; once its sound has played the radius grows by how
+   far the body has moved (the current record's slot 8). Always through the entry's matrix. */
+static void instance_sphere(W3DObjectBundle *b, int i, float out[4])
+{
+    UData *art = b->entries[i].article;
+    float extra = 0;
+    WAnimatable *a = b->smack;
+    if (a && WAnimatable_HasAnim(a, i, 0)) {   /* 0x489820, 0x476730 */
+        const WSmackEntry *e = &a->e[i];
+        art = e->pieces[0].article;
+        if (e->sounded) {
+            float v = WAnimatable_Drift(a, i);
+            if (v != 0) extra = v;   /* (0x5b23f8) */
+        }
     }
+    const WBase *bs = article_base(art);
+    out[3] = extra + bs->radius;
+    out[0] = bs->centre[0];
+    out[1] = bs->centre[1];
+    out[2] = bs->centre[2];
+    sphere_through(b, i, out);
+}
+
+/* WMidGroundBundle_v3 0x47cdc0: the Base's sphere, its radius times 2.25 (0x5b4774) and at least 200
+   (0x5b2484). */
+static void midground_sphere(W3DObjectBundle *b, int i, float out[4])
+{
+    const WBase *bs = article_base(b->entries[i].article);
+    float r = bs->radius * exe_f32(0x5b4774);
+    if (r <= exe_f32(0x5b2484)) r = exe_f32(0x5b2484);
+    out[0] = bs->centre[0];
+    out[1] = bs->centre[1];
+    out[2] = bs->centre[2];
+    out[3] = r;
 }
 
 /* 0x477ed0 */
@@ -189,12 +229,17 @@ void WArticleBundle_box(WArticleBundle *a, int i, float bmin[3], float bmax[3])
     memcpy(bmax, bs->bmax, sizeof bs->bmax);
 }
 
-/* The slots the world code doesn't call yet (2-8: the drawing and query methods). */
-static void slot_pending(void) { PENDING_NOTE(0x4892d0, "W3DObjectBundle slots 2-8"); }
+static void article_sphere(W3DObjectBundle *b, int i, float out[4]) { WArticleBundle_sphere((WArticleBundle *)b, i, out); }
+static void article_box(W3DObjectBundle *b, int i, float mn[3], float mx[3]) { WArticleBundle_box((WArticleBundle *)b, i, mn, mx); }
+static void instance_sphere(W3DObjectBundle *b, int i, float out[4]);
+static void midground_sphere(W3DObjectBundle *b, int i, float out[4]);
+static void midground_corners(W3DObjectBundle *b, int i, float c[8][4]);
 
-#define VT5(load_fn, matrix_fn) { WArticleBundle_dtor, load_fn, slot_pending, slot_pending, slot_pending, matrix_fn, \
-                      slot_pending, slot_pending, slot_pending, WArticleBundle_buildcache, WArticleBundle_fillcache }
-#define VT(load_fn) VT5(load_fn, NULL)
+#define VT6(load_fn, corners_fn, sphere_fn, matrix_fn) { WArticleBundle_dtor, load_fn, corners_fn, sphere_fn, article_box, \
+                      matrix_fn, W3DObjectBundle_nop, W3DObjectBundle_zero, W3DObjectBundle_sphere2, \
+                      WArticleBundle_buildcache, WArticleBundle_fillcache }
+#define VT5(load_fn, sphere_fn, matrix_fn) VT6(load_fn, W3DObjectBundle_corners, sphere_fn, matrix_fn)
+#define VT(load_fn) VT5(load_fn, article_sphere, NULL)
 
 /* ------------------------------------------------------------------ the article bundles' loads */
 
@@ -523,10 +568,10 @@ static void instance_matrix(W3DObjectBundle *b, int entry, float out[16])
     memcpy(out, m.m, sizeof m.m);
 }
 
-static const W3DObjectBundleVtbl vt_scene = VT5(WSceneBundle_load, scene_matrix);            /* 0x5b47e0 */
-static const W3DObjectBundleVtbl vt_instance = VT5(WInstanceBundle_load, instance_matrix);   /* 0x5b4718 */
-static const W3DObjectBundleVtbl vt_anim = VT5(WAnimBundle_load, anim_matrix);              /* 0x5b46b8 */
-static const W3DObjectBundleVtbl vt_midground = VT(WMidGroundBundle_load);    /* 0x5b477c */
+static const W3DObjectBundleVtbl vt_scene = VT5(WSceneBundle_load, instance_sphere, scene_matrix);         /* 0x5b47e0 */
+static const W3DObjectBundleVtbl vt_instance = VT5(WInstanceBundle_load, instance_sphere, instance_matrix); /* 0x5b4718 */
+static const W3DObjectBundleVtbl vt_anim = VT5(WAnimBundle_load, article_sphere, anim_matrix);              /* 0x5b46b8 */
+static const W3DObjectBundleVtbl vt_midground = VT6(WMidGroundBundle_load, midground_corners, midground_sphere, NULL);   /* 0x5b477c */
 static const W3DObjectBundleVtbl vt_static = VT(WStaticBundle_load);          /* 0x5b4814 */
 static const W3DObjectBundleVtbl vt_article = VT(WArticleBundle_load);        /* 0x5b46e8 */
 
@@ -563,24 +608,10 @@ W3DObjectBundle *WMidGroundBundle_new(void *world) { return article_bundle(sizeo
 W3DObjectBundle *WStaticBundle_new(void *world) { return article_bundle(sizeof(WStaticBundle), &vt_static, world); }
 W3DObjectBundle *WArticleBundle_new(void *world) { return article_bundle(sizeof(WArticleBundle), &vt_article, world); }
 
-/* Slot 2 (0x4892d0; the mid-ground's 0x47ced0, the line bundle's the generic one over its cell box
-   0x479f90): the entry's box corners, x, y, z, 1 from the least corner, x up, then y, back in x, then the
-   same at the greatest z, moved by the entry's matrix (slot 5) for the transformed bundles. The
-   mid-ground's box is spread from its centre by 2.25 (0x5b4774). */
-void W3DObjectBundle_Corners(W3DObjectBundle *b, int i, float c[8][4])
+/* The box's eight corners, x, y, z, 1 from the least corner, x up, then y, back in x, then the same at
+   the greatest z. */
+static void box_corners(const float mn[3], const float mx[3], float c[8][4])
 {
-    float mn[3], mx[3];
-    if (b->kind == 0x3039) WLineBundle_Box(b, i, mn, mx);
-    else WArticleBundle_box((WArticleBundle *)b, i, mn, mx);
-    if (b->vt == &vt_midground) {
-        float k = exe_f32(0x5b4774);
-        for (int j = 0; j < 3; j++) {
-            float m = (mn[j] + mx[j]) * 0.5f;   /* (0x5b2778, a double half) */
-            float lo = (mn[j] - m) * k + m, hi = (mx[j] - m) * k + m;
-            mn[j] = lo < hi ? lo : hi;
-            mx[j] = lo < hi ? hi : lo;
-        }
-    }
     static const uint8_t hi[8] = {0, 1, 3, 2, 4, 5, 7, 6};   /* bit 0 x, bit 1 y, bit 2 z */
     for (int k = 0; k < 8; k++) {
         c[k][0] = hi[k] & 1 ? mx[0] : mn[0];
@@ -588,11 +619,44 @@ void W3DObjectBundle_Corners(W3DObjectBundle *b, int i, float c[8][4])
         c[k][2] = hi[k] & 4 ? mx[2] : mn[2];
         c[k][3] = 1.0f;
     }
+}
+
+/* Slot 2 (0x4892d0; the line bundle's too, over its cell box): the box (slot 4) as corners, moved by the
+   entry's matrix (slot 5) for the transformed bundles. */
+void W3DObjectBundle_corners(W3DObjectBundle *b, int i, float c[8][4])
+{
+    float mn[3], mx[3];
+    b->vt->box(b, i, mn, mx);
+    box_corners(mn, mx, c);
     if (b->transformed && b->vt->matrix) {
         EaglMatrix m;
         b->vt->matrix(b, i, m.m);
         EAGL_MatTransform4(&m, 8, &c[0][0], 16, &c[0][0], 16);   /* 0x539cc0 */
     }
+}
+
+/* WMidGroundBundle_v2 0x47ced0: the box spread from its centre by 2.25 (0x5b4774). */
+static void midground_corners(W3DObjectBundle *b, int i, float c[8][4])
+{
+    float mn[3], mx[3];
+    b->vt->box(b, i, mn, mx);
+    float k = exe_f32(0x5b4774);
+    for (int j = 0; j < 3; j++) {
+        float m = (mn[j] + mx[j]) * 0.5f;   /* (0x5b2778, a double half) */
+        float lo = (mn[j] - m) * k + m, hi = (mx[j] - m) * k + m;
+        mn[j] = lo < hi ? lo : hi;
+        mx[j] = lo < hi ? hi : lo;
+    }
+    box_corners(mn, mx, c);
+}
+
+void W3DObjectBundle_nop(W3DObjectBundle *b) { (void)b; }
+int W3DObjectBundle_zero(W3DObjectBundle *b) { (void)b; return 0; }
+void W3DObjectBundle_sphere2(W3DObjectBundle *b, int i, float out[4])
+{
+    float s[4];
+    b->vt->sphere(b, i, s);
+    memcpy(out, s, sizeof s);
 }
 
 void W3DObjectBundle_delete(W3DObjectBundle *b)

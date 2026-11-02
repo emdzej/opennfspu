@@ -92,6 +92,8 @@ bool WAnimatable_HasAnim(const WAnimatable *a, int i, int piece);
 /* The entry's matrix with its piece's motion (-1: the current record's): the motion (the identity with
    `still`) times the placing. 0x476970 */
 void WAnimatable_Matrix(WAnimatable *a, int i, int piece, bool still, EaglMatrix *out);
+/* The current record's slot 8: how far its body has moved from its place (0 for a canned piece). 0x471370 */
+float WAnimatable_Drift(const WAnimatable *a, int i);
 /* The pieces drawn (the live ones, at least one). 0x450220 */
 int WAnimatable_Pieces(const WAnimatable *a, int i);
 /* The hit kind of entry i struck at vel: 0 for an object with a body, else 2 - whether its canned
