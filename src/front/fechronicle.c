@@ -426,7 +426,8 @@ static int part_w(FertControl *c, const char *name)   /* (0x4e2370: its size's w
 }
 
 /* The knob along the track at the accessor's place (FESlider_MainFunctionality_v11 0x4d05c0: its first
-   place plus place * (the track's width - the knob's) / (count - 1); horizontal). */
+   place plus place * (the track's width - the knob's) / (count - 1); horizontal), the hovered and pressed
+   knobs (+0xf0, +0xf4) put there too. */
 static void slider_place(FertControl *c)
 {
     FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
@@ -437,7 +438,12 @@ static void slider_place(FertControl *c)
     FertAttr *kp = FertAttrList_find(&k->attrs, "pos");
     int32_t at[2] = {0, 0};
     if (kp) FertAttr_point(kp, at);
-    if (kp) FertAttr_setPoint(kp, d, at[1]);   /* 0x527310 (the knob's first place 0, 0) */
+    static const char *const knobs[3] = {"knob", "hoverknob", "hovermousedownknob"};
+    for (int i = 0; i < 3; i++) {
+        FertPart *pk = part(c, knobs[i]);
+        FertAttr *pp = pk ? FertAttrList_find(&pk->attrs, "pos") : NULL;
+        if (pp) FertAttr_setPoint(pp, d, at[1]);   /* 0x527310 (the knob's first place 0, 0) */
+    }
 }
 
 /* What is under (x, y) (0x4d06f0): the knob 3, the track 4 (within its width) or 5, else 0. */
@@ -461,6 +467,9 @@ static int slider_hit(FertControl *c, int32_t x, int32_t y)
 /* ---------------------------------------------------------------- the dispatch */
 
 static bool is(const FertControl *c, const char *id) { return c && !strcmp(c->id, id); }
+/* The horizontal sliders (FEHorizontalSlider, factory 0x4cac40): the chronicle's years and the car
+   setup's settings. */
+static bool is_slider(const FertControl *c) { return is(c, "NFS5.CHRONICLESLIDER") || is(c, "NFS5.CarSettingSlider"); }
 
 bool FEChronicle_Draw(FertControl *c, int32_t ox, int32_t oy)
 {
@@ -476,12 +485,8 @@ bool FEChronicle_Draw(FertControl *c, int32_t ox, int32_t oy)
         if (!(c->feflags & 0x20)) icon_draw(c, ox, oy);
         return true;
     }
-    if (is(c, "NFS5.CHRONICLESLIDER")) {
+    if (is_slider(c)) {
         /* FEHorizontalSlider_v1 0x4cadd0 -> v11 each frame, then its parts (0x4c7e30) */
-        if (s_sl.c != c) {
-            memset(&s_sl, 0, sizeof s_sl);
-            s_sl.c = c;
-        }
         slider_place(c);
         FEControl_Draw(c, ox, oy);
         return true;
@@ -499,7 +504,10 @@ bool FEChronicle_Down(FertControl *c, int32_t x, int32_t y)
         s_pic.down[1] = y;
         return true;
     }
-    if (is(c, "NFS5.CHRONICLESLIDER") && s_sl.c == c) {
+    if (is_slider(c)) {
+        /* (each slider's own state in the original, +0x144's; one is pressed at a time) */
+        memset(&s_sl, 0, sizeof s_sl);
+        s_sl.c = c;
         /* FESlider_MainFunctionality_v5 0x4d0330: on the knob a drag from the mouse; on the track the knob
            to the mouse first and the drag from where it was (the place moves with the mouse's next move) */
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
@@ -555,7 +563,7 @@ void FEChronicle_Leave(FertControl *c)
 {
     if (is(c, "NFS5.ChronicleMainBoxControl")) s_box.hover = false;   /* v7 0x5076d0 */
     if (is(c, "NFS5.ChroniclePicture")) s_pic.drag = false;           /* v7 0x5079b0 */
-    if (is(c, "NFS5.CHRONICLESLIDER")) s_sl.hit = 0;                  /* v7 0x4d0940 */
+    if (is_slider(c) && s_sl.c == c) s_sl.hit = 0;   /* v7 0x4d0940 */
 }
 
 bool FEChronicle_Up(FertControl *c)
@@ -580,5 +588,5 @@ bool FEChronicle_Up(FertControl *c)
         s_shown = n;
         return true;
     }
-    return is(c, "NFS5.ChroniclePicture") || is(c, "NFS5.CHRONICLESLIDER");
+    return is(c, "NFS5.ChroniclePicture") || is_slider(c);
 }

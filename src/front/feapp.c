@@ -2205,22 +2205,6 @@ static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
-/* A car setting's slider (FECarSettingSlider): a knob along its width at its accessor's place (the port's
-   bar; its shapes, weeicons.fsh, pend). */
-static bool setting_draw(FertControl *c, int32_t ox, int32_t oy)
-{
-    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
-    if (!a) return true;
-    int32_t pos[2] = {0, 0};
-    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
-    if (pa) FertAttr_point(pa, pos);
-    int w = data_int_of(c, "width"), h = data_int_of(c, "height"), n = FEAccess_Count(a);
-    float f = n > 1 ? (float)FEAccess_Pos(a) / (float)(n - 1) : 0;
-    FE2D_DepthStep();
-    FE2D_Rect((float)(pos[0] + ox) + f * (float)(w - 6), (float)(pos[1] + oy), 6.0f, (float)h, 0xff202020u);
-    return true;
-}
-
 /* A list box (NFS5.ListBox: FEComboBox always open, +0x1dd; its list's draw, 0x4c53e0 from LAB_004c60ce):
    its accessor's rows from the first shown down its box (data.width x data.selectionboxmaxheight), each
    drawn by its accessor (the parts lists': FEPartsAllPartsAccessor_v15 0x514ef0, FEPartsShoppingBasket_v15
@@ -2721,7 +2705,6 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (FEShowcase_Draw(c, ox, oy)) return true;
     if (!strcmp(c->id, "NFS5.FACTORYPIC") || !strcmp(c->id, "NFS5.FACTORYMAP")) return factory_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.PRIZERACEMAP")) return prizemap_draw(c, ox, oy);
-    if (!strcmp(c->id, "NFS5.CarSettingSlider")) return setting_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH") || !strcmp(c->id, "NFS5.WORDWRAPCONTROL")) return wordwrap_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
