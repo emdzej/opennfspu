@@ -1839,7 +1839,7 @@ void FEData_Init(void)
     FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
     if (df) df->list = 0x5d9f08;
     /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
-       laps (0x5b9650: "1" .. "8"; the first slot's 3, its options 0xc .. 0xf in fe.txt: pending) */
+       laps (0x5b9650: "1" .. "8"; the first slot's at 3 laps) */
     for (int k = 1; k <= 7; k++) {
         char nm[32];
         if (k > 1) {

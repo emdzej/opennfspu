@@ -1203,8 +1203,8 @@ static void callback(const char *cb)
         (void)v;
         s_tour_race = -1;
         if (play_mode() == 2) {
-            /* the career's race: the tournament's next track, the player's chosen car (the race's laps and
-               opponents from the tournament: pending, the options') */
+            /* the career's race: the tournament's next track, the player's chosen car; its laps,
+               direction, traffic and racers the tournament's */
             const char *t = FEData_TourTrack();
             const char *c = FEAccess_CarFile(FEAccess_Find("OwnedCars.Car"));
             if (!t || !c) return;
@@ -1312,7 +1312,10 @@ static void callback(const char *cb)
             s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
             s_owned_race = FEData_OwnedIndex("zMergedList.Car");
         }
-        s_laps = s_tour_race >= 0 ? FEData_TourLaps() : s_gametype == 1 ? FEData_KOOpponents() : fe_int("num_laps", 1);
+        /* (0x4fb630's types 0 and 3: Track1.Laps' place + 1 on a looped track, else 1) */
+        FEAccessor *la = FEAccess_Find("Track1.Laps");
+        s_laps = s_tour_race >= 0 ? FEData_TourLaps() : s_gametype == 1 ? FEData_KOOpponents()
+               : FEData_TrackLooped(s_gametype) && la ? FEAccess_Pos(la) + 1 : 1;
         /* The traffic (0x4fb630's fifth: Track1.Traffic's place, none, light, medium, heavy, for the quick
            race and the quick knockout) */
         if (s_tour_race < 0 && (s_gametype == 0 || s_gametype == 1)) {
