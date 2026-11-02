@@ -53,6 +53,7 @@ static RaceViews views;
 static float env[64];
 static double ticks_due;
 static int s_start;   /* the race's first tick (--param start) */
+static bool s_replay_again;   /* 0x657428: the replay's restart */
 static int s_slot;    /* 0x606aa0: the race loop's tick slots (the replay's speeds skip or double them) */
 
 static void set_env(void)   /* the track viewer's light until the sky's is ported */
@@ -325,7 +326,7 @@ static void race_menus(void)
     static const int8_t replay_map[0x18] = {[6] = 8, [7] = 1, [8] = 3, [9] = 2, [10] = 4, [0xb] = 5, [0xc] = 6,
                                             [0xd] = 7, [0x16] = 9, [0x17] = 10};
     if (6 <= act && act < 0x18 && (replay_map[act] || act == 7)) {
-        if (Replay_Control(replay_map[act]) == 2) g_drive_result = 2;   /* restart (0x657428) */
+        if (Replay_Control(replay_map[act]) == 2) s_replay_again = true;   /* restart (0x657428) */
         return;
     }
     switch (act) {
@@ -365,7 +366,9 @@ bool DRIVE_selftest(const char *track, const char *car)
     if (g_replay_mode == 2 && !g_drive_paused) {
         /* RaceLoop's replay part: its quit ends the race; its pause stops it (the cameras updated once,
            the sounds stopped) */
-        if (Replay_ExitWanted()) {
+        if (s_replay_again) {
+            PENDING_NOTE(0x4ab130, "the sounds' stop before the replay again");
+        } else if (Replay_ExitWanted()) {
             if (!g_drive_result) g_drive_result = 1;
         } else if (Replay_Paused() != Replay_PauseWanted()) {
             Replay_SetPaused(Replay_PauseWanted());
@@ -431,11 +434,21 @@ bool DRIVE_selftest(const char *track, const char *car)
         }
         /* --param raceexit=<tick>: the race-over's Escape at that tick of its replay (tests) */
         if (g_replay_mode == 2 && plat_param("raceexit", ev, sizeof ev) && atoi(ev) <= g_sim_tick) g_drive_result = 1;
+        /* --param replayagain=<tick>: the replay panel's restart at that tick of the replay, once (tests) */
+        static bool again_done;
+        if (g_replay_mode == 2 && !again_done && plat_param("replayagain", ev, sizeof ev) && atoi(ev) <= g_sim_tick) {
+            again_done = true;
+            HUD_ReplayRestart();
+            if (Replay_Control(1) == 2) s_replay_again = true;
+        }
     }
-    if (g_race_over && g_race_view < 2) {
+    if ((g_race_over && g_race_view < 2) || s_replay_again) {
         /* GameMain's second race loop: the race again from its start, replaying the packets
-           (0x414ed0, 0x413ec0), the HUD's visuals hidden (0x425740), then the race-over screens. */
-        keep_wear();
+           (0x414ed0, 0x413ec0), the HUD's visuals hidden (0x425740), then the race-over screens. The
+           replay panel's restart (0x657428) ends the loop and GameMain runs it again: the results'
+           screens then stay hidden (0x60ca10). */
+        if (!s_replay_again) keep_wear();
+        s_replay_again = false;
         g_race_view = 2;
         g_replay_mode = 2;
         World_Restart();   /* 0x471ac0 */
@@ -516,5 +529,6 @@ void DRIVE_Shutdown(void)
     ready = failed = false;
     g_drive_paused = false;
     g_drive_result = 0;
+    s_replay_again = false;
     s_wear_kept = false;
 }

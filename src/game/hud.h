@@ -39,6 +39,9 @@ void HUD_RaceStart(void);
 /* Whether a modal visual (a race screen, the pause menu) is up. 0x426a20 */
 bool HUD_ModalShown(void);
 /* Every visual hidden, the modal list emptied (the replay's start). 0x425740 */
+/* The replay panel's restart (its action 7 in HUD_HandleInput): the results' screens not shown when
+   the replay starts again (0x60ca10), the next song (0x4ae2a0). */
+void HUD_ReplayRestart(void);
 void HUD_HideAll(void);
 /* The pause menu up (0x4267c0: HPause into the modal list, opening). */
 void HUD_Pause(void);

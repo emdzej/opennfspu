@@ -38,6 +38,7 @@ static bool hidden;          /* 0x60ca00 */
 static HudVisual *modal[8];
 static int nmodal;
 static HudVisual *summary;   /* 0x60ca4c */
+static bool s_noscreens;     /* 0x60ca10: the race-over's screens skipped */
 static HudVisual *mission;   /* 0x60ca50 */
 static HudVisual *s_time;    /* 0x60ca1c */
 static int s_cones_down;     /* 0x60ca04: the traffic objects knocked, last counted */
@@ -3968,6 +3969,7 @@ void HUD_Init(void)
     HUD_Free();
     s_laps_done = s_bestlap = 0;   /* (0x426c50's reset) */
     g_mission_forced = -1;         /* 0x60c9ec */
+    s_noscreens = false;           /* 0x60ca10 */
     /* The player's name (the race description's +0x558 +0x17c), the layout chosen (0x657db8), the
        screen. */
     HudConfig_Load(g_race_player, 0, g_display.width, g_display.height);
@@ -4134,6 +4136,7 @@ int HUD_HandleInput(int x, int y, int event)
         break;
     case 0x15:
         close_modals(0);
+        s_noscreens = true;
         g_race_quit = 1;
         break;
     case 0x1c:   /* yes */
@@ -4164,13 +4167,13 @@ int HUD_HandleInput(int x, int y, int event)
     default:
         break;
     }
-    /* The race over (its replay): with no modal's action, the replay panel's. 7 restart (the summary not
-       shown again, the music, 0x4ae2a0: pending), 0xe the race's screens again, 0xf the save's
+    /* The race over (its replay): with no modal's action, the replay panel's. 7 restart (the results'
+       screens not shown again, the next song), 0xe the race's screens again, 0xf the save's
        question (HReplaySave, pending). */
     if (g_race_view != 2 || a != 0 || !s_replay) return a;
     a = s_replay->vt->input(s_replay, x, y, c);
     if (a == 7) {
-        PENDING_NOTE(0x4ae2a0, "the music's stop for the restart");
+        HUD_ReplayRestart();
         return 7;
     }
     if (a == 0xe) {
@@ -4184,6 +4187,12 @@ int HUD_HandleInput(int x, int y, int event)
         PENDING_NOTE(0x42dfc0, "the replay's save (HReplaySave, Replay_Save 0x413ff0)");
     }
     return a;
+}
+
+void HUD_ReplayRestart(void)
+{
+    s_noscreens = true;
+    Music_Play(NULL, 0);
 }
 
 void HUD_HideAll(void)
@@ -4206,6 +4215,10 @@ void HUD_RaceStart(void)
 void HUD_RaceOver(void)
 {
     PENDING_NOTE(0x426a40, "the race-over HUD's other parts (place swaps, the replay's HUD)");
+    if (s_noscreens) {   /* (the replay's restart, the pause's view replay: no screens, once) */
+        s_noscreens = false;
+        return;
+    }
     /* The records take the player's time first, when the player has a place (or in a mission). */
     Car *me = local_car();
     if (s_records && ((me && *CAR_I(me, 0xcd4) != 0) || g_race_mode == 9)) {
