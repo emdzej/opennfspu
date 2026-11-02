@@ -324,7 +324,7 @@ void AI_Reset(Car *c)
     set_i(c, 0x101c, 0);
     memset(c->b + 0xeb4, 0, 0x20);    /* +0xeb4 .. +0xed0 */
     set_i(c, 0x538, 0);
-    /* +0xed4 holds the car's own address in the original (a 32-bit slot; the AI isn't ported). */
+    /* +0xed4: the car it keeps near (a pointer in the original; the port's index + 1, ai.c) */
     set_i(c, 0xedc, 0);
     memset(c->b + 0xee4, 0, 0x10);    /* +0xee4 .. +0xef0 */
     set_i(c, 0x1080, 0);

@@ -1,8 +1,7 @@
 /* The render options (render.h RenderOptions) from fe.txt, the settings file the game reads at start and
-   writes back. The options module (Options_Read 0x4b6450: "name = value" lines, '#' comments, names
-   case-insensitive, Options_Parse 0x4b0dc0's records) isn't ported yet; this reads only the render
-   system's keys the same way. Missing keys keep the value the option globals have before the file is read
-   (0, and "" for the driver, which then means the WIDTH x HEIGHT mode of the options). */
+   writes back, through the options module (game/options.c: Options_Read 0x4b6450's lines), by the render
+   system's keys. Missing keys keep the value the option globals have before the file is read (0, and ""
+   for the driver, which then means the WIDTH x HEIGHT mode of the options). */
 #include "render/render.h"
 #include "game/options.h"
 #include "platform.h"

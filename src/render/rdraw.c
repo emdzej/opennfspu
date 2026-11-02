@@ -136,7 +136,7 @@ static void article_queue(RDrawObject *o, int index, float dist2)
     const uint8_t *e = base + 0x64 + 12 * lod;
     RListEntry q = {NULL, o, 0, (uint16_t)index, fround(dist2)};
     const RCamera *cam = g_render ? g_render->camera : NULL;
-    /* The camera's point at +0x34 (kept by the camera behaviours, not ported: the eye until then). */
+    /* The camera's point at +0x34: the eye its update writes (0x461060 -> 0x464e40), the frame's. */
     const float *cp = cam ? cam->frame.eye : NULL;
     if (e[0]) {
         uint32_t lo = rd16(e + 4), hi = rd16(e + 6);
