@@ -3,13 +3,14 @@
    the destructor 0x4b7c40 lets go; FUN_004b78a0 finds one by name). The controls name them with a field
    and an argument, "Track1.Track(SHORT)": the map holds the name before the argument.
 
-   The port has, so far, the Quick Race screen's lists, made as the data areas make theirs:
+   Among them the Quick Race screen's lists, made as the data areas make theirs:
    - Game.NumOpponents, an int accessor 0..7 (FEdaGameOptions_v0 0x4e4bc0 -> 0x4b9ef0);
    - Track1.Track, the tracks of nfs5.trk with a model (FE_LoadTrackList 0x4facd0), named by their
      strings;
    - zMergedList.Car, the racing cars of nfs5.car with a model (FE_LoadCarList 0x4f30c0, the list
-     0x6919f0), named by their short names; OpponentCar.Car, which of them the opponents race. (The original's lists also follow the
-     era and the owned cars, and sort them, 0x4f34c0 / 0x4f05c0: pending.)
+     0x6919f0), named by their short names, sorted (0x4f05c0), the owned cars after them
+     (FEData_MergedOwned); OpponentCar.Car, which of them the opponents race. The dealer's lists follow the
+     career's year (FEData_RefreshCars, 0x4f34c0).
    Positions start from fe.txt's race description, what the original's options hold. */
 #pragma once
 #include <stdbool.h>
