@@ -249,6 +249,7 @@ static void car_prelod(R3DCar *car)
 {
     R3DCarState *st = car->state;
     R3DCar_LoadStyles(car, st->style);
+    memcpy(car->keptanim, car->anim, sizeof car->keptanim);   /* (+0x608, 0xa0 bytes) */
     for (int i = 0; i < 8; i++) {
         car->anim[i].pos = 0;
         car->anim[i].dir = 0;
@@ -586,11 +587,22 @@ void R3DCar_Dents(R3DCar *car, bool force)   /* 0x438160 */
     if (car->textures) R3DCar_DrawDecals(car, car->state->damage);   /* 0x445110 -> 0x447f40 */
 }
 
-/* R3DCar_v20 0x43b040: slot 1 at its last frame when the car's description says so (+0x50c), then the
-   moved slots' parts. */
+/* R3DCar_v20 0x43b040: the slots that were going (a target and a time kept, +0x608) where the new
+   model has frames: their place and target within its frames (the place below the last), their time,
+   on; then slot 1 at its last frame when the car's description says so (+0x50c), then the moved slots'
+   parts. */
 static void car_postlod(R3DCar *car)
 {
-    PENDING_NOTE(0x43b040, "R3DCar_v20's slots kept over a reload (+0x608)");
+    for (int i = 0; i < 8; i++) {
+        const R3DCarAnim *k = &car->keptanim[i];
+        R3DCarAnim *a = &car->anim[i];
+        if (k->dir == 0 || !(0.0f < k->t) || !(0.0f < a->frames)) continue;
+        float pos = (float)k->pos, last = a->frames - 1.0f, dir = (float)k->dir;
+        a->pos = (int)(pos < last ? pos : last);
+        a->dir = (int)(dir < a->frames ? dir : a->frames);
+        a->t = k->t;
+        a->on = 1;
+    }
     const R3DCarSpec *sp = car->state ? car->state->spec : NULL;
     R3DCar_AnimReset(car, 1, sp && sp->slot1end ? car->anim[1].frames : 0);
     R3DCar_ApplyMorphs(car);

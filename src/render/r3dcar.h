@@ -145,6 +145,7 @@ typedef struct R3DCar {
     float dents[10];                /* +0x6a8: the zones' damage the parts were last deformed by */
     int texinfo;                    /* +0x480 */
     R3DCarAnim anim[8];             /* +0x568 */
+    R3DCarAnim keptanim[8];         /* +0x608: the slots as they were before the LODs were built again */
     float wheelpos[4][3];           /* +0x6d0: wheel slot offsets (the simulation's) */
     char name[64];                  /* port: the name given to R3DCar_LoadCrp */
     /* port: the pages' texture states (the original's live on R3DObject_LoadHeader's stack, and the
