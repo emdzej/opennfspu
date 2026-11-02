@@ -2491,6 +2491,28 @@ void FEData_TourRaceInfo(RaceTournament *t)
 
 bool FEData_EraEnded(void) { return s_era_ended; }   /* 0x504db0 */
 
+void FEData_Cameras(int32_t out[4])
+{
+    /* FEdaCameras_v0 0x4e43e0: Camera.Current and Camera.1 .. Camera.4 (FEIntAccessor 0x4bbdd0 of four
+       values) at 0, 0, 1, 2, 3; the player's save's accessor values over them (its "accessor" section,
+       0x4b7dc0: each name and its own data, an int's four bytes); 0x4ee430 gives the race the four. */
+    for (int i = 0; i < 4; i++) out[i] = i;
+    Save *sv = FESave_Current();
+    for (int k = 0; sv && k < sv->nsec; k++) {
+        const SaveSection *x = &sv->sec[k];
+        if (strcmp(x->name, "accessor")) continue;
+        for (int i = 0; i < 4; i++) {
+            char nm[16];
+            int len = snprintf(nm, sizeof nm, "Camera.%d", i + 1) + 1;
+            for (size_t j = 0; j + (size_t)len + 4 <= x->size; j++)
+                if (!memcmp(x->data + j, nm, (size_t)len)) {
+                    memcpy(&out[i], x->data + j + (size_t)len, 4);
+                    break;
+                }
+        }
+    }
+}
+
 int FEData_Era(void)   /* 0x502880 */
 {
     int32_t head[7] = {0};

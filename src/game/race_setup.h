@@ -32,6 +32,9 @@ extern uint32_t g_race_cheats;
 /* The human car's colours the front end chose (the description's +0x218 order), when set. */
 extern uint32_t g_race_colours[4];
 extern bool g_race_colours_set;
+/* The player's camera list (_CAMERA, the description's +0x208: the front end's Camera.1 .. Camera.4,
+   0x4ee430; without the front end its defaults, 0 .. 3). */
+extern int32_t g_race_cameras[4];
 /* The human car's parts (PARTINDEX ids) the front end chose, when set. */
 extern int32_t g_race_parts[20];
 extern bool g_race_parts_set;

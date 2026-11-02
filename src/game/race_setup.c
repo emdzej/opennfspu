@@ -36,6 +36,7 @@ int16_t g_race_traffic_slots[7];
 RaceOpponent g_race_opp[8];
 bool g_race_opp_set;
 float g_race_skill = 1.0f;
+int32_t g_race_cameras[4] = {0, 1, 2, 3};
 char g_race_player[64];
 int32_t g_track_records[8], g_lap_records[8];
 char g_record_names[8][32], g_record_cars[8][32];
@@ -144,12 +145,7 @@ bool RaceSetup_SingleCar(const char *name)
     put_i(d, 0x0, 0xb);                                   /* TYPE */
     put_i(d, 0x8, 1);                                     /* CLASS: the human player */
     put_i(d, 0x200, 0xe);                                 /* SPEECHCOLOUR */
-    {
-        /* _CAMERA: the car's camera list (the front end's camera option; a stand-in until it is ported):
-           the near chase, the far chase, the hood, in the car. */
-        static const int32_t cams[4] = {2, 5, 1, 0};
-        for (int k = 0; k < 4; k++) put_i(d, 0x208 + 4 * k, cams[k]);
-    }
+    for (int k = 0; k < 4; k++) put_i(d, 0x208 + 4 * k, g_race_cameras[k]);   /* _CAMERA (0x148) */
     {
         /* SKILLSLOW .. SKILLDEFAULT 1, their ranges 0 (the player's, as the front end writes them). */
         float sk[8] = {1, 1, 1, 1, 0, 0, 0, 0};

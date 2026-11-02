@@ -208,4 +208,6 @@ int FEData_Era(void);
 bool FEData_EraDone(int era);
 const uint8_t *FEData_EraTournament(int era, int k);
 bool FEData_EraEnded(void);
+/* The player's four race cameras (Camera.1 .. Camera.4: 0 .. 3, or the save's). */
+void FEData_Cameras(int32_t out[4]);
 const uint8_t *FEData_CarAt(int i);
