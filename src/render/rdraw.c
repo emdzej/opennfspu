@@ -241,8 +241,8 @@ static const uint8_t *lod_entry(const uint8_t *base, uint32_t key)
 
 /* An article under a matrix (0x450250): its level's primitive lists, each through its material with the
    colour stream 'Am' overridden to the colour (white but for a lit knockable object: the light at it;
-   the vertex stream 'vt' too: with no vertex animation, the article's own); its markers ('ef' type 2)
-   pending. */
+   the vertex stream 'vt' too: with no vertex animation, the article's own); then its markers ('ef'
+   type 2) as glows. */
 static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, const EaglMatrix *m, uint32_t colour)
 {
     R3DPart p;
@@ -270,7 +270,11 @@ static void draw_article(RDrawBundle *d, WArticleCache *c, const RListEntry *e, 
                 mat->override = NULL;   /* +0x0c */
             }
         }
-        if (lod[1]) PENDING_NOTE(0x451810, "the animated articles' markers ('ef' type 2)");
+        if (lod[1]) {   /* its markers: each 'ef' type 2 a glow under the matrix (0x451810) */
+            uint32_t lo = rd16(lod + 4), hi = rd16(lod + 6);
+            for (const uint32_t *ef = first_item(&p, R3D_EF, lo, hi); ef; ef = next_item(&p, R3D_EF, hi))
+                if (ef[0] == 2) Sprite_DrawGlow((const float *)(ef + 2));
+        }
         EAGL_StackPop(st);
     }
     part_back(c, &p);
