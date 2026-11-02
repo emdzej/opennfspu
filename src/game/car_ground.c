@@ -1,6 +1,7 @@
 /* The cars' contact with the ground (see car_ground.h). */
 #include "game/car_collide.h"
 #include "game/car_ground.h"
+#include "game/car_damage.h"
 #include "game/race_car.h"
 #include "game/car_impulse.h"
 #include "exe.h"
@@ -15,7 +16,6 @@
 int32_t g_sim_tick;
 int32_t g_race_rally;
 int32_t g_race_network;
-int32_t g_race_rollover_events;
 int32_t g_race_heavy;
 
 
@@ -594,7 +594,7 @@ void CarSim_Forces(void *car)
             memcpy(&k, &s, 4);
             for (int j = 0; j < 3; j++) av[j] *= k;
         }
-        if (g_race_rollover_events && *CAR_F(c, 0x3a0) < K(0x5b4a1c) && *CAR_F(c, 0x504) < K(0x5b2410) && *CAR_I(c, 0xb50) == 0) {
+        if (g_race_damage && *CAR_F(c, 0x3a0) < K(0x5b4a1c) && *CAR_F(c, 0x504) < K(0x5b2410) && *CAR_I(c, 0xb50) == 0) {
             Car_AddEvent(c, 1, -1, 4, 3, 40.0f, 0);   /* 0x40f080: the rollover's */
             *CAR_F(c, 0x504) = 40.0f;
         }
