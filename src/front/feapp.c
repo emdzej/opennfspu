@@ -329,6 +329,7 @@ bool FEApp_Init(const char *start)
         memset(s_anims, 0, sizeof s_anims);
         s_ready = true;
     }
+    Render_SetVideoMode(g_render, 640, 480, 16, 2);   /* (FEApplication_Run 0x4d2e70's) */
     s_result = FE_RUNNING;
     s_replay_chosen = false;   /* (FECallBackList's constructor 0x50c120) */
     FESave_ListReplays();      /* (the data areas anew: FEdaUserList_v0 0x4e5400's Replay.List) */

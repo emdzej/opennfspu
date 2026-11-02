@@ -235,13 +235,18 @@ static bool load(const char *track, const char *carname)
     }
     /* GameStartup 0x4b65a0: the texture quality for the machine (0x44de80) before the track's textures.
        The original measures the machine; the port's is one above every threshold (1 GHz, 256 MB, 64 MB
-       of video memory) on THRASH's 32-bit display: level 3. Until the first race the front end runs at
+       of video memory): level 3. Until the first race the front end runs at
        the level's initial 0, as the original's does. */
     RTex_detectquality(&RTex_machine);
     Track_Load();
     if (!g_world || !g_world->root) return false;
     Render_LoadViewKeys(g_track_name);  /* 0x44f9b0 */
     Render_LoadCommonFsh(g_render ? g_render->textures : NULL);   /* 0x448a40 */
+    /* Render_RaceInit 0x468ef0: the device's render states kept (0x62814c, 0x38 bytes) for the race's end */
+    RenderState *drs = g_render && g_render->device ? g_render->device->rs : NULL;
+    free(g_racerstate);
+    g_racerstate = drs ? malloc(sizeof *g_racerstate) : NULL;
+    if (g_racerstate) *g_racerstate = *drs;
     Noise_Init();                       /* 0x44f110 (Render_RaceInit 0x468ef0) */
     Sprites_Init();                     /* 0x451360 */
     Particles_Init();                   /* 0x455180 */
@@ -762,6 +767,17 @@ void DRIVE_Shutdown(void)
     Particles_Free();       /* 0x4552c0 */
     R3DCar_FreeCommon();    /* 0x443a80 (0x414fa0: the car commons go with the race) */
     Render_FreeCommonFsh(); /* 0x448af0 */
+    /* (Render_RaceShutdown's end) the render states kept at the race's start back on the device, the fog
+       off in the record and sent (0x538890 -> 0x5374d0), then off at the driver */
+    RenderState *drs = g_render && g_render->device ? g_render->device->rs : NULL;
+    if (drs && g_racerstate) *drs = *g_racerstate;
+    free(g_racerstate);
+    g_racerstate = NULL;
+    if (drs) {
+        RenderState_SetFogMode(drs, 0);
+        RenderState_Send(drs);
+    }
+    THRASH.fn.setstate(0x15, 0);
     Scene_Clear();          /* 0x46cf60 */
     BWorld_DeInit();        /* 0x471ba0 */
     g_race_over = 0;

@@ -176,6 +176,22 @@ static bool dev_open(RDevice *d)
     return true;
 }
 
+/* Slot 7 (0x5388a0): the driver's video mode set (two buffers, 32 bits asked: the mode's depth then), the
+   EAGL context for it, the texture cache's states and the render states sent again, the display window
+   locked once more for its size (0x5341f0). */
+static bool dev_setmode(RDevice *d, int mode)
+{
+    if (!THRASH.fn.setvideomode(mode, 2, 2)) return false;
+    d->mode = mode;
+    EAGL_ContextInit(g_eagl, mode);
+    TEXTURE_sendstates();   /* 0x535870 */
+    EAGL_RSReset();         /* (the 0x5ded60 functions on the 0x5ded30 pairs) */
+    if (d->rs) RenderState_Send(d->rs);   /* (the record's states, 0x5375a0 .. 0x537710) */
+    d->about = THRASH.fn.about();
+    WINDOW_displayinit();
+    return true;
+}
+
 static void dev_begin(RDevice *d) { THRASH.fn.window(2); }
 static void dev_present(RDevice *d) { THRASH.fn.pageflip(); }
 
@@ -289,6 +305,77 @@ void Render_DisplayInit(void)
     EAGL_SetDisplaySize((float)w, (float)h);             /* 0x537370: the 2D window's size */
 }
 
+/* 0x572740: how far a driver mode is from the one asked for, 10000 when it isn't one: the size exactly,
+   the mode usable (+0x10) with the buffers asked (+0x18 for a flipped chain, else +0x14); then the
+   depths' difference, doubled only when the mode's is below the one asked (the original's), a
+   palettised mode never for a true-colour ask, a true-colour mode four times as far for a palettised one. */
+static int mode_distance(const ThrashMode *m, int w, int h, int bpp, int buffers, int flip)
+{
+    int d = 10000;
+    int have = flip ? m->unknown6 : m->unknown5;
+    if (m->width == w && m->height == h && m->unknown4 != 0 && buffers <= have) {
+        d = m->bpp - bpp;
+        if (d < 0) d *= -2;
+        if (m->bpp < 9) return 8 < bpp ? 10000 : d;
+        if (bpp < 9) d <<= 2;
+    }
+    return d;
+}
+
+/* The nearest of the driver's modes (0x537430 -> 0x5727b0), the first exact one; 0 for none. */
+static int find_mode(int w, int h, int bpp, int buffers, int flip)
+{
+    const ThrashAbout *a = THRASH.fn.about();
+    int best = 10000, at = 0;
+    for (int i = 1; a && i <= a->nmodes; i++) {
+        int d = mode_distance(&a->modes[i], w, h, bpp, buffers, flip);
+        if (d < best) {
+            best = d;
+            at = i;
+            if (d == 0) return i;
+        }
+    }
+    return at;
+}
+
+/* The video mode (0x467f70) when it isn't the one set: the device's (slot 7), the display's globals
+   from the mode's entry with the card's detection again (0x44eac0), the quality (0x44ebe0) and the 2D
+   window's size (0x537370); the mouse's cursor hidden (ShowCursor) has no counterpart here. */
+void Render_SetMode(RenderSystem *r, int mode)
+{
+    r->mode = mode;
+    if (mode == g_display.stamp) return;
+    int w = 640, h = 480, bpp = 16;
+    if (!r->windowed) {
+        const ThrashAbout *a = THRASH.fn.about();
+        /* (no mode found: the original sets the list's empty entry 0; the port keeps the one open) */
+        if (!a || mode < 1 || mode > a->nmodes) return;
+        w = a->modes[mode].width, h = a->modes[mode].height, bpp = a->modes[mode].bpp;   /* 0x44e5f0 */
+        if (!dev_setmode(r->device, mode)) return;
+    }
+    g_display.stamp = mode;
+    g_display.bpp = bpp == 15 ? 16 : bpp;
+    g_display.width = w;
+    g_display.height = h;
+    Render_DetectCard();
+    Render_SetupQuality();
+    EAGL_SetDisplaySize((float)w, (float)h);
+}
+
+/* A display size and depth (Render_SetVideoMode 0x467f00) when it isn't the one open (width 0: the
+   open size at that depth): the nearest mode with the buffers in a flipped chain, mode 0 windowed. The
+   front end and the intro movies ask for 640 x 480 x 16, the race for fe.txt's. */
+void Render_SetVideoMode(RenderSystem *r, int w, int h, int bpp, int buffers)
+{
+    if (!r || (w == g_display.width && h == g_display.height && bpp == g_display.bpp)) return;
+    if (w == 0) w = g_display.width, h = g_display.height;
+    if (r->windowed) {
+        Render_SetMode(r, 0);
+        return;
+    }
+    Render_SetMode(r, find_mode(w, h, bpp, buffers, 1));
+}
+
 /* 0x44ebe0. The globals other than the method key stay in this module until their readers are ported
    (shadows 0x6197e5, specials 0x6197ec); the car detail 0x6197c4 is render/r3dcar.h's g_r3d_quality. */
 int32_t g_render_specials;          /* 0x6197f4 */
@@ -358,6 +445,9 @@ RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, 
         return r;
     }
     Render_DisplayInit();
+    /* fe.txt's display (WIDTH 0x657a48, HEIGHT, DEPTH) when it isn't the one open: the nearest mode with
+       two buffers in a flipped chain (0x537430; mode 0 when windowed) */
+    Render_SetVideoMode(r, g_renderopts.width, g_renderopts.height, g_renderopts.depth, 2);
     r->textures = g->textures;
     /* MEM_info 0x53c140 (GlobalMemoryStatus's physical memory) goes to the quality level's choice: the
        port's machine is RTex_machine (render/rtex.h). */

@@ -195,6 +195,8 @@ bool app_frame(void)
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */
                     Options_Apply();
+                    /* the race's display (GameMain 0x4b6840: fe.txt's WIDTH, HEIGHT, DEPTH) */
+                    Render_SetVideoMode(g_render, g_renderopts.width, g_renderopts.height, g_renderopts.depth, 2);
                     snprintf(race_track, sizeof race_track, "%s", FEApp_Track());
                     snprintf(car_name, sizeof car_name, "%s", FEApp_Car());
                     g_drive_race_type = FEApp_RaceType();

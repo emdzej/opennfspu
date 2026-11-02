@@ -214,6 +214,8 @@ RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, 
 void Render_Shutdown(void);                              /* 0x467680 */
 /* The driver opened, its display chosen, the video mode set (GLIDE_env 0x556910, the real library's). */
 bool GLIDE_env(bool windowed, const char *driver, int display, int mode);
+void Render_SetMode(RenderSystem *r, int mode);         /* 0x467f70: the video mode, when not the one set */
+void Render_SetVideoMode(RenderSystem *r, int w, int h, int bpp, int buffers);   /* 0x467f00 */
 void Render_DisplayInit(void);                           /* 0x44e190 (RTex's display init) */
 void Render_SetupQuality(void);                          /* 0x44ebe0: method key, specials, gamma */
 void Render_SetCull(RenderSystem *r);                    /* 0x467ed0: flips the device's cull */

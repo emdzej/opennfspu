@@ -1,5 +1,6 @@
 /* The intro movies and the movie player (see feintro.h). */
 #include "front/feintro.h"
+#include "render/render.h"
 #include "front/fe_parts.h"
 #include "front/feapp.h"
 #include "real/mad.h"
@@ -340,6 +341,7 @@ static void next_movie(void)
         }
         s.movie++;
     }
+    Render_SetVideoMode(g_render, 640, 480, 16, 2);   /* (again before the loading screen) */
     char ls[128];
     snprintf(ls, sizeof ls, exe_str(0x5d99ac), FE_DIR_ART);
     s.loadscrn = vfs_exists(ls) ? SHAPE_loadfile(ls, 0, 0) : NULL;   /* (0x59d9e0, 0x59d690) */
@@ -349,7 +351,7 @@ static void next_movie(void)
 
 void FEIntro_Start(void)
 {
-    /* (Render_SetVideoMode 640 x 480 x 16: the port's mode already; 0x55fde0 the keys flushed) */
+    Render_SetVideoMode(g_render, 640, 480, 16, 2);   /* 0x467f00 (then 0x55fde0: the keys flushed) */
     uint8_t k[16];
     while (plat_key_presses(k, 16) > 0) {}
     FEApp_Sound();

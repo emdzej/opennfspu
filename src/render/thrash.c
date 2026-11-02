@@ -777,7 +777,10 @@ static void texformats_init(void)
     for (size_t i = 0; i < sizeof ok / sizeof *ok; i++) texformats[ok[i]] = 1;
 }
 
-/* The mode list (0x600211d8): the five standard modes first (FUN_60001fc0 sorts them there). */
+/* The mode list (0x600211d8): the five standard 16-bit modes first (FUN_60001fc0 sorts them there), as
+   DirectDraw's enumeration (0x60002740) leaves them on a card of 32 MB: the pixel format (+0xc, 4 for
+   565), usable (+0x10), the buffers that fit (+0x14, at most 3) and those of a flipped chain (+0x18: 3,
+   or one fewer when fewer fit). */
 static void modes_init(void)
 {
     static const int wh[5][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200}};
@@ -785,9 +788,10 @@ static void modes_init(void)
     for (int i = 0; i < 5; i++) {
         modes[i + 1].width = wh[i][0];
         modes[i + 1].height = wh[i][1];
-        modes[i + 1].bpp = 32;
+        modes[i + 1].bpp = 16;
         modes[i + 1].unknown3 = 4;
-        modes[i + 1].unknown4 = modes[i + 1].unknown5 = modes[i + 1].unknown6 = 1;
+        modes[i + 1].unknown4 = 1;
+        modes[i + 1].unknown5 = modes[i + 1].unknown6 = 3;
     }
 }
 
