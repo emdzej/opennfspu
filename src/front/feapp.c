@@ -451,15 +451,15 @@ static void close_popups(void)
     screen_entered();
 }
 
-/* FEFactoryDriverCBL's constructor (0x519180): the welcome the first time, the first mission's words
-   before it (its brief 0xbc7), else the mission's brief, popped up; Factory.MissionCheat remembered. */
+/* FEFactoryDriverCBL's constructor (0x519180): its callbacks CHEATFACTORY, PROFILEDEC, PROFILEINC (the
+   port's callback()); the welcome the first time, the first mission's words before it (its brief 0xbc7),
+   else the mission's brief, popped up; Factory.MissionCheat remembered. */
 static void factory_open(void)
 {
     Save *sv = FESave_Current();
     const uint8_t *m = FEFactory_Mission();
     int32_t desc = 0;
     if (m) memcpy(&desc, m, 4);
-    PENDING_NOTE(0x519180, "the screen's CHEATFACTORY registration (0x519300)");
     if (sv && !sv->flags[1]) {
         sv->flags[1] = 1;
         FEApp_GotoScreen("factwelcome", true);
@@ -867,7 +867,9 @@ static void callback(const char *cb)
         FESave_Write();
         FEApp_Back();
     } else if (!strcmp(cb, "CHEATFACTORY")) {
-        PENDING_NOTE(0x519300, "FEFactoryDriverCBL's CHEATFACTORY");
+        /* FEFactoryCallBackList_v55 0x5192f0 (by 0x4f6ca0, slot 0xdc): the mission marked with the last
+           verdict (0x657834), no time, damage or cones (0x51a770) */
+        FEFactory_Result(0, 0, 0, g_mission_pass);
     } else if (!strcmp(cb, "SETTYPECAREERMODE")) {
         s_gametype = 4;
         FEData_SetGameType(4);
