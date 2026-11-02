@@ -336,7 +336,6 @@ bool FEApp_Init(const char *start)
         FE2D_Init();                                 /* 0x4d88c0 */
         FE_ControlDrawHook = indicator_draw;
         s_camera = Render_CreateCamera(g_render, 5, 0, 0, 1, 1, 0xff000000u, 1.0f, 100.0f);
-        PENDING_NOTE(0x4d2e70, "FEApplication_Run: the data areas, the 3D rooms but the garage, movies");
         s_bar = load_screen("bottombar");
         memset(s_anims, 0, sizeof s_anims);
         s_ready = true;

@@ -59,6 +59,7 @@ static EaglLayer *exec_indexeduv(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_indexedcolour(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_ambient(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_fullambient(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_setalpha(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_light(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_spectex(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
@@ -75,7 +76,7 @@ static const RLayerClass classes[] = {
     {0x8003, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight_Opaque"},
     {0x8004, -1, 0, 0, false, true, 0, 4, 0, exec_uvlight, 0x453b70, "Headlights::LayerUVLight"},
     {0x8005, 5, 0, 0, true, true, 4, 0, 0x20, exec_fullambient, 0x448b60, "RCustomLayers::LayerFullAmbient"},
-    {0x8006, 5, 0x5b3c20, 1, false, true, 4, 0, 0x20, NULL, 0x448e30, "RCustomLayers::LayerSetAlpha"},
+    {0x8006, 5, 0x5b3c20, 1, false, true, 4, 0, 0x20, exec_setalpha, 0x448e30, "RCustomLayers::LayerSetAlpha"},
     {0x8007, 5, 0, 0, true, false, 4, 0, 0x20, exec_ambient, 0x448ba0, "RCustomLayers::LayerAmbient"},
     {0x8008, 1, 0, 0, true, false, 0x10, 0, 0x20, exec_untransformed, 0x449fc0, "RCustomLayers::LayerUntransformedCoords"},
     {0x8009, 0x8009, 0x5b3928, 2, true, false, 0x10, 0, 0x20, exec_transformindex, 0x4492b0, "RCustomLayers::LayerTransformIndexCoords"},
@@ -430,6 +431,23 @@ static EaglLayer *exec_ambient(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     uint8_t *dst = c->verts + 0x10;
     for (int k = 0; k < c->nverts; k++, dst += l->param) memcpy(dst, &colour, 4);
     c->flags |= EAGL_CF_DIFFUSE;
+    return l->next;
+}
+
+/* 0x448e30: dependency 0's colours (type 5, 0x5b3c20) into the second stream's data, a word a vertex,
+   each alpha byte 0x5cded4's (0xff, never written). */
+static EaglLayer *exec_setalpha(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0;
+    if (!l->dep || l->ndeps < 1 || !l->dep[0]) dep_assert();
+    const uint8_t *src = dep_data(l, 0);
+    uint8_t *dst = s1 ? s1->data : NULL;
+    if (!src || !dst) return l->next;
+    uint8_t a = (uint8_t)exe_u32(0x5cded4);
+    for (int k = 0; k < g_eagl->nverts; k++) {
+        memcpy(dst + 4 * k, src + 4 * k, 4);
+        dst[4 * k + 3] = a;
+    }
     return l->next;
 }
 
