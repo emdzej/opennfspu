@@ -5,6 +5,7 @@
 #include "render/render.h"
 #include "render/rdraw.h"
 #include "render/thrash.h"
+#include "app.h"
 #include "exe.h"
 #include "pending.h"
 #include "platform.h"
@@ -51,6 +52,7 @@ typedef struct {
 } RLayerClass;
 
 static EaglLayer *exec_untransformed(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_uvanimate(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_transform(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_transformindex(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_indexeduv(EaglLayer *, EaglStream *, EaglStream *);
@@ -67,7 +69,7 @@ static EaglLayer *exec_falsesort1(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_falsesort2(EaglLayer *, EaglStream *, EaglStream *);
 
 static const RLayerClass classes[] = {
-    {0x8001, -1, 0x5b3c18, 1, true, false, 0, 0, 0x20, NULL, 0x448bf0, "RCustomLayers::LayerUVAnimate"},
+    {0x8001, -1, 0x5b3c18, 1, true, false, 0, 0, 0x20, exec_uvanimate, 0x448bf0, "RCustomLayers::LayerUVAnimate"},
     {0x8002, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight"},
     {0x8003, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight_Opaque"},
     {0x8004, -1, 0, 0, false, true, 0, 4, 0, exec_uvlight, 0x453b70, "Headlights::LayerUVLight"},
@@ -223,6 +225,73 @@ static void backface_cull(EaglContext *c, const float *planes)
 
 /* 0x449fc0: the coordinates as given (a source for the others). */
 static EaglLayer *exec_untransformed(EaglLayer *l, EaglStream *s0, EaglStream *s1) { return l->next; }
+
+static double exe_f64(uint32_t va)
+{
+    uint64_t u = (uint64_t)exe_u32(va + 4) << 32 | exe_u32(va);
+    double d;
+    memcpy(&d, &u, 8);
+    return d;
+}
+
+/* 0x448bf0: the uv layer's (dependency 0) texture coordinates animated on the real library's clock
+   (TIMER_ticks 0x53c050, 128 a second) by the record in stream 0: { mode, speed, frames, du, dv } words.
+   Mode 0 scrolls v by the fraction of ticks x speed x 0.0001; mode 2 sways u by the sine of (ticks +
+   the low 12 bits of the source's address) x speed x 0.0002 turns, x 0.06, weighted by 1 - v (the top
+   of the texture moves, its bottom stays); mode 1 steps a flipbook, frame (ticks x speed / 1000) mod
+   frames, du/128 across, rows of dv/128 down as the u passes whole numbers. Into the work vertices' first
+   (stride 0x20) or second (0x28) uv; with any other stride the original writes over the stream itself,
+   which no data asks for. Nothing with every vertex outside a plane. */
+static EaglLayer *exec_uvanimate(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s1;
+    EaglContext *c = g_eagl;
+    if (c->flags & EAGL_CF_REJECT) return l->next;
+    if (!l->dep || !l->ndeps) dep_assert();
+    int stride = (int)l->param;
+    uint8_t *dst;
+    if (stride == 0x28) {
+        dst = c->verts + 0x20;
+        c->flags |= EAGL_CF_UV2;
+    } else if (stride == 0x20) {
+        dst = c->verts + 0x18;
+        c->flags |= EAGL_CF_UV;
+    } else {
+        return l->next;
+    }
+    const float *src = EAGL_LayerData(l->dep[0]);
+    int32_t rec[5];
+    memcpy(rec, s0->data, sizeof rec);
+    int n = c->nverts;
+    int32_t ticks = (int32_t)(uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+    if (rec[0] == 0) {
+        double t = (double)ticks * rec[1] * (double)0.0001f;
+        float frac = (float)(t - floor(t));
+        for (int k = 0; k < n; k++, src += 2, dst += stride) {
+            float uv[2] = {src[0], frac + src[1]};
+            memcpy(dst, uv, 8);
+        }
+    } else if (rec[0] == 2) {
+        uint32_t at = (uint32_t)ticks + (uint32_t)((uintptr_t)src & 0xfff);
+        float x = (float)((double)at * rec[1] * (double)0.0002f);
+        float sway = (float)(sin((double)x * exe_f64(0x5bb2c0)) * (double)0.06f);   /* 0x532550 */
+        for (int k = 0; k < n; k++, src += 2, dst += stride) {
+            float uv[2] = {(1.0f - src[1]) * sway + src[0], src[1]};
+            memcpy(dst, uv, 8);
+        }
+    } else if (rec[0] == 1) {
+        double a = (double)(int32_t)((uint32_t)ticks * (uint32_t)rec[1]) * (double)0.001f;
+        float du = (float)((double)rec[3] * (double)0.0078125f), dv = (float)((double)rec[4] * (double)0.0078125f);
+        int32_t frame = (int32_t)a;   /* __ftol: truncated */
+        float fu = (float)((double)(frame % rec[2]) * du);
+        float row = (float)(floor((double)(float)(fu + src[0])) * dv);
+        for (int k = 0; k < n; k++, src += 2, dst += stride) {
+            float uv[2] = {fu + src[0], row + src[1]};
+            memcpy(dst, uv, 8);
+        }
+    }
+    return l->next;
+}
 
 /* 0x448eb0: positions transformed into the work vertices, then back faces culled with the planes of the
    '$n' layer (dependency 0). */

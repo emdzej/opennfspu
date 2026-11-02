@@ -40,7 +40,12 @@ void *MEM_reserve(size_t *size)
 {
     enum { PAGE = 4096 };   /* GetSystemInfo's page size on the original's platforms */
     *size = (*size + PAGE - 1) / PAGE * PAGE;
-    return calloc(1, *size ? *size : PAGE);   /* VirtualAlloc commits zeroed pages */
+    /* VirtualAlloc commits zeroed pages on a page boundary: the address's low 12 bits are an offset in
+       the block, which the uv sway layer (0x448bf0) takes as its phase */
+    size_t n = *size ? *size : PAGE;
+    void *p = aligned_alloc(PAGE, n);
+    if (p) memset(p, 0, n);
+    return p;
 }
 
 void MEM_release(void *p) { free(p); }
