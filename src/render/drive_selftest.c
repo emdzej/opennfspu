@@ -181,6 +181,8 @@ static bool load(const char *track, const char *carname)
         g_camera_car = follow;
         int mode = plat_param("cam", v, sizeof v) ? atoi(v) : DESC_I(g_cars[follow], 0x208);
         Camera_Init(0, g_cars[follow], s_start == 0 ? 0xe : mode);   /* (0x463f70: mode 14, the fly-in) */
+        int look = plat_param("camlook", v, sizeof v) ? atoi(v) : -1;   /* --param camlook=<car>: the car looked at */
+        if (look >= 0 && look < g_ncars) g_racecam[0].base = g_cars[look];
     }
     /* The race's sounds (GameStartup 0x4b65a0: Audio_Init 0x4a6610, the player's engine 0x4a8aa0 ->
        0x4ac9e0 from its description's SOUNDNAME). */

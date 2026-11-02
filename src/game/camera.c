@@ -941,6 +941,38 @@ static QuatAnim *camanim_next(void)
    goes to the player's first camera (the race car's description's +0x208), or in the replay to the
    scene cameras (mode 10 without them, or in game type 9), and the cameras are updated again at once
    (the original's recursive call). */
+static float s_pair_lookat[2][3];   /* 0x627e68: mode 17's point, a camera's each */
+
+/* Mode 17 (0x463910): the camera's two cars, the followed one and the one looked at; the point halfway
+   between them looked at (0x464e40), the eye four out from the first along the way from the second, as
+   far again a quarter turn round, 1.5 up. (No scene, replay or camera list asks for it.) */
+static void mode_pair(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    const float *a = car_pos(c->car), *b = car_pos(c->base);
+    float d[3];
+    for (int k = 0; k < 3; k++) s_pair_lookat[p][k] = (a[k] + b[k]) * K(0x5b23f0);
+    for (int k = 0; k < 3; k++) d[k] = a[k] - b[k];
+    unit3(d);
+    for (int k = 0; k < 3; k++) d[k] *= 4.0f;
+    c->eye[0] = d[2] + a[0] + d[0];
+    c->eye[1] = a[1] + K(0x5b246c);
+    c->eye[2] = (a[2] - d[0]) + d[2];
+}
+
+/* Modes 18 and 19 (0x463a20): the eye two behind the first car on the line from the second, 1.2 up. */
+static void mode_behind_pair(int p)
+{
+    RaceCamera *c = &g_racecam[p];
+    const float *a = car_pos(c->car), *b = car_pos(c->base);
+    float d[3];
+    for (int k = 0; k < 3; k++) d[k] = (b[k] - a[k]) * K(0x5b2468);
+    unit3(d);
+    c->eye[0] = a[0] - (d[0] + d[0]);
+    c->eye[1] = a[1] + K(0x5b2480);
+    c->eye[2] = a[2] - (d[2] + d[2]);
+}
+
 static void mode_flyin(int p)
 {
     RaceCamera *c = &g_racecam[p];
@@ -1128,8 +1160,8 @@ void Camera_Update(void)
         case 0xb: mode_tv(p); break;
         case 0xc: mode_rise(p); break;
         case 0xe: mode_flyin(p); break;
-        case 0x11: PENDING_NOTE(0x463910, "camera mode 17"); break;
-        case 0x12: case 0x13: PENDING_NOTE(0x463a20, "camera modes 18, 19"); break;
+        case 0x11: mode_pair(p); break;
+        case 0x12: case 0x13: mode_behind_pair(p); break;
         default: break;
         }
     }
@@ -1184,7 +1216,7 @@ void Camera_ToView(int p, RCamera *v, int type)
         }
         if (1 < c->mode && c->mode != 0xc) over_ground(c, eye);
         if (c->flags & 8) look_at(c, NULL, eye, c->orient);
-        if (c->mode == 0x11) PENDING_NOTE(0x464e40, "mode 17's look-at point (0x627e68)");
+        if (c->mode == 0x11) look_at(c, s_pair_lookat[p], eye, c->orient);
         memcpy(o, c->orient, sizeof o);
     }
     if (!rows_ok(o)) Mat3_Orthonormalize(o);   /* 0x4a45f0 */
