@@ -54,7 +54,7 @@ bool FEShowcase_Callback(const char *cb)
         if (strcmp(cb, k[i].cb)) continue;
         /* the accessor's car (its slot 0x90); GenericCar.Car's the merged list's past the owned ones */
         FEShowcase_Load(k[i].acc ? FEAccess_CarRecord(FEAccess_Find(k[i].acc)) : FEData_GenericCar());
-        /* (0x50df70: the accessor the car compare compares, 0x699fe0: the car compare screen pends) */
+        /* (its accessor also the car compare's, 0x50df70: FEData_CompareCallback) */
         return true;
     }
     return false;

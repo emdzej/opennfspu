@@ -1030,7 +1030,10 @@ bool FEData_CompareCallback(const char *cb)
             s_compare = k[i].acc;
             return true;
         }
-    if (!strcmp(cb, "SHOWCASE.MERGEDCAR")) s_compare = "zMergedList.Car";
+    /* (the showcases' callbacks 0x50d0f0 .. 0x50d230 set it too, 0x50df70, then show their car) */
+    if (!strncmp(cb, "SHOWCASE.", 9))
+        for (int i = 0; i < 5; i++)
+            if (!strcmp(cb + 9, k[i].cb + 11)) s_compare = k[i].acc;   /* (after "CARCOMPARE.") */
     return false;
 }
 
