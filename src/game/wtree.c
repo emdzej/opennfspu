@@ -350,6 +350,7 @@ void WTreeElems_push(WTreeElems *v, WTreeElem *e)
 
 void WTreeElems_free(WTreeElems *v)
 {
+    if (!v) return;   /* (the queries' NULL: no tree, or nothing found) */
     free(v->e);
     free(v);
 }

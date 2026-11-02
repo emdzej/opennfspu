@@ -2206,12 +2206,12 @@ static void thunder_tick(void)
 void Audio_Tick(void)
 {
     if (!s_on) return;
-    /* 0x465360: the listener at the first camera's eye, its axes (the view's adjustments of the eye,
-       0x464e40's, are left out). */
+    /* 0x465360: the listener at the first view's eye, its axes. */
     const RaceCamera *cam = &g_racecam[0];
-    memcpy(s_listener, cam->eye, sizeof s_listener);
-    memcpy(s_lright, cam->orient, sizeof s_lright);
-    memcpy(s_lfwd, cam->orient + 6, sizeof s_lfwd);
+    float lo[9];
+    Camera_ListenerFrame(0, s_listener, lo);
+    memcpy(s_lright, lo, sizeof s_lright);
+    memcpy(s_lfwd, lo + 6, sizeof s_lfwd);
     s_lvel = cam->mode != 0xb && (cam->mode == 0xc || cam->mode == 0xe) ? NULL : cam->car ? CAR_F(cam->car, 0x33c) : NULL;
     stream_tick();   /* 0x4b07f0 */
     thunder_tick();   /* 0x4a8150 */

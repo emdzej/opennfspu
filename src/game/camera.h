@@ -66,6 +66,8 @@ void Camera_Update(void);                    /* 0x463af0 */
 /* Camera p put at once at its mode's offset in the car's frame (a car put back on the road: 0x461770,
    the fixed cameras' placing). */
 void Camera_Snap(int p);
+/* The sound's listener: the first view's eye and orientation as 0x465360 makes them. */
+void Camera_ListenerFrame(int p, float eye[3], float orient[9]);
 /* The race view's frame, field of view and near plane from camera p (type: the view's, 1 the car's own
    eye). 0x464e40 */
 void Camera_ToView(int p, RCamera *c, int type);

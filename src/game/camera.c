@@ -1179,20 +1179,59 @@ static bool rows_ok(const float *o)
     return true;
 }
 
+/* The eye as the views take it (0x464e40, and 0x465360 again for the listener): out of the objects and
+   under the ceilings with the flag 0x10, over the ground but in modes 0, 1 and 0xc, the orientation
+   turned to look at the car (flag 8) or at the pair's point (mode 0x11). */
+static void view_eye(int p, RaceCamera *c, float eye[3])
+{
+    memcpy(eye, c->eye, 12);
+    if (c->flags & 0x10) {
+        out_of_objects(c, eye);
+        if (inside_edges(c, eye)) {
+            float up = eye[1] - car_pos(c->car)[1];
+            if (under_ceiling(c, eye, &up)) eye[1] = up + car_pos(c->car)[1];
+        }
+    }
+    if (1 < c->mode && c->mode != 0xc) over_ground(c, eye);
+    if (c->flags & 8) look_at(c, NULL, eye, c->orient);
+    if (c->mode == 0x11) look_at(c, s_pair_lookat[p], eye, c->orient);
+}
+
+/* The roll with the car (flag 4): its orientation turned about z by the car's +0x11c4 and about x by
+   twice its +0x11c0 (less a turn with the flags' 2). */
+static void view_roll(RaceCamera *c)
+{
+    float z[9], x[9], m[9];
+    Mat3_RotZ(z, *CAR_F(c->car, 0x11c4));
+    Mat3_RotX(x, (float)-((c->flags >> 1) & 1) + *CAR_F(c->car, 0x11c0) * 2.0f);
+    Mat3_Mul(z, x, m);
+    Mat3_Mul(m, c->orient, c->orient);
+}
+
+/* 0x465360's listener: the roll, the view's eye and the orientation, its first row turned round when
+   mirrored (0x65742c). (Its writes into the main view, the field of view and near plane, are
+   Camera_ToView's too.) */
+void Camera_ListenerFrame(int p, float eye[3], float orient[9])
+{
+    RaceCamera *c = &g_racecam[p];
+    if (!c->car) {
+        memcpy(eye, c->eye, 12);
+        memcpy(orient, c->orient, 36);
+        return;
+    }
+    if (c->flags & 4) view_roll(c);
+    view_eye(p, c, eye);
+    memcpy(orient, c->orient, 36);
+    if (g_r3d_mirror) orient[0] = -orient[0], orient[1] = -orient[1], orient[2] = -orient[2];
+}
+
 void Camera_ToView(int p, RCamera *v, int type)
 {
     RaceCamera *c = &g_racecam[p];
     if (!c->car) return;
-    if (c->flags & 4) {
-        /* The roll with the car: its orientation turned about z by the car's +0x11c4 and about x by
-           twice its +0x11c0 (less a turn with the flags' 2). Nothing but the race's reset (0x410d99)
-           writes the two, so both turns are whole and the product is the orientation itself. */
-        float z[9], x[9], m[9];
-        Mat3_RotZ(z, *CAR_F(c->car, 0x11c4));
-        Mat3_RotX(x, (float)-((c->flags >> 1) & 1) + *CAR_F(c->car, 0x11c0) * 2.0f);
-        Mat3_Mul(z, x, m);
-        Mat3_Mul(m, c->orient, c->orient);
-    }
+    /* (Nothing but the race's reset 0x410d99 writes the roll's two angles, so both turns are whole and
+       the product is the orientation itself.) */
+    if (c->flags & 4) view_roll(c);
     float eye[3], o[9];
     if (type == 1) {
         /* The car's own eye: its position at the mode's height, its orientation (left, up, back). */
@@ -1206,17 +1245,7 @@ void Camera_ToView(int p, RCamera *v, int type)
             o[6 + k] = -r[6 + k];
         }
     } else {
-        memcpy(eye, c->eye, sizeof eye);
-        if (c->flags & 0x10) {
-            out_of_objects(c, eye);
-            if (inside_edges(c, eye)) {
-                float up = eye[1] - car_pos(c->car)[1];
-                if (under_ceiling(c, eye, &up)) eye[1] = up + car_pos(c->car)[1];
-            }
-        }
-        if (1 < c->mode && c->mode != 0xc) over_ground(c, eye);
-        if (c->flags & 8) look_at(c, NULL, eye, c->orient);
-        if (c->mode == 0x11) look_at(c, s_pair_lookat[p], eye, c->orient);
+        view_eye(p, c, eye);
         memcpy(o, c->orient, sizeof o);
     }
     if (!rows_ok(o)) Mat3_Orthonormalize(o);   /* 0x4a45f0 */
