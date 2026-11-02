@@ -16,6 +16,7 @@
 #include "render/carhalo.h"
 #include "render/carpages.h"
 #include "render/render.h"
+#include "render/rtex.h"
 #include "support/ufile.h"
 #include "render/thrash.h"
 #include <math.h>
@@ -757,7 +758,9 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
     car_unload(car);
     snprintf(car->name, sizeof car->name, "%s", name);
     car->textures = 1;
-    if (!g_r3d_frontend && !R3DCar_PendingTexturesWanted(car)) car->textures = 0;
+    /* (in the race not when its texture class's quality row, 0x44deb0 on +0x480, halves the 256 sizes:
+       byte 1 bit 1) */
+    if (!g_r3d_frontend && (RTex_quality(car->texinfo)[1] & 2)) car->textures = 0;
     if (strstr(name, exe_str(0x5cdcec)))                         /* ".crp" */
         snprintf(path, sizeof path, "%s", name);
     else

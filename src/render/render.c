@@ -313,8 +313,8 @@ RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, 
     EAGL_MatPreMul(&m, &s);
     *EAGL_StackTopForWrite(&v->view) = m;
     /* The UV test (0x467ba0..0x467e60: an 8x8 texture drawn and read back to find the texel centre the
-       card samples at, 0x44e740) is the driver's business here: the GL driver samples at D3D's centres. */
-    PENDING_NOTE(0x44e740, "the UV test's texel offset");
+       card samples at, its two results kept by 0x44e740 at 0x6197ab / 0x6197ac) is the driver's business
+       here: the GL driver samples at D3D's centres, the test's no-offset outcome. */
     THRASH.fn.setstate(7, 1);
     return r;
 }
