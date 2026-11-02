@@ -100,6 +100,7 @@ static bool s_used_parts;             /* the used car screen's parts shown, not 
 static int s_grid_pers[8], s_grid_start[9], s_ngrid = -1;   /* the knockout's and the career's grid for the race */
 static float s_skill = 1.0f;
 static bool s_era_race;   /* 0x6577dc of the race just run: the last race of its era's last tournament */   /* the opponents' skill factor (the career race's difficulty, +0x3cc) */
+static int s_race_gametype = -1;      /* 0x6573e8: the game type the last race ran in (the way back's) */
 static bool s_back_locked;            /* FEApplication +0x17c (0x4d5670 / 0x4d5690): the back button off */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int s_testdrive_type;          /* 0x5dc1b8 */
@@ -384,6 +385,15 @@ bool FEApp_Init(const char *start)
             return FEApp_GotoScreen(start, true);
         }
         s_era_race = false;
+        if ((s_race_gametype == 10 || s_race_gametype == 11) && n > 0) {
+            /* (0x4d2e70: after the prize race the first screen and the tournament screen; after its
+               test drive the first screen and the victory room) */
+            ok = FEApp_GotoScreen(s_saved[0], true);
+            if (ok) ok = FEApp_GotoScreen(exe_str(s_race_gametype == 10 ? 0x5d8bdc : 0x5d9408), true);   /* "tournament", "victoryroom" */
+            if (ok) return true;
+            while (s_depth) screen_free(s_stack[--s_depth]);
+            return FEApp_GotoScreen(start, true);
+        }
         for (int i = 0; i < n && ok; i++) ok = FEApp_GotoScreen(s_saved[i], true);
         if (ok && FEData_KnockoutOn()) FEApp_GotoScreen("knockoutraceinfo", true);
         if (ok) return true;
@@ -423,7 +433,27 @@ void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int 
         else FEData_TourResult(s_tour_race, places, times, clean, n);
     }
     s_tour_race = -1;
-    if (s_gametype == 5) {   /* (the career's test drive: 0x504b20 at the front end's exit, back to 4) */
+    s_race_gametype = s_gametype;
+    if (s_gametype == 10 && !quit && n > 0 && places[0] == 1) {
+        /* 0x4ed590's type 10 won: the prize car owned (0x501820 of PrizeCars.Car's slots 29 .. 34: its
+           colours +0x3ec, +0x530, +0x3f0, +0x3f4 swapped, no stripes, no number; +0x6a4 0) */
+        const uint8_t *pc = FEAccess_CarRecord(FEAccess_Find("PrizeCars.Car"));
+        if (pc) {
+            static const int offs[4] = {0x3ec, 0x530, 0x3f0, 0x3f4};
+            int32_t col[4];
+            for (int i = 0; i < 4; i++) {
+                uint32_t v;
+                memcpy(&v, pc + offs[i], 4);
+                col[i] = (int32_t)(v >> 24 | (v >> 8 & 0xff00u) | (v << 8 & 0xff0000u) | v << 24);
+            }
+            int16_t id;
+            memcpy(&id, pc, 2);
+            FEData_AddOwned(id, col, 0, -1);
+            FESave_Write();
+        }
+    }
+    if (s_gametype == 5 || s_gametype == 10 || s_gametype == 11) {
+        /* (the career's test drive and the prize races: 0x504b20 at the front end's exit, back to 4) */
         s_gametype = 4;
         FEData_SetGameType(4);
     }
@@ -705,6 +735,43 @@ static int play_mode(void)   /* (0x4d5df0: data.canplaygame: 1 a race of the cho
 }
 
 static bool can_play(void) { return play_mode() != 0; }
+
+/* The prize races' setup (0x4fb630's and 0x4eadb0's types 10, 11): the prize race's track, laps,
+   direction and traffic, in the prize car with its first colour on all four (none: 0xffff0000). */
+static bool prize_race(int type)
+{
+    int laps;
+    bool rev, mir;
+    int traffic;
+    const char *t = FEData_PrizeRace(&laps, &rev, &mir, &traffic);
+    const uint8_t *pc = FEAccess_CarRecord(FEAccess_Find("PrizeCars.Car"));
+    if (!t || !pc) return false;
+    s_gametype = type;
+    FEData_SetGameType(type);
+    s_reverse = rev;
+    s_mirror = mir;
+    s_laps = laps;
+    snprintf(s_track, sizeof s_track, "%s", t);
+    snprintf(s_car, sizeof s_car, "%s", (const char *)pc + 0x7f);
+    int16_t nc;
+    memcpy(&nc, pc + 0x3e6, 2);
+    uint32_t c = 0xffff0000u;
+    if (nc > 0) {
+        memcpy(&c, pc + 0x3ec, 4);
+        c = c >> 24 | (c >> 8 & 0xff00u) | (c << 8 & 0xff0000u) | c << 24;
+    }
+    for (int i = 0; i < 4; i++) s_colours[i] = c;
+    s_havecol = true;
+    s_owned_race = -1;
+    s_testdrive = false;
+    s_factory_race = false;
+    s_tour_race = -1;
+    s_ngrid = -1;
+    s_skill = 1.0f;
+    s_traffic = traffic;
+    memset(s_traffic_slots, 0, sizeof s_traffic_slots);
+    return true;
+}
 
 /* The callbacks the bottom bar's buttons and the screens' controls name (0x50cd90 through the screen's
    callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, the screens' own pending. */
@@ -1004,38 +1071,9 @@ static void callback(const char *cb)
             /* FEVictoryScreen's (0x506340): Game.GameType 11 and the race started (0x4d5200(0)): the
                prize race's track (0x4fb630's types 10, 11), alone (0x4ec590), in the prize car
                (0x4eadb0: its first colour, +0x3ec, all four; none: 0xffff0000) */
-            int laps;
-            bool rev, mir;
-            int traffic;
-            const char *t = FEData_PrizeRace(&laps, &rev, &mir, &traffic);
-            const uint8_t *pc = FEAccess_CarRecord(FEAccess_Find("PrizeCars.Car"));
-            if (!t || !pc) return;
-            s_gametype = 11;
-            FEData_SetGameType(11);
-            s_reverse = rev;
-            s_mirror = mir;
-            s_laps = laps;
-            snprintf(s_track, sizeof s_track, "%s", t);
-            snprintf(s_car, sizeof s_car, "%s", (const char *)pc + 0x7f);
-            int16_t nc;
-            memcpy(&nc, pc + 0x3e6, 2);
-            uint32_t c = 0xffff0000u;
-            if (nc > 0) {
-                memcpy(&c, pc + 0x3ec, 4);
-                c = c >> 24 | (c >> 8 & 0xff00u) | (c << 8 & 0xff0000u) | c << 24;
-            }
-            for (int i = 0; i < 4; i++) s_colours[i] = c;
-            s_havecol = true;
-            s_owned_race = -1;
-            s_testdrive = false;
-            s_factory_race = false;
-            s_tour_race = -1;
+            if (!prize_race(11)) return;
             s_opponents = 0;
             s_nopp = 0;
-            s_ngrid = -1;
-            s_skill = 1.0f;
-            s_traffic = traffic;
-            memset(s_traffic_slots, 0, sizeof s_traffic_slots);
             s_result = FE_PLAY;
             return;
         }
@@ -1157,6 +1195,13 @@ static void callback(const char *cb)
             s_opponents = s_ngrid;
             s_traffic = FEData_KnockoutTraffic();
             s_testdrive = false;
+            s_result = FE_PLAY;
+            return;
+        } else if (s_gametype == 10) {
+            /* the prize race (0x4ec590's type 10): its racers (0x4eb430 with 1), seven opponents */
+            if (!prize_race(10)) return;
+            s_nopp = FEData_PrizeOpponents(s_opp, &s_skill);
+            s_opponents = 7;
             s_result = FE_PLAY;
             return;
         } else if (s_gametype == 9) {

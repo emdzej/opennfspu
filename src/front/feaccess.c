@@ -2756,16 +2756,36 @@ static int tour_standing(const uint8_t *r, int k)
 
 static int tour_rank(const uint8_t *r) { return tour_standing(r, 0); }
 
+static int tour_opponents(const uint8_t *r, int race, RaceOpponent out[8], int start[9], float *skill);
+
 int FEData_TourOpponents(RaceOpponent out[8], int start[9], float *skill)
 {
-    /* 0x4eb430 with 0: the tournament's racers (+0x114, 0x58 bytes from +0x118): the personality
-       (+0x118), the car by id (+0x11a, 0x4f39e0), its colours (+0x14c and +0x15c swapped, the short
-       +0x168 twice) and race number (+0x16a); the skills scaled by the race's difficulty (+0x3cc);
-       the grid (0x247) by the standings (0x502c10) */
     memset(out, 0, sizeof(RaceOpponent) * 8);
     const uint8_t *r = FEData_Tournament();
     int race = FEData_TourRace();
     if (!r || race < 0) return -1;
+    return tour_opponents(r, race, out, start, skill);
+}
+
+int FEData_PrizeOpponents(RaceOpponent out[8], float *skill)
+{
+    /* 0x4eb430 with 1: the prize race's (0x503f40); the race's difficulty at the career's race index
+       (0x5028e0, 0x691e7c: whichever it last was; the port 0 without one, inside the record) */
+    memset(out, 0, sizeof(RaceOpponent) * 8);
+    const uint8_t *r = FEData_PrizeTournament();
+    if (!r) return -1;
+    int race = FEData_TourRace();
+    if (race < 0 || 0x3cc + 0xa4 * race + 4 > 0xd40) race = 0;
+    int start[9];
+    return tour_opponents(r, race, out, start, skill);
+}
+
+static int tour_opponents(const uint8_t *r, int race, RaceOpponent out[8], int start[9], float *skill)
+{
+    /* 0x4eb430: the tournament's racers (+0x114, 0x58 bytes from +0x118): the personality
+       (+0x118), the car by id (+0x11a, 0x4f39e0), its colours (+0x14c and +0x15c swapped, the short
+       +0x168 twice) and race number (+0x16a); the skills scaled by the race's difficulty (+0x3cc);
+       the grid (0x247) by the standings (0x502c10) */
     int n = rec16(r, 0x114);
     if (n > 7) n = 7;
     if (n < 0) n = 0;

@@ -48,6 +48,13 @@ int main(void)
     printf("prize race: %s, %d laps, reverse %d, mirror %d, traffic %d\n", t ? t : "(none)", laps, rev, mir, traffic);
     CHECK(t && *t && laps >= 1 && traffic >= 0 && traffic <= 8);
 
+    /* its racers (0x4eb430 with 1) */
+    RaceOpponent opp[8];
+    float skill = 0;
+    int n = FEData_PrizeOpponents(opp, &skill);
+    printf("prize racers: %d, skill %.2f, first '%s'\n", n, (double)skill, n > 0 ? opp[0].spec : "");
+    CHECK(n == rec16(r, 0x114) && n > 0 && n <= 7 && skill > 0.0f && opp[0].spec[0]);
+
     /* the message's texts */
     FEAccessor *td = FEAccess_Find("Tournament.Data");
     CHECK(td != NULL);
