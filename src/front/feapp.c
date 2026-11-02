@@ -48,13 +48,15 @@ static FEResult s_result;
 static char s_track[64] = "coastal";
 static int s_laps = 1, s_opponents, s_traffic, s_cops;
 static bool s_reverse, s_mirror;      /* 0x4fb630's third and fourth: the race's REVERSE and MIRROR */
+static bool s_replay_chosen;          /* 0x699fc9: the load replay screen's start (the race a replay) */
+static char s_replay_file[112];       /* its REPLAYFILENAME (option 0x110: "%s.rpl" 0x5ccebc) */
 static int16_t s_traffic_slots[7];   /* the career race's own traffic cars (0x4ec590's +0x382) */
 static char s_car[64] = "964";
 static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
    an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
 enum { DLG_ONE, DLG_TWO, DLG_INPUT };
-enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE, DLG_FOR_KILLREPLAY };
 static struct {
     bool up;
     int kind, purpose, done;
@@ -315,6 +317,8 @@ bool FEApp_Init(const char *start)
         s_ready = true;
     }
     s_result = FE_RUNNING;
+    s_replay_chosen = false;   /* (FECallBackList's constructor 0x50c120) */
+    FESave_ListReplays();      /* (the data areas anew: FEdaUserList_v0 0x4e5400's Replay.List) */
     g_r3d_frontend = 1;
     Render_LoadCommonFsh(g_render->textures);   /* 0x448a40 (FEApplication_Run's, then R3DCar_LoadCommon) */
     /* The sound (GameMain's Audio_Init 0x4a6610 before the front end; the port's race closes it at its
@@ -589,6 +593,7 @@ const char *FEApp_Car(void) { return s_car; }
 int FEApp_Laps(void) { return s_laps; }
 bool FEApp_Reverse(void) { return s_reverse; }
 bool FEApp_Mirror(void) { return s_mirror; }
+const char *FEApp_ReplayFile(void) { return s_replay_chosen ? s_replay_file : NULL; }
 
 /* A direction's string id (Track<n>.Direction: 0x19a forward, 0x19b reversed, 0x19c mirrored, 0x19d
    both) into the race's flags (0x4fb630). */
@@ -881,6 +886,18 @@ static void callback(const char *cb)
         s_testdrive_type = cb[9] == 'U' ? 7 : cb[9] == 'N' ? 6 : 8;
         set_direction(0);   /* (0x4fb630's types 6 .. 8: forward) */
         s_result = FE_PLAY;
+    } else if (!strcmp(cb, "STARTREPLAY")) {
+        /* FECallBackList_v51 0x50ca50: the replay chosen (0x699fc9) and the race started (v53 0x50c550 ->
+           0x4d5200(1): no checks), its file the race's (0x4ecc60's caller: options 0x97 2, 0x110) */
+        FEAccessor *rl = FEAccess_Find("Replay.List");
+        if (!rl || !FEAccess_Count(rl)) return;
+        s_replay_chosen = true;
+        snprintf(s_replay_file, sizeof s_replay_file, "%s.rpl", FEAccess_Text(rl));
+        s_result = FE_PLAY;
+    } else if (!strcmp(cb, "KILLREPLAY")) {
+        /* _v52 0x50ca60: its question (+0x274, FEDialogTwoItem 0x5131f0(0x328)) first */
+        dialog_open(DLG_TWO, FEStrings_Get(0x328), 0x2be, 0x2bf);
+        s_dialog.purpose = DLG_FOR_KILLREPLAY;
     } else if (!strcmp(cb, "PLAYGAME")) {
         s_testdrive = false;
         s_traffic = 0;
@@ -2653,15 +2670,16 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     }
     if (base_cbl(cbl)) {
         /* FECallBackList_v1 0x50c2f0 (the base list's; its derived ones' run it first): the colour box for
-           a new car, the garage for an owned one; the replays' buttons with replays (none yet: the replay
-           list pends); damage but in the career and Factory Driver; the laps on a circuit. (Its dialogs,
-           +0x270 / +0x274, the car settings car's ABS, traction and roof (CARSETTINGS.CAR, +0x27c: not
+           a new car, the garage for an owned one; the replays' buttons with replays; damage but in the career and Factory Driver; the laps on a circuit. (Its dialogs,
+           +0x270 / +0x274: the delete replay's in FEApp_Frame; the car settings car's ABS, traction and roof (CARSETTINGS.CAR, +0x27c: not
            ported) and the multiplayer's collision pend.) */
         bool owned = FEData_MergedOwned();
         hide(w, "ID_MERGEDLISTCOLOR", owned);
         hide(w, "ID_MERGEDLISTCARSETUP", !owned);
-        enable(w, "ID_LOADREPLAYBUTTON", false);
-        enable(w, "ID_REMOVEREPLAYBUTTON", false);
+        FEAccessor *rl = FEAccess_Find("Replay.List");
+        bool replays = rl && FEAccess_Count(rl) > 0;
+        enable(w, "ID_LOADREPLAYBUTTON", replays);
+        enable(w, "ID_REMOVEREPLAYBUTTON", replays);
         enable(w, "ID_DAMAGE", s_gametype != 4 && s_gametype != 9 && s_gametype != 3);   /* (3: 0x48c9d0, no session) */
         enable(w, "ID_LAPSSELECTOR", FEData_TrackLooped(s_gametype));
     }
@@ -2749,6 +2767,13 @@ void FEApp_Frame(void)
             if (!FESave_Delete(FESave_PlayerStem(FEAccess_Pos(users)))) FEApp_Message(0x324);
             else FESave_ListPlayers();
         }
+    }
+    if (s_dialog.purpose == DLG_FOR_KILLREPLAY && !s_dialog.up) {
+        /* FECallBackList_v1 0x50c2f0: yes deletes the chosen replay, the list made anew (FE_ListReplays
+           0x50ca80) */
+        s_dialog.purpose = DLG_FOR_NONE;
+        FEAccessor *rl = FEAccess_Find("Replay.List");
+        if (s_dialog.done == 1 && rl && FEAccess_Count(rl)) FESave_DeleteReplay(FEAccess_Pos(rl));
     }
     if (s_dialog.purpose == DLG_FOR_TOUR && !s_dialog.up) {
         /* FEApplication_v1 0x4d25d0: ok goes on with the race (0x4d5200 again) */

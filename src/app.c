@@ -9,6 +9,7 @@
 #include "game/race_setup.h"
 #include "game/race_car.h"
 #include "game/replay_file.h"
+#include "real/mouse.h"
 #include "game/track.h"
 #include "render/r3dcar.h"
 #include "game/race_progress.h"
@@ -151,6 +152,12 @@ bool app_frame(void)
                         snprintf(one, sizeof one, "%.*s", (int)(len < sizeof one ? len : sizeof one - 1), p);
                         if (one[0] == '=') snprintf(FEData_NameInput(), 9, "%s", one + 1);   /* (a name typed) */
                         else if (one[0] == '^') FEApp_Back();
+                        else if (one[0] == '!') {   /* (!<x>:<y> the mouse down there, ! up again: a dialog's click) */
+                            static int32_t px, py;
+                            const char *colon = strchr(one, ':');
+                            if (colon) px = atoi(one + 1), py = atoi(colon + 1);
+                            MOUSE_Override(true, px, py, colon ? 1u : 0u);
+                        }
                         else if (one[0] == '@') {   /* (@<x>:<y>: a click there) */
                             const char *colon = strchr(one, ':');
                             if (colon) FEApp_Click(atoi(one + 1), atoi(colon + 1));
@@ -218,6 +225,13 @@ bool app_frame(void)
                     }
                     Mission_Reset();
                     if (g_race_mode == 9) FEFactory_RaceOptions();
+                    /* The load replay screen's: the replay file's race (0x413830 at the race's start), or
+                       with no file the race the options describe, as the original's (0x5e99f4 0) */
+                    if (FEApp_ReplayFile() && Replay_Load(FEApp_ReplayFile())) {
+                        Replay_Apply();
+                        snprintf(race_track, sizeof race_track, "%s", g_track_name);
+                        snprintf(car_name, sizeof car_name, "%s", (const char *)g_cardesc[0] + 0x228);   /* (FILENAME) */
+                    }
                 } else if (FEApp_Result() == FE_QUIT) {
                     return false;
                 }

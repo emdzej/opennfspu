@@ -23,7 +23,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_STRING, ACC_SHOWCASE } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -1320,6 +1320,9 @@ void FEData_Init(void)
        players (FESpecialUserListCharVectAccessor 0x4b8b50, Save_ListPlayers' list) */
     add("UserList.NameInput", ACC_STRING, 1, 0, 0);
     add("UserList.UserList", ACC_USERS, 0, 0, 0);
+    /* (and the replays: FECharVectAccessor 0x4b8560, the save directory's *.rpl) */
+    FESave_ListReplays();
+    add("Replay.List", ACC_REPLAYS, 0, 0, 0);
     FEAccessor *df = add("Game.Difficutly", ACC_LIST, list_count(0x5d9f08), 0, 1);   /* FEListAccessor 0x4bb260, no option; at 1 */
     if (df) df->list = 0x5d9f08;
     /* FEdaTrack (0x4f8d30): the seven slots' tracks, traffic (list 0x5b9628), direction (0x5b963c) and
@@ -1453,6 +1456,11 @@ static void refresh(const FEAccessor *c)
         FESave_Current();
         a->count = FESave_PlayerCount();
         a->pos = FESave_PlayerChosen() < 0 ? 0 : FESave_PlayerChosen();
+        return;
+    }
+    if (a->kind == ACC_REPLAYS) {
+        a->count = FESave_ReplayCount();
+        if (a->pos >= a->count) a->pos = 0;
         return;
     }
     if (a->kind == ACC_SETUP) {   /* the position from the car's value */
@@ -1605,6 +1613,8 @@ const char *FEAccess_Text(const FEAccessor *a)
         return b;
     case ACC_STRING:
         return s_nameinput;
+    case ACC_REPLAYS:
+        return FESave_ReplayStem(a->pos);
     case ACC_OPPCAR: {   /* FEOpponentCarAccessor_v12 0x4f4d40 */
         static const int16_t id[5] = {0x280, 0x282, 0x283, 0x284, 0x281};
         return FEStrings_Get(id[a->pos < 5 ? a->pos : 0]);

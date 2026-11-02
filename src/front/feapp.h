@@ -60,6 +60,8 @@ int FEApp_Laps(void);
 /* The race driven backwards (REVERSE 0x657430) and mirrored (MIRROR 0x65742c), 0x4fb630's. */
 bool FEApp_Reverse(void);
 bool FEApp_Mirror(void);
+/* The replay file the load replay screen started (0x699fc9's REPLAYFILENAME), NULL for a race. */
+const char *FEApp_ReplayFile(void);
 int FEApp_Opponents(void);
 /* The race's traffic count (0x4fb630's fifth) and the career race's own traffic cars (0 slots: the
    track's models). */

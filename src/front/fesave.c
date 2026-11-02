@@ -302,6 +302,48 @@ void FESave_ListPlayers(void)
     qsort(s_players, (size_t)s_nplayers, sizeof s_players[0], stem_cmp);
 }
 
+/* The replays (Replay.List, FEdaUserList_v0 0x4e5400 and FE_ListReplays 0x50ca80): the save directory's
+   "*.rpl" in the order found (the user's, then the game's not among them), each to its first '.'. */
+static char s_replays[64][100];
+static int s_nreplays;
+
+static void add_replay(const char *name, bool is_dir, void *user)
+{
+    (void)user;
+    size_t l = strlen(name);
+    if (is_dir || l < 5 || strcasecmp(name + l - 4, ".rpl") || s_nreplays == 64) return;
+    char f[100];
+    snprintf(f, sizeof f, "%s", name);
+    char *dot = strchr(f, '.');   /* (0x5a2620) */
+    if (dot) *dot = 0;
+    for (int i = 0; i < s_nreplays; i++)
+        if (!strcmp(s_replays[i], f)) return;
+    snprintf(s_replays[s_nreplays++], sizeof s_replays[0], "%s", f);
+}
+
+void FESave_ListReplays(void)
+{
+    s_nreplays = 0;
+    int k = plat_user_file_count();
+    for (int i = 0; i < k; i++) {
+        char f[160];
+        if (plat_user_file_name(i, f, sizeof f)) add_replay(f, false, NULL);
+    }
+    vfs_list("SaveData", add_replay, NULL);
+}
+
+int FESave_ReplayCount(void) { return s_nreplays; }
+const char *FESave_ReplayStem(int i) { return i >= 0 && i < s_nreplays ? s_replays[i] : ""; }
+
+void FESave_DeleteReplay(int i)
+{
+    if (i < 0 || i >= s_nreplays) return;
+    char f[112];
+    snprintf(f, sizeof f, "%s.rpl", s_replays[i]);   /* ("%s%s.rpl" 0x5ccec4; 0x59dfb0: the game's own stay) */
+    plat_delete_user_file(f);
+    FESave_ListReplays();
+}
+
 int FESave_PlayerCount(void) { return s_nplayers; }
 const char *FESave_PlayerStem(int i) { return i >= 0 && i < s_nplayers ? s_players[i] : ""; }
 int FESave_PlayerChosen(void) { return s_chosen; }

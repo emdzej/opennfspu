@@ -70,6 +70,12 @@ const char *FESave_Stem(void);
 unsigned FESave_Serial(void);
 /* The players' saves (UserList.UserList: Save_ListPlayers 0x4dea10), their stems, player.lst's one. */
 void FESave_ListPlayers(void);
+/* The replays of the save directory (Replay.List: FEdaUserList_v0 0x4e5400, FE_ListReplays 0x50ca80),
+   their names; one deleted (its file, the list made again). */
+void FESave_ListReplays(void);
+int FESave_ReplayCount(void);
+const char *FESave_ReplayStem(int i);
+void FESave_DeleteReplay(int i);
 int FESave_PlayerCount(void);
 const char *FESave_PlayerStem(int i);
 int FESave_PlayerChosen(void);

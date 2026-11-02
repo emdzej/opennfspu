@@ -161,6 +161,7 @@ static bool load(const char *track, const char *carname)
     s_start = plat_param("start", v, sizeof v) ? atoi(v) : 0;
     if (s_start < 0) s_start = 0;
     g_sim_tick = s_start;
+    s_slot = s_start;   /* (0x414ed0: the slots from the race's start) */
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
     Render_SeedRand((uint32_t)g_race_seed);   /* (0x44fbd0) */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
