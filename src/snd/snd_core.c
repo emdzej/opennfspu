@@ -649,7 +649,8 @@ static int play_layer(const uint8_t *bank, const SndParams *p, const SndPatch *s
     }
     v->rate = s->rate;           /* 0x598cd0 */
     v->nsamples = s->nsamples;
-    if (p->f14) PENDING_NOTE(0x599720, "the SND voices' filter");
+    /* (a non-zero +0x14 starts the voice's filter, 0x599720: none of the game's plays sets it, all keep
+       the default 0) */
     voice_sources(i, s, bank, p->f12);
     return handle;
 }
