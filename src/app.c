@@ -185,6 +185,8 @@ bool app_frame(void)
                         static const char *const cs[4] = {"Car.Transmission", "Car.ABS", "Car.Traction", "Car.Roof"};
                         for (int i = 0; i < 4; i++) g_race_car_settings[i] = FEData_CarSetting(cs[i]);
                         g_race_fe_damage = FEApp_Damage();
+                        Save *sv = FESave_Current();
+                        snprintf(g_race_driver_name, sizeof g_race_driver_name, "%s", sv ? sv->player : "");
                     }
                     Options_Save();        /* (fe.txt written back) */
                     RenderOptions_Load();  /* the options the race reads (Options_Parse's globals) */

@@ -69,6 +69,8 @@ static bool load(const char *name)
     spec.colours[2] = 0xff303030u;
     spec.colours[3] = 0xffc0c0c0u;
     spec.racenumber = -1;
+    if (plat_param("racenumber", v, sizeof v)) spec.racenumber = atoi(v);   /* --param racenumber=<n> */
+    if (plat_param("licence", spec.licence, sizeof spec.licence) == false) spec.licence[0] = 0;   /* --param licence=<text> */
     for (int i = 0; i < CAR_NOPTIONS; i++) spec.options[i] = -1;
     state.spec = &spec;
     static float dents[10];   /* --param dent=<0..100>: every damage zone at that (the dents) */

@@ -15,6 +15,14 @@
 #include <stdint.h>
 
 typedef struct FontDtex FontDtex;
+typedef struct FontSoft FontSoft;
+
+/* The font drivers (0x53c640 makes one current; a font takes the current one at its first draw and keeps
+   it, 0x5717c0): the DTEX driver (0x5dfb60, current from FONT_init 0x5365e0 on) and the software one
+   (0x5dec18, \real\pc\fontpc.c) that draws the glyphs' pixels into the current window. */
+typedef enum { FONT_DRIVER_DTEX, FONT_DRIVER_WINDOW } FontDriver;
+/* Makes d current; the one current before. 0x53c640 */
+FontDriver FONT_setdriver(FontDriver d);
 
 /* A font (0xec bytes, FONT_open 0x53c430). */
 typedef struct Font {
@@ -43,6 +51,8 @@ typedef struct Font {
     float clip[4];               /* +0xc0 x0, +0xc4 x1, +0xc8 y0, +0xcc y1 */
     float du, dv, dx, dy;        /* +0xd0 .. +0xdc: states 0x12 .. 0x15 */
     float z, rhw;                /* +0xe0, +0xe4: states 0x16, 0x17 */
+    FontDriver driver;           /* +0xe8: the driver it took at its first draw */
+    FontSoft *soft;              /* (+0x44 for the software driver) */
 } Font;
 
 /* A text mesh (0x20 bytes, 0x53e0d0). */

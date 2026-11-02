@@ -48,6 +48,9 @@ extern bool g_race_setup_set;
 extern int32_t g_race_car_settings[4];
 /* The damage option the front end chose (DAMAGE, 0x657a2c; on without it). */
 extern int32_t g_race_fe_damage;
+/* The human player's name (0x500820: 0x691dc8, the save's player), the car's DRIVERNAME and LICENSE (the
+   licence plate's text); "" without the front end. */
+extern char g_race_driver_name[32];
 /* A grid the front end chose (the knockout's, 0x4ddc00): the opponents' personalities (1-based) and
    the starting places (start[0] the player's), when g_race_grid_set. */
 extern int g_race_grid_pers[8], g_race_grid_start[9];

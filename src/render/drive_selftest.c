@@ -138,6 +138,7 @@ static bool load(const char *track, const char *carname)
     CarEnv_Load(g_track_name);          /* 0x440fa0 (R3DCar_LoadEnvMap) */
     Headlights_Load();                  /* 0x452460 */
     RaceViews_ctor(&views);
+    plat_param("driver", g_race_driver_name, sizeof g_race_driver_name);   /* --param driver=<name>: the player's name */
     if (!RaceSetup_SingleCar(carname)) return false;
     char v[8];
     int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : g_drive_opponents;   /* --param opponents=<n> */

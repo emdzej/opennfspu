@@ -3,6 +3,8 @@
 #include "exe.h"
 #include "pending.h"
 #include "real/set3d.h"
+#include "real/real.h"
+#include "real/window.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -383,10 +385,177 @@ static void dtex_draw(int nquads, float *v, int *idx)
     free(pg);
 }
 
+/* ---- the software font driver (0x5dec18) ---- */
+
+/* The glyph image and its palette in the window's terms (0xd4 bytes, 0x53c880). */
+struct FontSoft {
+    int32_t width, height;   /* +0x00 */
+    int depth;               /* +0x08: the current window's when the palette was made */
+    const uint8_t *pixels;   /* +0x0c: the image's 4-bit pixels (the font's own) */
+    uint32_t colours[16];    /* +0x14: the palette */
+    uint32_t pre[16];        /* +0x54: times its alpha (0x53cac0) */
+    uint32_t p565[16];       /* +0x94: those as 565 under the alpha (0x53cb60) */
+};
+
+static FontSoft *g_soft;   /* 0x69eb98 */
+static FontDriver g_driver = FONT_DRIVER_DTEX;   /* 0x5dec08 (FONT_init's) */
+
+FontDriver FONT_setdriver(FontDriver d)
+{
+    FontDriver old = g_driver;
+    g_driver = d;
+    return old;
+}
+
+static FontSoft *soft_create(int w, int h)   /* 0x53c880 */
+{
+    FontSoft *t = calloc(1, sizeof *t);
+    if (!t) return NULL;
+    t->width = w;
+    t->height = h;
+    return t;
+}
+
+/* 0x53c8b0: the window's depth, the pixels, the palette and its two forms. */
+static bool soft_update(FontSoft *t, const uint8_t *pixels, const uint32_t *palette)
+{
+    t->depth = WINDOW_cur.depth;
+    t->pixels = pixels;
+    memcpy(t->colours, palette, sizeof t->colours);
+    for (int i = 0; i < 16; i++) {   /* 0x53cac0 */
+        uint32_t c = palette[i], a = c >> 24;
+        t->pre[i] = (((c >> 16 & 0xff) * a + 0x80) / 0xff | a << 8) << 8 | ((c >> 8 & 0xff) * a + 0x80) / 0xff;
+        t->pre[i] = t->pre[i] << 8 | ((c & 0xff) * a + 0x80) / 0xff;
+    }
+    for (int i = 0; i < 16; i++) {   /* 0x53cb60 */
+        uint32_t c = t->pre[i];
+        t->p565[i] = (((c >> 16 & 0xff) * 0x1f + 0x80) / 0xff << 6 | ((c >> 8 & 0xff) * 0x3f + 0x80) / 0xff) << 5 |
+                     ((c & 0xff) * 0x1f + 0x80) / 0xff | (c & 0xff000000u);
+    }
+    if (t->depth < 9) PENDING_NOTE(0x53c930, "the software font's 8-bit window table");
+    return true;
+}
+
+/* The 2D library's pixel writers: a premultiplied colour over the pixel, nothing under alpha 0x10, the
+   colour itself from 0xfc (0x573c70 565, 0x573d5f 1555), or over a 32-bit pixel (0x53c6c0). */
+static uint16_t *put565(uint16_t *d, uint32_t c)
+{
+    if (c > 0x0fffffffu) {
+        if (c < 0xfc000000u) {
+            uint32_t dv = *d, e = ((dv << 16 | (dv & 0xff)) & 0xf800001fu) + (dv & 0x7e0) * 0x100;
+            uint64_t l = (uint64_t)e * (~c >> 24);
+            uint32_t lo = (uint32_t)l, hi = (uint32_t)(l >> 32);
+            c = c + (hi & 0xf8) * 0x100 + (lo >> 16 & 0x7e0) + (lo >> 8 & 0x1f);
+        }
+        *d = (uint16_t)c;
+    }
+    return d + 1;
+}
+
+static uint16_t *put1555(uint16_t *d, uint32_t c)
+{
+    if (c > 0x0fffffffu) {
+        if (c < 0xfc000000u) {
+            uint32_t dv = *d;
+            uint64_t l = (uint64_t)((dv & 0x7c00) * 0x20000u + (dv & 0x3e0) * 0x200u + (dv & 0x1f)) * ((c >> 24) ^ 0xff);
+            uint32_t lo = (uint32_t)l;
+            c = c + (uint32_t)(l >> 32) * 0x10000u + (lo >> 5 & 0xff) + (lo >> 0xb & 0xff00);
+        }
+        *d = (uint16_t)(((c & 0xf800) >> 6) + 0x8000 + ((c & 0xf80000) >> 9) + (c >> 3 & 0x1f));
+    }
+    return d + 1;
+}
+
+static uint32_t *put8888(uint32_t *d, uint32_t c)
+{
+    uint32_t o = *d, a = c >> 24;
+    if (a == 0xff || o >> 24 == 0) {
+        *d = c;
+    } else if (a != 0) {
+        uint32_t k = 0xff - a;
+        *d = ((((o >> 8 & 0xff) * k) >> 8) + (c >> 8 & 0xff)) * 0x100 | ((((o >> 16 & 0xff) * k) >> 8) + (c >> 16 & 0xff)) * 0x10000 |
+             ((((o & 0xff) * k) >> 8) + (c & 0xff)) | (0xff - ((0xff - (o >> 24)) * k) / 0xff) * 0x1000000u;
+    }
+    return d + 1;
+}
+
+static uint8_t *at(int x, int y)   /* 0x573e00 */
+{
+    return WINDOW_cur.pixels + WINDOW_cur.stride * y + ((WINDOW_cur.bpp * x) >> 3);
+}
+
+/* A glyph's w x h pixels from (u, v) of the image at (x, y) (0x53cd50): a glyph wholly inside the clip
+   two pixels a byte through the depth's writer, every pixel (0 too, its colour's alpha deciding); else
+   pixel by pixel, the zero ones left. */
+static void soft_glyph(const FontSoft *t, int x, int y, int u, int v, int w, int h)
+{
+    int row = t->width / 2;
+    const uint8_t *s = t->pixels + row * v + u / 2;
+    int n = (w + 1) >> 1;
+    if (n == 0 || h == 0) return;
+    const int32_t *c = WINDOW_cur.clip;   /* x0 y0 x1 y1 */
+    int depth = WINDOW_cur.depth;
+    bool inside = c[0] <= x && x < c[2] && c[1] <= y && y < c[3] && c[0] <= x + w && x + w < c[2] && c[1] <= y + h && y + h < c[3];
+    if (inside && (depth == 16 || depth == 15 || depth == 32)) {
+        for (; h != 0; h--, y++, s += row - n) {
+            uint8_t *d = at(x, y);
+            for (int i = 0; i < n; i++, s++) {
+                if (depth == 16) {
+                    d = (uint8_t *)put565((uint16_t *)d, t->p565[*s >> 4]);
+                    d = (uint8_t *)put565((uint16_t *)d, t->p565[*s & 0xf]);
+                } else if (depth == 15) {
+                    d = (uint8_t *)put1555((uint16_t *)d, t->pre[*s >> 4]);
+                    d = (uint8_t *)put1555((uint16_t *)d, t->pre[*s & 0xf]);
+                } else {   /* (0x5deba0 0: the premultiplied blend) */
+                    d = (uint8_t *)put8888((uint32_t *)d, t->pre[*s >> 4]);
+                    d = (uint8_t *)put8888((uint32_t *)d, t->pre[*s & 0xf]);
+                }
+            }
+        }
+        return;
+    }
+    if (inside && depth == 8) {
+        PENDING_NOTE(0x573b60, "the software font on an 8-bit window");
+        return;
+    }
+    /* (the pixels one by one through the 2D library's plot 0x5738d0, which blends by alpha in the
+       window's format; the port puts each through the depth's writer) */
+    for (; h > 0; h--, y++, s += row - n) {
+        for (int i = 0; i < w; i += 2, s++) {
+            for (int k = 0; k < 2; k++) {
+                int nib = k ? *s & 0xf : *s >> 4, px = x + i + k;
+                if (!nib || px < c[0] || px >= c[2] || y < c[1] || y >= c[3]) continue;
+                if (depth == 16) put565((uint16_t *)at(px, y), t->p565[nib]);
+                else if (depth == 15) put1555((uint16_t *)at(px, y), t->pre[nib]);
+                else if (depth == 32) put8888((uint32_t *)at(px, y), t->pre[nib]);
+            }
+        }
+    }
+}
+
+static void soft_settexture(FontSoft *t) { g_soft = t; }   /* 0x53cc30 */
+
+/* FONT_drawtext 0x53cc40: each quad's glyph by its top left corner and its texture rectangle. */
+static void soft_draw(int nquads, const float *v)
+{
+    if (!WINDOW_cur.pixels) {
+        REAL_abort("\\real\\pc\\fontpc.c", 0x1c3,
+                   "FONT_drawtext - Using software font driver to draw into a THRASH window.\nEither call "
+                   "WINDOW_set, WINDOW_hidden, WINDOW_display, or install a THRASH font driver\n");
+        return;
+    }
+    if (!g_soft) return;
+    for (int q = 0; q < nquads; q++) {
+        const float *p = v + 32 * q;
+        soft_glyph(g_soft, (int)lrintf(p[0]), (int)lrintf(p[1]), (int)lrintf(p[6]), (int)lrintf(p[7]),
+                   (int)lrintf(p[14] - p[6]), (int)lrintf(p[23] - p[7]));
+    }
+}
+
 /* ---- the fonts ---- */
 
 static bool g_batch;          /* 0x69eba8 */
-static FontDtex *g_last;      /* 0x69ebac */
+static void *g_last;         /* 0x69ebac */
 static int *g_index;          /* 0x69eba4 */
 static int g_nindex;          /* 0x69eba0 */
 
@@ -445,6 +614,7 @@ Font *FONT_open(const void *file)
 void FONT_close(Font *f)
 {
     if (!f) return;
+    free(f->soft);   /* 0x53cc00 */
     if (f->tex) {
         for (int i = 0; i < f->tex->npages; i++) DTEX_free(f->tex->tex[i]);
         free(f->tex);
@@ -593,9 +763,29 @@ static int length(const Font *f, const char *s)
 /* The quads with the font's texture: made or recoloured first. 0x53d7b0 (0x5717c0) */
 static void draw_quads(Font *f, int nverts, float *v)
 {
+    if (f->soft || (!f->tex && g_driver == FONT_DRIVER_WINDOW)) {   /* (the software driver's texture) */
+        const uint8_t *im = f->image;
+        if (!f->soft) {
+            f->driver = FONT_DRIVER_WINDOW;
+            f->soft = soft_create((int16_t)rdn(im + 4, 2), (int16_t)rdn(im + 6, 2));
+            f->dirty = 1;
+            if (!f->soft) return;
+        }
+        if (f->dirty) {
+            make_palette(f);   /* 0x594730 */
+            f->dirty = !soft_update(f->soft, im + 0x10, f->palette);
+        }
+        if (!g_batch || g_last != (void *)f->soft) {
+            soft_settexture(f->soft);
+            g_last = (void *)f->soft;
+        }
+        soft_draw(nverts >> 2, v);
+        return;
+    }
     if (f->dirty || !f->tex) {
         if (!f->tex) {
             const uint8_t *im = f->image;
+            f->driver = FONT_DRIVER_DTEX;
             f->tex = dtex_create((int16_t)rdn(im + 4, 2), (int16_t)rdn(im + 6, 2), im[0]);
             f->dirty = 1;
         }
@@ -604,7 +794,7 @@ static void draw_quads(Font *f, int nverts, float *v)
             f->dirty = !dtex_update(f->tex, f->image + 0x10, f->palette);
         }
     }
-    if (f->tex && (!g_batch || g_last != f->tex)) {
+    if (f->tex && (!g_batch || g_last != (void *)f->tex)) {
         dtex_settexture(f->tex);
         g_last = f->tex;
     }

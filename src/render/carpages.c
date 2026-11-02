@@ -4,9 +4,11 @@
 #include "exe.h"
 #include "pending.h"
 #include "real/file.h"
+#include "real/font.h"
 #include "real/locatbig.h"
 #include "real/mem.h"
 #include "real/shape.h"
+#include "real/window.h"
 #include "render/rmaterial.h"
 #include "render/rtex.h"
 #include "support/ufile.h"
@@ -314,6 +316,10 @@ bool R3DCar_UseShape(R3DCar *car, int file, uint32_t code)
     return use;
 }
 
+/* The race-decal and licence fonts (0x6115fc, 0x611604) and their files (0x611600, 0x611608). */
+static Font *s_decalfont, *s_licfont;
+static void *s_decalfile, *s_licfile;
+
 bool R3DCar_TintShape(R3DCar *car, int file, uint32_t code)
 {
     bool t = true;
@@ -334,11 +340,55 @@ void R3DCar_LoadTextures(R3DCar *car, Window *w, const uint8_t *shape, int file,
     bool licence = IniFile_GetBool(&car->tpg, exe_str(0x5cde00), false);     /* "license" */
     bool racedecal = IniFile_GetBool(&car->tpg, exe_str(0x5cddf4), false);   /* "racedecal" */
     bool flyer = IniFile_GetBool(&car->tpg, exe_str(0x5cddec), false);       /* "flyer" */
-    if (licence || racedecal || flyer)
-        /* The licence text (spec +0x1c0), the race number (+0x510) or the flyer's number, drawn with the
-           licence / race-decal fonts (license.ffn, racedecal.ffn) centred on the shape: the fonts
-           (0x53c430, 0x53ea50, 0x53d730) aren't ported. */
-        PENDING_NOTE(0x53d730, "FONT_drawtext (licence plates, race numbers)");
+    if (!licence && !racedecal && !flyer) return;
+    /* The texts drawn into the page with the software font driver (0x5dec18) over the window, each at the
+       shape's place in it (+0xc: x the low 12 bits, y the next, both signed). */
+    FontDriver old = FONT_setdriver(FONT_DRIVER_WINDOW);
+    WINDOW_select(w);
+    int32_t pk;
+    memcpy(&pk, shape + 0xc, 4);
+    float sx = (float)((pk << 20) >> 20), sy = (float)((pk << 4) >> 20);
+    int16_t sw, sh;
+    memcpy(&sw, shape + 4, 2);
+    memcpy(&sh, shape + 6, 2);
+    const R3DCarSpec *sp = car->state ? car->state->spec : NULL;
+    float x, y, tw, th;
+    char text[16];
+    if (licence && s_licfont && sp) {   /* the licence (+0x1c0, eight characters), black, centred */
+        snprintf(text, 9, "%s", sp->licence);
+        FONT_setstate(s_licfont, 8, 0xff000000u);
+        FONT_setstate(s_licfont, 9, 0);
+        FONT_extent(s_licfont, text, &x, &y, &tw, &th);
+        FONT_print(s_licfont, ((float)sw - tw) * 0.5f + sx, ((float)sh - th) * 0.5f + sy, text);
+    }
+    if (racedecal && s_decalfont && sp) {
+        /* the race number ("0%d" below ten, 0x5cdde8; "%d" 0x5cd1b0), white outlined in black, or the
+           reverse on a light colour 0 (its value from 0xbe) */
+        int n = sp->racenumber;
+        snprintf(text, sizeof text, exe_str(n < 10 ? 0x5cdde8 : 0x5cd1b0), n);
+        bool light = car->hsv[2] >= 0xbe;
+        FONT_setstate(s_decalfont, 8, light ? 0xff000000u : 0xffffffffu);
+        FONT_setstate(s_decalfont, 10, light ? 0xffffffffu : 0xff000000u);
+        FONT_setstate(s_decalfont, 9, 0);
+        FONT_extent(s_decalfont, text, &x, &y, &tw, &th);
+        FONT_print(s_decalfont, ((float)sw - tw) * 0.5f + sx, ((float)sh - th) * 0.5f + sy, text);
+    }
+    if (flyer && s_licfont) {
+        /* the flyer's number (456787) in black, right-aligned on half its width, in each half of the
+           shape, clipped to it */
+        snprintf(text, sizeof text, exe_str(0x5cd1b0), 0x6f853);
+        FONT_setstate(s_licfont, 8, 0xff000000u);
+        FONT_setstate(s_licfont, 9, 0);
+        FONT_extent(s_licfont, text, &x, &y, &tw, &th);
+        float half = (float)(sh >> 1);
+        for (int k = 0; k < 2; k++) {
+            float top = sy + (k ? half : 0.0f);
+            FONT_setclip(s_licfont, sx, top, (float)sw, half);   /* 0x53d510 */
+            FONT_print(s_licfont, (sx + (float)sw) - tw * 0.5f, (half - th) * 0.5f + top, text);
+        }
+    }
+    WINDOW_deselect();
+    FONT_setdriver(old);
     (void)w;
     (void)shape;
 }
@@ -722,9 +772,20 @@ void R3DCar_LoadCommon(void)
     g_rtex_global = RTexBank_ctor(calloc(1, sizeof *g_rtex_global), m, 3);
     snprintf(path, sizeof path, exe_str(0x5cddb0), g_r3d_cardir);           /* "%scarcmn.fsh" */
     RTexBank_loadfile(g_rtex_global, path, 0x10000);
-    /* The environment map (R3DCar_LoadEnvMap into 0x6115d8) and the race-decal and licence fonts
-       (racedecal.ffn, license.ffn: 0x6115fc, 0x611604) pend. */
-    PENDING_NOTE(0x440fa0, "R3DCar_LoadEnvMap and the car fonts");
+    /* The environment map (R3DCar_LoadEnvMap into 0x6115d8) pends; then the race-decal and licence fonts
+       opened with the software font driver current ("%sracedecal.ffn" 0x5cdda0, "%slicense.ffn"
+       0x5cdd90). */
+    PENDING_NOTE(0x440fa0, "R3DCar_LoadEnvMap");
+    {
+        FontDriver old = FONT_setdriver(FONT_DRIVER_WINDOW);
+        snprintf(path, sizeof path, exe_str(0x5cdda0), g_r3d_cardir);
+        s_decalfile = UTIL_loadfileabort(path, 0);
+        s_decalfont = s_decalfile ? FONT_open(s_decalfile) : NULL;
+        snprintf(path, sizeof path, exe_str(0x5cdd90), g_r3d_cardir);
+        s_licfile = UTIL_loadfileabort(path, 0);
+        s_licfont = s_licfile ? FONT_open(s_licfile) : NULL;
+        FONT_setdriver(old);
+    }
     g_carset = R3DMaterialSet_ctor(calloc(1, sizeof *g_carset), m, 3);
     for (int i = 0; i < 5; i++) {
         snprintf(path, sizeof path, exe_str(0x5cccc8), g_r3d_cardir, exe_str(exe_u32(0x5cdafc + 4 * (uint32_t)i)));
@@ -788,6 +849,12 @@ void R3DCar_FreeCommon(void)
         MEM_purge(g_carfiles[i]);
         g_carfiles[i] = NULL;
     }
+    FONT_close(s_decalfont);   /* 0x53c620 */
+    MEM_purge(s_decalfile);
+    FONT_close(s_licfont);
+    MEM_purge(s_licfile);
+    s_decalfont = s_licfont = NULL;
+    s_decalfile = s_licfile = NULL;
     for (int i = 0; i < 2; i++) CarPage_free(&g_carpages[i]);
     if (g_carset) {
         R3DMaterialSet_dtor(g_carset);

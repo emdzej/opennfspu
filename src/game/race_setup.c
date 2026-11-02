@@ -31,6 +31,7 @@ float g_race_setup[17];
 bool g_race_setup_set;
 int32_t g_race_car_settings[4] = {1, 0, 0, 0};
 int32_t g_race_fe_damage = 1;
+char g_race_driver_name[32];
 int g_race_grid_pers[8], g_race_grid_start[9];
 bool g_race_grid_set;
 int16_t g_race_traffic_slots[7];
@@ -135,8 +136,8 @@ bool RaceSetup_SingleCar(const char *name)
     memset(d, 0, CARDESC_SIZE);
     /* As 0x4ee430 writes them (the front end's choices it takes from its screens are their defaults). */
     put_i(d, 0x150, 0);                                   /* DRIVER: rand() & 7 in the original */
-    put_str(d, 0x17c, "");                                /* DRIVERNAME */
-    put_str(d, 0x1c0, "");                                /* LICENSE */
+    put_str(d, 0x17c, g_race_driver_name);                /* DRIVERNAME: the player's name (0x4ee430's argument, 0x500820) */
+    put_str(d, 0x1c0, g_race_driver_name);                /* LICENSE: the same */
     car_fields(d, rec);
     cheat_fields(d);
     /* PARTINDEX (+0x28, 20): the car's parts (the front end hands the owned car's installed ones over,
