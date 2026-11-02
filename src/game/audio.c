@@ -1612,6 +1612,49 @@ void Audio_StartRace(void)
     Music_Play(NULL, 0);
 }
 
+/* The sounds stopped with a pause (0x4aaf20): the one-shot's plays silenced (0x4af6d0(0, 0); its
+   second pair at 0x656ae8, 0x4af590's, isn't ported), every slot's play at volume 0, the music cut, the
+   reverb's send off and the engines' voices stopped (0x4ad2e0: their snapshots dropped, the start and
+   stop sounds and both voices of each layer stopped, the layers' eased volumes 0). The original then
+   puts back the options' copies 0x657ca0.. (0x5d1740 .. 0x5d1750) that the resume took: the port's
+   options are the exe's, unchanged, so there is nothing to put back. */
+void Audio_Pause(void)
+{
+    if (!s_on) return;
+    for (int i = 0; i < 2; i++)
+        if (s_pair[i] != -1) SND_SetVolume(s_pair[i], 0);
+    for (int i = 0; i < 0x50; i++)
+        if (s_slot[i][0] != -1) SND_SetVolume(s_slot[i][0], 0);
+    Music_FadeOut(0);
+    if (s_revset) {
+        SND_SetGroupVolume(0, 0);
+        s_revlevel = 0;
+        s_revset = false;
+    }
+    for (int k = 0; k < 2; k++) {
+        Engine *e = s_engine[k];
+        if (!e) continue;
+        e->rd = e->wr;
+        if (-1 < e->stop_h) { SND_Stop(e->stop_h); e->stop_h = -1; }
+        if (-1 < e->start_h) { SND_Stop(e->start_h); e->start_h = -1; }
+        for (int i = 0; i < 32; i++) {
+            if (e->v[i].handle != -1) SND_Stop(e->v[i].handle);
+            if (e->v2[i].handle != -1) SND_Stop(e->v2[i].handle);
+            e->vol[i] = 0;
+            e->v[i].handle = e->v2[i].handle = -1;
+        }
+    }
+}
+
+/* And started again (0x4aafd0): the music's volume (the mix's 0x5d14b0 of MUSICLEVEL) and the music
+   on; then 0x516210 (it returns at once) and the options' copies (see Audio_Pause). */
+void Audio_Resume(void)
+{
+    if (!s_on) return;
+    Music_SetVolume((opt(0x5d14b0) * Options_Int(0x5d618c, opt(0x5d1740))) >> 7);
+    Music_Play(NULL, 0);
+}
+
 /* The player's car (0x4a7430): its distance from the listener, the Doppler (340 / (340 + the closing
    speed)), its pan, how it faces the listener, its rpm's volume lift. */
 static void player_tick(Car *c)

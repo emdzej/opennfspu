@@ -302,7 +302,7 @@ static void race_menus(void)
     if (esc && 0x20 < g_sim_tick) {
         if (g_replay_mode < 2) {
             if (!HUD_ModalShown()) {
-                PENDING_NOTE(0x4aaf20, "the sounds paused with the race");
+                Audio_Pause();           /* 0x4aaf20 */
                 g_drive_paused = true;   /* 0x606a90 */
                 HUD_Pause();             /* 0x4267c0 */
             }
@@ -330,6 +330,7 @@ static void race_menus(void)
     }
     switch (act) {
     case 2:
+        if (!Replay_Paused()) Audio_Resume();   /* 0x4aafd0 (a paused replay's stay off) */
         g_drive_paused = false;
         break;
     case 3:
@@ -363,13 +364,17 @@ bool DRIVE_selftest(const char *track, const char *car)
     race_menus();
     if (g_replay_mode == 2 && !g_drive_paused) {
         /* RaceLoop's replay part: its quit ends the race; its pause stops it (the cameras updated once,
-           the sounds' pause pending) */
+           the sounds stopped) */
         if (Replay_ExitWanted()) {
             if (!g_drive_result) g_drive_result = 1;
         } else if (Replay_Paused() != Replay_PauseWanted()) {
             Replay_SetPaused(Replay_PauseWanted());
-            if (Replay_Paused()) Camera_Update();
-            PENDING_NOTE(0x4aaf20, "the sounds paused with the replay (0x4aaf20, 0x4aafd0)");
+            if (Replay_Paused()) {
+                Camera_Update();
+                Audio_Pause();    /* 0x4aaf20 */
+            } else {
+                Audio_Resume();   /* 0x4aafd0 */
+            }
         }
     }
     /* The simulation's 64 Hz from the 60 Hz frames (none while paused). */
@@ -417,7 +422,7 @@ bool DRIVE_selftest(const char *track, const char *car)
         }
     }
     /* The race over (all the humans finished): the race-over screens (the original's second race loop,
-       race view 2, replays the race behind them: the replay isn't ported, the race goes on). */
+       race view 2, replays the race behind them). */
     {
         char ev[12];   /* --param endrace=<tick>: the race over at that tick (port addition, tests) */
         if (!g_race_over && plat_param("endrace", ev, sizeof ev) && atoi(ev) <= g_sim_tick) {
@@ -442,7 +447,6 @@ bool DRIVE_selftest(const char *track, const char *car)
         if (g_ai_drive) *CAR_I(g_cars[0], 0xda8) = 1;
         HUD_HideAll();      /* 0x425740 */
         HUD_RaceOver();     /* 0x426a40 */
-        PENDING_NOTE(0x415300, "the replay's speeds");
     }
     Camera_Update();   /* 0x463af0 (the race loop's, after the ticks) */
     char lv[4];

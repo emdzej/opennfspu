@@ -38,6 +38,9 @@ void Audio_SayLead(int s);
 /* The front end's and the HUD's sounds (0x4aab80): fesfx's patch (5 a click, 8 a slider, 9 a key or
    button, 4 a billboard) at the mix's volume. */
 void Audio_UI(int patch);
+/* The sounds stopped with a pause (0x4aaf20) and started again (0x4aafd0). */
+void Audio_Pause(void);
+void Audio_Resume(void);
 /* The race's bank-3 one-shots: a gate passed (0x4aac00, patch 2), a cone hit (0x4aac20, 0), the wrong
    way's warning (0x4aac40, 1, quieter). */
 void Audio_Gate(void);
