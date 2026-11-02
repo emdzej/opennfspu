@@ -62,6 +62,7 @@ static EaglLayer *exec_fullambient(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_setalpha(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_light(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_spectex(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_specular(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_shadowmap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_vertexlight(EaglLayer *, EaglStream *, EaglStream *);
@@ -90,7 +91,7 @@ static const RLayerClass classes[] = {
     {0x8101, 3, 0x5b38c0, 3, true, true, 0, 0, 0, exec_skymap, 0x445a40, "R3DSkyMapTextureLayer"},
     {0x8102, 3, 0x5b38c0, 3, false, true, 0, 0, 0, exec_shadowmap, 0x446060, "R3DShadowMapTextureLayer"},
     {0x8104, -1, 0x5b38c0, 3, true, false, 0, 0xb8, 0, exec_light, 0x446460, "R3DLightLayer"},
-    {0x8105, -1, 0x5b38c0, 3, true, false, 0, 4, 0, NULL, 0x446db0, "R3DSpecularLayer"},
+    {0x8105, -1, 0x5b38c0, 3, true, false, 0, 4, 0, exec_specular, 0x446db0, "R3DSpecularLayer"},
 };
 enum { NCLASSES = sizeof classes / sizeof *classes };
 
@@ -588,6 +589,125 @@ static void sphere_uv(const float *m, const float *n, float out[2])
     float f = r * (1.47f - a * r * r * 0.47f) * 0.5f;   /* 0x5b38d8, 0x5b38e0, 0x5b23f0 */
     out[0] = x * f + 0.5f;
     out[1] = y * f + 0.5f;
+}
+
+/* 0x446db0 (R3DSpecularLayer): the vertices' specular colours (+0x14), with the environment's specular
+   on (+0x89, and no +0x190; else all 0). The level by stream 0's shininess (as the specular texture's)
+   picks the colour (+0x9c, float4: rgb in 1..3), times +0x5c..+0x64 and 255. The eye (the camera's
+   place, 0x628130 -> +0x10 -> +0x10c) and the light (-(+0x48)) go into model space through the object
+   matrix's rows, the eye made unit by the bit root (half the bits plus 0x1fc00000). Per normal n (dependency
+   0): s = (2 (l.n) n - l) . e, 0 when s <= 0, else 0xff000000 and the channels of colour * s^8 (as the
+   light layer makes them, 0x5cde9c). As the light layer: only drawn primitives when clipped, each indexed
+   source vertex once (dependency 2). The original writes the clipped plain path's colours at +0x10, the
+   diffuse (kept). */
+static EaglLayer *exec_specular(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    EaglContext *c = g_eagl;
+    (void)s1;
+    if (c->flags & EAGL_CF_REJECT) return l->next;
+    if (!l->dep || !l->ndeps) dep_assert();
+    const float *normals = dep_data(l, 0);
+    int per = c->prim, stride = (int)l->param;
+    uint8_t *dst = c->verts;
+    if (l->ndeps < 3) dep_assert();
+    const EaglLayer *indexed = l->dep[2];
+    const uint8_t *env = (const uint8_t *)g_rlayer_lights;
+    static uint8_t defenv[0x194];
+    if (!env) env = defenv;
+    if (env[0x190] || !env[0x89]) {
+        for (int k = 0; k < c->nverts; k++, dst += stride) memset(dst + 0x14, 0, 4);
+        c->flags |= EAGL_CF_SPECULAR;
+        return l->next;
+    }
+    float shine;
+    memcpy(&shine, s0->data, 4);
+    int level = shine < exef(0x5b38b0) ? 0 : shine < exef(0x5b38b4) ? 1 : 2;
+    const float *m = model_matrix();
+    const float *eye = g_rlayer_eye;
+    float dx = eye[0] - m[12], dy = eye[1] - m[13], dz = eye[2] - m[14];
+    float ex = dx * m[0] + dz * m[2] + dy * m[1];
+    float ey = dx * m[4] + dz * m[6] + dy * m[5];
+    float ez = dy * m[9] + dx * m[8] + dz * m[10];
+    float len2 = ez * ez + ey * ey + ex * ex;
+    int32_t bits;
+    memcpy(&bits, &len2, 4);
+    bits = (bits >> 1) + 0x1fc00000;
+    float root;
+    memcpy(&root, &bits, 4);
+    float inv = 1.0f / root;
+    ex *= inv, ey *= inv, ez *= inv;
+    float dir[3];
+    memcpy(dir, env + 0x48, 12);
+    float lx = -(dir[0] * m[0] + m[1] * dir[1] + dir[2] * m[2]);
+    float ly = -(dir[0] * m[4] + m[5] * dir[1] + dir[2] * m[6]);
+    float lz = -(m[9] * dir[1] + m[10] * dir[2] + m[8] * dir[0]);
+    float col[4], mul[3];
+    memcpy(col, env + 0x9c + 16 * level, 16);
+    memcpy(mul, env + 0x5c, 12);
+    float k255 = exef(0x5b3710), magic = exef(0x5cde9c);
+    float sr = mul[0] * col[1] * k255, sg = mul[1] * col[2] * k255, sb = mul[2] * col[3] * k255;
+#define SPEC(nv) ({ \
+        float d_ = lx * (nv)[0] + ly * (nv)[1] + lz * (nv)[2]; \
+        d_ += d_; \
+        float s_ = (d_ * (nv)[0] - lx) * ex + (d_ * (nv)[1] - ly) * ey + (d_ * (nv)[2] - lz) * ez; \
+        uint32_t o_ = 0; \
+        if (s_ > 0.0f) { \
+            s_ = s_ * s_ * s_ * s_ * s_ * s_ * s_ * s_; \
+            o_ = channel(sr * s_, magic) << 16 | channel(sb * s_, magic) | 0xff000000u | channel(sg * s_, magic) << 8; \
+        } \
+        o_; })
+    static uint32_t spec[256];
+    static uint32_t specstamp[256], stamp;   /* 0x611618 (stamp, colour) pairs, 0x613de8 (shared there with the light layer) */
+    if (!(c->flags & EAGL_CF_INSIDE) && per != 1) {
+        uint32_t (*pc)[2] = c->primcodes;
+        if (!indexed) {
+            const float *n = normals;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, n += 4, dst += stride) {
+                        uint32_t o = SPEC(n);
+                        memcpy(dst + 0x10, &o, 4);
+                    }
+                else {
+                    k += per;
+                    n += 4 * per;
+                    dst += stride * per;
+                }
+            }
+        } else {
+            const uint8_t *idx = EAGL_LayerData(indexed);
+            stamp++;
+            for (int k = 0; k < c->nverts; pc++) {
+                if ((*pc)[0] == 0)
+                    for (int v = 0; v < per; v++, k++, dst += stride) {
+                        uint8_t i = idx[k];
+                        if (specstamp[i] != stamp) {
+                            specstamp[i] = stamp;
+                            spec[i] = SPEC(normals + 4 * i);
+                        }
+                        memcpy(dst + 0x14, &spec[i], 4);
+                    }
+                else {
+                    k += per;
+                    dst += stride * per;
+                }
+            }
+        }
+    } else if (!indexed) {
+        const float *n = normals;
+        for (int k = 0; k < c->nverts; k++, n += 4, dst += stride) {
+            uint32_t o = SPEC(n);
+            memcpy(dst + 0x14, &o, 4);
+        }
+    } else {
+        uint32_t nsrc = dep_info(l, 0) >> 4;   /* the normals' count */
+        for (uint32_t i = 0; i < nsrc && i < 256; i++) spec[i] = SPEC(normals + 4 * i);
+        const uint8_t *idx = EAGL_LayerData(indexed);
+        for (int k = 0; k < c->nverts; k++, dst += stride) memcpy(dst + 0x14, &spec[idx[k]], 4);
+    }
+#undef SPEC
+    c->flags |= EAGL_CF_SPECULAR;
+    return l->next;
 }
 
 /* 0x445450 (R3DSpecularTextureLayer): the reflection. Its level by the shininess (stream 0's first float:
