@@ -62,6 +62,7 @@ static EaglLayer *exec_spectex(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_skymap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_shadowmap(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_vertexlight(EaglLayer *, EaglStream *, EaglStream *);
+static EaglLayer *exec_uvlight(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_falsesort1(EaglLayer *, EaglStream *, EaglStream *);
 static EaglLayer *exec_falsesort2(EaglLayer *, EaglStream *, EaglStream *);
 
@@ -69,7 +70,7 @@ static const RLayerClass classes[] = {
     {0x8001, -1, 0x5b3c18, 1, true, false, 0, 0, 0x20, NULL, 0x448bf0, "RCustomLayers::LayerUVAnimate"},
     {0x8002, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight"},
     {0x8003, -1, 0x5b3d70, 3, false, false, 4, 0, 0, exec_vertexlight, 0x452fe0, "Headlights::LayerVertexLight_Opaque"},
-    {0x8004, -1, 0, 0, false, true, 0, 4, 0, NULL, 0x453b70, "Headlights::LayerUVLight"},
+    {0x8004, -1, 0, 0, false, true, 0, 4, 0, exec_uvlight, 0x453b70, "Headlights::LayerUVLight"},
     {0x8005, 5, 0, 0, true, true, 4, 0, 0x20, exec_fullambient, 0x448b60, "RCustomLayers::LayerFullAmbient"},
     {0x8006, 5, 0x5b3c20, 1, false, true, 4, 0, 0x20, NULL, 0x448e30, "RCustomLayers::LayerSetAlpha"},
     {0x8007, 5, 0, 0, true, false, 4, 0, 0x20, exec_ambient, 0x448ba0, "RCustomLayers::LayerAmbient"},
@@ -780,6 +781,7 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     bool all = (c->flags & EAGL_CF_INSIDE) || per == 1;
     bool on = g_r3d_night != 0;
     uint8_t *o = c->verts + 0x10;
+    g_headlight_lit = false;
     if (on && col && pos) {
         Headlights_Light((int)npos, pos, EAGL_StackTop(&c->view->model)->m);
         uint32_t hc = g_headlight_colour;
@@ -795,6 +797,7 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
                     uint32_t cv = col[k], out;
                     if (li <= 0.0f) out = cv | 0xff000000u;
                     else {
+                        g_headlight_lit = true;
                         int r = (int)lrintf((float)(hc >> 16 & 0xff) * li) + (int)(cv >> 16 & 0xff);
                         int g = (int)lrintf((float)(hc >> 8 & 0xff) * li) + (int)(cv >> 8 & 0xff);
                         int b = (int)lrintf(li * (float)(hc & 0xff)) + (int)(cv & 0xff);
@@ -830,6 +833,98 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
         }
     }
     c->flags |= EAGL_CF_DIFFUSE;
+    return l->next;
+}
+
+/* 0x453b70 (Headlights::LayerUVLight): the beam's texture projected from the viewed car's lights. With
+   its lights on (the R3DObject's +0x2d4 byte 0, taken as on at night) and a vertex lit by the vertex
+   light layer (0x61c16c), the stream's texture is common.fsh's 'HEAD' and the positions (dependency 0)
+   go into the tilted headlight space (0x61bd0c); each point's depth moved out by 16 (0x5cec50), its u
+   and v x / z + 0.5 and y / z + 0.5, the vertex's rhw times z: with 1 / z over 0.1 (closer than 10) 0.1
+   and 10, and behind (1 / z negative) u x * 0.1 + 0.5, v 0 and 10. Into the second uv of a two-uv vertex
+   (40 bytes) or the first (32), flagging them. Points through the index list (dependency 1) are worked
+   out once a draw (0x61c170, its stamp 0x61e1d0); the primitives clipped off are skipped unless every
+   vertex is inside. Without the lights the layers end here (no next layer). */
+static float s_beam_pts[256][4];   /* 0x61d178 */
+static struct { int stamp; float u, v, w; } s_beam_at[256];   /* 0x61c170 */
+static int s_beam_stamp;           /* 0x61e1d0 */
+
+static void beam_uv(float *p, float out[3])
+{
+    float z = exef(0x5cec50) + p[2];
+    p[2] = z;
+    float inv = exef(0x5b24a8) / z;
+    if (exef(0x5b2604) < inv) {
+        inv = 0.1f;   /* (0x3dcccccd) */
+        z = exef(0x5b241c);
+    }
+    if (!signbit(inv)) {
+        out[0] = inv * p[0] + exef(0x5b23f0);
+        out[1] = inv * p[1] + exef(0x5b23f0);
+        out[2] = z;
+    } else {
+        out[0] = p[0] * exef(0x5b2604) + exef(0x5b23f0);
+        out[1] = 0;
+        out[2] = exef(0x5b241c);
+    }
+}
+
+static EaglLayer *exec_uvlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
+{
+    (void)s0;
+    EaglContext *c = g_eagl;
+    if (!g_r3d_night || !g_headlight_lit) return NULL;
+    if (!l->dep || l->ndeps < 2) dep_assert();
+    int stride = (int)l->param, per = c->prim, n = c->nverts;
+    int uvoff;
+    if (stride == 0x28) {
+        uvoff = 0x20;
+        c->flags |= EAGL_CF_UV2;
+    } else if (stride == 0x20) {
+        uvoff = 0x18;
+        c->flags |= EAGL_CF_UV;
+    } else {
+        return l->next;   /* (the original writes into the stream itself then: no such data) */
+    }
+    if (s1) s1->data = Headlights_BeamTexture();
+    const float *pos = dep_data(l, 0);
+    uint32_t npos = dep_info(l, 0) >> 4;
+    if (256 < npos) npos = 256;
+    const uint8_t *idx = dep_present(l, 1) ? EAGL_LayerData(l->dep[1]) : NULL;
+    if (!pos) return l->next;
+    Headlights_BeamPoints((int)npos, pos, &s_beam_pts[0][0]);
+    uint8_t *v = c->verts;
+    bool all = (c->flags & EAGL_CF_INSIDE) || per == 1;
+    uint32_t (*pc)[2] = c->primcodes;
+    if (!all) s_beam_stamp += idx != NULL;
+    else if (idx)
+        for (uint32_t k = 0; k < npos; k++) beam_uv(s_beam_pts[k], &s_beam_at[k].u);
+    for (int k = 0; k < n;) {
+        if (!all && (*pc)[0] != 0) {
+            k += per;
+            v += per * stride;
+        } else {
+            for (int j = 0; j < (all ? n : per) && k < n; j++, k++, v += stride) {
+                float uvw[3];
+                if (idx) {
+                    int i = idx[k];
+                    if (!all && s_beam_at[i].stamp != s_beam_stamp) {
+                        beam_uv(s_beam_pts[i], &s_beam_at[i].u);
+                        s_beam_at[i].stamp = s_beam_stamp;
+                    }
+                    uvw[0] = s_beam_at[i].u, uvw[1] = s_beam_at[i].v, uvw[2] = s_beam_at[i].w;
+                } else {
+                    beam_uv(s_beam_pts[k < 256 ? k : 255], uvw);
+                }
+                float rhw;
+                memcpy(v + uvoff, uvw, 8);
+                memcpy(&rhw, v + 0xc, 4);
+                rhw *= uvw[2];
+                memcpy(v + 0xc, &rhw, 4);
+            }
+        }
+        pc++;
+    }
     return l->next;
 }
 

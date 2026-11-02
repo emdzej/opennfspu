@@ -8,6 +8,7 @@
 #include "vfs.h"
 #include "render/r3dcar.h"
 #include "render/render.h"
+#include "render/rtex.h"
 #include "game/camera.h"
 #include <math.h>
 #include <stdio.h>
@@ -35,6 +36,8 @@ static uint32_t s_cop_col[2];        /* 0x61e1c4 red, 0x61e1c8 blue */
 static float s_cop_light[256];       /* (0x61bd60 again in the original) */
 static bool s_cop_neg[256];          /* the points' side (0x61d178's z sign) */
 float g_headlight_light[256];        /* 0x61bd60 */
+bool g_headlight_lit;                /* 0x61c16c */
+static Texture *s_head;              /* 0x61e1d4: common.fsh's 'HEAD' */
 
 void Headlights_Load(void)   /* 0x452460 */
 {
@@ -61,7 +64,15 @@ void Headlights_Load(void)   /* 0x452460 */
     }
     s_car = NULL;
     s_cop = NULL;
-    PENDING_NOTE(0x44d1f0, "the headlights' 'HEAD' texture (0x61e1d4)");
+    s_head = g_rtex_common[0] ? RTexBank_find(g_rtex_common[0], 0, 0x44414548) : NULL;   /* 0x44d1f0 'HEAD' */
+}
+
+Texture *Headlights_BeamTexture(void) { return s_head; }
+
+/* The points into the tilted headlight space (0x61bd0c), as the UV light layer takes them (0x539cc0). */
+void Headlights_BeamPoints(int n, const float *pts, float *out)
+{
+    EAGL_MatTransform4(&s_tilted, n, pts, 16, out, 16);
 }
 
 void Headlights_Free(void)   /* 0x452530 */
