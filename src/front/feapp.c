@@ -100,6 +100,7 @@ static bool s_used_parts;             /* the used car screen's parts shown, not 
 static int s_grid_pers[8], s_grid_start[9], s_ngrid = -1;   /* the knockout's and the career's grid for the race */
 static float s_skill = 1.0f;
 static bool s_era_race;   /* 0x6577dc of the race just run: the last race of its era's last tournament */   /* the opponents' skill factor (the career race's difficulty, +0x3cc) */
+static bool s_back_locked;            /* FEApplication +0x17c (0x4d5670 / 0x4d5690): the back button off */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int s_testdrive_type;          /* 0x5dc1b8 */
 static bool s_factory_race;           /* the race Factory Driver's mission */
@@ -274,6 +275,15 @@ static const char *screen_attr(FertControl *w, const char *name)
     return "";
 }
 
+/* A screen let go (its callback list's destructor: the victory screens' 0x506300 / 0x519f10 unlock the
+   back button, 0x4d5690). */
+static void screen_free(FertControl *w)
+{
+    const char *cbl = screen_attr(w, "callbacklist");
+    if (!strcmp(cbl, "ID_VICTORYSCREEN") || !strcmp(cbl, "ID_FDVICTORYSCREEN")) s_back_locked = false;
+    FertControl_free(w);
+}
+
 static FertControl *load_screen(const char *name)
 {
     char path[300];
@@ -342,7 +352,7 @@ bool FEApp_Init(const char *start)
     FECD_Init();       /* 0x4bdfb0 (then the player's save's CD player section over it) */
     FESave_CDApply();
     s_music_at = -1;   /* 0x65b928: the application (the car renderer's showroom mode) */
-    while (s_depth) FertControl_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
+    while (s_depth) screen_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
     if (s_nsaved) {
         /* back from a race (0x4d2e70 after it): the screens it began from, the knockout between its races
            on its race information (knockoutraceinfo 0x5d9354) */
@@ -359,7 +369,7 @@ bool FEApp_Init(const char *start)
                 if (ok) ok = FEApp_GotoScreen("levelvictory", true);
             }
             if (ok) return true;
-            while (s_depth) FertControl_free(s_stack[--s_depth]);
+            while (s_depth) screen_free(s_stack[--s_depth]);
             return FEApp_GotoScreen(start, true);
         }
         if (s_gametype == 4 && s_era_race && FEData_EraEnded() && n > 0) {
@@ -370,14 +380,14 @@ bool FEApp_Init(const char *start)
             if (ok) ok = FEApp_GotoScreen(exe_str(0x5d93ac), true);   /* "VictoryRoom" */
             if (ok) ok = FEApp_GotoScreen(exe_str(0x5d93a0), true);   /* "endofera" */
             if (ok) return true;
-            while (s_depth) FertControl_free(s_stack[--s_depth]);
+            while (s_depth) screen_free(s_stack[--s_depth]);
             return FEApp_GotoScreen(start, true);
         }
         s_era_race = false;
         for (int i = 0; i < n && ok; i++) ok = FEApp_GotoScreen(s_saved[i], true);
         if (ok && FEData_KnockoutOn()) FEApp_GotoScreen("knockoutraceinfo", true);
         if (ok) return true;
-        while (s_depth) FertControl_free(s_stack[--s_depth]);
+        while (s_depth) screen_free(s_stack[--s_depth]);
     }
     if (!FEApp_GotoScreen(start, true)) return false;
     /* (0x4d2e70: the players listed and player.lst's loaded, 0x4dee70; without one the player is
@@ -468,7 +478,7 @@ static bool is_popup(const FertControl *w)
 /* Back to the screen under the popups (0x4d1e40(-1): the top screen's popups closed). */
 static void close_popups(void)
 {
-    while (s_depth > 1 && is_popup(s_stack[s_depth - 1])) FertControl_free(s_stack[--s_depth]);
+    while (s_depth > 1 && is_popup(s_stack[s_depth - 1])) screen_free(s_stack[--s_depth]);
     screen_entered();
 }
 
@@ -503,7 +513,7 @@ bool FEApp_GotoScreen(const char *name, bool push)
         plat_log(m);
         return false;
     }
-    if (!push && s_depth) FertControl_free(s_stack[--s_depth]);
+    if (!push && s_depth) screen_free(s_stack[--s_depth]);
     if (s_depth == STACK) {
         FertControl_free(w);
         return false;
@@ -512,12 +522,20 @@ bool FEApp_GotoScreen(const char *name, bool push)
     s_stack[s_depth++] = w;
     screen_entered();
     if (!strcasecmp(name, "factorydriver")) factory_open();
+    if (!strcmp(screen_attr(w, "callbacklist"), "ID_VICTORYSCREEN")) {
+        /* FEVictoryScreen's constructor (0x506210): Game.GameType 10, the back button locked (0x4d5670)
+           and its message over it (VictoryMessage 0x5dba20, popped) */
+        s_gametype = 10;
+        FEData_SetGameType(10);
+        s_back_locked = true;
+        FEApp_GotoScreen(exe_str(0x5dba20), true);
+    }
     return true;
 }
 
 void FEApp_Back(void)
 {
-    if (s_depth > 1) FertControl_free(s_stack[--s_depth]);
+    if (s_depth > 1) screen_free(s_stack[--s_depth]);
     screen_entered();
 }
 
@@ -981,8 +999,46 @@ static void callback(const char *cb)
            Game.GameType 5 and the race started (0x4d5200(0), its checks), else back to 4: the tournament's
            chosen track with its laps, reverse and mirror (0x4fb630's types 4, 5), alone, no traffic
            (0x4ec590), in zMergedList.Car's car (0x4eadb0: the Quick Race list's, not the career's chosen
-           one). The used cars' (0x516210) does nothing; the victory room's (0x506340, type 11: the prize
-           car) pends. */
+           one). The used cars' (0x516210) does nothing. */
+        if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_VICTORYSCREEN")) {
+            /* FEVictoryScreen's (0x506340): Game.GameType 11 and the race started (0x4d5200(0)): the
+               prize race's track (0x4fb630's types 10, 11), alone (0x4ec590), in the prize car
+               (0x4eadb0: its first colour, +0x3ec, all four; none: 0xffff0000) */
+            int laps;
+            bool rev, mir;
+            int traffic;
+            const char *t = FEData_PrizeRace(&laps, &rev, &mir, &traffic);
+            const uint8_t *pc = FEAccess_CarRecord(FEAccess_Find("PrizeCars.Car"));
+            if (!t || !pc) return;
+            s_gametype = 11;
+            FEData_SetGameType(11);
+            s_reverse = rev;
+            s_mirror = mir;
+            s_laps = laps;
+            snprintf(s_track, sizeof s_track, "%s", t);
+            snprintf(s_car, sizeof s_car, "%s", (const char *)pc + 0x7f);
+            int16_t nc;
+            memcpy(&nc, pc + 0x3e6, 2);
+            uint32_t c = 0xffff0000u;
+            if (nc > 0) {
+                memcpy(&c, pc + 0x3ec, 4);
+                c = c >> 24 | (c >> 8 & 0xff00u) | (c << 8 & 0xff0000u) | c << 24;
+            }
+            for (int i = 0; i < 4; i++) s_colours[i] = c;
+            s_havecol = true;
+            s_owned_race = -1;
+            s_testdrive = false;
+            s_factory_race = false;
+            s_tour_race = -1;
+            s_opponents = 0;
+            s_nopp = 0;
+            s_ngrid = -1;
+            s_skill = 1.0f;
+            s_traffic = traffic;
+            memset(s_traffic_slots, 0, sizeof s_traffic_slots);
+            s_result = FE_PLAY;
+            return;
+        }
         if (strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_TOURNYSCREEN")) return;
         Save *sv = FESave_Current();
         if (!sv || !sv->ncars || !can_play()) return;
@@ -3299,6 +3355,14 @@ void FEApp_Frame(void)
         /* the play button enabled with the screen's canplaygame (0x4d7c70 -> 0x4c79c0 / 0x4c79e0) */
         for (int i = 0; i < s_bar->nchildren; i++) {
             FertControl *c = s_bar->children[i];
+            if (!strcmp(c->name, "ID_BACKBUTTON")) {
+                /* (0x4d7c70: off while locked, 0x4d5df0; its other conditions pend) */
+                uint32_t f = c->feflags;
+                if (!s_back_locked) c->feflags &= ~0x10u;
+                else if (FertControl_findState(c, "disabled") >= 0) c->feflags |= 0x10;
+                if (f != c->feflags) refresh_state(c);
+                continue;
+            }
             if (strcmp(c->name, "ID_PLAYGAMEBUTTON")) continue;
             uint32_t f = c->feflags;
             if (can_play()) c->feflags &= ~0x10u;

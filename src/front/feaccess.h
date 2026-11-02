@@ -260,6 +260,11 @@ bool FEData_CheatCode(const char *name);
 void FEData_TourRaceInfo(RaceTournament *t);
 /* The race's era option (0x4ecc60's 0xbb from 0x503db0): 0 .. 2. */
 int FEData_RaceEra(void);
+/* The prize race of the last era done (0x503f40 of 0x503db0's era): the era's tournament of kind 2
+   (+0xe4), the victory room's (its car +0x10c, its race at +0x3a0); NULL without tournaments. */
+const uint8_t *FEData_PrizeTournament(void);
+/* Its race (0x4fb630's types 10, 11): the track's name (NULL none), laps, reverse, mirror, traffic. */
+const char *FEData_PrizeRace(int *laps, bool *reverse, bool *mirror, int *traffic);
 /* The career's era (0x502880: 0x209 .. 0x20b), an era with no tournament left never completed
    (0x503480), the k-th tournament record of an era's list (0x5028f0), the last tournament's end having
    ended its era (0x504db0), the whole car list's i-th record (0x6919e8). */

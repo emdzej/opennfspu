@@ -27,7 +27,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST, ACC_CMPCAR, ACC_CMPDATA } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_PRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST, ACC_CMPCAR, ACC_CMPDATA } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -47,7 +47,7 @@ struct FEAccessor {
     unsigned dzserial;
 };
 
-enum { NACC = 160 };
+enum { NACC = 256 };
 static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
@@ -1936,6 +1936,7 @@ void FEData_Init(void)
     add("Factory.MissionCheat", ACC_INT, 0x22, 1, 0);
     add("FactoryDriver.Car", ACC_FDCAR, 1, 0, 0);
     add("FDPrizeCars.Car", ACC_FDPRIZE, 1, 0, 0);
+    add("PrizeCars.Car", ACC_PRIZE, 1, 0, 0);   /* FEPrizeCarAccessor (vtable 0x5b85dc) */
     /* FEdaChronicle_v0 0x5080b0: the chronicle's year (FEIntAccessor 0x4b9ef0: 1948 of 1948 .. 1996; its
        range the era's, 0x4ba0d0); its Showcase.Text (FEShowcaseTextAccessor, vtable 0x5b8d64), the
        showcase's texts by number. */
@@ -2259,7 +2260,8 @@ const char *FEAccess_Text(const FEAccessor *a)
     }
     case ACC_CARSET:   /* (the car accessor's, 0x4b84c0's car) */
     case ACC_FDCAR:
-    case ACC_FDPRIZE: {
+    case ACC_FDPRIZE:
+    case ACC_PRIZE: {
         const uint8_t *r = FEAccess_CarRecord(a);
         snprintf(b, sizeof b, "%s", r ? (const char *)r + 0x34 : "");
         return b;
@@ -2368,7 +2370,13 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
             FEAccessor *d = FEAccess_Find("DealerCar.Car");
             return d && d->count ? FE_MoneyText(car_price(s_car + CAR_SIZE * s_dealer[d->pos])) : "";
         }
-        return "";   /* (the other data: pending) */
+        if (arg && (!strcmp(arg, "ENDERAHEADER") || !strcmp(arg, "ENDERADESCRIP"))) {
+            /* the prize race's (0x503f40) header and description strings, +0x24 and +0x28 */
+            const uint8_t *r = FEData_PrizeTournament();
+            const char *t = r ? FEStrings_Get(rec32(r, arg[6] == 'H' ? 0x24 : 0x28)) : NULL;
+            return t ? t : "";
+        }
+        return arg ? exe_str(0x5d73bc) : "";   /* "NOT FOUND" */
     }
     if (arg && !strcmp(arg, "CLASSLISTING")) {   /* the car accessors' (0x4f0130 ..): "%s %s" 0x5da730 */
         const uint8_t *r = FEAccess_CarRecord(a);
@@ -2682,6 +2690,10 @@ const uint8_t *FEAccess_CarRecord(const FEAccessor *a)
         if (!m) m = FEFactory_Mission();   /* (the original reads 0x69c8f0 unchecked) */
         return m ? FEData_CarById(rec16(m, 0x10)) : NULL;
     }
+    if (a->kind == ACC_PRIZE) {   /* FEPrizeCarAccessor_v36 0x501cd0: the prize race's car (0x503e80, +0x10c) */
+        const uint8_t *r = FEData_PrizeTournament();
+        return r ? FEData_CarById(rec16(r, 0x10c)) : NULL;
+    }
     return NULL;
 }
 
@@ -2691,7 +2703,7 @@ const char *FEAccess_CarFile(const FEAccessor *a)
     refresh(a);
     if (!a->count) return NULL;
     if (a->kind == ACC_CMPDATA && s_compare && *s_compare) return FEAccess_CarFile(FEAccess_Find(s_compare));
-    if (a->kind == ACC_MERGED || a->kind == ACC_FDCAR || a->kind == ACC_FDPRIZE || a->kind == ACC_CMPCAR || a->kind == ACC_CMPDATA) {
+    if (a->kind == ACC_MERGED || a->kind == ACC_FDCAR || a->kind == ACC_FDPRIZE || a->kind == ACC_PRIZE || a->kind == ACC_CMPCAR || a->kind == ACC_CMPDATA) {
         const uint8_t *r = FEAccess_CarRecord(a);
         return r ? (const char *)r + 0x7f : NULL;
     }
@@ -3387,6 +3399,43 @@ int FEData_RaceEra(void)
         if (0 <= e && e < 3 && rec16(x, 0xe4) != 2 && rec16(x, 0xd3c) == 0) open[e] = true;
     }
     return !open[2] ? 2 : !open[1] ? 1 : 0;
+}
+
+const uint8_t *FEData_PrizeTournament(void)
+{
+    /* 0x503f40 of the era 0x503db0 gives: its tournament of kind 2 (+0xe4), the prize race; else the
+       first tournament */
+    int32_t head[7] = {0};
+    int nt = 0;
+    const uint8_t *all = tour_section(head, &nt);
+    if (!all || nt <= 0) return NULL;
+    int era = 0x209 + FEData_RaceEra();
+    for (int i = 0; i < nt; i++) {
+        const uint8_t *x = all + 0xd40 * i;
+        if (rec32(x, 4) == era && rec16(x, 0xe4) == 2) return x;
+    }
+    return all;
+}
+
+const char *FEData_PrizeRace(int *laps, bool *reverse, bool *mirror, int *traffic)
+{
+    /* 0x4fb630's types 10 and 11: the prize race's first race (+0x3a0: the track by id, 0x503ee0; laps
+       +0x3a2, 0 one; reverse +0x3a4, mirror +0x3a5), the traffic by its level +0xe0 (0x5db450) without
+       its own (+0x380), else as many as its slots +0x382 that hold a car */
+    const uint8_t *r = FEData_PrizeTournament();
+    *laps = 1, *reverse = *mirror = false, *traffic = 0;
+    if (!r) return NULL;
+    int l = rec16(r, 0x3a2);
+    *laps = l ? l : 1;
+    *reverse = r[0x3a4] != 0;
+    *mirror = r[0x3a5] != 0;
+    if (!r[0x380]) {
+        int lvl = rec16(r, 0xe0);
+        *traffic = 0 <= lvl && lvl < 4 ? (int)exe_u32(0x5db450 + 4u * (uint32_t)lvl) : 0;
+    } else
+        for (int i = 0; i < 7; i++) *traffic += rec16(r, 0x382 + 2 * i) != 0;
+    const uint8_t *t = track_by_id(rec16(r, 0x3a0));
+    return t ? (const char *)t + 8 : NULL;
 }
 
 void FEData_TrackRecordEnter(const char *track, const char *name, const char *car, int32_t t)
