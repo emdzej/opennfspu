@@ -37,3 +37,6 @@ bool FEMovieBox_Draw(FertControl *c, int32_t ox, int32_t oy);
 void FEMovieBox_Update(void);
 /* The boxes no longer on screen freed (FEMovieBox_v22 0x4cce20), keep(c) telling which stay. */
 void FEMovieBox_Drop(bool (*keep)(const FertControl *c));
+/* The credits' roll speed (0x4cdb20: the credits screen's update sets it, 1, or -3 / 3 over its
+   backwards and forwards buttons). */
+void FEMovie_CreditSpeed(int v);

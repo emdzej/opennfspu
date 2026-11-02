@@ -743,10 +743,10 @@ int FEApp_Traffic(int16_t slots[7])
     return s_traffic;
 }
 
-/* The race's kind for the game type (0x4ec... option 0x10 RACE_TYPE): a quick race 0 (1 with the
-   flag 5 of 0x65b940: pending), a quick knockout 3 (the laps knock the last car out), the knockout and
-   the career 2, multiplayer and the test drives 0, Factory Driver 4 with a mission's conditions (pending:
-   0). */
+/* The race's kind for the game type (0x4eab10, option 0x10 RACE_TYPE): a quick race 0 (1 with the
+   cheat flag 5 of 0x65b940, the pursuit), a quick knockout 3 (the laps knock the last car out), the
+   knockout and the career 2, multiplayer and the test drives 0, Factory Driver 4 for a mission without
+   opponents (its +0xd4 slots all 0), else 0. */
 int FEApp_Grid(int pers[8], int start[9])
 {
     if (s_ngrid < 0) return -1;
@@ -1040,7 +1040,7 @@ static void callback(const char *cb)
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[11] == 'I' ? 1 : -1));
     } else if (!strncmp(cb, "SETTYPE", 7) && strcmp(cb, "SETTYPECAREERMODE")) {
         /* FEMainScreen_v59 .. _v64 (0x510510 ..): Game.GameType 0 quick race, 1 quick knockout, 2 knockout,
-           3 multiplayer, 9 Factory Driver (its screen, factorydriver or factdone once done: pending) */
+           3 multiplayer, 9 Factory Driver (its screen, factorydriver or factdone once done) */
         s_gametype = !strcmp(cb, "SETTYPEQUICKKNOCKOUT") ? 1 : !strcmp(cb, "SETTYPEKNOCKOUT") ? 2
                    : !strcmp(cb, "SETTYPEMULTIPLAYER") ? 3 : !strcmp(cb, "SETTYPEFACTORYDRIVER") ? 9 : 0;
         FEData_SetGameType(s_gametype);
@@ -1670,7 +1670,7 @@ static void control_rect(FertControl *c, int32_t r[4])
 /* An indicator bar (FEGouraudIndicatorBar_v15 0x4ca170 -> 0x521530): its accessor's share in per cent
    (0x4ca270) as a bar of two gouraud halves, c0 to c50 and c50 to c100 (no c50: their mean), cut where
    the share ends, with a drop shadow. (Port: the colours blended linearly; the bar's place from its
-   control, the .pos override FE_LoadPos 0x4e21c0 pends; growing to the left pends.) */
+   control: its part area, FE_LoadPos 0x4e21c0, is the control's size in GouraudIndicatorBar.ctr.) */
 /* The account (FEAccountDisplayControl_v15 0x4bd180): its parts, then the player's money (Tournament_Data's
    "CASH", 0x5058a0) in Univers7b, one character at a time from the rect's right edge leftwards (9 a
    digit, 3 a comma). */
@@ -3325,6 +3325,13 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
             enable(w, "ID_TRACTION", sc[0x2e3] != 0);
             enable(w, "ID_ROOF", sc[0x1bf] != 0);
         }
+    }
+    if (!strcmp(cbl, "ID_CREDITS")) {
+        /* FECreditsCallBackList_v1 0x50e350: the roll backwards (-3) over ID_CREDSBACK, forwards (3)
+           over ID_CREDSFWD (0x4c7880: hovered, not disabled), else at 1 */
+        FertControl *b = control_named(w, "ID_CREDSBACK"), *f = control_named(w, "ID_CREDSFWD");
+        bool hb = b && (b->feflags & 4) && !(b->feflags & 0x10), hf = f && (f->feflags & 4) && !(f->feflags & 0x10);
+        FEMovie_CreditSpeed(hb ? -3 : hf ? 3 : 1);
     }
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);

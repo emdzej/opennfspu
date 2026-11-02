@@ -765,7 +765,7 @@ bool R3DCar_LoadCrp(R3DCar *car, const char *name)
     else
         snprintf(path, sizeof path, exe_str(0x5cdce4), name);    /* "%s.crp" */
     /* The global textures the car's materials share (race: 'SPC1'..'SPC3', front end 'FEDU', 'FE  ',
-       'FESH'): pending with the texture system. */
+       'FESH'; 0x440870, carpages.c). */
     R3DCar_GlobalTextures(car);
     car->crp = crp_acquire(path);
     if (!car->crp) {
@@ -1092,7 +1092,7 @@ void R3DCarLOD_DrawLights(R3DCarLOD *lod, const EaglMatrix *m)
 
 static int table(uint32_t va, int i) { return (int)exe_u32(va + 4u * (unsigned)i); }
 
-/* R3DObject_v14 0x444d30 (R3DCar_v14 adds the race's window reflections, pending): which LOD draws
+/* R3DObject_v14 0x444d30 (R3DCar_v14 0x43a3c0 first draws the rain on the windscreen, R3DCar_Draw): which LOD draws
    which parts. The front end's showroom: the current LOD's body (0x50), then LOD list index 0's
    wheels and glass (0x20). */
 static void car_draw_lods(R3DCar *car, EaglMatStack *model)

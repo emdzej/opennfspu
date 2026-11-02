@@ -8,6 +8,7 @@
 #include "front/feaccess.h"
 #include "front/fesave.h"
 #include "game/options.h"
+#include "real/font.h"
 #include "real/mad.h"
 #include "real/texture.h"
 #include "real/window.h"
@@ -17,6 +18,7 @@
 #include "exe.h"
 #include "platform.h"
 #include "vfs.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -327,6 +329,10 @@ typedef struct Drift {
     DriftCross cross[3];            /* +0x20c */
     DriftWord words[4];             /* +0x224 */
     HudFont *fonts[2];              /* +0x214: Univers7b, Univers11b */
+    HudFont *names, *heads;         /* +0x21c, +0x220: Univers11B, Univers8B (0x4db960) */
+    int line;                       /* +0x23c: the credits' top string, 6000 .. 6466 */
+    uint32_t since;                 /* +0x240: TIMER_ticks at the last step */
+    int scroll;                     /* +0x244: pixels into the top line */
 } Drift;
 
 static void point(const FertControl *c, const char *name, int32_t p[2])
@@ -358,7 +364,18 @@ static Drift *drift_new(const FertControl *c)
         FE_ResolvePath(fonts[i], path, sizeof path);
         d->fonts[i] = FEFont_Get(path);   /* 0x4e2fb0 */
     }
-    /* (+0x21c, +0x220: Univers11B and Univers8B by name, 0x4db960, for the cheat's text, 0x4cdb30) */
+    static const char *const named[2] = {"Univers11B.ffn", "Univers8B.ffn"};   /* (0x5d8ce0, 0x5d8cd4 by name) */
+    for (int i = 0; i < 2; i++) {
+        char path[300];
+        FE_ResolvePath(named[i], path, sizeof path);
+        HudFont *f = FEFont_Get(path);
+        if (i == 0) d->names = f;
+        else d->heads = f;
+    }
+    /* FEMovieCircle_v21 0x4cd5d0: the credits from their first string */
+    d->since = timer_ticks();
+    d->scroll = 0;
+    d->line = 6000;
     return d;
 }
 
@@ -367,22 +384,119 @@ static void drift_free(Drift *d)   /* (FEMovieCircle_v22 0x4cd600) */
     if (!d) return;
     for (int i = 0; i < 3; i++) DriftCross_Free(&d->cross[i]);   /* 0x51ff90 */
     for (int i = 0; i < 2; i++) FEFont_Release(d->fonts[i]);    /* 0x4e31d0 */
+    FEFont_Release(d->names);
+    FEFont_Release(d->heads);
     free(d);
 }
 
-/* Over the movie (0x4cd980): the lines, the crossings and the words "NEED FOR SPEED" in white, at the
-   control's fade (0x4c8410: 0xff). With a cheat on (the application's +0xe0 v0xb0) they're orange and the
-   cheat's own text follows (0x4cdb30): pending. */
-static void drift_draw(Drift *d)
+/* The credits' strings 6000 .. 6466 (0x1d3 of them), round again past either end. */
+static int credit_wrap(int k)
+{
+    if (k < 6000) return k + 0x1d3;
+    if (0x1943 < k) return k - 0x1d3;
+    return k;
+}
+
+/* A credit line's height (FONT_extent 0x5366e0): '#' and '!' headings in Univers8B, 2 more, the
+   others in Univers11B, "Gary Steinke" 10 more with the cheat 6 on; 12 at least (13 and up as it is). */
+static int credit_step(const Drift *d, const char *s, bool skip_mark)
+{
+    float x = 0, y = 0, w = 0, h = 0;
+    bool head = *s == '#' || *s == '!';
+    HudFont *f = head ? d->heads : d->names;
+    if (f && f->font) FONT_extent(f->font, head && skip_mark ? s + 1 : s, &x, &y, &w, &h);
+    if (head) h += 2.0f;
+    else if (FE_Cheat(6) && !strcmp(exe_str(0x5d8d2c), s)) h += 10.0f;   /* "Gary Steinke" */
+    int step = (int)lrintf(h) + 2;
+    return step < 13 ? 12 : step;
+}
+
+static void credit_text(HudFont *f, float x, float y, uint32_t colour, const char *s)
+{
+    int n = (int)strlen(s) + 1;
+    char *copy = f ? FE2D_Alloc(n) : NULL;
+    if (!copy) return;
+    memcpy(copy, s, (size_t)n);
+    FE2D_Text(f, x, y, 1, colour, copy, 1.0f, 1.0f);   /* 0x4d9e00, centred */
+}
+
+static int s_credit_speed = 1;   /* 0x5d8bec */
+
+void FEMovie_CreditSpeed(int v) { s_credit_speed = v; }   /* 0x4cdb20 */
+
+/* The credits rolling up the circle (0x4cdb30): the speed's pixels (0x5d8bec) every four ticks; the top line
+   stepped on once scrolled past; the lines centred from the box's top down to its bottom, white at the
+   fade: '#' and '!' headings in Univers8B 3 lower, '*' lines and the rest in Univers11B, the mark
+   dropped; with the cheat 6, under "Gary Steinke" its aside (0x5d8d10) at 0xc0. */
+static void credits_draw(Drift *d, const int32_t pos[2], const int32_t size[2])
+{
+    int fade = 0xff;   /* (0x4c8410) */
+    uint32_t now = timer_ticks();
+    if (4 < (int32_t)(now - d->since)) {
+        d->since = now;
+        d->scroll += s_credit_speed;
+    }
+    uint32_t white = (uint32_t)fade << 24 | 0xffffffu;   /* 0x4d8280 */
+    int top = pos[1], height = size[1];
+    float cx = (float)(size[0] / 2 + pos[0]);
+    int step = credit_step(d, FEStrings_Get(d->line), true);
+    if (step < d->scroll) {
+        d->scroll -= step;
+        d->line++;
+    } else if (-step != d->scroll && step <= -d->scroll) {
+        d->scroll += step;
+        d->line--;
+    }
+    d->line = credit_wrap(d->line);
+    int y = 0;
+    for (int k = d->line;; k++) {
+        k = credit_wrap(k);
+        const char *s = FEStrings_Get(k);
+        if (!s) s = "";
+        int ty = top - d->scroll + y;
+        if (*s == '#' || *s == '!') {
+            credit_text(d->heads, cx, (float)(ty + 3), white, s + 1);
+        } else if (*s == '*') {
+            credit_text(d->names, cx, (float)ty, white, s + 1);
+        } else {
+            credit_text(d->names, cx, (float)ty, white, s);
+            if (FE_Cheat(6) && !strcmp(exe_str(0x5d8d2c), s))
+                credit_text(d->heads, cx, (float)(ty + 0xd), (uint32_t)((0xc0u * (white >> 24)) / 0xff) << 24 | (white & 0xffffffu),
+                            exe_str(0x5d8d10));
+        }
+        y += credit_step(d, s, false);
+        if (height <= y) return;
+    }
+}
+
+/* Over the movie (FECredits_Draw 0x4cd980): the lines, the crossings and the words "NEED FOR SPEED" in
+   white, at the control's fade (0x4c8410: 0xff). On the credits screen (the screen's callback list's
+   slot 44, FECreditsCallBackList's 0x50e340 the one true) they're orange and the credits roll over
+   them (0x4cdb30). */
+static bool on_credits(void)
+{
+    FertControl *w = FEApp_Top();
+    if (!w || !w->screen) return false;
+    for (int k = 0; k < w->screen->nparts; k++) {
+        FertAttr *a = FertAttrList_find(&w->screen->parts[k]->attrs, "callbacklist");
+        if (a) return !strcmp(FertAttr_str(a), "ID_CREDITS");
+    }
+    return false;
+}
+
+static void drift_draw(Drift *d, const int32_t pos[2], const int32_t size[2])
 {
     int fade = 0xff;
-    uint32_t line = (uint32_t)((0x4cu * fade) / 0xff) << 24 | 0xffffffu;   /* 0x4d82a0 */
-    uint32_t word = (uint32_t)((0xa0u * fade) / 0xff) << 24 | 0xffffffu;
-    uint32_t ring = (uint32_t)((0x30u * fade) / 0xff) << 24 | 0xffffffu;
+    bool credits = on_credits();
+    uint32_t rgb = credits ? 0xfab400u : 0xffffffu;
+    uint32_t line = (uint32_t)(((credits ? 0x26u : 0x4cu) * fade) / 0xff) << 24 | rgb;   /* 0x4d82a0 */
+    uint32_t word = (uint32_t)(((credits ? 0x50u : 0xa0u) * fade) / 0xff) << 24 | rgb;
+    uint32_t ring = (uint32_t)(((credits ? 0x18u : 0x30u) * fade) / 0xff) << 24 | rgb;
     for (int i = 0; i < 3; i++) DriftLine_Draw(&d->across[i], line);   /* 0x51f320 */
     for (int i = 0; i < 3; i++) DriftLine_Draw(&d->down[i], line);
     for (int i = 0; i < 3; i++) DriftCross_Draw(&d->cross[i], ring, d->across, 3, d->down, 3);   /* 0x51ffc0 */
     for (int i = 0; i < 4; i++) DriftWord_Draw(&d->words[i], exe_str(0x5d8d00), word, d->fonts, 2);   /* "NEED FOR SPEED", 0x520160 */
+    if (credits) credits_draw(d, pos, size);
 }
 
 static Box s_boxes[4];
@@ -559,7 +673,7 @@ bool FEMovieBox_Draw(FertControl *c, int32_t ox, int32_t oy)
     box_draw(b, ox, oy);
     FE2D_Flush();           /* 0x4da0a0 */
     if (!b->drift) b->drift = drift_new(c);
-    if (b->drift) drift_draw(b->drift);
+    if (b->drift) drift_draw(b->drift, b->pos, b->size);
     FE2D_OverlayEnd();      /* 0x4da5b0 */
     return true;
 }

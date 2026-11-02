@@ -2272,7 +2272,7 @@ const char *FEAccess_Text(const FEAccessor *a)
     case ACC_FDATA:
     case ACC_TDATA:
     case ACC_SHOWCASE:
-    case ACC_COLOUR:      /* (a colour box shows its swatch, not a text: FEColorBox pending) */
+    case ACC_COLOUR:      /* (a colour box shows its swatch, not a text: FEComboBox_Draw's) */
     case ACC_INTCOLOUR:
         return "";
     case ACC_ALLPARTS:    /* (the item's text, slot 12 0x515590) */
@@ -2482,7 +2482,7 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
             }
         }
         if (!strcmp(arg, "OVERALLDAMAGECOST")) return FE_MoneyText(total);
-        if (strcmp(arg, "SHORT")) return "";   /* (the damages and the rest: pending) */
+        if (strcmp(arg, "SHORT")) return "";   /* (every argument the layouts use is above) */
     }
     if (a->kind == ACC_CMPDATA) {   /* (_v5 0x50e050: "%02d" 0x5dc4d0, else "") */
         int v = compare_stat(arg);
