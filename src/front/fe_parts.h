@@ -60,6 +60,9 @@ extern bool (*FE_ControlDrawHook)(FertControl *c, int32_t ox, int32_t oy);
 void FEStyle_DropShadow(float x, float y, float w, float h, int a, int dx, int dy);
 void FEStyle_Shine(float x, float y, float w, float h, int a);
 void FEStyle_Inset(float x, float y, float w, float h, int a, int b);
+void FEStyle_Raised(float x, float y, float w, float h, int a, int b);
+void FEStyle_Range(int p0, int p1, int x0, int y0, int x1, int y1, uint32_t c0, uint32_t c50, uint32_t c100, int a,
+                   bool shadow, bool reverse);
 void FEStyle_Emboss(float x, float y, float w, float h, int a, int b);
 /* A glow b pixels out round a box (0x5213e0): white at it, half white at the outside. */
 void FEStyle_Glow(float x, float y, float w, float h, int a, int b);

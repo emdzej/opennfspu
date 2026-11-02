@@ -26,3 +26,7 @@ const char *FECtrl_ListName(bool pads, int i);
 void FECtrl_Map(int dev);
 /* AllControllers' i-th device (0x51eab0). */
 int FECtrl_ListDevice(int i);
+/* The dead zone panel's NFS5.DEADZONE (FEControllerDeadZoneControl, 0x51ae70 ..): a press at mouse x
+   on c (true when c is one), and the mouse's moves over hover (or the release) for its handles. */
+bool FECtrl_DeadZonePress(FertControl *c, int mx);
+void FECtrl_DeadZoneMouse(FertControl *hover, int mx, bool up);

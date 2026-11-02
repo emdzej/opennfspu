@@ -40,6 +40,8 @@ uint32_t Controls_Parse(const char *text);
 int Controls_Devices(void);
 const char *Controls_DeviceName(int n);
 int Controls_DeviceType(int n);
+/* Its axes (getstate 2 +8: bit n the record's axis n). */
+uint32_t Controls_DeviceAxes(int n);
 /* A device polled (getstate 6): its record, 0x104 bytes (the type, then its state); NULL none. */
 const uint8_t *Controls_DeviceState(int n);
 /* The players' packets (g_input_packet the first's) and the interface ring's next. 0x412e90 */

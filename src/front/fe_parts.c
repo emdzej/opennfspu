@@ -539,6 +539,47 @@ void FEStyle_Inset(float x, float y, float w, float h, int a, int b)
     quad4(x5, y4, c13, (xr - fb) + 1.0f, y4, c13, x - 2.0f, y9, c14, xr - 2.0f, y9, c14);
 }
 
+/* A raised bevel of b pixels (0x520ad0): light top and left, dark right and bottom, each fading inwards. */
+void FEStyle_Raised(float x, float y, float w, float h, int a, int b)
+{
+    if (plain()) return;
+    uint32_t c6 = fade(0xe5ffffffu, a), c7 = fade(0x80ffffffu, a), c8 = fade(0x80000000u, a), c9 = fade(0xffffffu, a);
+    uint32_t c10 = fade(0, a), c11 = fade(0xb2ffffffu, a), c12 = fade(0xccffffffu, a), c13 = fade(0xcc000000u, a);
+    float fb = (float)b, y2 = fb + y, xr = x + w, x3 = xr - fb, x4 = fb + x, yb = y + h, y1 = yb - fb;
+    quad4(x, y, c6, xr, y, c7, x4, y2, c9, x3, y2, c10);       /* top */
+    quad4(x, y, c12, x4, y2, c9, x, yb, c11, x4, y1, c9);      /* left */
+    quad4(x3, y2, c10, xr, y, c8, x3, y1, c10, xr, yb, c13);   /* right */
+    quad4(x4, y1, c9, x3, y1, c10, x, yb, c8, xr, yb, c13);    /* bottom */
+}
+
+/* A bar of the share p0 .. p1 per cent of (x0, y0) .. (x1, y1) (0x521530): its part under 50 from c0 to
+   c50, over 50 from c50 to c100, each half at most half the width; a drop shadow (3, 4) under it, or
+   from its right end leftwards (-4, 4) when reversed. (Port: the ends' colours along the ramp by their
+   share; the original's own blend steps are close to it.) */
+void FEStyle_Range(int p0, int p1, int x0, int y0, int x1, int y1, uint32_t c0, uint32_t c50, uint32_t c100, int a,
+                   bool shadow, bool reverse)
+{
+    if (p1 < p0) return;
+    float W = (float)(x1 - x0), half = W * 0.5f, h = (float)(y1 - y0);
+    c0 = fade(c0, a), c50 = fade(c50, a), c100 = fade(c100, a);
+    float start = (float)p0 * W * 0.01f + (float)x0;
+    float l1 = ((float)(p1 < 50 ? p1 : 50) - (float)p0) * W * 0.01f;
+    l1 = l1 < 0 ? 0 : l1 > half ? half : l1;
+    float l2 = ((float)p1 - (float)(p0 > 50 ? p0 : 50)) * W * 0.01f;
+    l2 = l2 < 0 ? 0 : l2 > half ? half : l2;
+    int q0 = p0 < 0 ? 0 : p0 > 50 ? 50 : p0, q1 = p1 < 50 ? p1 : 50;
+    uint32_t s0 = FE2D_Mix(c0, c50, q0 * 255 / 50), s1 = FE2D_Mix(c0, c50, (q1 < 0 ? 0 : q1) * 255 / 50);
+    int r0 = p0 > 50 ? p0 - 50 : 0, r1 = p1 > 100 ? 50 : p1 - 50;
+    uint32_t t0 = FE2D_Mix(c50, c100, r0 * 255 / 50), t1 = FE2D_Mix(c50, c100, (r1 < 0 ? 0 : r1) * 255 / 50);
+    if (0 < l1) FE2D_Gouraud(start, (float)y0, l1, h, s0, s1, s0, s1);
+    if (0 < l2) FE2D_Gouraud(l1 + start, (float)y0, l2, h, t0, t1, t0, t1);
+    float len = l1 + l2;
+    if (4.0f < len && shadow) {
+        if (reverse) FEStyle_DropShadow(len + start, (float)y0, -len, h, a, -4, 4);
+        else FEStyle_DropShadow(start, (float)y0, len, h, a, 3, 4);
+    }
+}
+
 /* An embossed knob (0x520e40): a blue to sand gradient, light top and left edges b pixels wide, dark
    bottom and right ones. */
 void FEStyle_Emboss(float x, float y, float w, float h, int a, int b)

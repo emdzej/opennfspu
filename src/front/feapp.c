@@ -1215,6 +1215,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && picture_click(target)) break;
         if (target && type == 4 && FECtrl_Click(target)) break;
+        if (target && type == 4 && FECtrl_DeadZonePress(target, w->mouse[0])) break;
         if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
         if (target && type == 8) on_up(target);
         break;
@@ -1228,6 +1229,14 @@ static void slider_held_move(int mx, int my);
 static void slider_held_up(void);
 static bool combo_mouse(bool down, int32_t mx, int32_t my);
 
+/* The control under the mouse, down through the panels (their windows' hovers). */
+static FertControl *deepest_hover(FertControl *w)
+{
+    FertControl *h = w ? w->hover : NULL;
+    while (h && h->sub && h->sub->hover) h = h->sub->hover;
+    return h;
+}
+
 static void poll(void)   /* 0x529530 */
 {
     FertControl *w = FEApp_Top();
@@ -1240,9 +1249,11 @@ static void poll(void)   /* 0x529530 */
         if (s_bar) window_event(s_bar, 7, mx, my);
         window_event(w, 7, mx, my);
         if (s_slider_held) slider_held_move(mx, my);
+        FECtrl_DeadZoneMouse(deepest_hover(w), mx, false);
     }
     uint32_t changed = b ^ s_buttons;
     s_buttons = b;
+    if ((changed & 1) && !(b & 1)) FECtrl_DeadZoneMouse(NULL, mx, true);
     if ((changed & 1) && !(b & 1) && s_slider_held) {
         slider_held_up();
     }

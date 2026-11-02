@@ -26,7 +26,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -39,6 +39,9 @@ struct FEAccessor {
     int src;         /* ACC_OWNED: 1 the market's cars; ACC_COLOUR / ACC_INTCOLOUR: 1 the garage car's */
     uint32_t cval;   /* FEColourAccessor's colour (+0x2c) for the garage car's (src 1) */
     bool nosel;      /* the CD player's lists: no row chosen (+0x1d, 0x4bc1f0; the position reads -1) */
+    int32_t dz[16];  /* ACC_DEADZONE: each joystick's value (+0x28), the one shown (+0x68), the save's load */
+    int dzpad;
+    unsigned dzserial;
 };
 
 enum { NACC = 160 };
@@ -193,6 +196,81 @@ static void audio(void)
 
 /* FEdaControllers' force feedback levels (0x51d8b0: FEIntAccessor 0x4b9ef0, 0 .. 100 from 50, options
    0x89 .. 0x8d, FFTOTALVOLUME0 ..; the force feedback itself has no device in gasm). */
+/* FEdaControllers' dead zones (FEControllerDeadZoneAccessor 0x51b6b0, vtable 0x5bac0c): XAxis .. SliderB,
+   each a Min and a Max of 0 .. 0x7f kept for each of 16 joysticks (+0x28) and shown for the one
+   Controller.AllPads has (+0x68): the mins at 0, the maxes at 0x80 (clamped to 0x7f), then the player's
+   save's "accessor" values over them (each its place and the 16). */
+static const char *dz_name(int i) { return exe_str(0x5dd564u - 0xcu * (uint32_t)i); }   /* "XAxis.Min" .. "SliderB.Max" */
+
+static void dead_zones(void)
+{
+    for (int i = 0; i < 16; i++) {
+        FEAccessor *a = add(dz_name(i), ACC_DEADZONE, 0x80, 0, (i & 1) ? 0x7f : 0);   /* (v27 0x51b7a0: all at it) */
+        if (!a) continue;
+        for (int k = 0; k < 16; k++) a->dz[k] = a->pos;
+        a->dzserial = (unsigned)-1;
+    }
+}
+
+/* A dead zone accessor's bytes in the save's accessor section (v8 0x51b770: its place, the 16). */
+static uint8_t *dz_bytes(const FEAccessor *a, Save *sv, size_t need)
+{
+    for (int k = 0; sv && k < sv->nsec; k++) {
+        SaveSection *x = &sv->sec[k];
+        if (strcmp(x->name, "accessor")) continue;
+        size_t len = strlen(a->name) + 1;
+        for (size_t j = 4; j + len + need <= x->size; j++)
+            if (x->data[j - 1] == 0 && !memcmp(x->data + j, a->name, len)) return x->data + j + len;
+    }
+    return NULL;
+}
+
+/* _v2 0x51b6f0: a new joystick (under 16) shows its value; else the value shown is kept as its. (The
+   save's values read first, at each new load.) */
+static void dz_refresh(FEAccessor *a)
+{
+    Save *sv = FESave_Current();
+    unsigned ser = FESave_Serial();
+    if (a->dzserial != ser) {
+        a->dzserial = ser;
+        const uint8_t *b = dz_bytes(a, sv, 0x44);
+        if (b) {
+            memcpy(&a->pos, b, 4);
+            memcpy(a->dz, b + 4, 0x40);
+        }
+    }
+    FEAccessor *pads = FEAccess_Find("Controller.AllPads");
+    int pad = pads ? FEAccess_Pos(pads) : 0;
+    if (a->dzpad != pad && pad < 0x10) {
+        a->dzpad = pad;
+        int v = a->dz[pad];
+        a->pos = v < 0 ? 0 : v > 0x7f ? 0x7f : v;   /* (slot 11, 0x4bbe20) */
+        return;
+    }
+    a->dz[a->dzpad & 0xf] = a->pos;
+}
+
+int FEAccess_DeadZone(int axis, bool max, int joy)   /* _v28 0x51b7d0 */
+{
+    if (axis < 0 || 7 < axis) return 0;
+    FEAccessor *a = FEAccess_Find(dz_name(2 * axis + max));
+    return a && a->kind == ACC_DEADZONE && 0 <= joy && joy < 16 ? a->dz[joy] : 0;
+}
+
+FEAccessor *FEAccess_DeadZoneAccessor(int axis, bool max) { return 0 <= axis && axis < 8 ? FEAccess_Find(dz_name(2 * axis + max)) : NULL; }
+
+void FEData_StoreDeadZones(Save *sv)   /* (the accessors' writer, _v7 0x51b740, into the section read) */
+{
+    for (int i = 0; i < s_nacc; i++) {
+        FEAccessor *a = &s_acc[i];
+        if (a->kind != ACC_DEADZONE) continue;
+        uint8_t *b = dz_bytes(a, sv, 0x44);
+        if (!b) continue;
+        memcpy(b, &a->pos, 4);
+        memcpy(b + 4, a->dz, 0x40);
+    }
+}
+
 static void force_feedback(void)
 {
     static const struct { const char *name; uint32_t key; } ff[5] = {
@@ -1452,6 +1530,7 @@ void FEData_Init(void)
     add("zMergedList.Car", ACC_MERGED, s_ncars, 0, cp);
     audio();
     force_feedback();
+    dead_zones();
     setup();
     display();
     graphics();
@@ -1576,6 +1655,10 @@ static void refresh(const FEAccessor *c)
             a->pos = a->src == 0 && a->count > 1 ? 1 : 0;
         }
         if (a->pos >= a->count) a->pos = 0;
+        return;
+    }
+    if (a->kind == ACC_DEADZONE) {
+        dz_refresh(a);
         return;
     }
     if (a->kind == ACC_CDAVAIL || a->kind == ACC_CDSEL || a->kind == ACC_CDTITLE) {
@@ -1707,6 +1790,10 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
         refresh(a);
         return;
     }
+    if (a->kind == ACC_DEADZONE) {   /* 0x4bbe20: clamped */
+        a->pos = pos >= a->count ? a->count - 1 : pos < 0 ? 0 : pos;
+        return;
+    }
     if (a->kind == ACC_CDAVAIL || a->kind == ACC_CDSEL) {   /* 0x4bbe20: clamped, a row chosen */
         a->pos = pos >= a->count ? a->count - 1 : pos;
         if (a->pos < 0) a->pos = 0;
@@ -1750,6 +1837,7 @@ const char *FEAccess_Text(const FEAccessor *a)
     if (!a->count) return "";
     switch (a->kind) {
     case ACC_INT:
+    case ACC_DEADZONE:   /* (FEPositionableAccessor's: its place) */
         snprintf(b, sizeof b, "%d", a->min + a->pos);
         return b;
     case ACC_TRACK: {

@@ -151,6 +151,8 @@ static void use_device(uint32_t n)
 int Controls_Devices(void) { return s_ndevices; }
 const uint8_t *Controls_DeviceState(int n) { return n >= 0 && n < s_ndevices ? getstate(n) : NULL; }
 const char *Controls_DeviceName(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].name : ""; }
+/* Getstate 2's axes (+8: a bit each of the 8): a gasm pad reports all eight. */
+uint32_t Controls_DeviceAxes(int n) { return Controls_DeviceType(n) == 4 ? 0xffu : 0; }
 int Controls_DeviceType(int n) { return n >= 0 && n < s_ndevices ? s_devices[n].type : 0; }
 
 static int read_null(uint32_t p) { (void)p; return 0; }   /* 0x508530 */

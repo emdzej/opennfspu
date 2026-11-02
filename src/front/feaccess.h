@@ -26,6 +26,10 @@ int FEAccess_Pos(const FEAccessor *a);
 void FEAccess_SetPos(FEAccessor *a, int pos);
 /* A list's choice dropped (0x4bc1f0: its position reads -1 till one is set; the CD player's lists). */
 void FEAccess_Unselect(FEAccessor *a);
+/* A joystick's dead zone for an axis (0 .. 7: x, y, z, the rotations, the sliders), its min or max
+   (XAxis.Min .. SliderB.Max, 0 .. 0x7f; _v28 0x51b7d0); and the accessor (min or max) itself. */
+int FEAccess_DeadZone(int axis, bool max, int joy);
+FEAccessor *FEAccess_DeadZoneAccessor(int axis, bool max);
 /* An int accessor's value (its first plus its place) and its range made lo .. hi (0x4ba0d0: a place past
    the new end back to 0). */
 int FEAccess_Int(const FEAccessor *a);
@@ -97,6 +101,8 @@ int FEData_TourLaps(void);
 int FEData_TourTraffic(int16_t slots[7]);
 #include "front/fesave.h"
 #include "game/race_setup.h"
+/* The dead zones into the save's accessor section, for its write. */
+void FEData_StoreDeadZones(Save *sv);
 /* An owned car's value in a year (0x4f83f0). */
 int32_t FEData_CarValue(const SaveCar *c, int year);
 /* A car's damage in per cent (0x4eefd0). */

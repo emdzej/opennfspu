@@ -1,6 +1,7 @@
 /* The player's save (fesave.h). */
 #include "front/fesave.h"
 #include "front/fecd.h"
+#include "front/feaccess.h"
 #include "front/fehudpreview.h"
 #include "exe.h"
 #include "front/fe_parts.h"
@@ -285,6 +286,7 @@ static bool save_write(const char *name, int32_t pic)
 {
     if (!name[0] || !s_ok) return false;
     cd_take();
+    FEData_StoreDeadZones(&s_save);
     char f[128];
     if (pic == -1) snprintf(f, sizeof f, "%s.sav", name);
     else snprintf(f, sizeof f, "%d%s.sav", (int)pic, name);

@@ -3,6 +3,7 @@
 #include "exe.h"
 #include "front/fe2d.h"
 #include "front/fe_parts.h"
+#include "front/feaccess.h"
 #include "front/feapp.h"
 #include "real/font.h"
 #include "game/controls.h"
@@ -129,6 +130,8 @@ static void fmt(char *out, size_t cap, const char *f, const char *s, int d)
     out[n] = 0;
 }
 
+static int joy_number(int dev);
+
 /* ---- the inputs and the bindings ---- */
 
 /* A binding's input (port: the inverse of the commit, slot 1 0x51c480, as fe.txt keeps the bindings and
@@ -148,14 +151,14 @@ static CtrlInput from_binding(uint32_t b)
     return in;
 }
 
-/* The commit (slot 1, 0x51c480): an axis from its dead zone's min to its max (XAxis_Min .., the device's,
-   0 and 0x80 at first: the panel's handles pend) each its way from 0x80, within 0 .. 0xff; a button, a
-   key's scan code, a hat's direction. */
+/* The commit (slot 1, 0x51c480): an axis from its dead zone's min to its max (XAxis.Min .., the
+   joystick's) each its way from 0x80, within 0 .. 0xff; a button, a key's scan code, a hat's direction. */
 static uint32_t to_binding(const CtrlInput *in)
 {
     switch (in->type) {
     case 1: {
-        int mn = 0, mx = 0x80;
+        int j = joy_number(in->dev);
+        int mn = FEAccess_DeadZone(in->idx, false, j), mx = FEAccess_DeadZone(in->idx, true, j);
         int l = mn * in->dir + 0x80, h = mx * in->dir + 0x80;
         uint32_t lo = (uint32_t)(l < 0 ? 0 : l), hi = (uint32_t)(h < 0x100 ? h : 0xff);
         return ((((uint32_t)in->dev << 4 | (uint32_t)in->idx) << 8 | lo) << 8 | hi) << 8 | 1;
@@ -411,8 +414,12 @@ static void text_of(int k, char *t, size_t cap, int *arc, bool waiting)
     }
 }
 
+static bool is_dz(const FertControl *c);
+static bool dz_draw(FertControl *c, int32_t ox, int32_t oy);
+
 bool FECtrl_Draw(FertControl *c, int32_t ox, int32_t oy)
 {
+    if (is_dz(c)) return dz_draw(c, ox, oy);
     int k = ctrl_of(c);
     if (k < 0) return false;
     if (c->feflags & 0x20) return true;
@@ -539,4 +546,155 @@ void FECtrl_Keys(FertControl *c, const uint8_t *k, int nk)
     CtrlInput in = {3, 0, scan, 0, 0, code};
     assign(ctrl_of(c), &in);
     unfocus(c);
+}
+
+/* ---- the dead zones (FEControllerDeadZoneControl, vtable 0x5bab9c) ---- */
+
+/* A NFS5.DEADZONE (_v20 0x51add0): its accessors (data.accessormin, data.accessormax) and its axis
+   (data.hackindex 0 .. 7); the handle pressed (+0x140) and under the mouse (+0x144): 1 the min's left,
+   3 its right, 2 the max's left, 4 its right. */
+static FertControl *s_dz_held;
+static int s_dz_drag, s_dz_hover;
+static FertControl *s_dz_hover_c;
+
+static bool is_dz(const FertControl *c) { return c && !strcmp(c->id, "NFS5.DEADZONE"); }
+
+static int dz_axis(FertControl *c)
+{
+    const char *v = data(c, "hackindex");
+    return v ? Fert_ParseInt(v) : -1;
+}
+
+static FEAccessor *dz_acc(FertControl *c, const char *key) { return FEAccess_Find(data(c, key)); }
+
+/* The nth joystick's device (0x51ea50; the first device for none). */
+static int joy_device(int n)
+{
+    int k = 0;
+    for (int d = 0; d < Controls_Devices(); d++)
+        if (Controls_DeviceType(d) == 4 && k++ == n) return d;
+    return 0;
+}
+
+static bool any_joy(void)   /* 0x51eb30 */
+{
+    for (int d = 0; d < Controls_Devices(); d++)
+        if (Controls_DeviceType(d) == 4) return true;
+    return false;
+}
+
+/* The handle at x (0x51b420): within 2 of the min's (half -+ min of half) or the max's, the later of
+   min left, min right, max left, max right winning; 0 none. */
+static int dz_hit(FertControl *c, int x)
+{
+    FEAccessor *mn = dz_acc(c, "accessormin"), *mx = dz_acc(c, "accessormax");
+    int32_t r[4], p[2] = {0, 0};
+    FertControl_rect(c, r);
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, p);
+    if (!mn || !mx) return 0;
+    int half = (r[2] - r[0]) / 2, a = FEAccess_Pos(mn) * half / 128, b = FEAccess_Pos(mx) * half / 128;
+    int k = 0, at[4] = {p[0] - a + half, p[0] + a + half, p[0] - b + half, p[0] + b + half}, id[4] = {1, 3, 2, 4};
+    for (int i = 0; i < 4; i++)
+        if (at[i] - 2 <= x && x <= at[i] + 2) k = id[i];
+    return k;
+}
+
+/* A drag (0x51b590): the distance from the middle as 0 .. 128 of half; a min at most the max less 5, a
+   max at least the min plus 5 and at most 0x80. */
+static void dz_drag(FertControl *c, int x)
+{
+    FEAccessor *mn = dz_acc(c, "accessormin"), *mx = dz_acc(c, "accessormax");
+    if (!s_dz_drag || !mn || !mx) return;
+    int32_t r[4];
+    FertControl_rect(c, r);
+    int half = (r[2] - r[0]) / 2;
+    if (half <= 0) return;
+    int d = x - r[0];
+    d = d < half ? half - d : d - half;
+    int v = (d << 7) / half;
+    if (s_dz_drag == 1 || s_dz_drag == 3) {
+        int lim = FEAccess_Pos(mx) - 5;
+        int n = v <= lim ? v : lim;
+        FEAccess_SetPos(mn, n < 0 ? 0 : n);
+    } else {
+        int lim = FEAccess_Pos(mn) + 5;
+        int n = lim <= v ? v : lim;
+        FEAccess_SetPos(mx, 0x80 < n ? 0x80 : n);
+    }
+}
+
+/* Its draw (_v15 0x51ae70; its tick _v1 0x51b3c0 refreshes the two accessors): with a joystick there
+   and the axis on the chosen one (Controller.AllPads), the ranges each side of the middle from min to
+   max (yellow 0xfffdb306 out to red 0xffe60000 at the middle), the axis's place as a 10 wide gold
+   marker with its shine, the four handles 5 wide (gold under the mouse, else red), pressed in or raised. */
+static bool dz_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    FEAccessor *mn = dz_acc(c, "accessormin"), *mx = dz_acc(c, "accessormax");
+    if (!mn || !mx) return true;
+    FEAccess_Count(mn);
+    FEAccess_Count(mx);
+    snapshot(s_now);
+    int axis = dz_axis(c);
+    if (!any_joy() || axis < 0 || 7 < axis) return true;
+    FEAccessor *pads = FEAccess_Find("Controller.AllPads");
+    int dev = joy_device(pads ? FEAccess_Pos(pads) : 0);
+    if (!(Controls_DeviceAxes(dev) & (1u << axis)) || dev >= NDEVS) return true;
+    int32_t v = rd32(s_now[dev], 4 + 4 * axis);
+    int32_t r[4], p[2] = {0, 0};
+    FertControl_rect(c, r);
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+    if (pa) FertAttr_point(pa, p);
+    int x = p[0] + ox, y = p[1] + oy, w = r[2] - r[0], h = r[3] - r[1], a = 0xff;
+    int half = w / 2, lo = FEAccess_Pos(mn) * half / 128, hi = FEAccess_Pos(mx) * half / 128;
+    int plo = lo * 100 / half, phi = hi * 100 / half;
+    FE2D_DepthStep();
+    FEStyle_Range(100 - phi, 100 - plo, x + 1, y, x + 1 + half, y + h, 0xfffdb306u, 0xffffd76cu, 0xffe60000u, a, true, true);
+    FEStyle_Range(plo, phi, x + half - 1, y, x + half - 1 + half, y + h, 0xffe60000u, 0xffffd76cu, 0xfffdb306u, a, true, false);
+    float m = (float)((w - 10) * v) / 65535.0f;
+    FE2D_DepthStep();
+    FE2D_Rect((float)x + m, (float)y, 10.0f, (float)h, 0xffffbb00u);   /* 0x4d8270 */
+    FEStyle_Shine((float)x + m, (float)y, 10.0f, (float)h, a);
+    const int at[4] = {half - lo, lo + half, half - hi, half + hi}, id[4] = {1, 3, 2, 4};
+    for (int i = 0; i < 4; i++) {
+        float hx = (float)(at[i] - 2 + x);
+        bool over = s_dz_hover_c == c && s_dz_hover == id[i];
+        FE2D_DepthStep();
+        FE2D_Rect(hx, (float)y, 5.0f, (float)h, over ? 0xffffbb00u : 0xffbc0000u);   /* 0x4d8270, 0x4d8260 */
+        if (s_dz_held == c && s_dz_drag == id[i]) FEStyle_Inset(hx, (float)y, 5.0f, (float)h, a, 3);   /* 0x5208d0 */
+        else FEStyle_Raised(hx, (float)y, 5.0f, (float)h, a, 3);   /* 0x520ad0 */
+    }
+    return true;
+}
+
+/* A press (_v5 0x51b3e0): on a handle, the focus and its drag at once. */
+bool FECtrl_DeadZonePress(FertControl *c, int mx)
+{
+    if (!is_dz(c)) return false;
+    s_dz_drag = dz_hit(c, mx);
+    s_dz_held = s_dz_drag ? c : NULL;
+    if (s_dz_drag) {
+        c->feflags |= 0x40;   /* 0x4c7940 */
+        dz_drag(c, mx);
+    }
+    return true;
+}
+
+/* The mouse's moves (_v8 0x51b550): the handle held dragged, else the one under the mouse kept; the
+   release (_v9 0x51b530) lets it go. */
+void FECtrl_DeadZoneMouse(FertControl *hover, int mx, bool up)
+{
+    if (s_dz_held) {
+        if (up) {
+            s_dz_held->feflags &= ~0x40u;   /* 0x4c7970 */
+            s_dz_held = NULL;
+            s_dz_drag = 0;
+        } else {
+            dz_drag(s_dz_held, mx);
+        }
+        return;
+    }
+    s_dz_hover_c = is_dz(hover) ? hover : NULL;
+    s_dz_hover = s_dz_hover_c ? dz_hit(hover, mx) : 0;
 }
