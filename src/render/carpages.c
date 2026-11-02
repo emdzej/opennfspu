@@ -12,6 +12,11 @@
 #include "render/rmaterial.h"
 #include "render/rtex.h"
 #include "support/ufile.h"
+#include "front/feaccess.h"
+#include "front/feapp.h"
+#include "front/fefactory.h"
+#include "game/car_drive.h"
+#include "game/track.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,10 +36,6 @@ static TextureStates common_states;
 const char *g_r3d_cardir = "GameData\\CarModel\\";
 /* The track's night flag (0x628a28, the track module's): 0 by day. */
 int16_t g_r3d_night;
-/* The front end's game type ("Game.GameType" of its data, 0x6573e8) and the name of the race's car
-   (0x657444): read through the front end's data areas (0x4b78a0), not ported. */
-static int g_gametype;
-static char g_carname[64];
 
 static uint32_t rd32le(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 static int16_t rd16s(const uint8_t *p) { return (int16_t)(p[0] | p[1] << 8); }
@@ -301,15 +302,24 @@ bool R3DCar_UseShape(R3DCar *car, int file, uint32_t code)
     } else if (g_r3d_frontend)
         gametype = true;
     if (gametype) {
-        /* The front end's game type (and in mode 9 the chosen car's name into 0x657444). */
-        PENDING_NOTE(0x4b78a0, "FE data Game.GameType");
-        g_carname[0] = 0;
+        /* In the front end: the track's name (0x657444) cleared, the race mode (0x6573e8) the data's
+           Game.GameType (0x4b78a0) and, for a Factory Driver mission (9), its track's name (the first
+           mission not done 0x51a700, +0x20, its nfs5.trk record 0x4fb4b0, +8; used as the format). */
+        g_track_name[0] = 0;
+        g_race_mode = FEApp_GameType();
+        if (g_race_mode == 9) {
+            const uint8_t *ms = FEFactory_Mission();
+            int16_t id = 0;
+            if (ms) memcpy(&id, ms + 0x20, 2);
+            const uint8_t *t = ms ? FEData_TrackById(id) : NULL;
+            if (t) snprintf(g_track_name, sizeof g_track_name, "%s", (const char *)t + 8);
+        }
     }
     /* "skidpad" (0x5cc54c): the test drive shapes follow the game type; elsewhere testdrive=1 hides. */
-    bool skidpad = strcasecmp(g_carname, exe_str(0x5cc54c)) == 0;
+    bool skidpad = strcasecmp(g_track_name, exe_str(0x5cc54c)) == 0;
     if (testdrive <= -1) return use;
     if (skidpad) {
-        if (testdrive != (g_gametype == 9)) use = false;
+        if (testdrive != (g_race_mode == 9)) use = false;
         return use;
     }
     if (testdrive == 1) use = false;
