@@ -122,7 +122,7 @@ static void set4(CarLight *l, int off, float a, float r, float g, float b)
 
 static float *at(CarLight *l, int off) { return &l->f[off / 4]; }
 
-void CarLight_Update(CarLight *l, Car *car)
+void CarLight_Update(CarLight *l, Car *car, int camtype)
 {
     const float *pos = CAR_F(car, 0x330);
     memcpy(at(l, 0xe8), pos, 12);
@@ -216,8 +216,7 @@ void CarLight_Update(CarLight *l, Car *car)
         dir[2] = 0;
         dir[3] = 0;
     }
-    PENDING_NOTE(0x43a490, "the cars' light in the mirror's view (+0x190: the drawing camera's +0x2c)");
-    b[0x190] = 0;
+    b[0x190] = camtype == 1;   /* (the drawing camera's update type, 0x628130 +0x10 +0x2c: the mirror's) */
 }
 
 static float f32(uint32_t va) { union { uint32_t u; float f; } c = {exe_u32(va)}; return c.f; }

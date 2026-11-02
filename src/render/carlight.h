@@ -52,8 +52,9 @@ typedef struct {
 
 /* The car's light now (R3DCar_v15 0x43a490): the light under it on the road (the polygon's colours), the
    map's colours for its exterior, interior and light decals, the sun's direction (straight down under a
-   roof), the slice's reflection textures, the road's axes for their projection. */
-void CarLight_Update(CarLight *l, Car *car);
+   roof), the slice's reflection textures, the road's axes for their projection; camtype the drawing
+   camera's update type (+0x2c: 1 in the mirror leaves the reflection textures out). */
+void CarLight_Update(CarLight *l, Car *car, int camtype);
 /* The car's lights on and their levels from the simulation's car (R3DCar_v6 0x439290; render/r3dcar.h's
    lighton, lightlevel). */
 void R3DCar_SetLights(struct R3DCar *r, Car *c);
