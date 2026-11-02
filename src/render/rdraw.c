@@ -432,6 +432,7 @@ RDrawBundle *RDrawAnimArticleBundle_ctor(RDrawBundle *d, W3DObjectBundle *b)   /
     return d;
 }
 
+/* 0x44fd70: after each view (the race's and the mirror's), every draw object's marks cleared. */
 void RDraw_ClearVisited(void)
 {
     for (RDrawBundle *d = g_rdraw_list; d; d = d->next) {

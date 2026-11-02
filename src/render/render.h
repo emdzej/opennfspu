@@ -206,7 +206,7 @@ void View_Begin(RenderSystem *r, RCamera *c);            /* 0x467170 */
 void View_End(RenderSystem *r);                          /* 0x4671e0 */
 
 /* One race frame (0x468900) for the race renderer: the views, the HUD, the flip. What isn't ported is a
-   pending note (src/render/pending.c; header render_pending.h). */
+   pending note (render_pending.h). */
 typedef struct {
     int32_t v00;
     RCamera *main;              /* +0x04 */

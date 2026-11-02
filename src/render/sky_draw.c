@@ -581,7 +581,7 @@ static void sky_draw(Sky *s)
     if (g_sun) Sun_Draw(g_sun);                              /* 0x460150 */
     for (int i = 0; i < s->nlayers; i++)
         if (s->layer[i] && !(s->layer[i]->flags & 0x400)) draw_layer(s, c, i, heading, fwd[1]);
-    PENDING_NOTE(0x516210, "0x516210 (twice) after the sky");
+    /* (0x516210 twice: an empty function) */
     rs->state39 = s39;
     EAGL_RSSet(0x39, (uint32_t)s39);
     rs->state28 = s28;

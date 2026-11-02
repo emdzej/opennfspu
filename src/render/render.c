@@ -1,6 +1,7 @@
 /* The render system (render.h): Render_Init and the render system object, the graphics device, the
    render-state object, display mode and quality, cameras and views, the race frame. */
 #include "render/render.h"
+#include "render/rdraw.h"
 #include "render/drive_selftest.h"
 #include "render/particles.h"
 #include "game/race.h"
@@ -528,7 +529,7 @@ void Render_MainViews(RaceViews *rv)
     View_Begin(g_render, c);
     Render_PendingWorld(c);                              /* 0x468a20 */
     View_End(g_render);
-    Render_PendingAfterViews();                          /* 0x44fd70 */
+    RDraw_ClearVisited();                                /* 0x44fd70 */
 }
 
 /* ---- the rear-view mirror (0x628144) ---- */
@@ -567,7 +568,7 @@ void Render_RearView(void)
     View_Begin(g_render, c);
     Render_PendingWorld(c);                              /* 0x468a20 */
     View_End(g_render);
-    Render_PendingAfterViews();                          /* 0x44fd70 */
+    RDraw_ClearVisited();                                /* 0x44fd70 */
     g_racecam[0].flags2 &= (uint8_t)~0x10;
 }
 

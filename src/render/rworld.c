@@ -9,6 +9,7 @@
 #include "game/world.h"
 #include "exe.h"
 #include "pending.h"
+#include "render/headlights.h"
 #include "render/rdraw.h"
 #include "render/render.h"
 #include "render/render_pending.h"
@@ -235,7 +236,6 @@ static void world_pass(RCamera *c)
             if (g_world->bundles[i]->b5) WGrid_FileBundle(g_world->f10, g_world->bundles[i]);
     WorldVis *v = &s_vis;
     vis_begin(v, c);
-    RDraw_ClearVisited();
     const WGrid *g = g_world->f10;
     if (!g || !g->root) return;
     v->nnodes = 0;
@@ -253,7 +253,7 @@ void (*g_render_cars)(RCamera *c);
 
 void Render_PendingWorld(RCamera *c)
 {
-    PENDING_NOTE(0x452590, "Render_World: 0x452590");
+    Headlights_Update();     /* 0x452590 (each view: the original's 0x468a20 starts with it) */
     Sprite_CameraGround();   /* 0x451f70 */
     if (c->v12c != 0) Sky_DrawBefore();   /* (and 0x657db4, 0x619799 clear: replay / front-end flags) */
     if (c->flags[2]) world_pass(c);                            /* +0x11a */
