@@ -764,9 +764,9 @@ static EaglLayer *exec_shadowmap(EaglLayer *l, EaglStream *s0, EaglStream *s1)
 
 /* 0x452fe0 (Headlights::LayerVertexLight and _Opaque): the vertices' colours (dependency 0) with the
    headlights' colour added by the light of their positions (dependency 2, through the index list of
-   dependency 1), each channel at most 255; without lights on the colours as they are. (The viewed car's
-   lights, its R3DObject's +0x2d4 bytes 0 and 1, are taken as on at night; the cop lights' pass 0x452920
-   is pending.) */
+   dependency 1), each channel at most 255; without lights on the colours as they are; then the police
+   roof light's (0x452920). (The viewed car's lights, its R3DObject's +0x2d4 bytes 0 and 1, are taken as
+   on at night.) */
 static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
 {
     (void)s0, (void)s1;
@@ -808,6 +808,26 @@ static EaglLayer *exec_vertexlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
         }
     } else if (col) {
         for (int k = 0; k < n; k++, o += stride) memcpy(o, &col[k], 4);
+    }
+    if (Headlights_CopOn() && pos) {
+        /* 0x452920: the police roof light added (by point, or by the index list) */
+        Headlights_CopLight((int)npos, pos);
+        uint8_t *v = c->verts + 0x10;
+        uint32_t (*pc)[2] = c->primcodes;
+        for (int k = 0; k < n;) {
+            if (!all && (*pc)[0] != 0) {
+                k += per;
+                v += per * stride;
+            } else {
+                for (int j = 0; j < per && k < n; j++, k++, v += stride) {
+                    uint32_t cv;
+                    memcpy(&cv, v, 4);
+                    cv = Headlights_CopAdd(idx ? idx[k] : k, cv, !all && !idx);
+                    memcpy(v, &cv, 4);
+                }
+            }
+            pc++;
+        }
     }
     c->flags |= EAGL_CF_DIFFUSE;
     return l->next;

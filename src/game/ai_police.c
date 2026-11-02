@@ -24,6 +24,7 @@
 #include "game/car_drive.h"
 #include "game/race_car.h"
 #include "game/race_progress.h"
+#include "game/race_car.h"
 #include "game/road.h"
 #include "game/sim_rand.h"
 #include "game/track.h"
@@ -742,6 +743,123 @@ static AiState chase_new(Car *c, Car *p, const float off[3], int32_t budget, flo
     return s;
 }
 
+/* A state's words from +8 (the base struct names +8 and +0xc for the idle state). */
+static AiWord *ow(AiState *s, int off)
+{
+    if (off == 8) return (AiWord *)(void *)&s->target;
+    if (off == 0xc) return (AiWord *)(void *)&s->hold;
+    return &SW(s, off);
+}
+
+/* ---- the roadblock (AIState_Offroad, vtable 0x5b26fc: 0x40dbc0) ----
+
+   Its words: +8 the node, +0xc its place, +0x18 its orientation (+0x3c its last row again), +0x48 the
+   node it drives for once a racer is near, +0x4c that node's point, +0x58 the gap to it, +0x5c set off,
+   +0x60 its speed, +0x64 the reaction's factor. Flag 0x800 on the car while it lasts. */
+static void block_tick(AiState *s)   /* 0x40dcd0 */
+{
+    Car *c = s->car;
+    if (ow(s, 0x5c)->i == 0) {
+        memset(c->b + 0x33c, 0, 12);
+        memset(c->b + 0x388, 0, 12);
+        *CAR_F(c, 0xeb8) = 0;
+        for (int k = 0; k < 3; k++) CAR_F(c, 0x330)[k] = ow(s, 0xc + 4 * k)->f;
+        for (int k = 0; k < 9; k++) CAR_F(c, 0x364)[k] = ow(s, 0x18 + 4 * k)->f;
+        memset(c->b + 0x1064, 0, 16);
+        return;
+    }
+    ow(s, 0x58)->f = node_gap(car_node(c), ow(s, 0x48)->i);
+    *CAR_F(c, 0xeb8) = ow(s, 0x60)->f;
+    if (ow(s, 0x58)->f <= K(0x5b23f8)) {
+        *CAR_I(c, 0xeac) = 1;
+    } else {
+        *CAR_I(c, 0xeac) = -1;
+        *CAR_F(c, 0xeb8) = -*CAR_F(c, 0xeb8);
+    }
+    AI_LaneReset(c);
+    AI_LaneScore(c);
+    AI_LaneChoose(c);
+    for (int k = 0; k < 3; k++) CAR_F(c, 0x1064)[k] = ow(s, 0x4c + 4 * k)->f;
+    *CAR_F(c, 0x1070) = 0;
+}
+static void block_done(AiState *s)   /* AIState_Offroad_v1 0x40db40 */
+{
+    memset(s->car->b + 0x1064, 0, 16);
+    *CAR_I(s->car, CAR_FLAGS) &= ~0x800;
+}
+static bool block_ready(AiState *s) { (void)s; return false; }
+static const AiStateVtbl block_vt = {block_tick, block_done, block_ready};
+
+static AiState block_new(Car *c, int node, const int32_t pos[3], const int32_t rot[9], int32_t speed, int32_t react, int32_t to)
+{
+    AiState s = {.vt = &block_vt, .car = c};
+    ow(&s, 8)->i = node;
+    ow(&s, 0x5c)->i = 0;
+    for (int k = 0; k < 3; k++) ow(&s, 0xc + 4 * k)->i = pos[k];
+    for (int k = 0; k < 9; k++) ow(&s, 0x18 + 4 * k)->i = rot[k];
+    ow(&s, 0x60)->f = (float)speed * K(0x5b2708);
+    for (int k = 0; k < 3; k++) ow(&s, 0x3c + 4 * k)->i = ow(&s, 0x30 + 4 * k)->i;
+    ow(&s, 0x64)->i = react;
+    ow(&s, 0x48)->i = to;
+    const float *np = Road_NodePos(g_road, to);
+    for (int k = 0; k < 3; k++) ow(&s, 0x4c + 4 * k)->f = np[k];
+    *CAR_I(c, CAR_FLAGS) |= 0x800;
+    return s;
+}
+
+/* A racer near enough to set it off (0x40dc70): within its speed times the factor (at least 0x5b2470). */
+static void block_check(AiState *s, Car *r)
+{
+    float a = absf(AI_Ahead(s->car, r)), lim = *CAR_F(r, 0x35c) * ow(s, 0x64)->f;
+    if (lim <= K(0x5b2470)) lim = K(0x5b2470);
+    if (a < lim) ow(s, 0x5c)->i = 1;
+}
+
+/* The block put at node n (0x407a20): stopped there in the direction, at its place and orientation. */
+static void place_block(Car *c, int n, int dir, const int32_t pos[3], const int32_t rot[9])
+{
+    memcpy(c->b + 8, &(int16_t){(int16_t)n}, 2);
+    if (node_i(1, 0x38) == 0) dir = dir_of_race();
+    *CAR_I(c, 0xeb0) = dir;
+    *CAR_I(c, 0xeac) = dir;
+    *CAR_F(c, 0xeb8) = 0;
+    *CAR_F(c, 0xec0) = 0;
+    *CAR_I(c, 0x544) = 0;   /* 0x40a9f0 */
+    *CAR_I(c, 0x540) = 0;
+    float zero[3] = {0, 0, 0};
+    CarSim_Place(c, n, zero, *CAR_I(c, 0xeb0));
+    memcpy(c->b + 0x330, pos, 12);
+    memcpy(c->b + 0x364, rot, 36);
+    memcpy(c->b + 0x490, rot, 36);
+    memset(c->b + 0x33c, 0, 12);
+    AIi_Settle(c, n);
+}
+
+/* ---- turning round (AIState_GotoSlice, vtable 0x5b2720: 0x40e1a0): toward node +8 ---- */
+static void goto_tick(AiState *s)   /* 0x40e230 (its +0xc speed caps: the police pass 0) */
+{
+    Car *c = s->car;
+    float g = -node_gap(car_node(c), ow(s, 8)->i);   /* 0x40e800 */
+    *CAR_I(c, 0xeac) = g < K(0x5b23f8) ? -1 : 1;
+    AIi_SpeedTarget(c);
+    AI_LaneReset(c);
+    AI_LaneScore(c);
+    AI_LaneChoose(c);
+    if (ow(s, 0xc)->i) PENDING_NOTE(0x40e230, "the turn's speed caps (+0xc)");
+}
+static void goto_done(AiState *s) { (void)s; }
+static bool goto_ready(AiState *s) { (void)s; return false; }
+static const AiStateVtbl goto_vt = {goto_tick, goto_done, goto_ready};
+static AiState goto_new(Car *c, int node, int caps)
+{
+    memset(c->b + 0x1064, 0, 16);
+    c->b[0x7f] = 1;
+    AiState s = {.vt = &goto_vt, .car = c};
+    ow(&s, 8)->i = node;
+    ow(&s, 0xc)->i = caps;
+    return s;
+}
+
 /* ---- the police ---- */
 
 /* Its pursuit dropped (the original's repeated steps): out of the formation, the chase's end kept only
@@ -949,12 +1067,19 @@ static void chasing(AiHigh *h)
         turn_back(c);
         drop(h);
         to_state(h, AIi_Normal(c), 2);
-        if (P(h, 0x54).i == 1) PENDING_NOTE(0x40f5a0, "the police car's respawn after a block");
         P(h, 0x54).i = 0;
         AIi_StateTick(&h->state);
         return;
     }
-    if (0xa0 < CW(s, 0x90).i) PENDING_NOTE(0x40e1a0, "the police's turn round when blocked (AIState_GotoSlice, state 9)");
+    AiState old;
+    if (0xa0 < CW(s, 0x90).i) {
+        /* Blocked a while: turning round toward the followed car's node (state 9). The original goes
+           on with the chase's words after freeing it; the port with a copy. */
+        old = *s;
+        Car *t = AIi_CarByIndex(*CAR_I(c, 0xed4) - 1);
+        to_state(h, goto_new(c, t ? car_node(t) : car_node(c), 0), 9);
+        s = &old;
+    }
     int t = P(h, 0x18).i & 1;
     if (rec_i(p, 4 * t) == 0 && rec_i(p, 0xc + 4 * t) == 0) CW(s, 0x7c).i = 0;
     P(h, 0x64).i = -1;
@@ -991,14 +1116,7 @@ static void chasing(AiHigh *h)
         to_state(h, AIi_Normal(c), 2);
     }
     if (P(h, 0x5c).i == 0 && !too_far(c)) {
-        if (P(h, 0x54).i != 0) {
-            turn_back(c);
-            drop(h);
-            to_state(h, AIi_Normal(c), 2);
-            if (P(h, 0x54).i == 1) PENDING_NOTE(0x40f5a0, "the police car's respawn after a block");
-            P(h, 0x54).i = 0;
-        }
-        AIi_StateTick(&h->state);
+        AIi_StateTick(&h->state);   /* (+0x54 is never set: its respawn is dead) */
         return;
     }
     P(h, 0x5c).i = 0;
@@ -1049,10 +1167,7 @@ void Police_Tick(AiHigh *h)
         P(h, 0x54).i = 0;
         P(h, 0x64).i = -1;
         if (P(h, 0x20).i == 4) P(h, 0x20).i = 0;
-        if (P(h, 0x20).i == 2) {
-            PENDING_NOTE(0x407b50, "the police's chase after a roadblock (0x407b50)");
-            break;
-        }
+        /* (+0x20 is never 2 in the original: its chase after a block, 0x407b50, is never reached) */
         if (!((*CAR_I(c, 0xecc) & 8) && P(h, 0x20).i != 1)) break;
         int32_t at = event(h);
         if (at < 0) break;
@@ -1071,7 +1186,11 @@ void Police_Tick(AiHigh *h)
             return;
         }
         if (r[0] == 3 && (r[2] == dir_of_race() || r[2] == 0)) {
-            PENDING_NOTE(0x40dbc0, "the police's roadblock (AIState_Offroad, 0x407a20)");
+            drop(h);
+            to_state(h, block_new(c, r[1], &r[3], &r[6], r[15], r[16], r[17]), 5);
+            place_block(c, r[1], 1, &r[3], &r[6]);
+            AIi_StateTick(&h->state);
+            return;
         }
         break;
     }
@@ -1092,19 +1211,8 @@ void Police_Tick(AiHigh *h)
             to_state(h, AIi_Normal(c), 2);
         }
         if (P(h, 0x5c).i == 0) {
-            if (P(h, 0x54).i != 0) {
-                turn_back(c);
-                drop(h);
-                to_state(h, AIi_Normal(c), 2);
-                if (P(h, 0x54).i == 1) PENDING_NOTE(0x40f5a0, "the police car's respawn after a block");
-                P(h, 0x54).i = 0;
-                AIi_StateTick(&h->state);
-                return;
-            }
-            if (P(h, 0x20).i == 2) {
-                PENDING_NOTE(0x40cb80, "the police's chase from a block");
-                break;
-            }
+            /* (+0x54 and +0x20 == 2 are never set in the original: their branches, a respawn 0x40f5a0
+               and a chase from a block, are dead) */
             *CAR_I(c, 0xecc) &= ~2;
             if (pick(h) && P(h, 0x20).i != 1 && P(h, 0x20).i != 4) {
                 start_chase(h);
@@ -1121,8 +1229,35 @@ void Police_Tick(AiHigh *h)
     case 4:
         chasing(h);
         return;
+    case 5: {
+        /* (+0x10e0 by +0x7e, which the original never sets: 0) */
+        *CAR_F(c, 0x10e0) = c->b[0x7e] ? 1.5f : 0.0f;
+        P(h, 0x64).i = -1;
+        for (int i = 0; i < g_racers.n; i++) {
+            AiHigh *r = ctl_of(g_racers.c[i]);
+            if (r && P(r, 0x78).i != 0 && h->state.vt == &block_vt) block_check(&h->state, g_racers.c[i]);
+        }
+        int n = car_node(c);
+        float x = *CAR_F(c, 0xed0);
+        if (-(node_f(n, 0x48) * (float)node_i(n, 0x38)) <= x && x <= node_f(n, 0x4c) * (float)node_i(n, 0x3c)) {
+            *CAR_F(c, 0x10e0) = 0;
+            drop(h);
+            to_state(h, AIi_Normal(c), 2);
+        }
+        if (P(h, 0x5c).i == 0 && !too_far(c)) break;
+        *CAR_F(c, 0x10e0) = 0;
+        P(h, 0x5c).i = 0;
+        drop(h);
+        to_state(h, AIi_Purgatory(c), 1);
+        AIi_StateTick(&h->state);
+        return;
+    }
+    case 9:
+        drop(h);
+        if (h->state.vt == &goto_vt && absf(node_gap(car_node(c), ow(&h->state, 8)->i)) < 10.0f)   /* 0x40e390 */
+            to_state(h, AIi_Normal(c), 2);
+        break;
     default:
-        PENDING_NOTE(0x403ed0, "the police's roadblock and turning states (5, 9)");
         break;
     }
     AIi_StateTick(&h->state);

@@ -8,10 +8,19 @@
 #include "vfs.h"
 #include "render/r3dcar.h"
 #include "render/render.h"
+#include "game/camera.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static float K(uint32_t va)
+{
+    uint32_t u = exe_u32(va);
+    float f;
+    memcpy(&f, &u, 4);
+    return f;
+}
 
 static uint8_t *s_psh;               /* 0x61c164 */
 static const uint8_t *s_beam;        /* 0x61e1cc: the table's bytes (the shape's +0x10) */
@@ -20,6 +29,11 @@ uint32_t g_headlight_colour;         /* 0x61bd4c */
 static float s_zoff, s_zscale = 1.28f, s_xscale = 3.62f;   /* 0x61bd50, 0x61bd54, 0x61bd58 (the 0x61e178,
                                                               0x61d170 copies taken once) */
 static EaglMatrix s_space, s_tilted; /* 0x61bccc, 0x61bd0c */
+static Car *s_cop;                   /* 0x61e180: the police car whose roof light shines */
+static EaglMatrix s_copspace;        /* 0x61e184 */
+static uint32_t s_cop_col[2];        /* 0x61e1c4 red, 0x61e1c8 blue */
+static float s_cop_light[256];       /* (0x61bd60 again in the original) */
+static bool s_cop_neg[256];          /* the points' side (0x61d178's z sign) */
 float g_headlight_light[256];        /* 0x61bd60 */
 
 void Headlights_Load(void)   /* 0x452460 */
@@ -46,7 +60,8 @@ void Headlights_Load(void)   /* 0x452460 */
         }
     }
     s_car = NULL;
-    PENDING_NOTE(0x44d1f0, "the headlights' 'HEAD' texture (0x61e1d4) and the cop lights' car (0x61e180)");
+    s_cop = NULL;
+    PENDING_NOTE(0x44d1f0, "the headlights' 'HEAD' texture (0x61e1d4)");
 }
 
 void Headlights_Free(void)   /* 0x452530 */
@@ -67,8 +82,8 @@ void Headlights_SetCar(Car *car)   /* 0x452550 */
 }
 
 /* Each frame (0x452590): the world into the car's frame (0x4660a0, 0x4660e0, 0x466140), its depth moved by
-   +0x61bd50; a copy raised by -4.8 (0x5cec54) and tilted by -17 degrees about x (0x5cec5c). (The nearest
-   cop car with its lights on, within 180, for the red and blue light: pending.) */
+   +0x61bd50; a copy raised by -4.8 (0x5cec54) and tilted by -17 degrees about x (0x5cec5c); then the
+   police car whose roof light shines. Only at night. */
 void Headlights_Update(void)
 {
     if (!g_r3d_night || !s_car) return;
@@ -91,7 +106,64 @@ void Headlights_Update(void)
     EaglMatrix x;
     EAGL_MatAxisAngle(&x, -17.0f, 1.0f, 0, 0);
     EAGL_MatPostMul(&s_tilted, &x);
-    PENDING_NOTE(0x452590, "the cop cars' lights in the headlights' pass (0x61e180)");
+    /* The police car with its siren on (+0xecc bit 1) nearest the camera within 180 (octagonally), its
+       light's frame turning with the clock (0.02 turns a tick about its up axis, 0x556200). */
+    if (g_chasers.n <= 0) return;
+    s_cop = NULL;
+    float best = 180.0f;
+    const float *eye = g_racecam[0].eye;
+    for (int i = 0; i < g_chasers.n; i++) {
+        Car *p = g_chasers.c[i];
+        if (!p->b[0x7f] || !(*CAR_I(p, 0xecc) & 2)) continue;
+        float dx = fabsf(CAR_F(p, 0x330)[0] - eye[0]), dz = fabsf(CAR_F(p, 0x330)[2] - eye[2]);
+        float d = dx <= dz ? dx * K(0x5b2468) + dz : dz * K(0x5b2468) + dx;
+        if (d < best) best = d, s_cop = p;
+    }
+    if (!s_cop) return;
+    s_cop_col[0] = 0xffff0000u;
+    s_cop_col[1] = 0xff0000ffu;
+    float t = (float)g_sim_tick * K(0x5b3714) * 6.2831855f;   /* (TIMER_ticks: the simulation's clock) */
+    float sn = sinf(t), cs = cosf(t);
+    const float *r = CAR_F(s_cop, 0x364);
+    float q[9] = {cs * r[0] - r[6] * sn, r[1] * cs - r[7] * sn, r[2] * cs - r[8] * sn, r[3], r[4], r[5],
+                  sn * r[0] + r[6] * cs, r[7] * cs + r[1] * sn, r[8] * cs + r[2] * sn};
+    float rot[9] = {q[0], q[3], q[6], q[1], q[4], q[7], q[2], q[5], q[8]}, tr[3];
+    const float *cp = CAR_F(s_cop, 0x330);
+    for (int j = 0; j < 3; j++) tr[j] = -cp[0] * rot[j] - cp[1] * rot[3 + j] - cp[2] * rot[6 + j];
+    EAGL_MatFromRotTrans(&s_copspace, rot, tr);
+}
+
+bool Headlights_CopOn(void) { return s_cop != NULL; }
+
+/* The roof light on n points (0x452920): through its frame alone (the model's matrix not applied: the
+   original's), the beam's table by depth either side (|z| x 3.5, side x 3.5) less 16 x height, / 128. */
+void Headlights_CopLight(int n, const float *pts)
+{
+    static float p[256][4];
+    if (n > 256) n = 256;
+    EAGL_MatTransform4(&s_copspace, n, pts, 0x10, p[0], 0x10);
+    for (int i = 0; i < n; i++) {
+        int v = 0;
+        int iz = (int)lrintf(p[i][2] * K(0x5cec6c));
+        if (s_beam && -0x7f < iz && iz < 0x7f) {
+            int ix = (int)lrintf(p[i][0] * K(0x5cec6c));
+            if (-0x3f < ix && ix < 0x3f) v = s_beam[(iz < 0 ? -iz : iz) * 0x80 + ix + 0x40] - (int)lrintf(p[i][1] * K(0x5cec70));
+        }
+        s_cop_light[i] = (float)v * K(0x5cec68);
+        s_cop_neg[i] = signbit(p[i][2]) != 0;
+    }
+}
+
+uint32_t Headlights_CopAdd(int i, uint32_t cv, bool flip)
+{
+    if (i < 0 || 255 < i) i = 255;
+    float li = s_cop_light[i];
+    if (!(K(0x5b23f8) < li)) return cv;
+    uint32_t c = s_cop_col[s_cop_neg[i] != flip ? 1 : 0];
+    int r = (int)lrintf((float)(c >> 16 & 0xff) * li) + (int)(cv >> 16 & 0xff);
+    int g = (int)lrintf((float)(c >> 8 & 0xff) * li) + (int)(cv >> 8 & 0xff);
+    int b = (int)lrintf(li * (float)(c & 0xff)) + (int)(cv & 0xff);
+    return (uint32_t)(r < 0xff ? r : 0xff) << 16 | (uint32_t)(g < 0xff ? g : 0xff) << 8 | (uint32_t)(b < 0xff ? b : 0xff) | 0xff000000u;
 }
 
 /* The light of n points (16 bytes each) through the model matrix (when it scales) and the headlight

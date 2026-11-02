@@ -47,3 +47,6 @@ AiState AIi_Purgatory(Car *c);    /* 0x40de30 */
 Car *AIi_CarByIndex(int i);
 void AIi_SpeedTarget(Car *c);    /* 0x40afd0 */
 void AIi_Place(Car *c);          /* 0x4076f0 (its second argument 0) */
+/* The end of a placement at node n: the drive's fields reset (0x406d30), its offset across the road
+   (0x4173e0), extent (0x4176a0) and lanes (0x40ec10). */
+void AIi_Settle(Car *c, int n);

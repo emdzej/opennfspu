@@ -793,6 +793,11 @@ void AIi_Place(Car *c)
     Mat3_Mul(CAR_F(c, 0x364), m, o);
     memcpy(CAR_F(c, 0x364), o, sizeof o);
     memcpy(CAR_F(c, 0x490), o, sizeof o);
+    AIi_Settle(c, n);
+}
+
+void AIi_Settle(Car *c, int n)
+{
     /* 0x406d30 */
     *CAR_I(c, 0x104c) = 1;
     memset(c->b + 0x388, 0, 12);
@@ -852,12 +857,28 @@ static bool too_far(Car *c)
 }
 
 /* The nearest police car not in the purgatory and its controller when close (0x405f30). */
+/* The police car near the traffic car (0x405f30): the nearest on the road; slow and within 0x5b257c
+   (close, unless it chases nobody: none), or moving and within it. */
 static AiHigh *police_near(AiHigh *h, int *close)
 {
     *close = 0;
     if (g_chasers.n == 0) return NULL;
-    PENDING_NOTE(0x405f30, "the traffic's reaction to the police");
-    (void)h;
+    Car *best = NULL;
+    float d = 20000.0f;
+    for (int i = 0; i < g_chasers.n; i++) {
+        Car *p = g_chasers.c[i];
+        if (*CAR_I(p, 0xecc) & 4) continue;
+        float g = absf(AI_Gap(h->car, p));
+        if (g < d) d = g, best = p;
+    }
+    if (!best) return NULL;
+    float v = absf(*CAR_F(best, 0xec0));
+    AiHigh *ph = ctl[*CAR_I(best, CAR_INDEX)];
+    if (!(K(0x5b2580) <= v || K(0x5b257c) <= d)) {
+        *close = 1;
+        return ph && HW(ph, 0x58).i ? ph : NULL;
+    }
+    if (K(0x5b2580) < v && d < K(0x5b257c)) return ph;
     return NULL;
 }
 
@@ -940,9 +961,7 @@ static void traffic_tick(AiHigh *h)
         AIi_SetState(h, s);
         h->phase = 2;
         break;
-    case 6:
-        PENDING_NOTE(0x406080, "the traffic's phase 6");
-        break;
+    /* (a phase 6, ready to drive on again, is never entered: nothing sets it) */
     }
     AIi_StateTick(&h->state);
 }
