@@ -385,7 +385,8 @@ bool FESave_LoadStem(const char *stem, bool write_first)
     snprintf(s_save.player, sizeof s_save.player, "%s", strcmp(stem, template_stem()) ? stem + 1 : stem);
     write_list_file(stem);
     FESave_ListPlayers();
-    PENDING_NOTE(0x501020, "the owned cars' refresh after a load (0x4f8760 of those with +0x691)");
+    /* (0x501020's re-listing of the owned cars up for sale: the market's, front/femarket.c, at its list's
+       rebuild for the new serial) */
     return true;
 }
 

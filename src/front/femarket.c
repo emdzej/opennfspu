@@ -21,6 +21,8 @@ static MarketEnt s_ent[256];
 static int s_n;
 static unsigned s_serial;
 
+static int32_t get32(const uint8_t *r, int off);
+
 static Save *market(void)
 {
     Save *sv = FESave_Current();
@@ -28,6 +30,11 @@ static Save *market(void)
         s_serial = FESave_Serial();
         s_n = 0;
         for (int i = 0; sv && i < sv->nused && s_n < 256; i++) s_ent[s_n++] = (MarketEnt){false, i};
+        /* 0x501020 after the load: the owned cars up for sale (+0x691) listed again at their price
+           (+0x68c), their offers cleared (0x4f8760). (Its 0x501080 sorts the owned cars, which a save
+           keeps in that order.) */
+        for (int i = 0; sv && i < sv->ncars; i++)
+            if (sv->cars[i].rec[0x691]) Market_List(i, get32(sv->cars[i].rec, 0x68c));
     }
     return sv;
 }
