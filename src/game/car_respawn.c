@@ -9,6 +9,7 @@
 #include "exe.h"
 #include "game/ai.h"
 #include "game/car_drive.h"
+#include <math.h>
 #include "game/race_car.h"
 #include "game/race_progress.h"
 #include "game/road.h"
@@ -242,6 +243,29 @@ static void ground_sounds(Car *c)
     *bits -= 4;
 }
 
+/* The AI's notice of a hit on a car (0x40a790): above 0.85 against a car and nearly stopped (|+0xec0|
+   under 10), once half its time (+0x1048) has passed it turns its direction (+0x104c, ai_drive.c's
+   0x408e90): reversing (-1) to forwards, forwards (below 20, always so here) to reversing; the time
+   then 0x60 ticks (0xa0 for the flag 0x10). */
+static void ai_hit(Car *c)
+{
+    if (!(K(0x5b25e0) < *CAR_F(c, 0x430)) || *CAR_I(c, 0x434) == 0) return;
+    if (!(fabsf(*CAR_F(c, 0xec0)) < K(0x5b241c))) return;
+    int len = (*CAR_I(c, CAR_FLAGS) & 0x10) ? 0xa0 : 0x60;
+    int32_t *dir = CAR_I(c, 0x104c), *time = CAR_I(c, 0x1048), *since = CAR_I(c, 0x1050);
+    if (*dir == -1 && *time / 2 < g_sim_tick - *since) {
+        *dir = 1;
+        *time = len;
+        *since = g_sim_tick;
+        return;
+    }
+    if (*dir == 1 && *time / 2 < g_sim_tick - *since && fabsf(*CAR_F(c, 0xec0)) < K(0x5b2470)) {
+        *dir = -1;
+        *since = g_sim_tick;
+        *time = len;
+    }
+}
+
 void CarSim_HitTask(void *car)
 {
     Car *c = car;
@@ -252,12 +276,27 @@ void CarSim_HitTask(void *car)
         *CAR_I(c, 0x454) = *CAR_I(c, 0x434);
     }
     if (!(*CAR_I(c, CAR_FLAGS) & 0x80)) {
-        PENDING_NOTE(0x40a790, "the AI's notice of a hit");
+        ai_hit(c);      /* 0x40a790 */
         race_part(c);   /* 0x40f7a0 */
         ground_sounds(c);   /* 0x410050 */
         return;
     }
-    PENDING_NOTE(0x4102e0, "the traffic's hit sounds");
+    /* The traffic's (0x4102e0): a hit above 0.15 its sound event, the kind and surface as the racers'
+       (none of the kind for the type 0x10 cars, +0x44c, but against a car's or the other types), the
+       strength at most 50, unscaled. */
+    if (K(0x5b2638) < *CAR_F(c, 0x430)) {
+        uint32_t w = (uint32_t)*CAR_I(c, 0x438), t = w & 0xefff0000u;
+        int kind = (int32_t)exe_u32(0x5cc518 + 4u * (uint32_t)((int32_t)t >> 16));
+        int surf = (int)(w & 0xff);
+        if (t != 0x40000 && ((int32_t)t < 0x30001 || t == 0x50000)) {
+            if ((int32_t)t < 0x30001) surf = (int32_t)exe_u32(0x5cc4d8 + 4u * (w & 0xff));
+            else if (*CAR_I(c, 0x434) == 0) surf = (int32_t)exe_u32(0x5cc534 + 4u * (w & 0xff));
+            if (*CAR_I(c, 0x44c) == 0x10) kind = 0;
+        }
+        float f = *CAR_F(c, 0x430);
+        if (K(0x5b251c) < f) f = K(0x5b251c);
+        Car_AddEvent(c, 1, -1, kind, surf, f, 0);
+    }
     *CAR_F(c, 0x430) = 0;
     *CAR_I(c, 0x434) = 0;
     *CAR_I(c, 0x438) = 0;
