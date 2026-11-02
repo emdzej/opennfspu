@@ -1017,8 +1017,8 @@ static void callback(const char *cb)
         int m = FEData_QuickFix();   /* FEQuickFixCallBackList 0x50e9f0 */
         if (m > 0) FEApp_Message(m);
     } else if (!strcmp(cb, "SELLCAR")) {
-        /* FEGarageCallBackList_v57 0x50f590: not the only car (the message 0x3c); else its confirmation
-           panel (+0x2d8 slot 0x50) and the sale at the car's value: pending (0x4f83f0) */
+        /* FEGarageCallBackList_v57 0x50f590: not the only car (the message 0x3c); else the asking price's
+           panel (+0x2d8 slot 0x50), the car listed at it (garage_update) */
         Save *sv = FESave_Current();
         if (sv && 1 < sv->ncars - Market_Listed()) {
             /* (+0x2d8: FEDialogInputCancel 0x513980(800, digits, 8): the asking price) */
@@ -3366,7 +3366,9 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
     else if (!strcmp(cbl, "ID_CARSETUP")) {
         /* FECarSetupCallbackList_v1 0x4f1130: install for a part in stock, uninstall for a fitted one,
-           uninstall shown off with none. (The gear ratio panel for +0x1ac 0x1f8 pends.) */
+           uninstall shown off with none; the test drive's button in the career only. A race class car
+           (the owned car's +0x1ac 0x1f8) gets the gear ratios: the screen's first ID_GEARRATIOPANEL
+           (0x5287b0) opened once (+0x294, FEPanel slot 27 0x4ce4d0; its screen's refresh 0x4ce6a0). */
         bool fitted = false, any = FEData_InstallState(&fitted);
         enable(w, "ID_PARTSDESC", any);
         if (!any) {
@@ -3378,6 +3380,21 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
             hide(w, "ID_INSTALLBUTTON", fitted);
             hide(w, "ID_UNINSTALLBUTTON", !fitted);
         }
+        const uint8_t *oc = FEAccess_CarRecord(FEAccess_Find("OwnedCars.Car"));
+        int32_t cls = 0;
+        if (oc) memcpy(&cls, oc + 0x1ac, 4);
+        for (int i = 0; cls == 0x1f8 && i < w->nchildren; i++) {
+            FertControl *c = w->children[i];
+            if (strcmp(c->id, "NFS5.PANEL") || strcmp(c->name, "ID_GEARRATIOPANEL")) continue;
+            if (!c->sub) {
+                FertAttr *a = NULL;
+                for (int k = 0; k < c->nparts && !a; k++) a = FertAttrList_find(&c->parts[k]->attrs, "filename");
+                if (a && *FertAttr_str(a)) c->sub = load_panel(c, FertAttr_str(a));
+                if (c->sub) c->feflags &= ~0x20u;
+            }
+            break;
+        }
+        enable(w, "ID_TESTDRIVECARSETUP", s_gametype == 4);
     }
     else if (!strcmp(cbl, "ID_BUYPARTSCBL")) {
         bool buy, sell, basket, sel;   /* FEPurchasePartsCBL_v1 0x518cf0 */

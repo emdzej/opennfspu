@@ -3134,8 +3134,8 @@ int FEData_UsedPool(const uint8_t **out, int cap)   /* the records 0x4f7660 offe
 
 /* Buying a used car (FEUsedCarCallbackList_v55 0x4f68f0 -> 0x501490): not with too little money (the
    message 0x322) or 80 cars (0x3d); else its asking price paid (+0x6a4 the price it cost, the money less
-   it clamped), the car out of the market (0x4f88e0) into the garage, the garage in order (0x4f0550).
-   (The purchase sound 0xb pends.) */
+   it clamped), the car out of the market (0x4f88e0) into the garage, the garage in order (0x4f0550),
+   the purchase sound 0xb. */
 int FEData_BuyUsed(void)
 {
     FEAccessor *u = FEAccess_Find("UsedCar.Car");
