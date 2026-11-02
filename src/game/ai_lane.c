@@ -403,16 +403,31 @@ static Car *human_near(Car *c)
 
 /* The lane chosen (0x4012b0): the best score of the three (the own lane on ties, then the left), its
    lane clamped to 0 .. 13; the lateral target and the speed cap. */
-static void choose(Car *c);
 
-void AI_LaneDrive(Car *c)
+void AI_LaneReset(Car *c)   /* 0x401000 */
 {
-    /* 0x401000 */
+    (void)c;
     memset(s_ahead, 0, sizeof s_ahead);
     memset(s_gap, 0, sizeof s_gap);
     s_lane = 0;
     memset(s_score, 0, sizeof s_score);
-    /* 0x401060 */
+}
+
+void AI_LaneBump(Car *c, int lane)   /* 0x401380 */
+{
+    if (I(0x1020) < lane) s_score[2] = addk(s_score[2], 0x5b2400);
+    else if (lane < I(0x1020)) s_score[0] = addk(s_score[0], 0x5b2400);
+}
+
+void AI_LaneDrive(Car *c)
+{
+    AI_LaneReset(c);
+    AI_LaneScore(c);
+    AI_LaneChoose(c);
+}
+
+void AI_LaneScore(Car *c)   /* 0x401060 */
+{
     uint32_t at = (uint32_t)step(car_node(c), I(0x520) << 1);
     uint32_t f = (uint32_t)I(CAR_FLAGS);
     if (!(f & 4) && (!(f & 8) || (at & ~0xfu) == at) && (!(f & 0x10) || (at & ~1u) == at)) {
@@ -443,7 +458,6 @@ void AI_LaneDrive(Car *c)
         I(0x107c) = 0x40a00000;   /* 5 */
         F(0x1078) = K(0x5b23f0) - (float)I(0xeb0) * F(0xec8);
     }
-    choose(c);
 }
 
 /* Dodging the car ahead in the chosen lane (0x402920): heading for the side of it with more room. */
@@ -557,7 +571,7 @@ static void speed_cap(Car *c)
     }
 }
 
-static void choose(Car *c)
+void AI_LaneChoose(Car *c)
 {
     for (int k = 0; k < 3; k++) s_scoref[k] = (float)s_score[k];
     s_lane = I(0x1020);

@@ -20,6 +20,7 @@
 #include "game/ai_police.h"
 #include "game/ai.h"
 #include "game/ai_internal.h"
+#include "game/ai_lane.h"
 #include "game/car_drive.h"
 #include "game/race_car.h"
 #include "game/race_progress.h"
@@ -391,6 +392,356 @@ static void form_take(AiHigh *p, int num, int car, int type)
     form_bubble(p, num, car);
 }
 
+/* ---- the chase (AIState_Chase, vtable 0x5b26c8: 0x40cb80) ----
+
+   Its words: +8 the blend (the state's target field), from +0x10 the follow base's (0x403680): +0x10
+   the car followed (its index + 1), +0x14 the gap to it, +0x18 its node ahead by that, +0x1c its offset
+   and +0x28 its place smoothed, +0x34 / +0x38 its lateral offset, +0x3c its lane, +0x40 its speed;
+   then +0x44 the tick it may turn, +0x48 the pursued, +0x4c its place in the formation (x, y, z) and
+   +0x58 / +0x5c that place's side (z, x), +0x60 / +0x64 the pursued's and its own direction, +0x68 how
+   far ahead the pursued is, +0x6c the lateral gap, +0x70 / +0x74 an event and its end, +0x78 the ticks
+   held in place, +0x7c the ram budget, +0x80 / +0x84 the window no human may be in, +0x88 the
+   formation, +0x8c the ram's start, +0x90 the ticks blocked. */
+
+#define CW(s, off) (SW(s, off))
+static Car *cw_car(AiState *s, int off) { return AIi_CarByIndex(CW(s, off).i - 1); }
+static void vsub(const float *a, const float *b, float *o) { o[0] = a[0] - b[0], o[1] = a[1] - b[1], o[2] = a[2] - b[2]; }   /* 0x5320a0 */
+
+/* The followed car taken (0x4036b0). */
+static void follow_init(AiState *s, Car *t)
+{
+    Car *c = s->car;
+    CW(s, 0x10).i = idx_of(t) + 1;
+    CW(s, 0x14).f = AI_Gap(c, t);
+    CW(s, 0x18).i = car_node(t);
+    float v[3];
+    vsub(CAR_F(c, 0x330), CAR_F(t, 0x330), v);
+    for (int k = 0; k < 3; k++) CW(s, 0x1c + 4 * k).f = v[k], CW(s, 0x28 + 4 * k).f = CAR_F(t, 0x330)[k];
+    CW(s, 0x34).f = *CAR_F(c, 0xed0) - *CAR_F(t, 0xed0);
+    CW(s, 0x38).f = *CAR_F(t, 0xed0);
+    CW(s, 0x3c).i = *CAR_I(t, 0x1020);
+    CW(s, 0x40).f = *CAR_F(t, 0xec0);
+}
+
+/* Each tick the followed car's gap, offset, lateral offset and speed eased toward it by the blend, its
+   node and lane from them (0x403750; the gap's and the offset's first values have the other sign: the
+   original's). */
+static void follow_update(AiState *s)
+{
+    Car *c = s->car, *t = cw_car(s, 0x10);
+    if (!t) return;
+    float b = s->target;
+    float g = (AI_Gap(t, c) - CW(s, 0x14).f) * b + CW(s, 0x14).f;
+    CW(s, 0x14).f = g;
+    CW(s, 0x18).i = Road_Step(g_road, car_node(c), (int)lrintf(g * K(0x5b2420)), -1);
+    float v[3], d[3];
+    vsub(CAR_F(t, 0x330), CAR_F(c, 0x330), v);
+    for (int k = 0; k < 3; k++) d[k] = v[k] - CW(s, 0x1c + 4 * k).f;
+    for (int k = 0; k < 3; k++) {
+        CW(s, 0x1c + 4 * k).f = d[k] * b + CW(s, 0x1c + 4 * k).f;
+        CW(s, 0x28 + 4 * k).f = CAR_F(c, 0x330)[k] + CW(s, 0x1c + 4 * k).f;   /* 0x532070 */
+    }
+    float l = ((*CAR_F(t, 0xed0) - *CAR_F(c, 0xed0)) - CW(s, 0x34).f) * b + CW(s, 0x34).f;
+    CW(s, 0x34).f = l;
+    CW(s, 0x38).f = l + *CAR_F(c, 0xed0);
+    CW(s, 0x3c).i = Race_LaneAt(CW(s, 0x18).i, CW(s, 0x38).f);
+    CW(s, 0x40).f = (*CAR_F(t, 0xec0) - CW(s, 0x40).f) * b + CW(s, 0x40).f;
+}
+
+/* How far ahead of the car a place on the road at node n is (0x40e980): by nodes, near by the ground
+   along the car's forward. */
+static float ahead_of(Car *c, int n, const float *at)
+{
+    float g = node_gap(car_node(c), n);
+    if (g <= K(0x5b240c) && K(0x5b24c8) <= g) {
+        float v[3];
+        vsub(CAR_F(c, 0x330), at, v);
+        g = *CAR_F(c, 0x3d8) * v[2] + *CAR_F(c, 0x3d0) * v[0];
+    }
+    return g;
+}
+
+static void chase_look(AiState *s)   /* 0x40cd90 */
+{
+    Car *c = s->car;
+    follow_update(s);
+    CW(s, 0x64).i = *CAR_F(c, 0xec0) < K(0x5b23f8) ? -1 : 1;
+    CW(s, 0x60).i = CW(s, 0x40).f < K(0x5b23f8) ? -1 : 1;
+    CW(s, 0x6c).f = *CAR_F(c, 0xed0) - CW(s, 0x38).f;
+    float at[3] = {CW(s, 0x28).f, CW(s, 0x2c).f, CW(s, 0x30).f};
+    CW(s, 0x68).f = ahead_of(c, CW(s, 0x18).i, at);
+    memset(c->b + 0x1064, 0, 16);
+    if (CW(s, 0x70).i && CW(s, 0x74).i <= g_sim_tick) CW(s, 0x70).i = CW(s, 0x74).i = 0;
+    if (*CAR_I(c, 0x1098) != 0x3f800000) CW(s, 0x7c).i -= g_ai_ticks;
+    *CAR_F(c, 0x1098) = *CAR_F(c, 0x109c) = *CAR_F(c, 0x1078) = *CAR_F(c, 0x107c) = 1.0f;
+}
+
+/* The pursued and the police car's place by it (0x40ccc0): the side of the pursued that place is on. */
+static void chase_aim(AiState *s, Car *p, const float off[3])
+{
+    if (CW(s, 0x48).i != idx_of(p) + 1) follow_init(s, p);
+    CW(s, 0x48).i = idx_of(p) + 1;
+    for (int k = 0; k < 3; k++) CW(s, 0x4c + 4 * k).f = off[k];
+    CW(s, 0x58).i = CW(s, 0x5c).i = 0;
+    if (off[0] < -*CAR_F(p, 0x3a8)) CW(s, 0x5c).i = -1;
+    else if (*CAR_F(p, 0x3a8) < off[0]) CW(s, 0x5c).i = 1;
+    if (off[2] < -*CAR_F(p, 0x3b0)) CW(s, 0x58).i = -1;
+    else if (*CAR_F(p, 0x3b0) < off[2]) CW(s, 0x58).i = 1;
+    CW(s, 0x70).i = CW(s, 0x74).i = CW(s, 0x78).i = 0;
+    chase_look(s);
+}
+
+static void chase_event(AiState *s, int ev, int dt)   /* 0x40cd70 */
+{
+    if (CW(s, 0x70).i == 0) {
+        CW(s, 0x70).i = ev;
+        CW(s, 0x74).i = g_sim_tick + dt;
+    }
+}
+
+/* The ram (0x40cea0): with budget left and its time come, the engine and speed raised (3, 2.5); back to 1
+   with a human just ahead within the window or just behind. */
+static void ram(AiState *s, bool check)
+{
+    Car *c = s->car;
+    if (!(0 < CW(s, 0x7c).i && CW(s, 0x8c).i <= g_sim_tick)) return;
+    *CAR_F(c, 0x1098) = 3.0f;
+    *CAR_F(c, 0x109c) = 2.5f;
+    if (!check) return;
+    for (int i = 0; i < g_humans.n; i++) {
+        float g = AI_Gap(c, g_humans.c[i]) * (float)*CAR_I(c, 0xeb0);
+        if (K(0x5b23f8) < g && g < CW(s, 0x80).f) *CAR_F(c, 0x1098) = *CAR_F(c, 0x109c) = 1.0f;
+        if (!(K(0x5b23f8) <= g || g <= -CW(s, 0x84).f)) *CAR_F(c, 0x1098) = *CAR_F(c, 0x109c) = 1.0f;
+    }
+}
+
+/* The lanes between two lanes open at a node (0x40eb10: the node's closed-lane bits +0x34). */
+static uint32_t open_between(int n, int a, int b)
+{
+    uint32_t m = (uint32_t)node_i(n, 0x34);
+    int lo = 0x16 - a, hi = 0x16 - b;
+    if (hi < lo) return ~(~0u << ((lo - hi + 1) & 31)) & (uint32_t)((int32_t)~m >> (hi & 31));
+    return ~(~0u << ((hi - lo + 1) & 31)) & (uint32_t)((int32_t)~m >> (lo & 31));
+}
+
+/* Blocked from the pursued's lane (0x40da20): near it, the road open between the lanes at its node but
+   not at the police car's, the pursued's lane favoured three times; else the ticks blocked counted. */
+static void lanes_block(AiState *s)
+{
+    Car *c = s->car, *p = cw_car(s, 0x48);
+    if (!p || !(absf(CW(s, 0x68).f) <= K(0x5b24e0))) return;
+    int n = car_node(c), l = *CAR_I(c, 0x1020), pn = car_node(p), pl = *CAR_I(p, 0x1020);
+    if (!(6 - node_i(n, 0x38) <= l && l <= node_i(n, 0x3c) + 7 && 6 - node_i(pn, 0x38) <= pl && pl <= node_i(pn, 0x3c) + 7)) return;
+    uint32_t a = open_between(pn, pl, l), b = open_between(n, pl, l);
+    if (a) {
+        if (!b) {
+            CW(s, 0x90).i = 0;
+            for (int k = 0; k < 3; k++) AI_LaneBump(c, pl);
+            return;
+        }
+        CW(s, 0x90).i += g_ai_ticks;
+        return;
+    }
+    CW(s, 0x90).i = 0;
+}
+
+static void lane_steps(AiState *s)
+{
+    AI_LaneReset(s->car);
+    lanes_block(s);
+    AI_LaneScore(s->car);
+    AI_LaneChoose(s->car);
+}
+static void turn_to(AiState *s)
+{
+    if (CW(s, 0x44).i < g_sim_tick) *CAR_I(s->car, 0xeac) = CW(s, 0x68).f <= K(0x5b23f8) ? 1 : -1;
+}
+
+/* Alongside or past it the same way (0x40d170): toward its place in the formation (the side it is on,
+   or a car's width past it), the speed by how far it is from that place, held there a while. */
+static void chase_pass(AiState *s)
+{
+    Car *c = s->car, *p = cw_car(s, 0x48);
+    float sx = 0, sz = 0, dir = (float)*CAR_I(c, 0xeb0);
+    ram(s, true);
+    float wx, wz;
+    if (CW(s, 0x70).i == 0) {
+        wx = (float)CW(s, 0x5c).i;
+        wz = (float)CW(s, 0x58).i;
+    } else {
+        wx = wz = 0;
+        ram(s, false);
+    }
+    float lx = dir * CW(s, 0x6c).f, lz = dir * CW(s, 0x68).f;
+    if (lx < -*CAR_F(p, 0x3a8)) sx = -1;
+    else if (*CAR_F(p, 0x3a8) < lx) sx = 1;
+    float f4 = K(0x5b2624);
+    if (-(*CAR_F(p, 0x3b0) - K(0x5b2580)) <= lz) f4 = lz <= *CAR_F(p, 0x3b0) + K(0x5b2580) ? 0.0f : K(0x5b24a8);
+    float e = *CAR_F(p, 0x3b0) + K(0x5b2580);
+    if (lz < -e) sz = -1;
+    else if (e < lz) sz = 1;
+    if (sx == wx && f4 == wz) CW(s, 0x78).i += g_ai_ticks;
+    else CW(s, 0x78).i = 0;
+    int mode = 0, side = 0;
+    bool steer = true;
+    if (wz * sz == K(0x5b2624)) {
+        side = (int)wx;
+        if (side == 0) side = -1;
+    } else if (wx * sx == K(0x5b2624) && sz == K(0x5b23f8)) {
+        mode = -1;
+        steer = false;
+    } else if (wx == 0 && sz == K(0x5b23f8) && CW(s, 0x70).i == 0) {
+        steer = false;
+    } else if (wz == 1 && sz == K(0x5b24a8) && sx == K(0x5b23f8) && CW(s, 0x68).f < K(0x5b2470)) {
+        mode = -2;
+    }
+    float v = absf(CW(s, 0x40).f), a = CW(s, 0x68).f;
+    if (f4 < wz || mode == 1) {
+        v *= K(0x5b26e0);
+    } else if (wz < f4 || mode == -1 || (K(0x5b2470) < a && (K(0x5b241c) <= a || sx != K(0x5b23f8) || wx == 0))) {
+        float d = absf(a), k;
+        if (d < K(0x5b2408)) k = K(0x5b2610);
+        else if (d < K(0x5b242c)) k = K(0x5b24e8);
+        else if (d < K(0x5b248c)) k = K(0x5b260c);
+        else k = d < K(0x5b2484) ? K(0x5b2618) : K(0x5b2678);
+        v *= k;
+    } else if (mode == -2) {
+        int f = CW(s, 0x88).i;
+        v *= f == 0 ? K(0x5b26ec) : f == 1 ? K(0x5b26e8) : K(0x5b26e4);
+    }
+    AIi_SpeedTarget(c);
+    *CAR_F(c, 0xeb8) = absf(*CAR_F(c, 0xeb8));
+    if (*CAR_F(c, 0xeb8) <= v) v = *CAR_F(c, 0xeb8);
+    if (v < K(0x5b2400)) v = K(0x5b2400);
+    *CAR_F(c, 0xeb8) = dir * v;
+    AI_LaneReset(c);
+    if (steer) {
+        float x, k = 15.0f;
+        if (CW(s, 0x70).i == 0) {
+            float o = side == 0 ? CW(s, 0x4c).f : *CAR_F(p, 0x3a8) + K(0x5b2460);
+            x = o * dir + CW(s, 0x38).f;
+            int n = car_node(c);
+            float lo = -(node_f(n, 0x48) * (float)node_i(n, 0x38)), hi = node_f(n, 0x4c) * (float)node_i(n, 0x3c);
+            if (x <= lo) x = lo;
+            if (hi <= x) x = hi;
+        } else {
+            x = CW(s, 0x38).f;
+            k = 30.0f;
+        }
+        *CAR_F(c, 0x1078) = x;
+        *CAR_F(c, 0x107c) = k;
+    }
+    lanes_block(s);
+    AI_LaneScore(c);
+    AI_LaneChoose(c);
+}
+
+/* Closing in from behind or the other way (0x40d6a0): the speed capped by the octagonal distance by the
+   formation (its six bands), the pursued's place the target when near. */
+static void chase_close(AiState *s, bool near)
+{
+    Car *c = s->car, *p = cw_car(s, 0x48);
+    float x = absf(*CAR_F(c, 0x330) - *CAR_F(p, 0x330)), z = absf(*CAR_F(c, 0x338) - *CAR_F(p, 0x338));
+    float d = x <= z ? x * K(0x5b2468) + z : z * K(0x5b2468) + x;
+    CW(s, 0x78).i = 0;
+    turn_to(s);
+    AIi_SpeedTarget(c);
+    int f = CW(s, 0x88).i;
+    float cap;
+    if (f == 0 || f == 1 || f == 2) {
+        float b[6];   /* the caps beyond 0x5b248c, 0x5b242c, 0x5b251c, 0x5b24dc, 0x5b241c, 0x5b2460 */
+        if (f == 2) {
+            const uint32_t v[6] = {0x5b26d4, 0x5b26f4, 0x5b251c, 0x5b2410, 0x5b2450, 0x5b2460};
+            for (int k = 0; k < 6; k++) b[k] = K(v[k]);
+        } else {
+            const uint32_t v[6] = {0x5b26f0, 0x5b251c, 0x5b2410, 0x5b25f8, 0x5b2470, 0x5b2600};
+            for (int k = 0; k < 6; k++) b[k] = K(v[k]);
+            if (f == 1) b[4] = K(0x5b241c);
+        }
+        const uint32_t lim[6] = {0x5b248c, 0x5b242c, 0x5b251c, 0x5b24dc, 0x5b241c, 0x5b2460};
+        cap = K(0x5b23f8);
+        for (int k = 0; k < 6; k++)
+            if (K(lim[k]) < d) {
+                cap = b[k];
+                break;
+            }
+    } else {
+        cap = K(0x5b24dc);
+    }
+    if (*CAR_I(c, 0xeb0) == 1) {
+        if (!(cap <= *CAR_F(c, 0xeb8))) cap = *CAR_F(c, 0xeb8);
+    } else {
+        cap = -cap;
+        if (!(*CAR_F(c, 0xeb8) <= cap)) cap = *CAR_F(c, 0xeb8);
+    }
+    *CAR_F(c, 0xeb8) = cap;
+    lane_steps(s);
+    if (near) {
+        memcpy(c->b + 0x1064, CAR_F(p, 0x330), 12);
+        *CAR_F(c, 0x1070) = *CAR_F(p, 0xed0);
+        *CAR_F(c, 0x1078) = *CAR_F(p, 0xed0);
+        *CAR_F(c, 0x107c) = 15.0f;
+    }
+}
+
+static void chase_tick(AiState *s)   /* 0x40cf90 */
+{
+    Car *c = s->car, *p = cw_car(s, 0x48);
+    if (!p) return;
+    chase_look(s);
+    float a = absf(CW(s, 0x68).f * K(0x5b26dc)), dv = absf(*CAR_F(c, 0xec0) - *CAR_F(p, 0xec0));
+    bool far = dv < a && K(0x5b26d8) < absf(CW(s, 0x68).f);
+    float ps = absf(*CAR_F(p, 0xec0));
+    bool follow = far;
+    if (!far) {
+        if (CW(s, 0x60).i * CW(s, 0x64).i == 1 && K(0x5b2478) <= ps) {
+            chase_pass(s);
+        } else if (K(0x5b23f8) <= (float)CW(s, 0x64).i * CW(s, 0x68).f && K(0x5b2478) <= ps) {
+            follow = true;
+        } else {
+            chase_close(s, !(K(0x5b2650) < dv) && !(K(0x5b26d4) < absf(CW(s, 0x68).f)));
+        }
+    }
+    if (follow) {
+        CW(s, 0x78).i = 0;
+        turn_to(s);
+        ram(s, true);
+        AIi_SpeedTarget(c);
+        lane_steps(s);
+    }
+    if (g_sim_tick < CW(s, 0x8c).i) {
+        *CAR_F(c, 0x1098) = 0.5f;
+        *CAR_F(c, 0x109c) = 0.75f;
+    }
+}
+
+static void chase_done(AiState *s)   /* AIState_Chase_v1 0x40cc30 */
+{
+    Car *c = s->car;
+    memset(c->b + 0x1064, 0, 16);
+    *CAR_F(c, 0x1078) = 0;
+    *CAR_F(c, 0x107c) = 0;
+    *CAR_F(c, 0x1098) = *CAR_F(c, 0x109c) = 1.0f;
+}
+static bool chase_ready(AiState *s) { (void)s; return false; }   /* 0x403e10 */
+static const AiStateVtbl chase_vt = {chase_tick, chase_done, chase_ready};
+
+static AiState chase_new(Car *c, Car *p, const float off[3], int32_t budget, float w80, float w84, int form, float blend)
+{
+    AiState s = {.vt = &chase_vt, .car = c, .target = blend};
+    follow_init(&s, p);
+    CW(&s, 0x7c).i = budget;
+    chase_aim(&s, p, off);
+    *CAR_F(c, 0x1098) = *CAR_F(c, 0x109c) = 1.0f;
+    CW(&s, 0x80).f = w80;
+    CW(&s, 0x84).f = w84;
+    CW(&s, 0x88).i = form;
+    CW(&s, 0x8c).i = 0;
+    CW(&s, 0x44).i = 0;
+    CW(&s, 0x90).i = 0;
+    return s;
+}
+
 /* ---- the police ---- */
 
 /* Its pursuit dropped (the original's repeated steps): out of the formation, the chase's end kept only
@@ -533,6 +884,129 @@ static void place_patrol(Car *c, int n, int dir, int dir2, int drive)
     AIi_Place(c);
 }
 
+/* The police car's place in its pursued's formation (0x403c60) and that place's offset (0x5cbee8: six
+   places of three floats per formation). */
+static void form_offset(AiHigh *h, float off[3])
+{
+    AiHigh *p = ctl_ref(P(h, 0x58).i);
+    if (p) {
+        int k = form_bubble(p, P(h, 0x1c).i, idx_of(h->car));
+        if (k != P(h, 0x60).i) P(h, 0x60).i = k;
+    }
+    uint32_t at = 0x5cbee8u + 12u * (uint32_t)(P(h, 0x60).i + P(h, 0x68).i * 6);
+    for (int k = 0; k < 3; k++) off[k] = K(at + 4u * (uint32_t)k);
+}
+
+/* Into the chase of its pursued (0x40cb80 from AIHigh_Cop): the formation's ram budget (0x5cbeb0), the
+   kind's windows (0x5cbfc0), the skill's blend (0x5cbedc). */
+static void start_chase(AiHigh *h)
+{
+    AiHigh *p = ctl_ref(P(h, 0x58).i);
+    if (!p) return;
+    float off[3];
+    form_offset(h, off);
+    int f = P(h, 0x68).i, t = P(h, 0x18).i & 1;
+    AiState st = chase_new(h->car, p->car, off, (int32_t)exe_u32(0x5cbeb0u + 0x14u * (uint32_t)f),
+                           K(0x5cbfc0u + 8u * (uint32_t)t), K(0x5cbfc4u + 8u * (uint32_t)t), f, K(0x5cbedcu + 4u * (uint32_t)g_ai_level));
+    to_state(h, st, 4);
+}
+
+/* A ram now and then (0x4038b0): by chance (p a second), the target beside the lane by more than its
+   width yet within 0x5b2404, ahead by more than two lengths yet within 0x5b240c. */
+static bool ram_chance(AiHigh *h, float pr, Car *t)
+{
+    Car *c = h->car;
+    uint32_t r = SimRand_Next();
+    if (!((int)((r * 1000) >> 16) < (int)lrintf((float)g_ai_ticks * pr * K(0x5b24b8) * K(0x5b2428)))) return false;
+    float lat = absf(*CAR_F(c, 0xed0) - *CAR_F(t, 0xed0));
+    if (!(*CAR_F(t, 0x3a8) + K(0x5b24a8) < lat && lat < K(0x5b2404))) return false;
+    float a = AI_Ahead(c, t) * (float)*CAR_I(c, 0xeb0), b = *CAR_F(t, 0x3b0) + K(0x5b24a8);
+    return b + b < a && a < K(0x5b240c);
+}
+
+/* Chasing an opponent, now and then a pause (0x4051a0, +0x10a4) when a human is a level above it. */
+static void opponent_pause(AiHigh *h)
+{
+    AiHigh *p = ctl_ref(P(h, 0x58).i);
+    Car *c = h->car;
+    if (h->phase != 4 || !p || !(*CAR_I(p->car, CAR_FLAGS) & 8) || g_sim_tick < *CAR_I(c, 0x10a4)) return;
+    if (2 <= (int32_t)lrintf(P(p, 0x8c).f)) return;
+    float r = (float)SimRand_Next() * K(0x5b253c);
+    for (int i = 0; i < g_humans.n; i++) {
+        AiHigh *u = ctl_of(g_humans.c[i]);
+        if (u && P(p, 0x94).i < P(u, 0x94).i && r < (float)g_ai_ticks * K(0x5b2538)) *CAR_I(c, 0x10a4) = g_sim_tick + 0x280;
+    }
+}
+
+/* AIHigh_Cop's chase (its state 4). */
+static void chasing(AiHigh *h)
+{
+    Car *c = h->car;
+    AiState *s = &h->state;
+    *CAR_I(c, 0xecc) |= 2;
+    AiHigh *p = ctl_ref(P(h, 0x58).i);
+    if (!p) {
+        turn_back(c);
+        drop(h);
+        to_state(h, AIi_Normal(c), 2);
+        if (P(h, 0x54).i == 1) PENDING_NOTE(0x40f5a0, "the police car's respawn after a block");
+        P(h, 0x54).i = 0;
+        AIi_StateTick(&h->state);
+        return;
+    }
+    if (0xa0 < CW(s, 0x90).i) PENDING_NOTE(0x40e1a0, "the police's turn round when blocked (AIState_GotoSlice, state 9)");
+    int t = P(h, 0x18).i & 1;
+    if (rec_i(p, 4 * t) == 0 && rec_i(p, 0xc + 4 * t) == 0) CW(s, 0x7c).i = 0;
+    P(h, 0x64).i = -1;
+    if (CW(s, 0x8c).i <= g_sim_tick && 0 < g_humans.n) {
+        bool late = false;
+        for (int i = 0; i < g_humans.n; i++) {
+            AiHigh *u = ctl_of(g_humans.c[i]);
+            if (u && 800 < P(u, 0xac).i && K(0x5b2470) < absf(*CAR_F(g_humans.c[i], 0xec0))) late = true;
+        }
+        if (late) CW(s, 0x8c).i = g_sim_tick + 0x3c0;
+    }
+    int was = P(h, 0x60).i;
+    float off[3];
+    form_offset(h, off);
+    if (P(h, 0x60).i != was && CW(s, 0x70).i == 0) chase_aim(s, p->car, off);
+    uint32_t f = 0x14u * (uint32_t)P(h, 0x68).i;
+    if ((int32_t)exe_u32(0x5cbea0 + f) < CW(s, 0x78).i && absf(CW(s, 0x6c).f) < K(0x5cbea4 + f) && absf(CW(s, 0x68).f) < K(0x5cbea8 + f))
+        chase_event(s, 1, (int)exe_u32(0x5cbeac + f));
+    if (ram_chance(h, 0.25f, p->car) && CW(s, 0x70).i == 0) {
+        const float zero[3] = {0, 0, 0};
+        chase_aim(s, p->car, zero);
+        chase_event(s, 1, 0x20);
+    }
+    if (pick(h)) {
+        AiHigh *q = ctl_ref(P(h, 0x58).i);
+        form_offset(h, off);
+        if (q) chase_aim(s, q->car, off);
+    }
+    p = ctl_ref(P(h, 0x58).i);
+    int e = P(h, 0x20).i;
+    if (e == 1 || e == 4 || !p || 1 < *CAR_I(p->car, 0xb50)) {
+        if (e == 1 || e == 4) turn_back(c);
+        drop(h);
+        to_state(h, AIi_Normal(c), 2);
+    }
+    if (P(h, 0x5c).i == 0 && !too_far(c)) {
+        if (P(h, 0x54).i != 0) {
+            turn_back(c);
+            drop(h);
+            to_state(h, AIi_Normal(c), 2);
+            if (P(h, 0x54).i == 1) PENDING_NOTE(0x40f5a0, "the police car's respawn after a block");
+            P(h, 0x54).i = 0;
+        }
+        AIi_StateTick(&h->state);
+        return;
+    }
+    P(h, 0x5c).i = 0;
+    drop(h);
+    to_state(h, AIi_Purgatory(c), 1);
+    AIi_StateTick(&h->state);
+}
+
 void Police_Init(AiHigh *h, int number)
 {
     /* 0x403860 */
@@ -559,7 +1033,7 @@ void Police_Tick(AiHigh *h)
     Car *c = h->car;
     *CAR_I(c, 0x534) = 0;
     *CAR_I(c, 0x530) = 0;
-    if (h->phase == 4) PENDING_NOTE(0x4051a0, "the police's ram timer in the chase");
+    opponent_pause(h);
     switch (h->phase) {
     case 0:
         drop(h);
@@ -604,8 +1078,7 @@ void Police_Tick(AiHigh *h)
     case 2:
         P(h, 0x64).i = -1;
         if (P(h, 0x20).i != 1 && P(h, 0x20).i != 4) *CAR_I(c, 0xecc) &= ~2;
-        if (P(h, 0x20).i != 1 && P(h, 0x20).i != 4 && pick(h))
-            PENDING_NOTE(0x40cb80, "the police's chase (AIState_Chase)");
+        if (P(h, 0x20).i != 1 && P(h, 0x20).i != 4 && pick(h)) start_chase(h);
         if (P(h, 0x5c).i == 0 && !too_far(c)) break;
         P(h, 0x5c).i = 0;
         drop(h);
@@ -634,7 +1107,7 @@ void Police_Tick(AiHigh *h)
             }
             *CAR_I(c, 0xecc) &= ~2;
             if (pick(h) && P(h, 0x20).i != 1 && P(h, 0x20).i != 4) {
-                PENDING_NOTE(0x40cb80, "the police's chase (AIState_Chase)");
+                start_chase(h);
                 break;
             }
             if (!too_far(c)) break;
@@ -645,8 +1118,11 @@ void Police_Tick(AiHigh *h)
         to_state(h, AIi_Purgatory(c), 1);
         AIi_StateTick(&h->state);
         return;
+    case 4:
+        chasing(h);
+        return;
     default:
-        PENDING_NOTE(0x403ed0, "the police's chase, roadblock and turning states (4, 5, 9)");
+        PENDING_NOTE(0x403ed0, "the police's roadblock and turning states (5, 9)");
         break;
     }
     AIi_StateTick(&h->state);
