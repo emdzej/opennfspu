@@ -50,10 +50,9 @@ void Car_SetTasks(Car *c)
         *slot(c, T_E14) = task_516210;
         *slot(c, T_E1C) = AI_DriveTask;   /* 0x4083c0 */
     }
-    /* (f & 4) with 0x657420 set and 0x657404 > 0 takes 0x49b6b0 for +0xe24: those race settings come
-       with the race set-up's port. */
+    /* (f & 4) in a multiplayer race (0x657420 set, the players 0x657404 above 0) takes 0x49b6b0 for
+       +0xe24; the port's races are single-player, where 0x657420 is 0. */
     (void)task_49b6b0;
-    PENDING_NOTE(0x657420, "the +0xe24 variant's race condition (0x657420, 0x657404)");
 }
 
 void Car_RegisterTasks(Car *c)
