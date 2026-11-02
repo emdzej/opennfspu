@@ -164,3 +164,49 @@ void HudConfig_setpos(int k, int32_t x, int32_t y)
     pos[k][0] = x;
     pos[k][1] = y;
 }
+
+void HudConfig_setchoice(int off, int32_t v)
+{
+    uint8_t *c = (uint8_t *)HudConfig_choice();
+    if (!c) return;
+    memcpy(c + off, &v, 4);
+    if (off == 0x58) HudConfig_trays(v == 0);   /* 0x420f50: the trays' alpha with the translucency */
+}
+
+/* The places back to fractions of the screen (0x41fef0), each only for a visual the choices show: the
+   gear (k 0, by +0x64 == 1), the speedometer's two (1, 7: +0x30 == 1, 2), the time (2, always), the
+   damage's (3: +0x3c 2 or 3; 5: 1), the standings (4: +0x48), the tachometer's (6: +0x38 == 2; 12: 1),
+   the map (8: +0x40), 9 by +0x54, the mirror (10: +0x5c), the split times (11: +0x4c). */
+static void to_fractions(void)
+{
+    uint8_t *l = (uint8_t *)HudConfig_look(), *c = (uint8_t *)HudConfig_choice();
+    if (!l || !c) return;
+    int32_t sp = rd32(c + 0x30), tach = rd32(c + 0x38), dmg = rd32(c + 0x3c);
+    bool show[13] = {rd32(c + 0x64) == 1, sp == 1, true, dmg == 2 || dmg == 3, rd32(c + 0x48) != 0, dmg == 1,
+                     tach == 2, sp == 2, rd32(c + 0x40) != 0, rd32(c + 0x54) != 0, rd32(c + 0x5c) != 0,
+                     rd32(c + 0x4c) != 0, tach == 1};
+    for (int k = 0; k < 13; k++) {
+        if (!show[k]) continue;
+        uint8_t *at = k < 11 ? l + 0x188 + 8 * k : c + (k == 11 ? 0xc : 0x20);
+        float f[2] = {(float)pos[k][0] / (float)screen_w, (float)pos[k][1] / (float)screen_h};
+        memcpy(at, f, 8);
+    }
+}
+
+/* Written back (HUD_LoadLayout 0x41ea70, a save despite its name): the places as fractions, then both
+   files whole to the player's own, else over the defaults (made writable first, 0x59df60). */
+void HudConfig_Save(const char *player)
+{
+    if (!loads || !looks || !choices) return;
+    to_fractions();
+    char f[200];
+    size_t n = 0;
+    snprintf(f, sizeof f, "%s%s", player ? player : "", "1.hud");
+    uint8_t *own = read_savedata(f, &n);
+    free(own);
+    plat_save_user_file(own ? f : "XXhud1XX.hud", looks, (size_t)LOOK * (size_t)nconfigs);
+    snprintf(f, sizeof f, "%s%s", player ? player : "", "2.hud");
+    own = read_savedata(f, &n);
+    free(own);
+    plat_save_user_file(own ? f : "XXhud2XX.hud", choices, (size_t)CHOICE * (size_t)nconfigs);
+}

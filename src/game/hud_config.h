@@ -61,3 +61,7 @@ bool HudConfig_notrays(void);          /* 0x41e5e0 */
 void HudConfig_trays(bool on);
 void HudConfig_pos(int k, int32_t *x, int32_t *y);   /* 0x420b30 .. 0x420bf0 */
 void HudConfig_setpos(int k, int32_t x, int32_t y);  /* 0x420680 .. 0x420800 */
+/* A choice set (0x420e30 .. 0x421030; +0x58, the translucency, also sets the trays' alpha, 0x420f50), and
+   the layouts written back for the player (0x41ea70). */
+void HudConfig_setchoice(int off, int32_t v);
+void HudConfig_Save(const char *player);

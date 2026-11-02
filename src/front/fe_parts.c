@@ -445,11 +445,6 @@ static void draw_at(FertControl *w, int32_t ox, int32_t oy)
             if (c->sub && !(c->feflags & 0x20)) draw_at(c->sub, ox, oy);
             continue;
         }
-        if (!strcmp(c->id, "NFS5.HUD")) {
-            /* FEHudDisplayControl (vtable 0x5b603c): the race HUD's preview with the display settings */
-            PENDING_NOTE(0x4caea0, "FEHudDisplayControl: the HUD's preview");
-            continue;
-        }
         /* (FECar3DControl_v15 0x4c0570 draws none of its parts: its car is in the room) */
         if (FE_ControlDrawHook && FE_ControlDrawHook(c, ox, oy)) continue;
         if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) continue;   /* (none of its parts is drawn plainly: femovie.c) */
