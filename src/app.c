@@ -123,6 +123,9 @@ bool app_frame(void)
                     char rn[32], rc[32];
                     int32_t best, time;
                     if (!g_race_quit && DRIVE_PlayerResult(rn, rc, &best, &time)) FEApp_RaceRecord(rn, rc, best, time);   /* (0x4ed590 skips a quit race, 0x657e34) */
+                    int32_t ms[3] = {0, 0, 0};
+                    DRIVE_MissionStats(&ms[0], &ms[1], &ms[2]);
+                    FEApp_MissionStats(ms);
                     FEApp_RaceOver(places, times, clean, n, g_race_quit != 0);
                 }
                 DRIVE_Shutdown();

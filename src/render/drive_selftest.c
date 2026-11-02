@@ -262,6 +262,18 @@ bool DRIVE_PlayerResult(char name[32], char car[32], int32_t *best, int32_t *tim
     return true;
 }
 
+bool DRIVE_MissionStats(int32_t *time, int32_t *damage, int32_t *cones)
+{
+    Car *c = ready && g_racers.n ? g_racers.c[0] : NULL;
+    if (!c) return false;
+    *time = *CAR_I(c, 0xcd8);
+    int32_t sum = 0;
+    for (int off = 0xc98; off < 0xcc0; off += 4) sum = (int32_t)((float)sum + *CAR_F(c, off));
+    *damage = sum / 10;
+    *cones = *CAR_I(c, 0xb60);
+    return true;
+}
+
 static int32_t s_wear_ids[20];
 static float s_wear[20];
 static bool s_wear_kept;

@@ -27,8 +27,9 @@ int FEFactory_MissionIndex(void);          /* 0x51a740 */
 int FEFactory_Rank(void);                  /* 0x51a680: -1 before the first, the level - 1, 3 when all done */
 bool FEFactory_AllDone(void);              /* 0x51a8a0 */
 bool FEFactory_LevelDone(void);            /* 0x51a810: the last mission ended a level not yet told */
-/* The race's result into the current mission (0x51a770): done = pass (0x657834), the results. */
-void FEFactory_Result(int place, int time, int value, int pass);
+/* The race's result into the current mission (0x51a770): done = pass (0x657834), the time (+0xea), the
+   damage (+0xec) and the cones knocked down (+0xee). */
+void FEFactory_Result(int time, int damage, int cones, int pass);
 /* The race cheat's skip (0x51a8e0): missions marked by pass up to a level's end. */
 void FEFactory_Skip(int pass);
 /* The first n - 1 missions done, the rest not (0x51aa20); once: only the first such call. */

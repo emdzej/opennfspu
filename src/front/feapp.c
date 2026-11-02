@@ -385,6 +385,9 @@ void FEApp_RaceRecord(const char *name, const char *car, int32_t best, int32_t t
     FEData_TrackRecordEnter(s_track, name, car, g_race_linear ? time : best);
 }
 
+static int32_t s_mission_stats[3];
+void FEApp_MissionStats(const int32_t stats[3]) { memcpy(s_mission_stats, stats, sizeof s_mission_stats); }
+
 void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int n, bool quit)
 {
     /* a quit race (0x657e34): 0x4ed590 records nothing, a career race only its tournament's end */
@@ -398,10 +401,10 @@ void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int 
     if (s_gametype == 4) Market_Update(FEData_CareerYear());   /* (FEApplication_Run's 0x4ed390) */
     if (s_factory_race && !quit) {
         /* 0x4ed590's type 9: the verdict (0x657834) and the results into the mission (0x51a770: the
-           place, the time over ten), or the cheat's skip (0x657e2c, 0x51a8e0) */
-        PENDING_NOTE(0x4ed590, "the mission result's time from the stats (0x5e77a4) and its value (0x5e762c)");
+           local racer's time, damage and cones from the results' stats, 0x5e75a0), or the cheat's skip
+           (0x657e2c, 0x51a8e0) */
         if (g_mission_skip) FEFactory_Skip(g_mission_pass);
-        else FEFactory_Result(n > 0 ? places[0] : 0, n > 0 ? times[0] / 10 : 0, 0, g_mission_pass);
+        else FEFactory_Result(s_mission_stats[0], s_mission_stats[1], s_mission_stats[2], g_mission_pass);
         FESave_Write();
     }
     s_factory_race = false;

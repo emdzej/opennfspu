@@ -26,6 +26,10 @@ extern bool g_drive_paused;
 int DRIVE_Results(int places[8], int times[8], bool clean[8]);
 /* The player's (racer 0's) driver, car, best lap and race time as the race left them. */
 bool DRIVE_PlayerResult(char name[32], char car[32], int32_t *best, int32_t *time);
+/* The local racer's stats a Factory Driver mission keeps (0x4ed590's type 9 from the results' copy of
+   the car's +0xad4): the race time (+0xcd8), the damage (the ten zones the race's end kept, +0xc98,
+   summed with each step truncated, a tenth) and the cones knocked down (+0xb60). */
+bool DRIVE_MissionStats(int32_t *time, int32_t *damage, int32_t *cones);
 /* The local player's car's parts (their ids) and the wear the race gave them (the results' +0xc48);
    their count (20), 0 without a race. */
 int DRIVE_PartsWear(int32_t ids[20], float wear[20]);

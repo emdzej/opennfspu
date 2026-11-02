@@ -150,21 +150,21 @@ bool FEFactory_LevelDone(void)
     return m32(s_last, 0xc) != -1;
 }
 
-static void result(int place, int time, int value, int pass)
+static void result(int time, int damage, int cones, int pass)
 {
     int i = current();
     s_last = rec(i < 0 ? 0 : i);
-    put16(s_last, 0xea, place);
-    put16(s_last, 0xec, time);
-    put16(s_last, 0xee, value);
+    put16(s_last, 0xea, time);
+    put16(s_last, 0xec, damage);
+    put16(s_last, 0xee, cones);
     put16(s_last, 0xe8, pass);
     make_car();
 }
 
-void FEFactory_Result(int place, int time, int value, int pass)
+void FEFactory_Result(int time, int damage, int cones, int pass)
 {
     FEFactory_Load();
-    if (s_n > 0) result(place, time, value, pass);
+    if (s_n > 0) result(time, damage, cones, pass);
 }
 
 void FEFactory_Skip(int pass)
