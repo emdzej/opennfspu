@@ -178,6 +178,7 @@ int FEApp_Language(void) { return language(); }
 
 static FertControl *load_screen(const char *name);
 static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy);
+static int combo_open_h(FertControl *c, bool *scroll);
 static bool listbox_click(FertControl *c, int32_t mx, int32_t my);
 static bool ko_list_click(FertControl *c, int32_t my);
 static FertControl *control_named(FertControl *w, const char *name);
@@ -2701,29 +2702,24 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE") || !strcmp(c->id, "NFS5.PLAYERPICTURE")) return picture_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
-        /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): the bar, then its colour (its slot 0x74,
-           the accessor's) as a 20 x 10 swatch 40 from its right and 4 down, outlined in black. (The custom
-           colour picker, FEColorSelectBox_v17 0x4c3800, and the drop-down pend.) */
+        /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
+           accessor's) as the bar's swatch. (The custom colour picker, FEColorSelectBox_v17 0x4c3800,
+           instead while open, drawn last.) */
         if (c->feflags & 0x20) return true;
-        if (FEColour_Open_On(c)) return true;   /* (_v17 0x4c3800: the picker instead, drawn last) */
-        FEControl_Draw(c, ox, oy);
+        if (FEColour_Open_On(c)) return true;
         FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
-        if (!a) return true;
-        FEAccess_AllowCustom(a, data_int_of(c, "allowcustom") != 0);   /* _v21 0x4c37c0 */
-        int32_t r[4];
-        control_rect(c, r);
-        float x = (float)(r[2] + ox - 0x28), y = (float)(r[1] + oy + 4);
-        uint32_t col = FEAccess_Colour(a) | 0xff000000u, k = 0xff000000u;
-        FE2D_DepthStep();
-        FE2D_Gouraud(x, y, 20.0f, 10.0f, col, col, col, col);
-        const float t[8] = {x, y, x + 20.0f, y, x, y + 1.0f, x + 20.0f, y + 1.0f}, bm[8] = {x, y + 9.0f, x + 20.0f, y + 9.0f, x, y + 10.0f, x + 20.0f, y + 10.0f};
-        const float l[8] = {x, y, x + 1.0f, y, x, y + 10.0f, x + 1.0f, y + 10.0f}, rt[8] = {x + 19.0f, y, x + 20.0f, y, x + 19.0f, y + 10.0f, x + 20.0f, y + 10.0f};
-        const uint32_t kk[4] = {k, k, k, k};
-        FE2D_DepthStep();
-        FE2D_Quad(t, kk);
-        FE2D_Quad(bm, kk);
-        FE2D_Quad(l, kk);
-        FE2D_Quad(rt, kk);
+        if (a) FEAccess_AllowCustom(a, data_int_of(c, "allowcustom") != 0);   /* _v21 0x4c37c0 */
+        bool scroll;
+        int open_h = combo_open_h(c, &scroll);
+        FEComboBox_Draw(c, ox, oy, a ? FEAccess_Text(a) : "", true, a ? FEAccess_Colour(a) | 0xff000000u : 0xff000000u,
+                        open_h, scroll);
+        return true;
+    }
+    if (is_combo(c)) {
+        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+        bool scroll;
+        int open_h = combo_open_h(c, &scroll);
+        FEComboBox_Draw(c, ox, oy, a ? FEAccess_Text(a) : "", false, 0, open_h, scroll);
         return true;
     }
     if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
@@ -2957,51 +2953,6 @@ static void update_all(FertControl *w)
     }
 }
 
-/* The combo boxes' values (FEComboBox's own draw 0x4c53e0, its styling pending): right-aligned in the
-   value part's place; in the screen and its panels. */
-static void draw_combos(FertControl *w)
-{
-    const FertTrans *outer = FETrans_Window();   /* (the values with their combo box's transition) */
-    FETrans_SetWindow(w->trans.live ? &w->trans : outer);
-    for (int i = 0; i < w->nchildren; i++)
-        if (w->children[i]->sub && !(w->children[i]->feflags & 0x20)) draw_combos(w->children[i]->sub);
-    for (int i = 0; i < w->nchildren; i++) {
-        FertControl *c = w->children[i];
-        if (!is_combo(c) || c->state == FertControl_findState(c, "hidden")) continue;
-        int32_t dx = 0, dy = 0;
-        FETrans_Offset(c, &dx, &dy);
-        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
-        int k = FertControl_findPart(c, "label");
-        if (!a || k < 0) continue;
-        /* (data.nolabel, +0x1fc: 0 the value right-aligned past the label; 1 the value at the left in
-           the label's place; 2 and 3 no value, the box shows its label only (the CD player's); 4's
-           own centred layout pends, drawn as 0) */
-        int nl = data_int_of(c, "nolabel");
-        if (nl == 2 || nl == 3) continue;
-        FertAttr *f = FertAttrList_find(&c->parts[k]->attrs, "fontPathName");
-        char path[300];
-        FE_ResolvePath(f ? FertAttr_str(f) : "", path, sizeof path);
-        HudFont *font = FEFont_Get(path);
-        const char *t = FEAccess_Text(a);
-        int n = (int)strlen(t) + 1;
-        char *copy = FE2D_Alloc(n);
-        if (!font || !copy) continue;
-        memcpy(copy, t, (size_t)n);
-        int32_t pos[2] = {0, 0}, width = 0;
-        FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
-        if (pa) FertAttr_point(pa, pos);
-        const char *ws = data_str(c, "width");
-        if (ws) width = atoi(ws);
-        FE2D_DepthStep();
-        pos[0] += dx, pos[1] += dy;
-        g_fe_fade = FETrans_Fade(c);
-        if (nl == 1) FE2D_Text(font, (float)(pos[0] + 5), (float)(pos[1] + 2), 0, 0xffffffffu, copy, 1.0f, 1.0f);
-        else FE2D_Text(font, (float)(pos[0] + width - 13), (float)(pos[1] + 2), 2, 0xffffffffu, copy, 1.0f, 1.0f);
-        g_fe_fade = 0xff;
-    }
-    FETrans_SetWindow(outer);
-}
-
 /* A combo box's selection box (FEComboBox 0x4c4960, open: 0x4c79a0): the accessor's rows, 14 pixels each
    (FEPositionableAccessor_v26 0x4bc2e0), below the bar (part selectionbox: at (0, data.height),
    data.width wide), as tall as the rows up to data.selectionboxmaxheight, with a scroll bar when they
@@ -3084,6 +3035,19 @@ static int combo_height(int h)
     int e = (int)(timer_ticks() - s_combo.t0) * h / 16;
     if (h < e) e = h;
     return s_combo.open ? e : h - e;
+}
+
+/* A combo box's selection box's height as it opens and shuts (+0x178's, 0x4c5030), 0 when shut. */
+static int combo_open_h(FertControl *c, bool *scroll)
+{
+    *scroll = s_combo.c == c && s_combo.scroll;
+    if (s_combo.c != c) return 0;
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    if (!a) return 0;
+    ComboBox b;
+    combo_box(c, a, &b);
+    int e = combo_height(b.h);
+    return e < 0 ? 0 : e;
 }
 
 /* The mouse with a combo box open (0x4c66c0): a press on its scroll bar drags it; a release on a row
@@ -3510,7 +3474,6 @@ static void draw_screen(FertControl *s, FertControl *top)
     hover_pointer(s);
     FEWindow_Draw(s);
     if (s == FEApp_Top() && FEEndOfEra_On()) FEEndOfEra_Draw();   /* (its list's _v15 0x4fe7a0) */
-    draw_combos(s);
     if (s == FEApp_Top()) combo_draw();
     if (s == FEApp_Top() && FEColour_Box()) FEColour_Draw(FEColour_Box(), 0, 0);
 }

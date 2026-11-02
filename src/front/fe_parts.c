@@ -472,7 +472,7 @@ static void draw_control(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.MOVIECIRCLE")) return;   /* (none of its parts is drawn plainly: femovie.c) */
     if (!strcmp(c->id, "NFS5.GOURAUDBOX")) FEGouraudBox_Draw(c, ox, oy);
     else if (!strcmp(c->id, "NFS5.GlintyRectangle")) FEGlintyBox_Draw(c, ox, oy);
-    else if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.ComboBoxSlider")) FEGoTo_Draw(c, ox, oy);
+    else if (!strcmp(c->id, "NFS5.GOTOBUTTON")) FEGoTo_Draw(c, ox, oy);
     else if (!strcmp(c->id, "NFS5.TABBUTTON") || !strcmp(c->id, "NFS5.GRAPHICTABBUTTON")) FERadioItem_Draw(c, ox, oy);
     else FEControl_Draw(c, ox, oy);
 }
@@ -890,6 +890,151 @@ static void FERadioItem_Draw(FertControl *c, int32_t ox, int32_t oy)
         allow = (c->feflags & (4 | 8 | 0x40)) != 0;   /* 0x4c7860, 0x4c7920, 0x4c79a0 */
     }
     FEGlint_Draw(&gg->g, (int)x, (int)y, a, allow && !disabled);
+}
+
+/* The combo box's fonts (FE_LoadFonts 0x4c4a00: univers8b, universC11b from the art folder; the label
+   part's own), cached as the parts' are. */
+static HudFont *combo_font(const char *name)
+{
+    static struct { char name[64]; HudFont *f; } cache[8];
+    static int n;
+    for (int i = 0; i < n; i++)
+        if (!strcmp(cache[i].name, name)) return cache[i].f;
+    char path[300];
+    FE_ResolvePath(name, path, sizeof path);
+    HudFont *f = FEFont_Get(path);
+    if (n < 8) {
+        snprintf(cache[n].name, sizeof cache[n].name, "%s", name);
+        cache[n++].f = f;
+    }
+    return f;
+}
+
+static void combo_text(HudFont *f, float x, float y, int align, uint32_t colour, const char *t)
+{
+    int n = (int)strlen(t) + 1;
+    char *copy = f ? FE2D_Alloc(n) : NULL;   /* (the queue keeps the pointer until its flush) */
+    if (!copy) return;
+    memcpy(copy, t, (size_t)n);
+    FE2D_Text(f, x, y, align, colour, copy, 1.0f, 1.0f);   /* 0x4d9e00 */
+}
+
+/* FEComboBox's bar (0x4c53e0; slot 15 0x4c6630 / slot 17 0x4c6650 call it), at the part backrect (its
+   data.width by data.height, FE_LoadPos 0x4e21c0). The bar's colour 0xffbc0000, hovered or focused
+   0xffffbb00, disabled 0x30ff0000; the texts at 0x30 when disabled, and "N/A" (299) for the value.
+   data.nolabel 4, the graphics options': the value centred in a grey box data.GraphicsSpecialCaseWidth
+   wide right of the bar (0xa0444444, framed), black where it runs over the bar (drawn over it, the
+   depth test), the arrow centred in the bar. Else: the bar (data.dropshadow 2: the gradient), its stems
+   (data.stemleftheight, stemrightheight), the line after the left label (+0x1f0, nolabel 0: its width
+   in the label font + 6, 0x4c5030); nolabel 3 no texts, else the left label (labelleft) in white at
+   (5, 2), and the value: nolabel 1 in its place in white, 0 right-aligned 12 in from the right in
+   black, 2 none; a colour box (+0x1de) instead its colour 20 x 10, 40 in from the right, framed. The
+   arrow 3 in from the right; the shine (the gradient's bevel) unless hovered; the frame; its glinty
+   box (data.glintybox, +0x20c, run as a GoTo button's); hovered the inset, else data.dropshadow 1's
+   drop shadow, down over the open selection box. The fonts: data.usesmallfont univers8b for both,
+   else universC11b and the label part's. (0x5297f0, the application's focus, is taken as had.) */
+void FEComboBox_Draw(FertControl *c, int32_t ox, int32_t oy, const char *value, bool swatch, uint32_t colour,
+                     int open_h, bool scroll)
+{
+    if (c->feflags & 0x20) return;   /* 0x4c7aa0: hidden */
+    int32_t r[4];
+    FertControl_rect(c, r);
+    int cx = r[0] + ox, cy = r[1] + oy;   /* (0x524b90 + 0x4c8330 + the parent's) */
+    int kb = FertControl_findPart(c, "backrect"), kl = FertControl_findPart(c, "labelleft");
+    int kv = FertControl_findPart(c, "label"), ka = FertControl_findPart(c, "arrowbutton");
+    int32_t bp[2] = {0, 0}, bs[2] = {data_int(c, "width", 0), data_int(c, "height", 0)};
+    if (kb >= 0) {
+        FertAttr *pa = FertAttrList_find(&c->parts[kb]->attrs, "pos"), *sa = FertAttrList_find(&c->parts[kb]->attrs, "size");
+        if (pa) FertAttr_point(pa, bp);
+        if (sa) FertAttr_point(sa, bs);
+    }
+    int x = cx + bp[0], y = cy + bp[1], bw = bs[0], bh = bs[1];
+    float fx = (float)x, fy = (float)y;
+    int a = 0xff;   /* (0x4c8410: the control's fade, g_fe_fade's in the 2D) */
+    int width = data_int(c, "width", 0), nolabel = data_int(c, "nolabel", 0), ds = data_int(c, "dropshadow", 1);
+    int gw = data_int(c, "GraphicsSpecialCaseWidth", 0), mode = data_int(c, "glintybox", -1);
+    bool shadow = ds == 1, gradient = ds == 2, small = data_int(c, "usesmallfont", 0) != 0;
+    bool hover = (c->feflags & 4) != 0, disabled = (c->feflags & 0x10) != 0, focused = (c->feflags & 0x40) != 0;
+    uint32_t bar = disabled ? fade(0x30ff0000u, a) : hover || focused ? (uint32_t)a << 24 | 0xffbb00u : fade(0xffbc0000u, a);
+    int ta = disabled ? 0x30 : 0xff;
+    uint32_t black = fade((uint32_t)a << 24, ta), white = fade((uint32_t)a << 24 | 0xffffffu, ta), k = (uint32_t)a << 24;
+    HudFont *f1 = combo_font(small ? "univers8b.ffn" : "universC11b.ffn");
+    HudFont *f2 = small ? f1 : NULL;
+    if (!f2 && kv >= 0) {
+        FertAttr *fa = FertAttrList_find(&c->parts[kv]->attrs, "fontPathName");
+        f2 = combo_font(fa ? FertAttr_str(fa) : "");
+    }
+    const char *shown = disabled ? FEStrings_Get(299) : value ? value : "";
+    const FeImage *arrow = ka >= 0 && !c->parts[ka]->hidden ? c->parts[ka]->image : NULL;
+    if (nolabel == 4) {
+        float gx = (float)(x + width);
+        FE2D_Rect(gx, fy, (float)gw, (float)bh, fade(0xa0444444u, a));   /* 0x4d8d30 */
+        FE2D_Frame(gx, fy, (float)gw, (float)bh, k);                       /* 0x4d8cb0 */
+        float tx = (float)(gw / 2 + width + x);
+        combo_text(f2, tx, (float)(y + 2), 1, fade(fade(0xaaffffffu, a), ta), shown);
+        FE2D_Frame(fx, fy, (float)(bw + scroll), (float)bh, k);
+        FE2D_DepthPushStep();   /* 0x4da4c0 */
+        FE2D_Rect(fx + 1.0f, fy + 1.0f, (float)(bw - 2), (float)(bh - 2), bar);
+        FE2D_OverlayBegin();    /* 0x4da570 */
+        combo_text(f2, tx, (float)(y + 2), 1, black, shown);
+        FE2D_OverlayEnd();      /* 0x4da5b0 */
+        if (arrow)
+            FE2D_Image(arrow, (float)((width - arrow->w) / 2 + x), (float)((bh - arrow->h) / 2 + y), (float)arrow->w,
+                       (float)arrow->h, (uint32_t)a << 24 | 0xffffffu, 0, false);   /* 0x4d95a0 */
+        if (!hover || disabled) {
+            if (gradient) FEStyle_Bevel(fx, fy, (float)bw, (float)bh, a, 3);   /* 0x5211f0 */
+            else FEStyle_Shine(fx, fy, (float)bw, (float)bh, a);              /* 0x521090 */
+        }
+    } else {
+        if (gradient) FEStyle_Shadow(fx, fy, (float)bw, (float)bh, a);   /* 0x521180 */
+        else FE2D_Rect(fx, fy, (float)bw, (float)bh, bar);
+        FE2D_Rect(fx, fy, 1.0f, (float)(bh + data_int(c, "stemleftheight", 0)), k);
+        FE2D_Rect((float)(x + bw + scroll), fy, 1.0f, (float)(bh + data_int(c, "stemrightheight", 0)), k);
+        int sep = 0;   /* +0x1f0 */
+        if (nolabel == 0 && kl >= 0 && f1 && f1->font) {
+            float ex = 0, ey = 0, ew = 0, eh = 0;
+            FONT_extent(f1->font, FEPart_Text(c->parts[kl]), &ex, &ey, &ew, &eh);   /* 0x5366e0 */
+            sep = (int)(ew + 6.0f);
+        }
+        FE2D_Rect((float)(x + sep), fy, 1.0f, (float)bh, k);
+        if (nolabel != 3) {
+            if (nolabel != 1 && kl >= 0) combo_text(f1, (float)(x + 5), (float)(y + 2), 0, white, FEPart_Text(c->parts[kl]));
+            if (nolabel == 1) {
+                combo_text(f1, (float)(x + 5), (float)(y + 2), 0, white, shown);
+            } else if (swatch) {
+                float sx = (float)(x + bw - 0x28), sy = (float)(y + 4);
+                FE2D_Rect(sx, sy, 20.0f, 10.0f, fade(colour, a));
+                FE2D_Frame(sx, sy, 20.0f, 10.0f, k);
+            } else if (nolabel != 2) {
+                combo_text(f2, (float)(x + bw - 0xc), (float)(y + 2), 2, black, shown);
+            }
+        }
+        if (arrow)
+            FE2D_Image(arrow, (float)(x - arrow->w + bw - 3), (float)((bh - arrow->h) / 2 + 1 + y), (float)arrow->w,
+                       (float)arrow->h, (uint32_t)a << 24 | 0xffffffu, 0, false);   /* 0x4d95a0 */
+        if (!hover || disabled) {
+            if (gradient) FEStyle_Bevel(fx, fy, (float)bw, (float)bh, a, 3);
+            else FEStyle_Shine(fx, fy, (float)bw, (float)bh, a);
+        }
+        if (!gradient || !hover || !disabled) FE2D_Frame(fx, fy, (float)(bw + scroll), (float)bh, k);   /* (0x4c7880) */
+        GoToGlint *gg = bw == width && mode != -1 ? ctl_glint(c, 0xff000000u, width, bh, mode) : NULL;
+        if (gg) {
+            /* +0x214, seen: as a GoTo button's (0x4c83f0, 0x4c7860, 0x4c7920, 0x4c79a0, 0x4c7a10) */
+            bool allow;
+            if (disabled) gg->seen = true;
+            if (!gg->seen) {
+                allow = trans_done();
+                if (allow) gg->seen = true;
+            } else {
+                allow = (c->feflags & (4 | 8 | 0x40)) != 0;
+            }
+            FEGlint_Draw(&gg->g, cx, cy, a, allow && !disabled);
+        }
+        if (gradient && hover && disabled) FE2D_Frame(fx, fy, (float)bw, (float)bh, (uint32_t)a << 24 | 0xffffffu);
+    }
+    /* (the selection box between, 0x4c60ce: the application's, drawn after the window) */
+    if (hover && !disabled) FEStyle_Inset(fx, (float)cy, (float)bw, (float)(bh + open_h), a, 3);   /* 0x5208d0 */
+    else if (shadow) FEStyle_DropShadow(fx, (float)cy, (float)bw, (float)(bh + open_h), a, 4, 4);  /* 0x520780 */
 }
 
 static uint32_t data_colour(const FertControl *c, const char *name);
