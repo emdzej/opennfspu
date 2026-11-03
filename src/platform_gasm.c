@@ -364,6 +364,19 @@ static bool mount_game(void)
 static bool running;
 static double audio_acc;   /* fractional audio frames carried between frames */
 
+/* gasm-run 0.16.0's window drops the queued samples while it buffers again after running dry, so after
+   one long frame (a load) it never fills up again and stays silent. After a gap that emptied it, a block
+   of silence longer than its largest target (150 ms) lets it start again. Headless time is the frames':
+   no gaps, the hashes as they were. (Until a runner with the fix.) */
+static void refill_after_gap(void)
+{
+    static float silence[APP_AUDIO_RATE * 160 / 1000 * 2];
+    static double last = -1;
+    double now = gasm_time_ms();
+    if (0 <= last && now - last > 80.0) gasm_audio_push(silence, APP_AUDIO_RATE * 160 / 1000);
+    last = now;
+}
+
 /* --param frametime=1: the frames slower than the frame rate (the time in the game's frame, the time since
    the previous one), to see where a window run falls behind its audio. */
 static bool frametime_on;
@@ -431,6 +444,7 @@ PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
     unsigned n = (unsigned)audio_acc;
     audio_acc -= n;
     app_audio(audio_buf, n);
+    refill_after_gap();
     gasm_audio_push(audio_buf, n);
     if (frametime_on) frametime_log(t0);
 }
