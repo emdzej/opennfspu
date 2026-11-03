@@ -127,6 +127,5 @@ bool TRACK_selftest(const char *name)
     TexManager *tm = g_texgraphics ? g_texgraphics->textures : NULL;
     if (tm) TexManager_begin(tm);
     Render_Frame(&views);
-    if (tm) TexManager_end(tm);
     return true;
 }

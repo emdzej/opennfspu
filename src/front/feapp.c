@@ -4274,6 +4274,5 @@ void FEApp_Frame(void)
     FEPointer_Draw();   /* (0x4d2980, after the windows: 0x4e1470 at the mouse) */
     FE2D_Flush();
     View_End(g_render);
-    if (tm) TexManager_end(tm);
     Render_EndFrame(g_render);
 }

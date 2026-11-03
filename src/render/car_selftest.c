@@ -138,7 +138,6 @@ bool CAR_selftest(const char *name)
     Render_SetCull(g_render);
     memcpy(state.rot, rot, sizeof rot);
     View_End(g_render);
-    if (tm) TexManager_end(tm);
     Render_EndFrame(g_render);
     frame++;
     return true;

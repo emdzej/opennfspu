@@ -292,7 +292,8 @@ void FEShapes_Release(const char *path)
     for (int i = 0; i < b->count; i++) free(b->images[i]);
     free(b->images);
     free(b->file);
-    /* (the page textures stay with the texture manager) */
+    for (int i = 0; i < 64; i++)
+        if (b->pages[i]) Texture_dtor(b->pages[i], 1);   /* (the list's textures, each by its vtable) */
     *b = s_banks[--s_nbanks];
 }
 
@@ -307,6 +308,11 @@ static void shape_eval(FertPart *p)
     int32_t index = ia ? FertAttr_int(ia) : 0;
     if (p->image && !strcmp(path, p->bank) && index == p->bankindex) return;   /* unchanged */
     if (index < 0) return;
+    /* The same file at another index (an animation's frames): its bank stays, only the image changes. */
+    if (p->bank[0] && !strcmp(path, p->bank)) {
+        p->bankindex = index;
+        goto image;
+    }
     /* FEShapePart_v8 0x4e6140: with a low-end card (FELOWENDCARD, 0x657e60), the rooms' detail off or
        under 33 MB (0x4e2da0, 0x4e2db0: the port has neither), the white backgrounds and big pieces
        named as written (optwht2.fsh, careerwhtbg.fsh, .., whtrkrec.fsh: 0x5da2e4 .. 0x5da230) are
@@ -326,6 +332,7 @@ static void shape_eval(FertPart *p)
     snprintf(p->bank, sizeof p->bank, "%s", path);
     p->bankindex = index;
     FEShapes_Load(path);                          /* 0x4d67f0 */
+image:;
     FeImage *im = FEShapes_Image(path, index);    /* 0x4d74e0 */
     p->image = im;
     FertAttr *sz = FertAttrList_find(&p->attrs, "size");

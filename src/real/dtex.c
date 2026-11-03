@@ -274,6 +274,11 @@ DtexObject *DTEX_new(int width, int height, uint32_t srcformat, uint32_t srcclut
 {
     const ThrashAbout *a = caps = THRASH.fn.about();
     if (width == 0 || width != height || (width & (width - 1))) return NULL;
+    /* (The port's: the original's callers take the textures off the card before they make or free one,
+       the front end by 0x4d7750 at each load (FE_ValidateShapes 0x4d67f0, 0x4d7270, 0x4e3300, the cars,
+       the movies) and the race by Render_RaceInit 0x468ef0 / Render_RaceShutdown 0x469030; the next
+       TexManager_begin 0x535dc0 puts them all back. The port does it here, once for all of them.) */
+    if (DTEX_uploaded) DTEX_resetall();
     DtexObject *t = pool_alloc(name, (int)sizeof *t, true);
     if (!t) return NULL;
     for (int i = 0; i < 8; i++) {
@@ -306,6 +311,7 @@ DtexObject *DTEX_new(int width, int height, uint32_t srcformat, uint32_t srcclut
 
 void DTEX_free(DtexObject *t)
 {
+    if (DTEX_uploaded) DTEX_resetall();   /* (as in DTEX_new) */
     DtexType *ty = &DTEX_types[t->type];
     if (ty->objects == t) ty->objects = t->next;
     else {

@@ -72,7 +72,6 @@ bool FE_selftest(const char *layout)
     FEWindow_Draw(window);
     FE2D_Flush();
     View_End(g_render);
-    if (tm) TexManager_end(tm);
     Render_EndFrame(g_render);
     return true;
 }
