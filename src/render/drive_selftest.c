@@ -370,6 +370,7 @@ static int load(const char *track, const char *carname)
     set_env();
     plat_set_frame_rate(60.0);
     LoadingScreen(10);
+    if (g_race_mode == 3) Net_RaceStart();   /* (RaceLoop 0x415300's, before its first tick) */
     return 1;
 }
 

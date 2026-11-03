@@ -192,6 +192,8 @@ void Net_Tick(void);                                                  /* 0x48ed2
 void Net_Controls(void);                                              /* 0x48c930 */
 bool Net_SyncBarrier(void);                                           /* 0x48cd20 */
 void Net_Sync(void);                                                  /* 0x48d5d0 */
+/* The race loop's start in a network race: the barrier, the go, its wait (RaceLoop 0x415300). */
+void Net_RaceStart(void);
 void Net_StartRace(void);                                             /* 0x48d300 */
 void Net_SendStart(void);                                             /* 0x48d2a0 */
 void Net_SendGo(void);                                                /* 0x48d2d0 */

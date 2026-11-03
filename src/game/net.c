@@ -7,10 +7,12 @@
 #include "game/input.h"
 #include "game/loadscreen.h"
 #include "game/option_rec.h"
+#include "game/race.h"
 #include "game/race_progress.h"
 #include "pending.h"
 #include "platform.h"
 #include "real/systask.h"
+#include "real/thread.h"
 #include "real/udp.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -815,6 +817,19 @@ bool Net_SyncBarrier(void)
 void Net_Sync(void)
 {
     if (Net_Live()) Net_SyncBarrier();
+}
+
+void Net_RaceStart(void)
+{
+    /* RaceLoop 0x415300's network start: everyone loaded (the barrier), my go (0x48d2d0, unless the
+       start was given up), then the session's go waited for (+0xc4, with the pump 0x4b0d70; the port's
+       wait sleeps so gasm's threads run) */
+    if (Net_Live()) Net_SyncBarrier();
+    if (Net_InGame() && !g_net->aborted) Net_SendGo();
+    while (Net_InGame() && g_net->startwait) {
+        App_WaitActive();
+        THREAD_sleep(1);
+    }
 }
 
 void Net_StartRace(void)

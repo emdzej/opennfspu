@@ -861,6 +861,7 @@ typedef struct {
     char placebuf[8], ofbuf[8];   /* +0x11c, +0x120 */
     char gapbuf[POS_MAX][12];     /* +0x123: by car */
     char namebuf[POS_MAX][25];    /* +0x183: by car */
+    HudArt *ping;                 /* +0x250: the network's ping meter (DashHud\pingmeter.fsh) */
     int32_t count;                /* +0x254 */
 } HPosition;
 
@@ -999,6 +1000,14 @@ static void position_draw(HudVisual *v)
             }
         }
         text_print(p->gap[row], s, 1.0f, 1.0f);
+        if (g_race_mode == 3 && p->ping && p->gap[row]) {
+            /* the network race's: the car's lag (0x4900a0: fine, late, too late, none, out) as the meter's
+               colour (0x5b2d90), right of the gap's corner (+6, +4) */
+            uint32_t pc = exe_u32(0x5b2d90 + 4u * (uint32_t)Net_CarLag(i));
+            HudArt_setcolours(p->ping, pc, pc, pc, pc);
+            HudArt_place(p->ping, p->gap[row]->x + 6, p->gap[row]->y + 4);
+            HudArt_draw(p->ping);
+        }
     }
     const char *label = LOC_string(HudConfig_loc(), 0x11);
     text_print(p->label, label ? label : "", 1.0f, 1.0f);
@@ -1018,6 +1027,7 @@ static void position_destroy(HudVisual *v)   /* 0x42ad40 */
     text_free(p->place);
     text_free(p->of);
     text_free(p->extra);
+    HudArt_free(p->ping);
     free(p);
 }
 
@@ -1043,7 +1053,7 @@ static HudVisual *position_new(void)
     p->extra = text_new(HudConfig_font(0x64), HudConfig_scheme(), c14, 0, 0, rw, rh, 1, false);
     p->place = text_new(HudConfig_font(0x4c), HudConfig_scheme(), c14, 0, 0, rw, rh, 0, false);
     p->of = text_new(HudConfig_font(0x64), (uint32_t)HudConfig_i32(0x18), c14, 0, 0, rw, rh, 0, false);
-    PENDING_NOTE(0x42a6f0, "the standings' ping meter (network)");
+    p->ping = HudArt_load(exe_str(0x5ccdc4), 0, 0, 0, exe_i32(0x5b2d88), exe_i32(0x5b2d8c), false, false, false);   /* "pingmeter" */
     HudConfig_pos(HUDPOS_POSITION, &x, &y);
     position_setpos(&p->tray.base, x, y);
     /* The drivers' names, cut to fit 55 pixels (" " when none). */
