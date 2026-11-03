@@ -87,6 +87,7 @@ static bool picture_click(FertControl *c);
 static bool camera_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool mini_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool glintyline_draw(FertControl *c);
+static bool header_draw(FertControl *c, int32_t ox, int32_t oy);
 static void glintylines_drop(void);
 static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
 static void camera_update(FertControl *w, FertControl *c);
@@ -2725,6 +2726,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) return camera_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.MINIBADGE") || !strcmp(c->id, "NFS5.MINIPLAYERPICTURE")) return mini_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.GLINTYLINE")) return glintyline_draw(c);
+    if (!strcmp(c->id, "NFS5.HEADER")) return header_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
@@ -2963,12 +2965,99 @@ typedef struct { const FertControl *c; DriftLine line; uint32_t colour; } Glinty
 static GlintyLine *s_glines;
 static int s_nglines;
 
-static void glintylines_drop(void)   /* (_v22 0x521d20, the screen gone) */
+/* A screen's header (FEHeaderText, vtable 0x5b5f48): its label's text (the part's string in its font;
+   _v20 0x4ca940), not its parts, drawn by _v15 0x4ca980 unless FEHEADERTEXTENABLED (0x657e48) is set
+   (0x4e2e00). As its window comes on (the transition's counter, 0x4c83f0, from 0xff to 0) its letters
+   close in: spaced -7 apart to a fifth of the way, opening out to 7 by four fifths, closing to 0 at
+   the end (Drift_Text 0x5218d0; FE2D_Text 0x4d9e00 at 0), in its colour (0x5288c0) at the fade. Once on,
+   weeicons.fsh's GLNT glint sweeps across the screen (0x4e2d30: 640 ticks, a pixel a tick) over the
+   text alone, white, every 128 .. 255 ticks (_v21 0x4ca8a0 the first wait). */
+typedef struct { const FertControl *c; bool sweeping; uint32_t start; int wait; } HeaderGlint;   /* +0x1de, +0x1e0, +0x1e4 */
+static HeaderGlint *s_headers;
+static int s_nheaders;
+static char s_weeicons[300];   /* (+0x148) */
+
+static bool header_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (Options_Int(0x5d5dec, 0) != 0) return true;   /* FEHEADERTEXTENABLED */
+    HeaderGlint *h = NULL;
+    for (int i = 0; i < s_nheaders && !h; i++)
+        if (s_headers[i].c == c) h = &s_headers[i];
+    uint32_t now = (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+    if (!h) {
+        HeaderGlint *nh = realloc(s_headers, sizeof *nh * (size_t)(s_nheaders + 1));
+        if (!nh) return true;
+        s_headers = nh;
+        h = &s_headers[s_nheaders++];
+        h->c = c;
+        h->sweeping = false;
+        h->start = now;
+        h->wait = CRT_rand() % 128 + 0x80;
+    }
+    int k = FertControl_findPart(c, "label");   /* ("label" 0x5d78ec) */
+    if (k < 0) return true;
+    const FertPart *label = c->parts[k];
+    HudFont *font = FEPart_Font(label);
+    const char *text = FEPart_Text(label);
+    FE2D_DepthPushStep();   /* 0x4da4c0 */
+    int32_t p[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");   /* 0x524b90 */
+    if (pa) FertAttr_point(pa, p);
+    int x = p[0] + ox, y = p[1] + oy;   /* (the transition's offset 0x4c8330 and the window's, in ox, oy) */
+    const FertTrans *tr = FETrans_Window();
+    int left = tr ? FETrans_Counter(tr) * 0xff / 0x200 : 0;   /* 0x4c83f0 (0x5b6b2c) */
+    double t = (double)(0xff - left) * (double)(1.0f / 255.0f);   /* (0x5b3888) */
+    int alpha = (int)(t * 255.0);
+    int spacing;
+    if (t < 0.2) spacing = -7;
+    else if (t < 0.8) spacing = -7 - (int)((t - (double)0.2f) * (double)(5.0f / 3.0f) * -14.0);   /* (0x5b23f4, 0x5b5fbc, 0x5b5fb8) */
+    else spacing = 7 - (int)((t - (double)0.8f) * 5.0 * 7.0);   /* (0x5b24e8, 0x5b5fb4, 0x5b3090) */
+    FertAttr *ca = FertAttrList_find(&c->attrs, "color");
+    uint32_t col = ca ? FertAttr_color(ca) : 0xffffffffu;
+    col = (uint32_t)(int)((col >> 24) * (uint32_t)alpha / 0xff) << 24 | (col & 0xffffffu);   /* 0x4d82a0 */
+    if (font && text) {
+        if (spacing == 0) FE2D_Text(font, (float)x, (float)y, 0, col, text, 1.0f, 1.0f);
+        else Drift_Text(font, x, y, col, text, spacing, 0, false);
+    }
+    if (left != 0) {   /* (0x4e2da0: the rooms' detail off, not the port's) */
+        FE2D_DepthPop();   /* 0x4da480 */
+        return true;
+    }
+    FE2D_OverlayBegin();   /* 0x4da570 */
+    if (!h->sweeping && (int)(h->start + (uint32_t)h->wait) < (int)now) {
+        h->sweeping = true;
+        h->start = now;
+    }
+    if (h->sweeping) {
+        int d = (int)(now - h->start);
+        if (640 <= d) {   /* 0x4e2d30 */
+            h->sweeping = false;
+            h->start = now;
+            h->wait = CRT_rand() % 128 + 0x80;
+        } else {
+            if (!s_weeicons[0]) {
+                FE_ResolvePath("weeicons.fsh", s_weeicons, sizeof s_weeicons);   /* ("%sweeicons.fsh" 0x5d7bf8) */
+                FEShapes_Load(s_weeicons);
+            }
+            FeImage *g = FEShapes_Named(s_weeicons, "GLNT");   /* 0x4d75f0 (0x5d7bf0) */
+            if (g) FE2D_Image(g, (float)d, (float)y, (float)g->w, (float)g->h, (uint32_t)alpha << 24 | 0xffffffu, 0, false);   /* 0x4d8280, 0x4d95a0 */
+        }
+    }
+    FE2D_OverlayEnd();   /* 0x4da5b0 */
+    FE2D_DepthPop();
+    return true;
+}
+
+static void glintylines_drop(void)   /* (_v22 0x521d20, the screen gone; FEHeaderText_v22 0x4ca910) */
 {
     int n = 0;
     for (int i = 0; i < s_nglines; i++)
         if (on_stack(s_glines[i].c)) s_glines[n++] = s_glines[i];
     s_nglines = n;
+    n = 0;
+    for (int i = 0; i < s_nheaders; i++)
+        if (on_stack(s_headers[i].c)) s_headers[n++] = s_headers[i];
+    s_nheaders = n;
 }
 
 static bool glintyline_draw(FertControl *c)

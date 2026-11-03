@@ -347,6 +347,7 @@ static const char *part_text(const FertPart *p);
 
 /* The text a part shows: a localized part's string of its stringID (0x4e5d80), else its text. */
 const char *FEPart_Text(const FertPart *p) { return part_text(p); }
+HudFont *FEPart_Font(const FertPart *p);
 
 static const char *part_text(const FertPart *p)
 {
@@ -368,6 +369,8 @@ static HudFont *part_font(const FertPart *p)
     }
     return FEFont_Get(path);
 }
+
+HudFont *FEPart_Font(const FertPart *p) { return part_font(p); }
 
 static bool measure(const FertPart *p, int32_t *w, int32_t *h)
 {
