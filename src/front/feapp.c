@@ -1443,7 +1443,7 @@ static void on_up(FertControl *c)
     }
     if (!strcmp(c->id, "NFS5.CheckBox")) {   /* FECheckBox_v9 0x4c3340: a click in it turns its accessor over */
         FEAccessor *a = FEAccess_Find(data_str(c, "boolAccessor"));
-        if (a) FEAccess_SetPos(a, !FEAccess_Pos(a));   /* (FEBoolAccessor's slot 29) */
+        FEAccess_Toggle(a);   /* (FEBoolAccessor's slot 29) */
         return;
     }
     if (is_combo(c)) {
@@ -3839,6 +3839,23 @@ static void hide(FertControl *w, const char *name, bool on) { set_flag(w, name, 
    (OwnedCars.Car) and the mode (the used and new cars, the parts and the repairs the career's; a car for
    sale shows "remove from market" for "sell"); the asking price's dialog closed with OK and a text: the
    car put up at it (0x4f8760), the market's turn (0x4f7350) in the career's year. */
+/* FEQuickFixCallBackList_v1 0x50ecd0 (the garage's, which derives from it): the repair panel's bars
+   (ID_BAR<category>) shown by their boxes, the boxes locked while nothing needs repairing, and the quick
+   fix button enabled with any box ticked. */
+static void quickfix_update(FertControl *w)
+{
+    static const char *const bars[10] = {"ID_BARENGINE", "ID_BARBRAKES", "ID_BARTRANSMISSION",
+        "ID_BARSUSPENSION", "ID_BARSHOCKS", "ID_BARBODYWORK", "ID_BARSWAYBARS", "ID_BARTIRES",
+        "ID_BARCOSMETIC", "ID_BAROVERALL"};
+    bool on[10], any = false;
+    FEData_QuickFixTick(on);
+    for (int k = 0; k < 10; k++) {
+        hide(w, bars[k], !on[k]);   /* 0x50cfd0 */
+        any |= on[k];
+    }
+    enable(w, "ID_QUICKFIXBUTTON", any);   /* 0x50cf40 */
+}
+
 static void garage_update(FertControl *w)
 {
     Save *sv = FESave_Current();
@@ -3990,6 +4007,9 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
         bool hb = b && (b->feflags & 4) && !(b->feflags & 0x10), hf = f && (f->feflags & 4) && !(f->feflags & 0x10);
         FEMovie_CreditSpeed(hb ? -3 : hf ? 3 : 1);
     }
+    /* (the repair screen has no list of its own; its QUICKFIX is the quick fix list's member, which the
+       garage's derives from: the port runs that list's tick wherever its button is) */
+    if (control_named(w, "ID_QUICKFIXBUTTON")) quickfix_update(w);
     if (!strcmp(cbl, "ID_GARAGECBL")) garage_update(w);
     else if (!strcmp(cbl, "ID_USEDCARCBL")) usedcar_update(w);
     else if (!strcmp(cbl, "ID_CARSETUP")) {

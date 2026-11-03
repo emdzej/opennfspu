@@ -146,6 +146,10 @@ void FEData_RepairOpen(void);
 bool FEData_CompareCallback(const char *cb);
 int FEData_RepairCallback(const char *cb);
 void FEData_QuickFixClear(void);
+/* The quick fix screen's boxes each tick (0x50ecd0): the whole car's clears the others, the ones with
+   nothing to repair locked; on[] the boxes ticked. A bool accessor turned over unless locked (0x4b8390). */
+void FEData_QuickFixTick(bool on[10]);
+void FEAccess_Toggle(FEAccessor *a);
 /* The owned car an accessor's position is (its index in the save), -1 when it isn't one. */
 int FEData_OwnedIndex(const char *accessor);
 /* A race's wear (the race car's parts by id) added to an owned car's installed parts (the race's

@@ -40,6 +40,7 @@ struct FEAccessor {
     int owned;       /* ACC_MERGED: the owned cars it counted last */
     float fmin, fstep; int dec, slot;   /* ACC_SETUP: FEFloatAccessor's range, decimals; the car's float */
     int src;         /* ACC_OWNED: 1 the market's cars; ACC_COLOUR / ACC_INTCOLOUR: 1 the garage car's */
+    bool locked;     /* ACC_BOOL: +0x24 (0x4b83a0 on, 0x4b83b0 off), not turned over (FEBoolAccessor_v29 0x4b8390) */
     uint32_t cval;   /* FEColourAccessor's colour (+0x2c) for the garage car's (src 1) */
     bool custom;     /* ACC_COLOUR / ACC_INTCOLOUR: its box allows custom colours (+0x30, data.allowcustom) */
     int pal;         /* (their palette's count) */
@@ -624,6 +625,35 @@ void FEData_QuickFixClear(void)   /* GOTOQUICKFIX (0x50e960): every box off */
     for (int k = 0; k < 10; k++) {
         FEAccessor *a = FEAccess_Find(k_quickfix[k]);
         if (a) FEAccess_SetPos(a, 0);
+    }
+}
+
+void FEAccess_Toggle(FEAccessor *a)   /* FEBoolAccessor_v29 0x4b8390 */
+{
+    if (a && !a->locked) FEAccess_SetPos(a, !FEAccess_Pos(a));
+}
+
+/* FEQuickFixCallBackList_v1 0x50ecd0's accessors: the whole car's box ticked turns the nine others off;
+   on[] the boxes after; with a car shown, each box locked while its category costs nothing to repair
+   (0x4ef230 .. 0x4ef590, the whole car's 0x4ef5f0). */
+void FEData_QuickFixTick(bool on[10])
+{
+    FEAccessor *b[10];
+    for (int k = 0; k < 10; k++) b[k] = FEAccess_Find(k_quickfix[k]);
+    if (b[9] && FEAccess_Pos(b[9]))
+        for (int k = 0; k < 9; k++)
+            if (b[k]) FEAccess_SetPos(b[k], 0);
+    for (int k = 0; k < 10; k++) on[k] = b[k] && FEAccess_Pos(b[k]) != 0;
+    Save *sv = FESave_Current();
+    FEAccessor *a = FEAccess_Find("OwnedCars.Car");
+    if (!sv || !a || !FEAccess_Count(a) || FEAccess_Pos(a) >= sv->ncars) return;
+    const SaveCar *c = &sv->cars[FEAccess_Pos(a)];
+    int year = career_year();
+    for (int k = 0; k < 10; k++) {
+        int32_t cost = 0;
+        if (k < 9) cost = category_cost(c, k_cats[k].type, k_cats[k].type2, year);
+        else for (int t = 1; t <= 10; t++) cost += category_cost(c, t, 0, year);
+        if (b[k]) b[k]->locked = cost == 0;
     }
 }
 
@@ -2739,7 +2769,7 @@ int FEAccess_Percent(const FEAccessor *a, const char *arg)
 {
     if (!a) return 0;
     refresh(a);
-    if (a->kind == ACC_OWNED && arg && *arg) {   /* (FEOwnedCarAccessor's slot 0x18: a condition) */
+    if (a->kind == ACC_OWNED && arg && *arg) {   /* FEOwnedCarAccessor_v6 0x4f6170 (slot 0x18): a condition, 100 less the wear */
         const SaveCar *c = acc_car(a);
         if (!c) return 0;
         if (!strcmp(arg, "OVERALLDAMAGE")) return (int)(100.0f - FEData_CarDamage(c));
