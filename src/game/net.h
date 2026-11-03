@@ -2,7 +2,7 @@
    players' lobby, its games (rooms) and their races.
 
    A session object (Net_Construct 0x48fbe0, 0x268 bytes at 0x628c70) holds this machine's client: a guest
-   of a server, by the network (UDP; IPX is absent on gasm) or a modem (pending), or the in-process guest
+   of a server, by the network (UDP or IPX, both over the relay) or a modem (out of scope: gasm has no serial ports), or the in-process guest
    of the server this machine runs (Net_HostGame: provider 3, the memory link). The server (0x491c80, 0x188
    bytes at 0x628c74) keeps the players and their rooms (games of up to 8, 0x48b890); a hosted game is one
    room the host's own player opens. A server without a player of this machine's is a lobby server that
@@ -114,7 +114,7 @@ typedef struct NetSession {
     NetClient *client;          /* +0x08 */
     NetSender *sender;          /* +0x0c: {client, NULL} */
     CritSec **cs;               /* +0x10 */
-    void *voice;                /* +0x14: (pending) */
+    void *voice;                /* +0x14: the voice chat's (never: gasm has no microphone, net.c) */
     void *unused18;             /* +0x18 */
     int32_t sendclock;          /* +0x1c: GetTickCount * 32, 1000 a flush */
     void (*chat)(const char *text, int32_t from, int32_t to);   /* +0x20 */
