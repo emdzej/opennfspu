@@ -36,8 +36,6 @@ bool plat_param(const char *name, char *dst, size_t cap);
 void plat_set_frame_rate(double hz);
 /* The drawable (default framebuffer) size in pixels; follows window resizes. */
 void plat_display_size(int *w, int *h);
-/* False during catch-up frames, whose drawing is never shown (a step may skip drawing). */
-bool plat_frame_shown(void);
 /* Persistent user files (saves, settings). */
 uint8_t *plat_load_user_file(const char *name, size_t *size);
 bool plat_save_user_file(const char *name, const void *data, size_t size);

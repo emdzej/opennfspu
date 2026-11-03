@@ -103,7 +103,9 @@ bool app_init(void)
 bool app_frame(void)
 {
     g_app_frames++;
-    if (plat_frame_shown()) {
+    /* Every frame runs the game, the runner's catch-up frames too (gasm_gl_frame_shown 0: only the last
+       of them is shown): the game's time is the frame count, so skipping them would stop it. */
+    {
         if (race_track[0]) {
             DRIVE_selftest(race_track, car_name);
             /* The race loop's end (RaceLoop 0x415300): the menus' quit or the race-over's Escape back to the

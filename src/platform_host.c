@@ -37,7 +37,6 @@ bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel)
     *buttons = 0;
     return false;
 }
-bool plat_frame_shown(void) { return true; }
 /* The user files in memory (the tests' runs start empty, as gasm's headless ones do). */
 typedef struct { char name[128]; uint8_t *data; size_t size; } UserFile;
 static UserFile s_files[64];

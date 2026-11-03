@@ -42,7 +42,6 @@ void plat_display_size(int *w, int *h)
     *w = (int)gasm_gl_width();
     *h = (int)gasm_gl_height();
 }
-bool plat_frame_shown(void) { return gasm_gl_frame_shown() != 0; }
 
 bool plat_gamepad(int slot, float axes[16], float buttons[32], char *name, size_t cap)
 {
