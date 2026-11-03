@@ -22,25 +22,18 @@ gasm-run opennfspu.wasm --asset-dir "/path/to/Need For Speed - Porsche Unleashed
 
 ## Network games
 
-gasm has no raw sockets: its `gasm:net` reaches other players through a relay server (`gasm-relay`, from
-gasm). The port puts the original's network library on it: each player in a relay room gets an address
-`10.0.0.<n>`, in the order they joined, the first `10.0.0.1`. Start the relay, then each player's game:
+gasm has no raw sockets: `gasm:net` reaches other players through a relay server (`gasm-relay`, from
+gasm). The port runs the original's network library over it. Each game in a relay room gets the address
+`10.0.0.<n>`, in the order the games joined:
 
 ```sh
 gasm-relay 0.0.0.0:9123 --max-peers 8
-gasm-run opennfspu.wasm --asset-dir <game folder> --allow-net \
+gasm-run opennfspu.wasm --asset-dir <game folder> --allow-net=<relay host> \
   --param relay=ws://<relay host>:9123 --param room=<name>
 ```
 
-All players use the same `room`. In the game: Multiplayer, Peer to peer IP. The host chooses create, the
-others type the host's address (shown at the top right of the host's create screen) and connect.
-Or Multiplayer, LAN: the room is the local network, the host creates a game and the others see it in
-their list.
-
-The browser player takes the same two settings in its address:
-`https://opennfspu.emdzej.pl/play/?relay=wss://<relay host>:9123&room=<name>`. It then lets the game connect to
-that host only. A page served over https can only reach a `wss://` relay (`gasm-relay` with `--tls-cert` and
-`--tls-key`); `ws://` works from a page on `localhost`. Browser and `gasm-run` players can share a room.
+[Multiplayer](/guide/multiplayer) covers the relay, the bundles and the browser player, and the game's
+peer to peer IP and LAN games.
 
 ## Graphics
 

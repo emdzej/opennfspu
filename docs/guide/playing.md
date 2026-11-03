@@ -32,5 +32,5 @@ fullscreen first. The line under the game shows the frames per second.
 
 `?hashframes=N` runs N frames on virtual time and prints the same hash line as
 `gasm-run --headless N` (with `input=` for scripted input, gasm-run's `--input` syntax, and `size=WxH` for
-the drawing size; 1280x720 by default, the size `gasm-run --headless` draws at, so the hashes match). Other query parameters are passed to the game. `relay=` and `room=` join a network game's relay room ([Network games](/guide/gasm#network-games)).
+the drawing size; 1280x720 by default, the size `gasm-run --headless` draws at, so the hashes match). Other query parameters are passed to the game. `relay=` and `room=` join a network game's relay room ([Multiplayer](/guide/multiplayer)).
 `tools/web-play-test.mjs` drives this page in headless Chrome.

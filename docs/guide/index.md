@@ -18,3 +18,4 @@ see [Game data](/guide/game-data).
 - [Installing](/guide/install): the bundles for macOS, Linux and Windows.
 - [Playing in the browser](/guide/playing): no installation.
 - [Running on gasm](/guide/gasm): `gasm-run` directly.
+- [Multiplayer](/guide/multiplayer): network games over a gasm relay.

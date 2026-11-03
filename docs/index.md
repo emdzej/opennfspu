@@ -34,7 +34,7 @@ features:
     linkText: Play
     target: _self
   - title: In progress, and honest about it
-    details: Single player runs from the menus to the race and back (Quick Race, the knockouts, the Evolution career, Factory Driver). Multiplayer (games by IP address over gasm's relay) is in progress. Expect rough edges.
+    details: Single player runs from the menus to the race and back (Quick Race, the knockouts, the Evolution career, Factory Driver). Multiplayer (peer to peer IP and LAN games over gasm's relay) is in progress. Expect rough edges.
     link: /guide/status
     linkText: Status
 ---
@@ -65,7 +65,7 @@ portable game runtime: the same module natively (`gasm-run`) and in the browser.
 
 ## Status
 
-In progress: single player is playable (Quick Race, the knockouts, the Evolution career, Factory Driver); multiplayer is in progress (games by IP address over gasm's relay). Details in
+In progress: single player is playable (Quick Race, the knockouts, the Evolution career, Factory Driver); multiplayer is in progress (peer to peer IP and LAN games over gasm's relay). Details in
 [Status](/guide/status).
 
 ## Sibling projects

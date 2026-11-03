@@ -100,6 +100,7 @@ export default defineConfig({
             { text: "Running on gasm", link: "/guide/gasm" },
             { text: "Playing in the browser", link: "/guide/playing" },
             { text: "Controls", link: "/guide/controls" },
+            { text: "Multiplayer", link: "/guide/multiplayer" },
           ],
         },
       ],

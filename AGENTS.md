@@ -26,9 +26,11 @@ loads from `Drivers/dx7z.dll` (Direct3D 7) or `voodoo2z.dll` (Glide). The port i
 3.0 (`gasm:gl`; WebGL 2 in browsers) following dx7z.dll, and ports the game above it unchanged in structure.
 
 **State:** single player playable (docs/guide/status.md): the front end, Quick Race, the knockouts, the Evolution
-career, Factory Driver, the races with AI, traffic and police, the HUD, sound and replays. Multiplayer: games by
-IP address over a gasm-relay room (src/real/wsock.c: peer i is 10.0.0.(i+1)), both race modes; LAN (IPX), the
-Internet (TCP/IP stream provider), the modem and the players' pictures are `PENDING_NOTE`s. Viewers: `--param car=<name>`, `track=<name>`, `drive=<track>`, `fe=<layout>`.
+career, Factory Driver, the races with AI, traffic and police, the HUD, sound and replays. Multiplayer: peer to
+peer IP and LAN (IPX + SAP, src/real/ipx.c) games over a gasm-relay room (src/real/wsock.c: peer i is
+10.0.0.(i+1)), both race modes, the TCP/IP stream fallback (src/real/tcp.c), the players' pictures
+(docs/guide/multiplayer.md); the Internet lobby (EA's servers are gone) is not ported, the modem and serial
+games are out of scope (their `PENDING_NOTE`s stay). Viewers: `--param car=<name>`, `track=<name>`, `drive=<track>`, `fe=<layout>`.
 
 ## Hard rules
 
