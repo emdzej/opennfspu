@@ -40,7 +40,6 @@ static void Sim_ClearContacts(void)
         if (g_traffic[i]) *CAR_I(g_traffic[i], CAR_CONTACTS) = 0;
 }
 
-static int32_t s_fxsaved;   /* 0x657ca4 */
 
 /* Each car renderer's tick (slot 8, R3DCar_v8 0x438350) through their list (0x6115f0, the newest
    first): in the race its particles' emitters set from the car (0x43eeb0 with 1), the viewed car's too
@@ -88,10 +87,10 @@ void Sim_Step(void)
         if (g_sim_tick > 0x1bf) g_race_started = 1;
         /* the effects' volume from nothing over ticks 0x11 .. 0x50 */
         if (g_sim_tick == 0) {
-            s_fxsaved = g_audio_fx;
+            g_audio_fx_kept = g_audio_fx;
             g_audio_fx = 0;
         } else if (0x10 < g_sim_tick && g_sim_tick < 0x51) {
-            g_audio_fx = ((g_sim_tick - 0x10) * s_fxsaved) >> 6;
+            g_audio_fx = ((g_sim_tick - 0x10) * g_audio_fx_kept) >> 6;
         }
     }
     if (!(g_sim_tick & 1)) {

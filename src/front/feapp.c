@@ -1,4 +1,5 @@
 /* The front end's application (feapp.h). */
+#include "game/car_drive.h"
 #include "front/feapp.h"
 #include "front/feintro.h"
 #include "render/rtex.h"
@@ -126,7 +127,6 @@ static bool s_used_parts;             /* the used car screen's parts shown, not 
 static int s_grid_pers[8], s_grid_start[9], s_ngrid = -1;   /* the knockout's and the career's grid for the race */
 static float s_skill = 1.0f;
 static bool s_era_race;   /* 0x6577dc of the race just run: the last race of its era's last tournament */   /* the opponents' skill factor (the career race's difficulty, +0x3cc) */
-static int s_race_gametype = -1;      /* 0x6573e8: the game type the last race ran in (the way back's) */
 static bool s_back_locked;            /* FEApplication +0x17c (0x4d5670 / 0x4d5690): the back button off */
 static bool s_testdrive;              /* 0x699fc8: the race a test drive (0x5dc1b8 its type: 6 new, 7 used, 8 setup) */
 static int s_testdrive_type;          /* 0x5dc1b8 */
@@ -507,11 +507,11 @@ static bool fe_start(const char *start)
             return FEApp_GotoScreen(start, true);
         }
         s_era_race = false;
-        if ((s_race_gametype == 10 || s_race_gametype == 11) && n > 0) {
+        if ((g_race_mode == 10 || g_race_mode == 11) && n > 0) {
             /* (0x4d2e70: after the prize race the first screen and the tournament screen; after its
                test drive the first screen and the victory room) */
             ok = FEApp_GotoScreen(s_saved[0], true);
-            if (ok) ok = FEApp_GotoScreen(exe_str(s_race_gametype == 10 ? 0x5d8bdc : 0x5d9408), true);   /* "tournament", "victoryroom" */
+            if (ok) ok = FEApp_GotoScreen(exe_str(g_race_mode == 10 ? 0x5d8bdc : 0x5d9408), true);   /* "tournament", "victoryroom" */
             if (ok) return true;
             while (s_depth) screen_free(s_stack[--s_depth]);
             return FEApp_GotoScreen(start, true);
@@ -555,7 +555,6 @@ void FEApp_RaceOver(const int *places, const int *times, const bool *clean, int 
         else FEData_TourResult(s_tour_race, places, times, clean, n);
     }
     s_tour_race = -1;
-    s_race_gametype = s_gametype;
     if (s_gametype == 10 && !quit && n > 0 && places[0] == 1) {
         /* 0x4ed590's type 10 won: the prize car owned (0x501820 of PrizeCars.Car's slots 29 .. 34: its
            colours +0x3ec, +0x530, +0x3f0, +0x3f4 swapped, no stripes, no number; +0x6a4 0) */

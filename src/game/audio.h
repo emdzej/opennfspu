@@ -11,6 +11,8 @@
 #include <stdint.h>
 
 extern int32_t g_sound_quality;
+/* The effects' volume kept (0x657ca4): while they are off, and over the race start's fade-in. */
+extern int32_t g_audio_fx_kept;
 extern int32_t g_audio_fx;         /* 0x5d1744: the effects' volume, 0 .. 0x7f (the options') */    /* 0x657c98: 0 high .. 2 low, 3 none */
 /* A music level (0 .. 0x7f, the options') through the mix's music share (0x5d14b0). 0x4a80c0 */
 int Audio_MusicLevel(int level);

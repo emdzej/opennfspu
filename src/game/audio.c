@@ -32,7 +32,7 @@ static const char *sound_dir(void) { return "GameData\\Sounds\\"; }   /* 0x65b31
 static int32_t s_mix[15];
 static bool s_mix_read;
 static bool s_sfx_off;    /* !0x656840: the effects' key turned them off */
-static int32_t s_sfx_kept; /* 0x657ca4: the effects' volume while off (0x657ca8 .. the others') */
+int32_t g_audio_fx_kept;   /* 0x657ca4: the effects' volume while off or faded in (0x657ca8 .. the others') */
 
 static int32_t opt(uint32_t va)
 {
@@ -1768,11 +1768,11 @@ void Audio_ToggleSfx(void)
         engines_stop();
         for (int i = 0; i < 0x49; i++)   /* (to 0x6563c8: not the last seven) */
             if (s_slot[i][0] != -1) SND_SetVolume(s_slot[i][0], 0);
-        s_sfx_kept = g_audio_fx;
+        g_audio_fx_kept = g_audio_fx;
         g_audio_fx = 0;
         s_sfx_off = true;
     } else {
-        g_audio_fx = s_sfx_kept;
+        g_audio_fx = g_audio_fx_kept;
         s_sfx_off = false;
     }
 }
