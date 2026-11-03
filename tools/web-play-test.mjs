@@ -37,12 +37,14 @@ if (!existsSync(WASM)) { console.error('build the site first (docs/scripts/copy-
 if (!existsSync(CHROME)) { console.error(`no Chrome at ${CHROME} (CHROME=<binary>)`); process.exit(1); }
 
 // Add cases (frames and scripted input) as the game grows: the frontend, a race.
-const CASES = [
-  { name: 'start', frames: Number(process.env.PLAY_FRAMES || 120), input: '' },
-];
-// PLAY_QUERY=<k=v&...>: more of the page's parameters (a network check: relay=ws://127.0.0.1:9123&room=..,
-// beside a gasm-run in the same room; the hashes then aren't expected to match).
+// PLAY_QUERY=<k=v&...>: more of the page's parameters, given to the reference runs too (aspect=16:9&drive=..).
+// A network check (relay=ws://127.0.0.1:9123&room=.., beside a gasm-run in the same room) keeps them out:
+// its hashes aren't expected to match.
 const EXTRA = process.env.PLAY_QUERY ? `&${process.env.PLAY_QUERY}` : '';
+const QUERY = Object.fromEntries(new URLSearchParams(process.env.PLAY_QUERY ?? ''));
+const CASES = [
+  { name: 'start', frames: Number(process.env.PLAY_FRAMES || 120), input: '', params: QUERY.relay ? {} : QUERY },
+];
 
 // Reference hashes from the native runner (same module, same data, same input).
 function native(c, dir) {
