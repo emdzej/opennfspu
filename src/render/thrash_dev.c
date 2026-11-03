@@ -14,6 +14,20 @@
 
 static int mw, mh, mbpp, scale;       /* the mode, and the surfaces' scale */
 static GLuint fbo[2], colour[2], depth;   /* [0] front, [1] back (the render target) */
+/* A surface known to be one colour (cleared whole, nothing drawn on it since): a lock's read of it is
+   that colour, without waiting on the GPU for the pixels (the movies lock a cleared frame each frame). */
+static bool solid[2];
+static uint32_t solid_c[2];
+/* Or holding the pixels last written to it whole (mode pixels, the round trip through the surface being
+   exact): read from that copy. */
+static uint8_t *shadow[2];
+static bool shadow_ok[2];
+
+static void forget(int i)
+{
+    solid[i] = false;
+    shadow_ok[i] = false;
+}
 static GLuint prog, present_prog, vao, vbo, ibo, white_tex, blit_tex, samplers[DEV_STAGES];
 static uint32_t rstate[RS_COUNT];
 static uint32_t tstate[DEV_STAGES][TSS_COUNT];
@@ -204,6 +218,11 @@ int dev_open(int width, int height, int bpp)
 {
     int dw, dh;
     plat_display_size(&dw, &dh);
+    for (int i = 0; i < 2; i++) {
+        free(shadow[i]);
+        shadow[i] = NULL;
+        shadow_ok[i] = false;
+    }
     mw = width;
     mh = height;
     mbpp = bpp;
@@ -269,6 +288,9 @@ int dev_open(int width, int height, int bpp)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     }
     defaults();
+    solid[0] = solid[1] = true;
+    solid_c[0] = solid_c[1] = 0;
+    shadow_ok[0] = shadow_ok[1] = false;
     vp_x = vp_y = 0;
     vp_w = mw;
     vp_h = mh;
@@ -379,6 +401,7 @@ static void scissor(int x0, int y0, int x1, int y1)
 
 static void apply_state(int prim)
 {
+    forget(1);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo[1]);
     glViewport(0, 0, mw * scale, mh * scale);
     scissor(vp_x, vp_y, vp_x + vp_w, vp_y + vp_h);
@@ -540,6 +563,10 @@ void dev_clear(int x0, int y0, int x1, int y1, int flags, uint32_t c, float z, u
     scissor(x0 > vp_x ? x0 : vp_x, y0 > vp_y ? y0 : vp_y, x1 < vx1 ? x1 : vx1, y1 < vy1 ? y1 : vy1);
     GLbitfield m = 0;
     if (flags & CLEAR_TARGET) {
+        int cx0 = x0 > vp_x ? x0 : vp_x, cy0 = y0 > vp_y ? y0 : vp_y, cx1 = x1 < vx1 ? x1 : vx1, cy1 = y1 < vy1 ? y1 : vy1;
+        solid[1] = cx0 <= 0 && cy0 <= 0 && cx1 >= mw && cy1 >= mh;
+        solid_c[1] = c & 0xffffff;
+        shadow_ok[1] = false;
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glClearColor((float)(c >> 16 & 255) / 255.0f, (float)(c >> 8 & 255) / 255.0f, (float)(c & 255) / 255.0f, 1.0f);
         m |= GL_COLOR_BUFFER_BIT;
@@ -565,8 +592,24 @@ void dev_flip(bool copy)
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[0]);
         glDisable(GL_SCISSOR_TEST);
         glBlitFramebuffer(0, 0, mw * scale, mh * scale, 0, 0, mw * scale, mh * scale, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        solid[0] = solid[1];
+        solid_c[0] = solid_c[1];
+        shadow_ok[0] = shadow_ok[1];
+        if (shadow_ok[1] && shadow[0] && shadow[1]) memcpy(shadow[0], shadow[1], (size_t)mw * mh * (mbpp <= 16 ? 2 : 4));
+        else shadow_ok[0] = false;
         return;
     }
+    bool sf = solid[0], so = shadow_ok[0];
+    uint32_t sc = solid_c[0];
+    uint8_t *sp = shadow[0];
+    solid[0] = solid[1];
+    solid_c[0] = solid_c[1];
+    shadow_ok[0] = shadow_ok[1];
+    shadow[0] = shadow[1];
+    solid[1] = sf;
+    solid_c[1] = sc;
+    shadow_ok[1] = so;
+    shadow[1] = sp;
     GLuint f = fbo[0], c = colour[0];
     fbo[0] = fbo[1];
     colour[0] = colour[1];
@@ -590,16 +633,27 @@ void dev_read_pixels(int surface, int x, int y, int w, int h, void *dst, int pit
     if (x + w > mw) w = mw - x;
     if (y + h > mh) h = mh - y;
     if (w <= 0 || h <= 0) return;
-    uint8_t *rgba = malloc((size_t)w * scale * h * scale * 4);
-    if (!rgba) return;
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo[surface == 1 ? 0 : 1]);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(x * scale, y * scale, w * scale, h * scale, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    int si = surface == 1 ? 0 : 1;
+    if (shadow_ok[si] && shadow[si]) {
+        int bpp = mbpp <= 16 ? 2 : 4;
+        for (int r = 0; r < h; r++)
+            memcpy((uint8_t *)dst + (size_t)r * pitch, shadow[si] + ((size_t)(y + r) * mw + x) * bpp, (size_t)w * bpp);
+        return;
+    }
+    uint8_t one[4] = {(uint8_t)(solid_c[si] >> 16), (uint8_t)(solid_c[si] >> 8), (uint8_t)solid_c[si], 255};
+    uint8_t *rgba = NULL;
+    if (!solid[si]) {
+        rgba = malloc((size_t)w * scale * h * scale * 4);
+        if (!rgba) return;
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo[si]);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x * scale, y * scale, w * scale, h * scale, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    }
     int rw = w * scale;
     for (int r = 0; r < h; r++) {
         uint8_t *row = (uint8_t *)dst + (size_t)r * pitch;
         for (int c = 0; c < w; c++) {
-            const uint8_t *p = rgba + ((size_t)(r * scale + scale / 2) * rw + (size_t)(c * scale + scale / 2)) * 4;
+            const uint8_t *p = rgba ? rgba + ((size_t)(r * scale + scale / 2) * rw + (size_t)(c * scale + scale / 2)) * 4 : one;
             if (mbpp <= 16) {
                 uint16_t v = (uint16_t)((p[0] * 31 + 127) / 255 << 11 | (p[1] * 63 + 127) / 255 << 5 | (p[2] * 31 + 127) / 255);
                 memcpy(row + c * 2, &v, 2);
@@ -643,6 +697,17 @@ void dev_write_pixels(int surface, int x, int y, int w, int h, const void *src, 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     free(rgba);
+    {
+        int si = surface == 1 ? 0 : 1, bpp = mbpp <= 16 ? 2 : 4;
+        forget(si);
+        if (x == 0 && y == 0 && w == mw && h == mh) {
+            if (!shadow[si]) shadow[si] = malloc((size_t)mw * mh * 4);
+            if (shadow[si]) {
+                for (int r = 0; r < h; r++) memcpy(shadow[si] + (size_t)r * mw * bpp, (const uint8_t *)src + (size_t)r * pitch, (size_t)w * bpp);
+                shadow_ok[si] = true;
+            }
+        }
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, fbo[surface == 1 ? 0 : 1]);
     glViewport(0, 0, mw * scale, mh * scale);
     glDisable(GL_SCISSOR_TEST);
