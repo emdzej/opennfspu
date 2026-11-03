@@ -101,7 +101,17 @@ void R3DCar_Init(R3DCar *car, R3DCarState *state)
     /* The hinge angle table (the original's lives with the car's other animation state): one triple per
        kind, all zero until the simulation fills them (R3DCar_v9 0x438370). */
     car->hinge = calloc(CAR_NHINGES, sizeof *car->hinge);
+    car->nhinges = car->hinge ? CAR_NHINGES : 0;
     for (int i = 0; i < 8; i++) car->anim[i].dir = 1;   /* 0x437850: 8 records {0, 1, 0, 0, 0} */
+}
+
+void R3DCar_SetHingeCount(R3DCar *car, int n)
+{
+    float (*h)[3] = calloc((size_t)n, sizeof *h);
+    if (!h) return;
+    free(car->hinge);
+    car->hinge = h;
+    car->nhinges = n;
 }
 
 /* ---- the .crp cache (0x43ff80) ---- */
@@ -898,6 +908,7 @@ void R3DCar_Free(R3DCar *car)
     car->materials = NULL;
     free(car->hinge);
     car->hinge = NULL;
+    car->nhinges = 0;
 }
 
 /* ---- rotations (EAGL_MatAxisAngle 0x539940, 0x532430) ---- */
@@ -982,7 +993,7 @@ void R3DCarLOD_Draw(R3DCarLOD *lod, EaglMatStack *model, uint8_t mask, bool cock
                     Mat3_AxisRotation(axis, car->hinge[kind][1], r);
                     EAGL_MatFromRotTrans(&m, r, zero);
                     EAGL_MatPreMul(EAGL_StackTopForWrite(model), &m);
-                } else if (kind != 0 && kind < CAR_NHINGES) {
+                } else if (kind != 0 && kind < car->nhinges) {
                     const float *a = car->hinge[kind];
                     float deg = f32(0x5b25cc);   /* 360 */
                     EaglMatrix rx, ry, rz;
@@ -1029,7 +1040,7 @@ void R3DCarLOD_Draw(R3DCarLOD *lod, EaglMatStack *model, uint8_t mask, bool cock
 static void hinge_rot(const R3DCar *car, int kind, EaglMatrix *all, EaglMatrix *yz)
 {
     static const float none[3] = {0, 0, 0};
-    const float *a = car->hinge && kind < CAR_NHINGES ? car->hinge[kind] : none;
+    const float *a = car->hinge && kind < car->nhinges ? car->hinge[kind] : none;
     float deg = f32(0x5b25cc);   /* 360 */
     EaglMatrix rx, ry, rz;
     EAGL_MatAxisAngle(&rx, a[0] * deg, 1.0f, 0, 0);

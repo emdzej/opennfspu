@@ -50,6 +50,7 @@ FE3DObject *FE3DObject_New(int kind, const char *name, const uint32_t colours[4]
     o->state.spec = &o->spec;
     o->state.damage = o->damage;
     R3DCar_Init(&o->car, &o->state);   /* R3DCar_ctor(state, 0x32, 0x14, 3) */
+    R3DCar_SetHingeCount(&o->car, 0x32);
     /* (a room's 20 flags at +0x2d4 set, a car's +0x700: not read by the ported draw) */
     /* The colours before the load, as the race's CarSpecs_Load does: the port composes the pages with them
        while loading (the original sets them after, 0x443ce0, and recomposes, 0x442c80). */
@@ -126,7 +127,7 @@ void FE3DObject_Draw(FE3DObject *o, EaglMatStack *model)
 
 static void hinge(FE3DObject *o, int kind, float x, float y, float z)   /* 0x443e60 */
 {
-    if (!o->car.hinge) return;
+    if (!o->car.hinge || kind < 0 || kind >= o->car.nhinges) return;
     o->car.hinge[kind][0] = x;
     o->car.hinge[kind][1] = y;
     o->car.hinge[kind][2] = z;

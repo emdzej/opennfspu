@@ -26,7 +26,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-enum { CAR_NOPTIONS = 120, CAR_NLODS = 7, CAR_NHINGES = 0x17 };
+enum { CAR_NOPTIONS = 120, CAR_NLODS = 7, CAR_NHINGES = 0x18 };   /* (R3DCar_ctor 0x437850 from CarSpecs_Load 0x410dc0: 0x18) */
 
 /* The car's specification (the car state's +0x558): what the renderer reads of it. */
 typedef struct {
@@ -141,6 +141,7 @@ typedef struct R3DCar {
     int curlod;                     /* +0x2c0: the LOD list index drawn */
     int cockpitlod;                 /* +0x2c8 */
     float (*hinge)[3];              /* +0x2d0: hinge angles (turns) per kind (R3DCar_v9 fills them) */
+    int nhinges;                    /* the ctor's count (0x4413f0's third: 0x18 a race car's, 0x32 the front end's, 0x4d0bb0) */
     uint8_t loaded;                 /* +0x470 */
     uint8_t interior;               /* +0x471: draw the cockpit LOD */
     uint8_t textures;               /* +0x47c: textures are loaded with the geometry */
@@ -187,6 +188,8 @@ extern int g_r3d_quality;       /* 0x6197c4: the detail level (0 = parts never d
 
 /* R3DObject + R3DCar constructors (0x4413f0, 0x437850): state is the car state the car reads. */
 void R3DCar_Init(R3DCar *car, R3DCarState *state);
+/* The hinge table made n long (zeroed): R3DCar_ctor's count for the front end's objects. */
+void R3DCar_SetHingeCount(R3DCar *car, int n);
 void R3DCar_Free(R3DCar *car);                          /* R3DCar_v0 0x437980 + R3DObject 0x441730 */
 /* Loads <name>.crp and <name>.tpg (name as the game gives it, e.g. "GameData\\CarModel\\356a"). Returns
    true as the original does even when the .crp is missing (then car->loaded stays false). 0x441940 */
