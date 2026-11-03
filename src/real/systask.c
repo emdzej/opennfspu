@@ -1,5 +1,6 @@
 /* \real\cmn\systask.c, see systask.h. */
 #include "real/systask.h"
+#include "real/thread.h"
 #include "real/real.h"
 #include <stddef.h>
 
@@ -52,6 +53,17 @@ unsigned SYNCTASK_run(int arg)
             tasks[i].next = now + (uint32_t)tasks[i].period;
             tasks[i].running = 0;
         }
+    }
+    return r;
+}
+
+int SYNCTASK_wait(int ticks)
+{
+    int r = 0;
+    uint32_t start = TIMER_count;
+    while ((int32_t)(TIMER_count - start) < ticks && !r) {
+        r = (int)SYNCTASK_run(0);
+        if (!r && (int32_t)(TIMER_count - start) < ticks) THREAD_sleep(1);   /* (the port's: see .h) */
     }
     return r;
 }

@@ -1,5 +1,6 @@
 /* The UDP address provider and the WinSock datagram socket: see udp.h. */
 #include "real/udp.h"
+#include "real/netgathr.h"
 #include "exe.h"
 #include "platform.h"
 #include "real/wsock.h"
@@ -8,7 +9,6 @@
 #include <string.h>
 
 char g_net_hostaddr[32];
-static CritSec *send_cs;   /* 0x6a5720: around each sendto */
 static bool registered;    /* 0x6a5a78 */
 
 /* ---------------------------------------------------------------- the datagram socket */
@@ -120,9 +120,9 @@ static void send_thread(void *arg)
             WsAddr to;
             if (!pk->broadcast) to_sockaddr(s, &pk->addr, &to);
             else broadcast_sockaddr(s, s->port, &to);
-            CS_enter(send_cs);
+            CS_enter(g_net_sendcs);
             WS_sendto(s->sock, pk->buf, pk->len, 0, &to, (int)sizeof to);
-            CS_leave(send_cs);
+            CS_leave(g_net_sendcs);
             NetList_Push(&s->freesend, pk);
         }
     }
@@ -319,12 +319,13 @@ static void *udp_open(int port, void *owner, NetRecvFn recv)
 }
 
 static int udp_port(void *s) { return ((DgSocket *)s)->port; }   /* 0x5603a0 */
-static int udp_one(void *s) { return 1; }                        /* 0x5603b0, 0x5603c0, 0x560400 */
+static int udp_one(void *s, const char *name) { return 1; }      /* 0x5603b0, 0x5603c0: no advertising */
+static int udp_endbroadcast(void *s) { return 1; }               /* 0x560400 */
 
 /* The text to everyone as a type 0x77 packet, its 0 included. 0x5603d0 */
-static void udp_broadcasttext(void *s, const char *text)
+static int udp_broadcasttext(void *s, const char *text)
 {
-    UDP_provider.send(s, NULL, 0x77, text, (int)strlen(text) + 1);
+    return UDP_provider.send(s, NULL, 0x77, text, (int)strlen(text) + 1);
 }
 
 /* An address from text: dotted, else a host name; the port given, else the socket's. Not an empty text
@@ -369,7 +370,7 @@ static bool udp_same(void *s, const NetAddr *x, const NetAddr *y)
 
 NetProvider UDP_provider = {
     "UDP", {0}, udp_startup, DGRAM_cleanup, udp_open, DGRAM_close, udp_port, udp_one, udp_one,
-    udp_broadcasttext, udp_one, udp_parse, udp_totext, udp_same, DGRAM_localaddr, DGRAM_sendempty,
+    udp_broadcasttext, udp_endbroadcast, udp_parse, udp_totext, udp_same, DGRAM_localaddr, DGRAM_sendempty,
     DGRAM_received, DGRAM_send, DGRAM_recv, DGRAM_discard, DGRAM_setidle,
 };
 
@@ -409,11 +410,11 @@ bool UDP_probe(void)
 
 const uint8_t *UDP_register(const char *name)
 {
-    if (!send_cs) send_cs = CS_create();
+    if (!g_net_sendcs) g_net_sendcs = CS_create();
     if (!registered && UDP_probe()) {
         registered = true;
         memcpy(UDP_provider.guid, exe_data(0x5df6b4, 16), 16);
-        NET_addprovider(&UDP_provider, NULL /* the datagram transport 0x5e1cf0: to come */);
+        NET_addprovider(&UDP_provider, &NETGATHR_transport);
         if (name) UDP_provider.name = name;
     }
     return registered ? UDP_provider.guid : NULL;

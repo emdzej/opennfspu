@@ -28,6 +28,7 @@ void NetList_Append(NetList *l, void *node);                                    
 void *NetList_Pop(NetList *l);                                                     /* 0x580540 */
 void *NetList_Pull(NetList *l);                                                    /* 0x580590 */
 void NetList_Insert(NetList *l, void *node);                                       /* 0x580600: by key */
+bool NetList_Remove(NetList *l, void *node);                                       /* 0x5806a0: Unlink in the section */
 bool NetList_Unlink(NetList *l, void *node);                                       /* 0x5806e0 */
 int NetList_Count(const NetList *l);                                               /* 0x5807a0 */
 int NetList_Index(NetList *l, void *node);                                         /* 0x5807b0 */

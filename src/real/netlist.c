@@ -116,6 +116,15 @@ void NetList_Insert(NetList *l, void *node)
     CS_leave(l->cs);
 }
 
+bool NetList_Remove(NetList *l, void *node)
+{
+    bool r = false;
+    CS_enter(l->cs);
+    if (node) r = NetList_Unlink(l, node);
+    CS_leave(l->cs);
+    return r;
+}
+
 /* (Without the section: its callers hold it.) */
 bool NetList_Unlink(NetList *l, void *node)
 {

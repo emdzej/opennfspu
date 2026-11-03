@@ -13,3 +13,6 @@ extern volatile uint32_t TIMER_count;
 
 void SYNCTASK_add(SyncTaskFn fn, int period, int delay);   /* 0x536350 */
 unsigned SYNCTASK_run(int arg);                             /* 0x536450: the tasks' results or'ed */
+/* The tasks run for that many ticks or until one returns non-zero (its result). The port's timer moves
+   between frames only, so the wait sleeps the thread a frame at a time (the original spins). 0x5364e0 */
+int SYNCTASK_wait(int ticks);

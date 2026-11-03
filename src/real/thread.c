@@ -184,11 +184,18 @@ bool THREAD_isthread(ThreadRec *rec)
     return id == rec->id;   /* (0x55f590) */
 }
 
-void THREAD_sleep(uint32_t ms) { plat_thread_sleep_ms((double)ms); }   /* 0x55f4f0 */
+static void main_slept(double ms);
+
+void THREAD_sleep(uint32_t ms)   /* 0x55f4f0 */
+{
+    plat_thread_sleep_ms((double)ms);
+    main_slept((double)ms);
+}
 
 void THREAD_sleepticks(int ticks)   /* 0x55f500 */
 {
     plat_thread_sleep_ms((double)(ticks * 1000 / TIMER_RATE));
+    main_slept((double)(ticks * 1000 / TIMER_RATE));
 }
 
 /* ---- events ---- */
@@ -258,7 +265,10 @@ void TIMER_removesecondary(void (*fn)(void))
 
 /* The timer thread (0x5646f0: each tick TIMER_count advanced, the callbacks run) and the secondary one
    (0x53be60: the tick's event, its list up to the first empty slot), for every tick up to ms. */
-void TIMER_run(uint32_t ms)
+static uint32_t frame_ms;   /* the last frame's time */
+static double slept_ms;     /* the main thread's sleeps inside frames, all told */
+
+static void advance(uint32_t ms)
 {
     uint32_t to = (uint32_t)((uint64_t)ms * TIMER_RATE / 1000u);
     while ((int32_t)(to - TIMER_count) > 0) {
@@ -267,4 +277,20 @@ void TIMER_run(uint32_t ms)
             if (callbacks[i]) callbacks[i]();
         for (int i = 0; i < 8 && secondary[i]; i++) secondary[i]();
     }
+}
+
+void TIMER_run(uint32_t ms)
+{
+    frame_ms = ms;
+    advance(ms + (uint32_t)slept_ms);
+}
+
+/* The original's timer runs on while the main thread waits (the network's requests wait for answers by
+   ticks); the port's moves at frames, which don't come while the main thread sleeps inside one: its
+   sleeps move the timer on by their time, and the frames' time after them. */
+static void main_slept(double ms)
+{
+    if (!THREAD_isthread(NULL)) return;
+    slept_ms += ms;
+    advance(frame_ms + (uint32_t)slept_ms);
 }

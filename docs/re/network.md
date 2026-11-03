@@ -60,7 +60,8 @@ lines. The web games list asks EA's servers, which are gone.
 
 Tests: two `gasm-run --allow-net --realtime` against a local gasm-relay (`--max-peers 8`):
 `--param thrash_test=3` the WinSock layer, `=4` the UDP provider (src/real/udp.c: each broadcasts its
-address as a type 0x77 packet and reads the other's).
+address as a type 0x77 packet and reads the other's), `=5` the gathering (one instance with
+`--param nethost=1` hosts, the other finds, joins and lists the players).
 
 ## Ported
 
@@ -72,3 +73,11 @@ address as a type 0x77 packet and reads the other's).
   The socket's receive match 0x587840 takes a packet of another type than asked, or of that type from
   the address given: a caller wanting any packet asks for type 0 (never kept: type 0 datagrams are
   dropped on arrival).
+- The connections 0x57ff60..0x580240 and the datagram transport, game gathering (\real\patch3\cmn\
+  netgathr.c, class 0x5e1cf0, src/real/netgathr.c; the packet types are listed in netgathr.h). A socket
+  bound to any address reports 0.0.0.0, as on Windows: a player's address in the protocol is 0.x, which
+  CONMAN 0x55d3b0 replaces with the host address text 0x6b49c0. The packet connections (0x55ff80, the
+  transport's +0x38, and the socket callback's first look 0x5821c0) are next.
+- The port's timer moves at frames; the main thread's sleeps inside a frame move it on by their time
+  (src/real/thread.c), so the requests' tick time-outs end while the main thread waits, as the
+  original's timer thread makes them.
