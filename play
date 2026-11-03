@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Play the game from this checkout in gasm's native runner (gasm-run, a window): builds opennfspu.wasm if
+# a source changed (fetching the SDK and the runner the first time), then runs it on the game data.
+# Anything after the options goes to gasm-run:
+#
+#   ./play                                  the game, from the intro movies (data: ./game)
+#   ./play --param intro=0                  straight to the menus
+#   ./play --param drive=autobahn           a viewer: a race on a track (AGENTS.md lists the viewers)
+#   ./play --iso                            the data from the disc image instead (ISO=<file>)
+#   ./play --profile=ana                    saves of their own (a second player on this machine)
+#   ./play --help                           this
+#
+# Environment: DATA=<folder> (default ./game), ISO=<image> (default /Volumes/dropbox/NFS_PU.iso),
+# BUILD=0 (don't build, run what is there). Saves go to gasm's storage for opennfspu, the same as the
+# bundles' (--profile: a storage of its own, opennfspu-<name>).
+set -euo pipefail
+cd "$(dirname "$0")"
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  exit 0
+fi
+
+case "$(uname -s)-$(uname -m)" in
+  Darwin-*)      PLAT=macos-universal ;;
+  Linux-x86_64)  PLAT=linux-x86_64 ;;
+  Linux-aarch64) PLAT=linux-arm64 ;;
+  *) echo "play: unsupported host $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+RUN=.deps/gasm-runner-$PLAT/gasm-run
+WASM=build-gasm/opennfspu.wasm
+
+if [[ "${BUILD:-1}" != 0 ]]; then
+  [[ -x .deps/wasi-sdk/bin/clang && -x .deps/binaryen/bin/wasm-opt && -f .deps/gasm-c-sdk/include/gasm.h ]] ||
+    tools/fetch-gasm-sdk.sh
+  if [[ ! -f build-gasm/CMakeCache.txt ]]; then
+    cmake -S . -B build-gasm -DOPENNFSPU_PLATFORM=gasm -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=.deps/gasm-c-sdk/cmake/gasm-toolchain.cmake -DWASI_SDK_PREFIX="$PWD/.deps/wasi-sdk" >/dev/null
+  fi
+  cmake --build build-gasm -j >/dev/null
+fi
+[[ -x "$RUN" ]] || RUN="$(tools/fetch-gasm-runner.sh "$PLAT")/gasm-run"
+
+data=(--asset-dir "${DATA:-game}")
+args=()
+for a in "$@"; do
+  case "$a" in
+    --iso) data=(--asset "cd=${ISO:-/Volumes/dropbox/NFS_PU.iso}") ;;
+    --profile=*) args+=(--storage-id "opennfspu-${a#--profile=}") ;;
+    *) args+=("$a") ;;
+  esac
+done
+exec "$RUN" "$WASM" "${data[@]}" ${args[@]+"${args[@]}"}

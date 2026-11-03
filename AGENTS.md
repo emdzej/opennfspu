@@ -94,7 +94,8 @@ $RUN build-gasm/opennfspu.wasm --asset-dir game --headless 60 --screenshot /tmp/
 $RUN build-gasm/opennfspu.wasm --asset cd=/Volumes/dropbox/NFS_PU.iso --headless 60   # same hash line
 ```
 
-Unattended runs: always `--headless` (never open a window, never use macOS `screencapture`). The folder and
+`./play` builds the module if needed and opens it in `gasm-run`'s window on `./game` (`./play --help`; for the user,
+not for unattended runs). Unattended runs: always `--headless` (never open a window, never use macOS `screencapture`). The folder and
 the image must give identical hash lines. A change that alters the hashes must be explained by the change.
 
 ## gasm backend
