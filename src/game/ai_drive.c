@@ -377,7 +377,9 @@ static void headings(Car *c)
     I(0xdc0) = absf(F(0xd58)) <= absf(F(0xd58)) * K(0x5b2604) ? 0 : 0x3f000000;
     float fx = F(0x37c), fz = F(0x384);
     if (I(0x104c) != 1) fx = -fx, fz = -fz;
-    double k2pi = 1.0 / (2.0 * 3.14159265358979323846);
+    uint64_t ku = (uint64_t)exe_u32(0x5bb2c8) | (uint64_t)exe_u32(0x5bb2cc) << 32;
+    double k2pi;   /* 0x5bb2c8: 1 / 2 pi as a float, kept in a double (0.15915495157...) */
+    memcpy(&k2pi, &ku, 8);
     float h = (float)(atan2((double)fx, (double)fz) * k2pi);   /* 0x5325d0 */
     F(0x1054) = h;
     aim_point(c);

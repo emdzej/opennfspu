@@ -137,9 +137,11 @@ void CarSim_ZoneDamage(Car *c, float impact, int z, int kick)
     float t[9];
     Mat3_Transpose(CAR_F(c, 0x364), t);
     if (*CAR_I(c, 0x434) == 0) {
-        double a = (double)l[2] * 6.283185307179586;
-        float q[3] = {(float)-(sin(a) * *CAR_F(c, 0x3a8)), (float)-(cos(a) * *CAR_F(c, 0x3ac)), 0};
-        CAR_F(c, 0x330)[1] = (float)((double)dot3(q, t + 3) * K(0x5b24b8) + CAR_F(c, 0x330)[1]);
+        /* (0x532550, 0x532560: the angle in radians rounded to a float, the sine unrounded until the
+           product; single precision after) */
+        double a = (float)((double)l[2] * 6.283185307179586);
+        float q[3] = {-(float)(sin(a) * *CAR_F(c, 0x3a8)), -(float)(cos(a) * *CAR_F(c, 0x3ac)), 0};
+        CAR_F(c, 0x330)[1] = dot3(q, t + 3) * K(0x5b24b8) + CAR_F(c, 0x330)[1];
     }
     w[0] = dot3(l, t);
     w[1] = dot3(l, t + 3);
