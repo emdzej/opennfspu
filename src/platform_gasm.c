@@ -366,16 +366,16 @@ static double audio_acc;   /* fractional audio frames carried between frames */
 
 /* gasm-run 0.16.0's window drops the queued samples while it buffers again after running dry, so after
    one long frame (a load) it never fills up again and stays silent; nor does it fill at the start, as the
-   intro's movies push a frame's worth each frame. After a gap that emptied it, and before the first frame's
-   sound in a window (gasm_max_threads 0: headless or a browser, which have neither), a block of silence
-   longer than its largest target (150 ms) lets it start. Headless time is the frames': no gaps, the hashes
-   as they were. (Until a runner with the fix.) */
+   intro's movies push a frame's worth each frame. Before the first frame's sound and after a gap that
+   emptied it, a block of silence longer than its largest target (150 ms) lets it start. (A run can't tell
+   a window from a headless run here: the block comes first in every run, headless audio hashes with it.
+   Headless time is the frames': no gaps after that. Until a runner with the fix.) */
 static void refill_after_gap(void)
 {
     static float silence[APP_AUDIO_RATE * 160 / 1000 * 2];
     static double last = -1;
     double now = gasm_time_ms();
-    if (0 <= last ? now - last > 60.0 : 0 < gasm_max_threads()) gasm_audio_push(silence, APP_AUDIO_RATE * 160 / 1000);
+    if (last < 0 || now - last > 60.0) gasm_audio_push(silence, APP_AUDIO_RATE * 160 / 1000);
     last = now;
 }
 
