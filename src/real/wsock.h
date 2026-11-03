@@ -6,10 +6,11 @@
    10.0.0.(i + 1), and the host's sockets are told apart by their ports. A datagram travels as one relay
    message, [destination address (4 bytes, 255.255.255.255 a broadcast)][destination port][source port]
    (2 bytes each, network order)[kind (1 byte)] then the data; the others drop it unless it is theirs or a
-   broadcast. Kind 0 is a datagram; the others carry streams (TCP's): a connect (1) answered by an accept
-   (2) or a refusal (5, also a reset), the data (3), the end (4). The relay is reliable and in order, so
-   a stream needs no more; a peer leaving the room resets its streams. Streams and datagrams have ports of
-   their own.
+   broadcast. Kind 0 is a UDP datagram, 6 an IPX one; the others carry streams (TCP's): a connect (1)
+   answered by an accept (2) or a refusal (5, also a reset), the data (3), the end (4). The relay is
+   reliable and in order, so a stream needs no more; a peer leaving the room resets its streams. Streams,
+   datagrams and IPX have ports of their own. IPX's addresses (SOCKADDR_IPX, 14 bytes) have network 0 and
+   the node 00:00 and the host's four bytes (ff:ff:ff:ff:ff:ff everyone).
    The room and the relay come from the launch parameters relay=ws://host:port and room=<name> (default
    "nfs5"); without a relay there is no network, as on a machine whose TCP/IP isn't set up.
 

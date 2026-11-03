@@ -34,6 +34,8 @@ gasm-run opennfspu.wasm --asset-dir <game folder> --allow-net \
 
 All players use the same `room`. In the game: Multiplayer, Peer to peer IP. The host chooses create, the
 others type the host's address (shown at the top right of the host's create screen) and connect.
+Or Multiplayer, LAN: the room is the local network, the host creates a game and the others see it in
+their list.
 
 The browser player takes the same two settings in its address:
 `https://opennfspu.emdzej.pl/play/?relay=wss://<relay host>:9123&room=<name>`. It then lets the game connect to

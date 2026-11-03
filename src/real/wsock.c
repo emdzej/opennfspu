@@ -12,7 +12,7 @@ enum { WSAEWOULDBLOCK = 10035, WSAEALREADY = 10037, WSAENOTSOCK = 10038, WSAEINV
        FIONBIO = 0x8004667e };
 enum { NSOCK = 32, QUEUE = 256, HEADER = 9, MAXMSG = 0x10000, BACKLOG = 5 };
 /* A message's kind (its header's last byte): a datagram, or a stream's handshake, data and end. */
-enum { K_DGRAM = 0, K_SYN = 1, K_SYNACK = 2, K_DATA = 3, K_FIN = 4, K_RST = 5 };
+enum { K_DGRAM = 0, K_SYN = 1, K_SYNACK = 2, K_DATA = 3, K_FIN = 4, K_RST = 5, K_IPX = 6 };
 #define CONNECT_MS 21000.0   /* (Windows' connect gives up after about 21 seconds without an answer) */
 
 typedef struct Datagram {
@@ -23,7 +23,7 @@ typedef struct Datagram {
 
 typedef struct Sock {
     bool used, nonblocking;
-    int type;
+    int af, type;
     uint16_t port;          /* host order; 0 unbound */
     Datagram q[QUEUE];
     int head, count;
@@ -67,18 +67,51 @@ static void own_addr(uint8_t a[4])
 
 static bool is_broadcast(const uint8_t a[4]) { return a[0] == 255 && a[1] == 255 && a[2] == 255 && a[3] == 255; }
 
-/* A datagram into the queue of each socket of ours bound to its port (a broadcast reaches them all,
-   the sender's own too, as Windows loops broadcasts back). */
-static void deliver(const uint8_t from[4], uint16_t from_port, uint16_t to_port, const uint8_t *d, int n)
+/* An address of the family: sockaddr_in, or SOCKADDR_IPX (14 bytes: the family, the network (0 here),
+   the node, the socket) whose node is 00:00 and the host's four address bytes. */
+static void make_addr(WsAddr *a, int af, const uint8_t host[4], uint16_t port)
+{
+    memset(a, 0, sizeof *a);
+    a->family = (uint16_t)af;
+    uint8_t *p = (uint8_t *)a;
+    uint16_t v = WS_htons(port);
+    if (af == WS_AF_IPX) {
+        memcpy(p + 8, host, 4);
+        memcpy(p + 12, &v, 2);
+    } else {
+        a->port = v;
+        memcpy(a->addr, host, 4);
+    }
+}
+
+static int addr_len(int af) { return af == WS_AF_IPX ? 14 : (int)sizeof(WsAddr); }
+
+/* An address's host (255.255.255.255 for IPX's broadcast node) and port. */
+static uint16_t addr_parts(const WsAddr *a, int af, uint8_t host[4])
+{
+    const uint8_t *p = (const uint8_t *)a;
+    uint16_t v;
+    if (af == WS_AF_IPX) {
+        static const uint8_t all[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+        if (!memcmp(p + 6, all, 6)) memset(host, 0xff, 4);
+        else memcpy(host, p + 8, 4);
+        memcpy(&v, p + 12, 2);
+    } else {
+        memcpy(host, a->addr, 4);
+        v = a->port;
+    }
+    return WS_htons(v);
+}
+
+/* A datagram into the queue of each socket of ours of the family bound to its port (a broadcast reaches
+   them all, the sender's own too, as Windows loops broadcasts back). */
+static void deliver(int af, const uint8_t from[4], uint16_t from_port, uint16_t to_port, const uint8_t *d, int n)
 {
     for (int i = 0; i < NSOCK; i++) {
         Sock *k = &socks[i];
-        if (!k->used || k->type != WS_SOCK_DGRAM || k->port != to_port || k->count == QUEUE) continue;
+        if (!k->used || k->af != af || k->type != WS_SOCK_DGRAM || k->port != to_port || k->count == QUEUE) continue;
         Datagram *g = &k->q[(k->head + k->count) % QUEUE];
-        memset(&g->from, 0, sizeof g->from);
-        g->from.family = WS_AF_INET;
-        g->from.port = WS_htons(from_port);
-        memcpy(g->from.addr, from, 4);
+        make_addr(&g->from, af, from, from_port);
         g->len = n;
         g->data = n ? malloc((size_t)n) : NULL;
         if (n && !g->data) continue;
@@ -224,9 +257,9 @@ void WS_pump(void)
                 uint8_t mine[4], from[4] = {10, 0, 0, (uint8_t)(rx[1] + 1)};
                 own_addr(mine);
                 uint16_t fp = (uint16_t)(p[6] << 8 | p[7]), tp = (uint16_t)(p[4] << 8 | p[5]);
-                if (p[8] == K_DGRAM) {
+                if (p[8] == K_DGRAM || p[8] == K_IPX) {
                     if (is_broadcast(p) || (!memcmp(p, mine, 4) && !drop_unicast()))
-                        deliver(from, fp, tp, p + HEADER, (int)n - 2 - HEADER);
+                        deliver(p[8] == K_IPX ? WS_AF_IPX : WS_AF_INET, from, fp, tp, p + HEADER, (int)n - 2 - HEADER);
                 } else if (!memcmp(p, mine, 4)) {
                     deliver_stream(from, fp, tp, p[8], p + HEADER, (int)n - 2 - HEADER);
                 }
@@ -270,34 +303,34 @@ static void relay_open(void)
     }
 }
 
+/* The relay joined on the first WSAStartup and kept from then on: the room's index is the host's address,
+   which stays the machine's whatever WinSock's count does (leaving and joining again could come back
+   with another). */
 int WS_startup(uint16_t version, void *data)
 {
-    if (started++ == 0) relay_open();
+    if (started++ == 0 && conn <= 0) relay_open();
     return 0;
 }
 
 int WS_cleanup(void)
 {
     if (started <= 0) return fail(WSANOTINITIALISED);
-    if (--started == 0) {
+    if (--started == 0)
         for (int i = 0; i < NSOCK; i++)
             if (socks[i].used) WS_closesocket(i + 1);
-        if (conn > 0) plat_net_close(conn);
-        conn = -1;
-        me = -1;
-        full = false;
-    }
     return 0;
 }
 
-/* Sockets of the Internet family only: there is no IPX here. */
+/* Internet datagrams and streams, IPX datagrams. */
 int WS_socket(int af, int type, int protocol)
 {
-    if (af != WS_AF_INET || (type != WS_SOCK_DGRAM && type != WS_SOCK_STREAM)) return fail(10047 /* WSAEAFNOSUPPORT */);
+    if (!(af == WS_AF_INET && (type == WS_SOCK_DGRAM || type == WS_SOCK_STREAM)) && !(af == WS_AF_IPX && type == WS_SOCK_DGRAM))
+        return fail(10047 /* WSAEAFNOSUPPORT */);
     for (int i = 0; i < NSOCK; i++)
         if (!socks[i].used) {
             memset(&socks[i], 0, sizeof socks[i]);
             socks[i].used = true;
+            socks[i].af = af;
             socks[i].type = type;
             return i + 1;
         }
@@ -324,11 +357,11 @@ int WS_closesocket(int s)
     return 0;
 }
 
-/* (Streams and datagrams have ports of their own, as TCP's and UDP's.) */
-static bool port_taken(uint16_t p, int type)
+/* (Streams, datagrams and IPX have ports of their own, as TCP's, UDP's and IPX's sockets.) */
+static bool port_taken(uint16_t p, const Sock *k)
 {
     for (int i = 0; i < NSOCK; i++)
-        if (socks[i].used && socks[i].type == type && socks[i].port == p) return true;
+        if (socks[i].used && socks[i].af == k->af && socks[i].type == k->type && socks[i].port == p) return true;
     return false;
 }
 
@@ -336,9 +369,10 @@ int WS_bind(int s, const WsAddr *a, int len)
 {
     Sock *k = sock(s);
     if (!k) return fail(WSAENOTSOCK);
-    uint16_t p = a ? WS_htons(a->port) : 0;
-    if (p && port_taken(p, k->type)) return fail(WSAEADDRINUSE);
-    while (!p || port_taken(p, k->type)) {   /* (an ephemeral port: 49152 and up) */
+    uint8_t host[4];
+    uint16_t p = a ? addr_parts(a, k->af, host) : 0;
+    if (p && port_taken(p, k)) return fail(WSAEADDRINUSE);
+    while (!p || port_taken(p, k)) {   /* (an ephemeral port: 49152 and up) */
         p = next_port++;
         if (!next_port) next_port = 49152;
     }
@@ -350,10 +384,10 @@ int WS_getsockname(int s, WsAddr *a, int *len)
 {
     Sock *k = sock(s);
     if (!k) return fail(WSAENOTSOCK);
-    memset(a, 0, sizeof *a);
-    a->family = WS_AF_INET;
-    a->port = WS_htons(k->port);
-    if (len) *len = (int)sizeof *a;
+    uint8_t host[4] = {0};
+    if (k->af == WS_AF_IPX && me >= 0) own_addr(host);   /* (an IPX node is the host's; INADDR_ANY otherwise) */
+    make_addr(a, k->af, host, k->port);
+    if (len) *len = addr_len(k->af);
     return 0;
 }
 
@@ -383,8 +417,8 @@ static bool emit(const uint8_t to[4], uint16_t to_port, uint16_t from_port, uint
     own_addr(mine);
     bool local = !memcmp(to, mine, 4) || to[0] == 127;
     if (!local && !plat_net_send(conn, tx, (uint32_t)(1 + HEADER + n))) return false;
-    if (kind == K_DGRAM) {
-        if (local || is_broadcast(to)) deliver(mine, from_port, to_port, d, n);
+    if (kind == K_DGRAM || kind == K_IPX) {
+        if (local || is_broadcast(to)) deliver(kind == K_IPX ? WS_AF_IPX : WS_AF_INET, mine, from_port, to_port, d, n);
     } else if (local) {
         deliver_stream(mine, from_port, to_port, kind, d, n);
     }
@@ -399,7 +433,9 @@ int WS_sendto(int s, const void *buf, int len, int flags, const WsAddr *to, int 
     if (!k->port) WS_bind(s, NULL, 0);
     if (conn <= 0 || me < 0) return fail(WSAENETDOWN);
     if (len < 0 || len > MAXMSG) return fail(10040 /* WSAEMSGSIZE */);
-    if (!emit(to->addr, WS_htons(to->port), k->port, K_DGRAM, buf, len)) return fail(WSAENETDOWN);
+    uint8_t host[4];
+    uint16_t port = addr_parts(to, k->af, host);
+    if (!emit(host, port, k->port, k->af == WS_AF_IPX ? K_IPX : K_DGRAM, buf, len)) return fail(WSAENETDOWN);
     return len;
 }
 
@@ -544,7 +580,7 @@ int WS_recvfrom(int s, void *buf, int len, int flags, WsAddr *from, int *fromlen
     int n = g->len < len ? g->len : len;
     if (n > 0) memcpy(buf, g->data, (size_t)n);
     if (from) *from = g->from;
-    if (fromlen) *fromlen = (int)sizeof *from;
+    if (fromlen) *fromlen = addr_len(k->af);
     free(g->data);
     k->head = (k->head + 1) % QUEUE;
     k->count--;
@@ -577,6 +613,14 @@ static int ready(WsFdSet *set, bool (*test)(Sock *), bool keep_only)
     return (int)keep;
 }
 
+/* (A socket closed while it is waited on ends the wait with an error, as WinSock's.) */
+static bool gone(const WsFdSet *set)
+{
+    for (uint32_t i = 0; set && i < set->count; i++)
+        if (!sock(set->fd[i])) return true;
+    return false;
+}
+
 static int any_ready(WsFdSet *r, WsFdSet *w, WsFdSet *e)
 {
     return ready(r, is_readable, false) + ready(w, is_writable, false) + ready(e, is_failed, false);
@@ -589,6 +633,7 @@ int WS_select(int n, WsFdSet *r, WsFdSet *w, WsFdSet *e, const WsTimeval *t)
     double until = t ? plat_time_ms() + t->sec * 1000.0 + t->usec / 1000.0 : -1;
     WS_pump();
     while (!any_ready(r, w, e)) {
+        if (gone(r) || gone(w) || gone(e)) return fail(WSAENOTSOCK);
         if (t && plat_time_ms() >= until) break;
         plat_thread_sleep_ms(1);
         WS_pump();

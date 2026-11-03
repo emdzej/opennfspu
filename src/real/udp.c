@@ -1,5 +1,6 @@
 /* The UDP address provider and the WinSock datagram socket: see udp.h. */
 #include "real/udp.h"
+#include "real/ipx.h"
 #include "real/netgathr.h"
 #include "exe.h"
 #include "platform.h"
@@ -78,7 +79,7 @@ static bool receive(DgSocket *s, DgPacket *pk)
     int n = WS_recvfrom(sock, pk->buf, DGRAM_DATA, 0, &from, &fromlen);
     pk->len = n;
     if (n <= 0) return false;
-    /* (An IPX socket with a name passes its datagrams to 0x560990 first; there is no IPX here.) */
+    if (s->kind == 1 && s->ipxname[0] && IPX_sapfilter(s, &from, pk->buf, n)) return false;   /* 0x560990 */
     if (*pk->type && fromlen == s->addrlen) {
         from_sockaddr(s, &from, &pk->addr);
         return true;

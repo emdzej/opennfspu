@@ -163,7 +163,7 @@ static NetHost *host_new(uintptr_t provider, ConEventFn event, ConEventFn lobbye
     h->hosting = 1;
     if (lobbyevent) {
         NetAddr me, at;
-        char text[32];
+        char text[64];
         uint32_t myport = (uint32_t)port;
         CONMAN_localaddr(&h->cm->cm, &me);   /* 0x55d3b0 */
         CONMAN_totext(&h->cm->cm, &me, text, &myport);

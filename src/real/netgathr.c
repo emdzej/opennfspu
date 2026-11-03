@@ -1,5 +1,6 @@
 /* The datagram transport, game gathering: see netgathr.h. */
 #include "real/netgathr.h"
+#include "real/ipx.h"
 #include "real/llpacket.h"
 #include "exe.h"
 #include "pending.h"
@@ -696,7 +697,7 @@ static NetAddr found_at;
 
 static int on_game(NetConn *c, const NetGameInfo *g, int players, const NetAddr *from)
 {
-    char m[128], t[32];
+    char m[160], t[64];   /* (an IPX address is up to 50 characters) */
     uint32_t port;
     NETCONN_totext(c, from, t, &port);
     snprintf(m, sizeof m, "gathr: found \"%s\" at %s:%u players %d max %d", g->name, t, port, players, g->maxplayers);
@@ -715,7 +716,7 @@ static int on_player(NetConn *c, const NetPlayerInfo *p, int number, int ishost)
 
 static int on_join(NetConn *c, const NetPlayerInfo *p, int number, int ishost)
 {
-    char m[128], t[32];
+    char m[160], t[64];   /* (an IPX address is up to 50 characters) */
     uint32_t port;
     NETCONN_totext(c, &p->addr, t, &port);
     snprintf(m, sizeof m, "gathr: %s joins as %d from %s:%u", p->name, number, t, port);
@@ -728,14 +729,15 @@ static void selftest_thread(void *arg)
 {
     static NetConn conn;
     char m[160], me[32];
-    const uint8_t *prov = UDP_register(NULL);
+    char v[8];
+    bool ipx = plat_param("ipx", v, sizeof v) && v[0] == '1';   /* (--param ipx=1: on IPX, found by SAP) */
+    const uint8_t *prov = ipx ? IPX_register(NULL) : UDP_register(NULL);
     if (!prov) {
-        plat_log("gathr: no UDP");
+        plat_log(ipx ? "gathr: no IPX" : "gathr: no UDP");
         return;
     }
     static const uint8_t game[16] = {'O', 'p', 'e', 'n', 'N', 'F', 'S', 'P', 'U', ' ', 't', 'e', 's', 't', 0, 1};
     WS_gethostname(me, sizeof me);
-    char v[8];
     bool hosting = plat_param("nethost", v, sizeof v) && v[0] == '1';
     int r = NET_open(&conn, NULL, game, prov, 0x5001, hosting ? "host" : "guest", me);
     snprintf(m, sizeof m, "gathr: %s open %d", me, r);

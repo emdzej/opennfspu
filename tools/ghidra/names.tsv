@@ -2695,3 +2695,14 @@
 00581f80	TCP_same	net	high	Two addresses' first 16 bytes equal
 00581fa0	TCP_localaddr	net	high	The listener's getsockname
 00581ff0	TCP_register	net	high	Registers the TCP/IP provider and stream transport
+005605f0	IPX_open	net	high	IPX provider 0x5df710: a datagram socket bound to the port
+00560700	IPX_broadcasttext	net	high	The games named so looked for (a SAP query)
+00560740	IPX_parse	net	high	An IPX address from ten numbers
+005607c0	IPX_totext	net	high	An IPX address as "0x.. " text
+00560840	IPX_register	net	high	Registers the IPX provider and the datagram transport
+005608f0	SAP_find	net	high	A SAP general query for type 0x8be to everyone
+00560990	SAP_filter	net	high	SAP responses to a finding socket: name packets to the games
+00560a40	SAP_start	net	high	A hosted game advertised by SAP (its thread)
+00560b50	SAP_socket	net	high	The SAP socket (0x452)
+00560c20	SAP_thread	net	high	Answers SAP queries, broadcasts the response
+00560e50	SAP_stop	net	high	The SAP thread stopped

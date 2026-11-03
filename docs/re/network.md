@@ -89,6 +89,13 @@ address as a type 0x77 packet and reads the other's), `=5` the gathering (one in
   (codes 0..0xd in conman.h). The transport's calls 0x580170..0x5802d0 are NET_find .. NET_setmessage.
   0x5e8e50 (the gathering's password, the finds' user) is in the zeroed data: an empty text. Pending: the
   modems' serial lines (0x55e890).
+- The IPX provider (src/real/ipx.c, 0x5605f0..0x560e50, registered by 0x560840): the shared datagram
+  socket of kind 1 (SOCKADDR_IPX, 14 bytes) and SAP (socket 0x452, type 0x8be): a hosted game's thread
+  answers queries and broadcasts its response (the wait is GetTickCount's deadline over 1000 in seconds:
+  hours on Windows); a find sends a query and turns each matching response into a 0x77 name packet to
+  the game (0x560990 in the receive). Net_HostGame's first IPX host starts and ends a CONMAN host at once
+  (0x5d0728). WinSock's IPX datagrams ride the relay as their own kind; the relay stays joined across
+  WSACleanup (the room index is the address). Self-test `--param thrash_test=5 --param ipx=1`.
 - The TCP/IP stream provider (src/real/tcp.c, `\real\patch3\pc\tcp.c`): the provider 0x5e1a78
   (0x581630..0x581fd0: a listening stream socket on the connection's port with a thread 0x581800 that
   selects on it and on every stream packet connection, accepts one connection at a time for four seconds,

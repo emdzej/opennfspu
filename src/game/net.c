@@ -13,6 +13,7 @@
 #include "platform.h"
 #include "real/systask.h"
 #include "real/thread.h"
+#include "real/ipx.h"
 #include "real/udp.h"
 #include "vfs.h"
 #include <stdio.h>
@@ -41,6 +42,7 @@ static double exe_f64(uint32_t va)
 static int32_t tickcount(void) { return (int32_t)((uint64_t)TIMER_count * 1000 / TIMER_RATE); }
 
 static const uint8_t *game_guid(void) { return exe_data(0x5b4980, 16); }
+static int no_events(ConMan *cm, const NetPlayerInfo *who, const ConEvent *e) { return 0; }   /* 0x508530 */
 static const char *s_empty = "";   /* 0x5e8e50 */
 static const int s_voice_option = 0;   /* (0x657aa4: the voice chat's option, never set: gasm has no microphone) */
 #define PROTOCOL exe_str(0x5d06fc)   /* "2.8" */
@@ -466,8 +468,7 @@ void Net_End(void)
 NetSession *Net_Construct(void)
 {
     NetSession *s = calloc(1, sizeof *s);
-    /* (0x560840: IPX, which the socket call refuses on gasm) */
-    s->ipx = NULL;
+    s->ipx = IPX_register(exe_str(0x5d07c4));   /* "IPX" */
     s->udp = UDP_register(exe_str(0x5d07c0));   /* "UDP" */
     NetLst_init(&s->events);
     s->optlen = 4;
@@ -610,7 +611,18 @@ void Net_HostGame(const NetGameInfo *given, int port)
     uintptr_t provider = 0;
     if (s->mode == 0) {
         provider = (uintptr_t)s->ipx;
-        /* (the first time, 0x5d0728: a CONMAN host started and ended at once on IPX) */
+        /* the first time (0x5d0728): a host started and ended at once on IPX, of the game given (else
+           "NfsNet"), with an event callback that answers nothing (0x508530) */
+        static bool first = true;
+        if (first) {
+            first = false;
+            NetGameInfo gi;
+            memset(&gi, 0, sizeof gi);
+            if (!given) snprintf(gi.name, sizeof gi.name, "%s", exe_str(0x5d06b4));
+            else memcpy(&gi, given, sizeof gi);
+            ConServer *h = CONMAN_host(no_events, provider, game_guid(), &gi, 0, 0, NULL);   /* 0x55a800 */
+            if (h) CONMAN_hostend(h);   /* 0x55bd30 (the original passes it on unchecked) */
+        }
     } else if (s->mode == 1) {
         provider = (uintptr_t)s->udp;
         port = LOBBY_PORT;

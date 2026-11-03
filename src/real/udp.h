@@ -34,7 +34,7 @@ typedef struct DgSocket {
     int kind;                       /* +0x30: 0 UDP, 1 IPX */
     int addrlen;                    /* +0x34 */
     int port;                       /* +0x38 */
-    bool ipxname;                   /* +0x3c: (IPX's, 0x560990) */
+    char ipxname[0x30];             /* +0x3c: IPX's: the games' name looked for (0x560700) */
     NetList freerecv;               /* +0x70 */
     NetList freesend;               /* +0x8c */
     NetList received;               /* +0xa8 */
