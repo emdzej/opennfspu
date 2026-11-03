@@ -88,6 +88,7 @@ static bool camera_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool mini_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool glintyline_draw(FertControl *c);
 static bool header_draw(FertControl *c, int32_t ox, int32_t oy);
+static void animpic_update(FertControl *c);
 static void glintylines_drop(void);
 static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
 static void camera_update(FertControl *w, FertControl *c);
@@ -2727,6 +2728,17 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.MINIBADGE") || !strcmp(c->id, "NFS5.MINIPLAYERPICTURE")) return mini_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.GLINTYLINE")) return glintyline_draw(c);
     if (!strcmp(c->id, "NFS5.HEADER")) return header_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.BEVELEDOPTIONBOX")) {
+        /* FEBeveledOptionsBoxes_v15 0x5206d0 (the function keys' boxes): its parts, then the inset over
+           its rectangle at the fade */
+        FEControl_Draw(c, ox, oy);   /* 0x4c7e30 */
+        int32_t p[2] = {0, 0}, r[4];
+        FertAttr *pa = FertAttrList_find(&c->attrs, "pos");   /* 0x524b90 */
+        if (pa) FertAttr_point(pa, p);
+        FertControl_rect(c, r);   /* 0x4c8240 */
+        FEStyle_Inset((float)(p[0] + ox), (float)(p[1] + oy), (float)(r[2] - r[0]), (float)(r[3] - r[1]), g_fe_fade, 3);   /* 0x5208d0 */
+        return true;
+    }
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
@@ -3048,6 +3060,63 @@ static bool header_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* An animating picture (FEAnimatingPicture, vtable 0x5b5568: the chronicle's turning logo): its
+   picture's frames data.start_frame .. data.end_frame over data.numticks (at least 1), after a wait
+   of data.mindelay .. data.maxdelay ticks (_v20 0x4bd3c0), then waiting again; a max delay under 1
+   plays on from the start (_v1 0x4bd4d0, each frame). */
+typedef struct { const FertControl *c; AnimRun run; bool going; uint32_t since; } AnimPicture;   /* +0x144 .., +0x14c, +0x150 */
+static AnimPicture *s_animpics;
+static int s_nanimpics;
+
+static void animpic_update(FertControl *c)
+{
+    AnimPicture *a = NULL;
+    for (int i = 0; i < s_nanimpics && !a; i++)
+        if (s_animpics[i].c == c) a = &s_animpics[i];
+    if (!a) {
+        AnimPicture *na = realloc(s_animpics, sizeof *na * (size_t)(s_nanimpics + 1));
+        if (!na) return;
+        s_animpics = na;
+        a = &s_animpics[s_nanimpics++];
+        a->c = c;
+        AnimRun *r = &a->run;
+        r->first = data_int_of(c, "start_frame");   /* ("data.start_frame" 0x5d7850 ..) */
+        r->last = data_int_of(c, "end_frame");
+        r->ticks = data_int_of(c, "numticks");
+        if (!r->ticks) r->ticks = 1;
+        r->min = data_int_of(c, "mindelay");
+        r->max = data_int_of(c, "maxdelay");
+        a->going = false;
+        r->wait = anim_wait(r);
+        a->since = timer_ticks();
+    }
+    AnimRun *r = &a->run;
+    uint32_t now = timer_ticks();
+    if (!a->going) {
+        if ((int)(a->since + (uint32_t)r->wait) < (int)now) {
+            a->going = true;
+            a->since = timer_ticks();
+        }
+        anim_frame(c, r->first);   /* (0x526e20 on picture.shapeIndex) */
+        if (!a->going) return;
+    }
+    if ((int)(a->since + (uint32_t)r->ticks) < (int)timer_ticks()) {
+        if (r->max < 1) a->since = timer_ticks();
+        else {
+            a->going = false;
+            r->wait = anim_wait(r);
+            a->since = timer_ticks();
+            anim_frame(c, r->first);
+        }
+    }
+    if (a->going) {
+        int f = (int)(timer_ticks() - a->since) * (r->last - r->first) / r->ticks + r->first;
+        if (f < r->first) f = r->first;
+        if (f > r->last) f = r->last;
+        anim_frame(c, f);
+    }
+}
+
 static void glintylines_drop(void)   /* (_v22 0x521d20, the screen gone; FEHeaderText_v22 0x4ca910) */
 {
     int n = 0;
@@ -3058,6 +3127,10 @@ static void glintylines_drop(void)   /* (_v22 0x521d20, the screen gone; FEHeade
     for (int i = 0; i < s_nheaders; i++)
         if (on_stack(s_headers[i].c)) s_headers[n++] = s_headers[i];
     s_nheaders = n;
+    n = 0;
+    for (int i = 0; i < s_nanimpics; i++)
+        if (on_stack(s_animpics[i].c)) s_animpics[n++] = s_animpics[i];
+    s_nanimpics = n;
 }
 
 static bool glintyline_draw(FertControl *c)
@@ -3317,6 +3390,10 @@ static void update_watches(FertControl *w)
         }
         if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) {
             camera_update(w, c);
+            continue;
+        }
+        if (!strcmp(c->id, "NFS5.AnimatingPicture")) {
+            animpic_update(c);
             continue;
         }
         if (strcmp(c->id, "NFS5.AccessorWatch")) continue;
