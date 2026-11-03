@@ -68,6 +68,10 @@ typedef struct {
 
 static inline float *CAR_F(Car *c, int off) { return (float *)(void *)(c->b + off); }
 static inline int32_t *CAR_I(Car *c, int off) { return (int32_t *)(void *)(c->b + off); }
+/* The branch the body's road tracking takes at a junction: the car's +0xc in the original is its
+   tracker's +4 (the tracker sits at +0x8), which the node search 0x4743a0 reads; the port keeps the
+   tracker apart, so both are set (-1 none). */
+static inline void Car_SetBranch(Car *c, int32_t seg) { *CAR_I(c, 0xc) = seg; c->body.f4 = seg; }
 static inline uint8_t *CAR_DESCB(Car *c) { return c->p[CARP_DESC]; }
 static inline uint8_t *CAR_SPECSB(Car *c) { return c->p[CARP_SPECS]; }
 static inline float *SPEC_F(Car *c, int off) { return (float *)(void *)(CAR_SPECSB(c) + off); }

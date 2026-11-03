@@ -1115,5 +1115,5 @@ void CarSim_ResetDrive(Car *c)
     *CAR_I(c, 0x540) = 0;
     *CAR_F(c, 0xdc4) = *CAR_F(c, 0xdc8) = 0;
     *CAR_I(c, 0xe94) = 0;
-    *CAR_I(c, 0xc) = -1;
+    Car_SetBranch(c, -1);
 }

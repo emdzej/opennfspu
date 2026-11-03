@@ -198,7 +198,7 @@ void AI_Plan(Car *c)
             }
             if (take) {
                 *CAR_I(c, 0xe98) = k;
-                *CAR_I(c, 0xc) = e->seg;
+                Car_SetBranch(c, e->seg);
                 break;
             }
         }

@@ -128,7 +128,7 @@ static void snap(Car *c)
     Mat3_Orthonormalize(CAR_F(c, 0x364));
     CarSim_Track(c);   /* 0x49aee0 */
     *CAR_I(c, 0xe94) = 0;
-    *CAR_I(c, 0xc) = -1;
+    Car_SetBranch(c, -1);
     CarSim_BodyPoints(c);   /* 0x49ada0 */
 }
 
@@ -196,7 +196,7 @@ static void settle(Car *c)
         memset(w + 0x1c, 0, 4);
     }
     *CAR_I(c, 0xe94) = 0;
-    *CAR_I(c, 0xc) = -1;
+    Car_SetBranch(c, -1);
     CarSim_BodyPoints(c);   /* 0x49ada0 */
 }
 
