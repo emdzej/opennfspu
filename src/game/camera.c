@@ -550,7 +550,7 @@ static void orbit(int p)
 
 static void clear_shake(void);
 
-static int32_t s_tvmode;    /* 0x606850: 10 circling the car, 0x14 the scene's cameras */
+int32_t g_tvmode;           /* 0x606850: 10 circling the car, 0x14 the scene's cameras */
 static int32_t s_viewed;    /* 0x606858: the human the replay's camera cuts with */
 static float s_rise_x[2], s_rise_y[2];   /* 0x628098, 0x6280a4: mode 12's camera's x and height kept */
 
@@ -601,7 +601,7 @@ static void tv_start(int p)
     if (*CAR_F(c->car, 0xd60) < 0) way = -way;
     int16_t node;
     memcpy(&node, c->car->b + 8, 2);
-    if (s_tvmode != 0x14) tv_place(c, node, way);
+    if (g_tvmode != 0x14) tv_place(c, node, way);
     WSurface_Update(&c->surf, c->eye, true);   /* 0x473fc0 */
 }
 
@@ -699,14 +699,14 @@ static void mode_tv(int p)
     if (gap < 0) gap = -gap;
     if (g_road->nnodes / 2 < gap) gap = g_road->nnodes - gap;
     int n = (int)((1.0f - c->tvspeed) * K(0x5b243c));
-    if (gap <= n + 3 || K(0x5b24a8) <= c->tvspeed || dist <= K(0x5b24dc) || s_tvmode == 0x14) {
+    if (gap <= n + 3 || K(0x5b24a8) <= c->tvspeed || dist <= K(0x5b24dc) || g_tvmode == 0x14) {
         WSurface_Update(&c->surf, c->eye, true);
     } else {
         tv_place(c, cnode, way);
         WSurface_Update(&c->surf, c->eye, true);
     }
     float from[3];
-    if (s_tvmode == 0x14) {
+    if (g_tvmode == 0x14) {
         memcpy(from, Road_NodePos(g_road, c->surf.node), sizeof from);
         from[1] += c->f30 == 0 ? K(0x5b2600) : c->f30;
     } else {
@@ -820,7 +820,7 @@ void Camera_ReplayCuts(bool cut)
     }
 }
 
-bool Camera_ReplayDirected(void) { return s_tvmode == 0x14; }
+bool Camera_ReplayDirected(void) { return g_tvmode == 0x14; }
 
 /* The camera's mode set afresh (0x4658a0): the wander and the hold off, unless the mode's flags are
    about to be reloaded. */
@@ -844,12 +844,12 @@ static void next_kind(void)
     g_racecam[0].car = g_racecam[0].base = g_humans.c[s_viewed];
     int mode;
     if (camkind() == 0x14) {
-        s_tvmode = Scene_CameraCount() != 0 ? 0x14 : 3;
+        g_tvmode = Scene_CameraCount() != 0 ? 0x14 : 3;
         mode = 3;
     } else {
         if (camkind() == 0xb && !strcasecmp(g_track_name, exe_str(0x5cc54c))) s_camkind = (s_camkind + 1) % 9;   /* "skidpad" */
-        s_tvmode = camkind();
-        mode = s_tvmode;
+        g_tvmode = camkind();
+        mode = g_tvmode;
     }
     set_mode_fresh(0, mode);
 }
@@ -895,17 +895,17 @@ void Camera_Hold(bool on) { s_hold = on; }
 void Camera_ReplayStart(void)
 {
     if (Scene_CameraCount() == 0) {
-        s_tvmode = 10;
+        g_tvmode = 10;
         set_mode_fresh(0, 10);
     } else if (g_race_mode == 9) {
         set_mode_fresh(0, 10);
-        s_tvmode = 0x14;
+        g_tvmode = 0x14;
     } else {
         for (int k = 0; k < g_humans.n; k++) {
             *CAR_I(g_humans.c[k], 0x10e4) = Scene_FirstCamera(g_race_reverse != 0);
             scene_camera(*CAR_I(g_humans.c[k], 0x10e4));
         }
-        s_tvmode = 0x14;
+        g_tvmode = 0x14;
     }
     s_viewed = g_camera_car;
     s_replay_paused = 0;
@@ -1001,7 +1001,7 @@ static void mode_flyin(int p)
                     *CAR_I(g_humans.c[k], 0x10e4) = Scene_FirstCamera(g_race_reverse != 0);
                     scene_camera(*CAR_I(g_humans.c[k], 0x10e4));
                 }
-            s_tvmode = 0x14;
+            g_tvmode = 0x14;
         } else {
             clear_shake();
             s_hold = 0;
@@ -1147,7 +1147,7 @@ void Camera_Update(void)
             c->flags &= 0xfe;
             /* No replay controller (0x628c70): the camera back on the viewed car (0x5e8c00[0x65741c]). */
             if (0 <= g_camera_car && g_camera_car < g_ncars) c->car = c->base = g_cars[g_camera_car];
-            if (1 < g_replay_mode) Camera_ReplayCuts(s_tvmode == 0x14);
+            if (1 < g_replay_mode) Camera_ReplayCuts(g_tvmode == 0x14);
         }
         switch (c->mode) {
         case 0: mode_incar(p); break;

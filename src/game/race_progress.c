@@ -7,6 +7,7 @@
 #include "game/car_drive.h"
 #include "game/race_car.h"
 #include "game/hud.h"
+#include "game/camera.h"
 #include "game/road.h"
 #include "game/scene.h"
 #include "game/track.h"
@@ -21,7 +22,6 @@ int32_t g_race_over;
 int32_t g_race_quit;
 int32_t g_race_local;
 int32_t g_race_inputs;
-int32_t g_hud_message;
 int32_t g_race_end_wait[4] = {0, 0, -1, -1};
 RaceRank g_race_rank[CAR_MAX];
 Car *g_lead_human, *g_first_human, *g_first_rival, *g_last_rival;
@@ -173,14 +173,14 @@ void Race_CarProgress(Car *c)
                 *CAR_I(c, 0xb24) = *CAR_I(c, 0xb24) - 0x1c0;
                 if (*CAR_I(c, CAR_INDEX) == g_race_local) {
                     if (!Net_Live()) {
-                        g_hud_message = 0x14;
+                        g_tvmode = 0x14;
                     } else {
                         /* the finish and the best lap to the session */
                         int32_t best = *CAR_I(c, 0xb28);
                         for (int i = 1; i < g_race_laps; i++)
                             if (*CAR_I(c, 0xb28 + 4 * i) < best) best = *CAR_I(c, 0xb28 + 4 * i);
                         Net_Finish(tick - 0x1c0, best);   /* 0x48d990 */
-                        g_hud_message = g_race_network ? 10 : 0x14;
+                        g_tvmode = g_race_network ? 10 : 0x14;
                     }
                 }
             }
@@ -205,7 +205,8 @@ ranked:;
    gear (+0x1100) is done (+0xb50 3) with no time (+0xb14 0, +0xb24 99999). Else, while it runs (+0xb50
    below 2), the gate it heads for (+0xb58, by id) taken: the last one (type 1) finishes it (its sound,
    +0xb50 2, the tick, the tick less the countdown's 0x1c0), a checkpoint (type 0) moves it on to the
-   next gate (its sound, its arrow). (A network game's message, 0x606850, isn't ported.) */
+   next gate (its sound, its arrow). In a network game the finish sets the TV camera's kind (0x606850)
+   as a race's finish does. */
 static void SkillTest_Progress(Car *c)
 {
     if (*CAR_I(c, 0xdb0) == 0 && *CAR_I(c, 0x1100) < 4 && !strcasecmp(g_track_name, "skidpad")) {   /* 0x5cc54c */
@@ -222,6 +223,7 @@ static void SkillTest_Progress(Car *c)
         *CAR_I(c, 0xb50) = 2;
         *CAR_I(c, 0xb14) = g_sim_tick;
         *CAR_I(c, 0xb24) = g_sim_tick - 0x1c0;
+        if (Net_Live()) g_tvmode = g_race_network ? 10 : 0x14;
     } else if (type == 0) {
         *CAR_I(c, 0xb58) += 1;
         Scene_TriggerSound(gate);

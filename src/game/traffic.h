@@ -2,8 +2,8 @@
    the knockable objects' (game/smack.h): one traffic "car" of kind 1 per body of the instance bundle, its
    shape from the body's points and its mass, its position and rotation the ones the body follows. It
    sleeps until a race car comes near, then falls, slides and tumbles in the car simulation like any car
-   (game/car_ground.h's traffic branches) until it comes to rest. The road traffic's vehicles (kind 0,
-   the 0x4a12f0 branch on a road node) aren't ported. */
+   (game/car_ground.h's traffic branches) until it comes to rest. Traffic_Place's branch for an object
+   of another kind (on its road node) is left out: Traffic_SmackDescs gives every one kind 1. */
 #pragma once
 #include "game/car.h"
 

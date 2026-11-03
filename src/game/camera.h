@@ -57,6 +57,9 @@ _Static_assert(sizeof(RaceCamera) == 0x10c, "the original's layout");
 
 extern RaceCamera g_racecam[2];   /* 0x627e80 */
 extern int32_t g_look[4];         /* 0x5e99a8 .. 0x5e99b4: the look keys: forward (halve), right (+90), back, left (-90) */
+/* The TV camera's kind (0x606850): 10 circling the car, 0x14 the scene's cameras (3 with none). The
+   replay's camera keys set it, and so does the local player's finish: 0x14, or 10 in a network game. */
+extern int32_t g_tvmode;
 extern int32_t g_camera_car;      /* 0x65741c: the car the camera goes back to (an index of the race's cars) */
 
 /* The camera on the car with its mode. 0x465650 (the race's set-up also points +0 and +4 at the car) */

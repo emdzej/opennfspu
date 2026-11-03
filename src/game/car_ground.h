@@ -33,8 +33,8 @@ void CarSim_Forces(void *car);
    body's surface tracker and the car's own ground plane, the surface, the heading against the road.
    0x49aee0 */
 void CarSim_Track(void *car);
-/* The road node nearest p, from the tracker's last (the junction's other segment, the tracker's +0x4,
-   isn't ported with the junctions); +0x8 and +0x9 say whether it changed. 0x4743a0 */
+/* The road node nearest p, from the tracker's last: in its segment and in the junction's other one (the
+   tracker's +0x4, Car_SetBranch), the nearer by x and z; +0x8 and +0x9 say whether it changed. 0x4743a0 */
 void WSurface_TrackNode(WSurface *s, const float p[3]);
 
 /* The ride heights over the plane through `at` of normal n: +0x424 the lowest, +0x428 the mean (the

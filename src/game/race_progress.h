@@ -11,7 +11,6 @@ extern int32_t g_race_over;       /* 0x606a8c */
 extern int32_t g_race_quit;       /* 0x657e34: the race left from its menus (no records kept) */
 extern int32_t g_race_local;      /* 0x65741c: the local player's index */
 extern int32_t g_race_inputs;     /* 0x658084: the players giving input */
-extern int32_t g_hud_message;     /* 0x606850: the HUD's lap message's frames */
 extern int32_t g_race_end_wait[4];  /* 0x656ae4, 0x657300, 0x6573a8, 0x6573ac (the replay's marks: 0, 0, -1, -1) */
 
 /* A row of the distance ranking (0x608b38, 16 bytes): the car's index (+0x520), its distance, the tick it
