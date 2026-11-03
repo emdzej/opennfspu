@@ -58,7 +58,10 @@ sets (0x5e753c, 0x5e7544), the traffic's configuration as 0x406c00 decodes it (0
 squares table (+0x1014), 0x406900's table of 1 / i (0x5e7550), the AI's ticks (0x5e6654) and level
 (0x6573f4), the track's speed zones (0x5e74ac, 0x5e74fc); +0x454 (the car that hit it) is mapped like
 +0xed4, +0xe94 (the junction last chosen) to the rebuilt junction, +0x550 (the car swapped with) is
-written and not compared. `ARGS=` replaces the replay with
+written and not compared. The race's car counts as the front end gave them (0x658080, 0x65807c) and the
+traffic list's objects (0x5e8c24, the knockable objects: stand-ins with their node at +8) are set for the
+respawn's free node test. 0x40f5a0 (the respawn) is dumped with its kind as the second argument
+(`FD arg`); 0x40cad0 (idle) and 0x40e160 (the traffic's purgatory) run on the rebuilt state. `ARGS=` replaces the replay with
 another run (`--param cops=4 --param aidrive=1` for the police, `--param traffic=3` for the traffic).
 
 The police's states are dumped with the car: 0x40cf90 (the chase), 0x40dcd0 (the roadblock) and

@@ -1,5 +1,5 @@
 diff --git a/src/game/ai.c b/src/game/ai.c
-index fc55547..63ef33c 100644
+index b5a9ae9..7792aab 100644
 --- a/src/game/ai.c
 +++ b/src/game/ai.c
 @@ -129,6 +129,7 @@ void AI_Free(void)
@@ -53,6 +53,30 @@ index fc55547..63ef33c 100644
  static const AiStateVtbl normal_vt = {normal_tick, no_done, not_ready};
  static void normal_init(AiState *s, Car *c)   /* 0x40b630 */
  {
+@@ -589,7 +600,10 @@ static void normal_init(AiState *s, Car *c)   /* 0x40b630 */
+ 
+ /* AIState_Idle (vtable 0x5b252c): holding the car's offset, or easing toward the target one at the AI's
+    speed target halved. 0x40cad0 */
+-static void idle_tick(AiState *s)
++void FD_StateTick(AiState *s, void (*fn)(AiState *), uint32_t va, uint32_t vt, const char *cars);
++static void idle_tick_(AiState *s);
++static void idle_tick(AiState *s) { FD_StateTick(s, idle_tick_, 0x40cad0, 0x5b252c, "-"); }
++static void idle_tick_(AiState *s)
+ {
+     Car *c = s->car;
+     if (s->hold != 0) {
+@@ -615,7 +629,10 @@ static const AiStateVtbl idle_vt = {idle_tick, idle_done, not_ready};
+    for a bus. Its tick counts down once the race is a while in; it is ready at the end of it when fewer
+    than the cap (0x5cc480) are about and the followed car is not on the tracks' sections where none may
+    come (canyon's, industrial's: the original's node ranges). 0x40de30, 0x40e160, 0x40e080 */
+-static void purgatory_tick(AiState *s)
++void FD_StateTick(AiState *s, void (*fn)(AiState *), uint32_t va, uint32_t vt, const char *cars);
++static void purgatory_tick_(AiState *s);
++static void purgatory_tick(AiState *s) { FD_StateTick(s, purgatory_tick_, 0x40e160, 0x5b2710, "-"); }
++static void purgatory_tick_(AiState *s)
+ {
+     Car *c = s->car;
+     *CAR_I(c, 0x1100) = 0;
 diff --git a/src/game/ai_drive.c b/src/game/ai_drive.c
 index 72b9683..fe888c6 100644
 --- a/src/game/ai_drive.c
@@ -95,10 +119,10 @@ index 93edf1d..b92b541 100644
 +    plat_log(m);
 +}
 diff --git a/src/game/ai_police.c b/src/game/ai_police.c
-index 060fb95..3d83960 100644
+index 060fb95..0756ea2 100644
 --- a/src/game/ai_police.c
 +++ b/src/game/ai_police.c
-@@ -685,7 +685,42 @@ static void chase_close(AiState *s, bool near)
+@@ -685,7 +685,44 @@ static void chase_close(AiState *s, bool near)
      }
  }
  
@@ -126,7 +150,9 @@ index 060fb95..3d83960 100644
 +}
 +static void fd_state_pre(void *car) { (void)car; fd_state_line("state"); }
 +static void fd_state_run(void *car) { (void)car; s_fdfn(s_fds); }
-+static void fd_state_tick(AiState *s, void (*fn)(AiState *), uint32_t va, uint32_t vt, const char *cars)
++void FD_StateTick(AiState *s, void (*fn)(AiState *), uint32_t va, uint32_t vt, const char *cars);
++#define fd_state_tick FD_StateTick
++void FD_StateTick(AiState *s, void (*fn)(AiState *), uint32_t va, uint32_t vt, const char *cars)
 +{
 +    extern bool FD_Active(void *car, uint32_t va);
 +    if (!FD_Active(s->car, va)) { fn(s); return; }
@@ -142,7 +168,7 @@ index 060fb95..3d83960 100644
  {
      Car *c = s->car, *p = cw_car(s, 0x48);
      if (!p) return;
-@@ -756,7 +791,9 @@ static AiWord *ow(AiState *s, int off)
+@@ -756,7 +793,9 @@ static AiWord *ow(AiState *s, int off)
     Its words: +8 the node, +0xc its place, +0x18 its orientation (+0x3c its last row again), +0x48 the
     node it drives for once a racer is near, +0x4c that node's point, +0x58 the gap to it, +0x5c set off,
     +0x60 its speed, +0x64 the reaction's factor. Flag 0x800 on the car while it lasts. */
@@ -153,7 +179,7 @@ index 060fb95..3d83960 100644
  {
      Car *c = s->car;
      if (ow(s, 0x5c)->i == 0) {
-@@ -839,7 +876,9 @@ static void place_block(Car *c, int n, int dir, const int32_t pos[3], const int3
+@@ -839,7 +878,9 @@ static void place_block(Car *c, int n, int dir, const int32_t pos[3], const int3
  /* 0x40e230: the way to node +8 by its gap's sign, the speed target and the lanes; with +0xc set (the
     police pass 0) the target speed (+0xeb8) capped by the distance left: 4 under 0x5b240c, then the
     steps 0x5b2470, 0x5b2410, 0x5b26d4 (from 0x5b248c), 0x5b2484 from 0x5b25c4 on, either way. */
@@ -283,7 +309,7 @@ index 34c2aa9..2acfcfd 100644
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
 diff --git a/src/game/car_drive.c b/src/game/car_drive.c
-index c0bd7a7..1956768 100644
+index 4fef594..5b97b0b 100644
 --- a/src/game/car_drive.c
 +++ b/src/game/car_drive.c
 @@ -1046,7 +1046,10 @@ static void drive(Car *c)
@@ -299,7 +325,7 @@ index c0bd7a7..1956768 100644
      Car *c = car;
      if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
 diff --git a/src/game/car_ground.c b/src/game/car_ground.c
-index 4ce8464..99eb322 100644
+index 4ce8464..92cea3e 100644
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
 @@ -1,12 +1,14 @@
@@ -317,7 +343,7 @@ index 4ce8464..99eb322 100644
  #include "game/sim_math.h"
  #include "game/sim_rand.h"
  #include "pending.h"
-@@ -526,7 +528,266 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
+@@ -526,7 +528,277 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -492,6 +518,17 @@ index 4ce8464..99eb322 100644
 +        for (int i = 0; i < g_ncars; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_cars[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_cars[i]->b, CAR_SIZE); }
 +        fd_hex("pers", "0", g_ai_pers, sizeof g_ai_pers);
 +        {
++            /* the traffic list's objects' nodes (0x5e8c24: the knockable objects; +8 each) */
++            static char m[4096];
++            int o = snprintf(m, sizeof m, "FD trafnodes 0");
++            for (int i = 0; i < g_ntraffic && o < (int)sizeof m - 8; i++) {
++                int16_t nd = 0;
++                if (g_traffic[i]) memcpy(&nd, g_traffic[i]->b + 8, 2);
++                o += snprintf(m + o, sizeof m - (size_t)o, " %d", g_traffic[i] ? nd : -32768);
++            }
++            plat_log(m);
++        }
++        {
 +            /* the track's speed zones (0x5e74ac: ten node ranges) and their factors (0x5e74fc) */
 +            extern int32_t g_track_zone[10][2];
 +            extern float g_track_zone_f[10];
@@ -540,7 +577,7 @@ index 4ce8464..99eb322 100644
 +            if (g_road && g_road->nnodes > 1) memcpy(&one, g_road->nodes + ROAD_NODE_SIZE + 0x38, 4);
 +            extern int g_ai_ticks;
 +            extern int32_t g_ai_level;
-+            snprintf(b, sizeof b, "FD glob2 0 side=%d oneway=%d aiticks=%d ailevel=%d", g_race_side, one == 0, g_ai_ticks, g_ai_level);
++            snprintf(b, sizeof b, "FD glob2 0 side=%d oneway=%d aiticks=%d ailevel=%d nracecars=%d ntrafficcars=%d ncars=%d", g_race_side, one == 0, g_ai_ticks, g_ai_level, g_nracecars, g_ntrafficcars, g_ncars);
 +            plat_log(b);
 +        }
 +        {
@@ -585,7 +622,7 @@ index 4ce8464..99eb322 100644
  {
      Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
-@@ -641,7 +902,13 @@ static void player_distance(Car *c)
+@@ -641,7 +913,13 @@ static void player_distance(Car *c)
  
  /* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
     segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
@@ -599,7 +636,7 @@ index 4ce8464..99eb322 100644
  {
      int16_t old = s->node;
      if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
-@@ -757,7 +1024,9 @@ void CarSim_BodyPlane(Car *c)
+@@ -757,7 +1035,9 @@ void CarSim_BodyPlane(Car *c)
      memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
  }
  
@@ -638,10 +675,42 @@ index 5640140..bf75978 100644
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
 diff --git a/src/game/car_respawn.c b/src/game/car_respawn.c
-index 37aa1fa..9a402e4 100644
+index 37aa1fa..4c07984 100644
 --- a/src/game/car_respawn.c
 +++ b/src/game/car_respawn.c
-@@ -266,7 +266,10 @@ static void ai_hit(Car *c)
+@@ -17,6 +17,8 @@
+ #include "game/track.h"
+ #include "pending.h"
+ #include <string.h>
++#include "platform.h"
++#include <stdio.h>
+ #include <strings.h>
+ 
+ static float exe_f32(uint32_t va)
+@@ -71,7 +73,22 @@ static void still(Car *c)
+     *CAR_I(c, 0x40c) = 0;
+ }
+ 
++static void respawn_(Car *c, int kind);
++static int s_fd_kind;
++static void respawn_task(void *car) { respawn_(car, s_fd_kind); }
++static void respawn_arg(void *car) { (void)car; char m[32]; snprintf(m, sizeof m, "FD arg 0 %d", s_fd_kind); plat_log(m); }
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
+ void CarSim_Respawn(Car *c, int kind)
++{
++    /* (forcesdump: the kind as the call's second argument) */
++    extern void (*g_fd_extra)(void *car);
++    void (*was)(void *) = g_fd_extra;
++    s_fd_kind = kind;
++    g_fd_extra = respawn_arg;
++    FD_Wrap(respawn_task, c, 0x40f5a0);
++    g_fd_extra = was;
++}
++static void respawn_(Car *c, int kind)
+ {
+     if (g_race_type == 4 && !strcasecmp(g_track_name, exe_str(0x5cc54c))) return;   /* "skidpad" */
+     float off[3] = {0, 0, 0};
+@@ -266,7 +283,10 @@ static void ai_hit(Car *c)
      }
  }
  

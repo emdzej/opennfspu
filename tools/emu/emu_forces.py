@@ -22,6 +22,8 @@ lists, pers, trafcfg, squares = [], None, None, {}
 states = {}
 swapped = {}
 zones = zonef = None
+fnargs = []
+trafnodes = None
 objraw, okinds = {}, []
 import os
 road_all = {}
@@ -60,6 +62,12 @@ for line in open(sys.argv[2]):
         continue
     if tag == 'okind':
         okinds.append(int(p[3]))
+        continue
+    if tag == 'arg':
+        fnargs = [int(x) for x in p[3:]]
+        continue
+    if tag == 'trafnodes':
+        trafnodes = [int(x) for x in p[3:]]
         continue
     if tag == 'swapped':
         swapped[int(key)] = int(p[3])
@@ -169,11 +177,15 @@ if 'glob2' in glob:
     w32(0x5e753c, int(glob['glob2']['side'])); w32(0x5e7544, int(glob['glob2']['oneway']))   # (0x40e6d0's)
     if 'aiticks' in glob['glob2']: w32(0x5e6654, int(glob['glob2']['aiticks']))   # (the AI task's ticks this turn)
     if 'ailevel' in glob['glob2']: w32(0x6573f4, int(glob['glob2']['ailevel']))   # (the opponents' level)
+    if 'nracecars' in glob['glob2']: w32(0x658080, int(glob['glob2']['nracecars'])); w32(0x65807c, int(glob['glob2']['ntrafficcars']))   # (the front end's counts)
 # the race's cars (0x5e8b34, count 0x5e8b58; the draft reads the racers' positions), the car itself among
 # them, their personalities (0x5e67c0, 0x54 bytes each; the car's +0xe38 points at its record by +0xe34)
 w32(0x5e8ae8, len(racers))
 if pers is not None: mu.mem_write(0x5e67c0, pers)
 if trafcfg is not None: mu.mem_write(0x5e6d08, trafcfg)   # (0x406c00's)
+if trafnodes is not None:
+    # the traffic list (0x5e8c24): stand-ins with their road node at +8 (the respawn's free node test)
+    for i, nd in enumerate(trafnodes): wu32(0x5e8c24 + 4 * i, alloc(bytes(8) + struct.pack('<h', nd) + bytes(0x16)) if nd != -32768 else 0)
 if zones is not None: mu.mem_write(0x5e74ac, zones)   # (the track's speed zones and their factors)
 if zonef is not None: mu.mem_write(0x5e74fc, zonef)
 # 0x406900's table of 1 / i at 0x5e7550 ([0] 0, then i = 1 .. 19, single precision)
@@ -386,7 +398,7 @@ mu.mem_write(sp, struct.pack('<IH', RET, cw))
 mu.reg_write(UC_X86_REG_ESP, sp)
 mu.emu_start(stub, RET, count=100)
 sp = STK - 0x2000
-mu.mem_write(sp, struct.pack('<II', RET, car))
+mu.mem_write(sp, struct.pack('<II', RET, car) + b''.join(struct.pack('<i', a) for a in fnargs))
 mu.reg_write(UC_X86_REG_ESP, sp)
 if fn == 0x40b600:   # (an AI state's tick: thiscall, the car at +4)
     mu.reg_write(UC_X86_REG_ECX, alloc(struct.pack('<II', 0, car) + bytes(0x20)))
