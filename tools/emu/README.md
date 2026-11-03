@@ -96,12 +96,15 @@ generator), so the original then runs on its own values rather than the port's; 
 changed between the two calls (by code no wrapped call covers) is reported as `uncovered`. The packet
 task (0x499150) is the run's input (the replay file or the controls) and is taken from the port.
 
-`CAR=-2` dumps every racer's calls in the race's order and keeps a carry per car (a call's other racers
+`CAR=-3` adds the knockable objects (the traffic list's, named 1000 + their index; their own task
+0x4a0e10 wrapped too). `CAR=-2` dumps every racer's calls in the race's order and keeps a carry per car (a call's other racers
 included), so the cars run on together.
 
 ```sh
 CAR=1 PY=/path/to/venv/bin/python tools/emu/freerun.sh 1000:1:1600 2900   # an opponent, 600 ticks
 CAR=-2 PY=/path/to/venv/bin/python tools/emu/freerun.sh 1000:1:1100 2300  # every racer, 100 ticks
+CAR=-3 ARGS="--param drive=monaco1 --param aidrive=1 --param opponents=3" \
+  PY=/path/to/venv/bin/python tools/emu/freerun.sh 1630:1:1760 3000          # an object woken at 1634
 ```
 
 What the comparisons showed: the game runs the x87 at single precision, so every add, multiply, divide

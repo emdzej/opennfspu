@@ -33,9 +33,9 @@ the original does.
   countdown, a car put back on the road and the opponents' finish. Each step is compared from the port's
   own state, and in a free run: the original's code for one car, every step in order, each on the state
   the original left, gives the same car as the port over 600 ticks for the player and 300 for an opponent
-  of the game's own replay.rpl, and all four racers at once, each carried on its own, over 100 ticks. Not
-  covered yet: the parts of the race loop outside the cars' own steps (the world's objects), and a whole
-  race from its start.
+  of the game's own replay.rpl, all four racers at once, each carried on its own, over 100 ticks, and every
+  car with the track's knockable objects through their waking on Monaco (130 ticks, 10,971 calls). Not
+  covered yet: a whole race from its start, and the race loop's parts outside the cars' tasks.
 - **Two-player split screen.** The race code has a split-screen mode: communication mode 1, with a second
   player's camera and the catch-up logic. The original never runs it: the front end's race set-up
   (0x4eab10) writes the mode before every race, 0 (or 4 in a network game), over `fe.txt`'s `comm_mode`.
