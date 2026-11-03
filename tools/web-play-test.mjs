@@ -38,8 +38,11 @@ if (!existsSync(CHROME)) { console.error(`no Chrome at ${CHROME} (CHROME=<binary
 
 // Add cases (frames and scripted input) as the game grows: the frontend, a race.
 const CASES = [
-  { name: 'start', frames: 120, input: '' },
+  { name: 'start', frames: Number(process.env.PLAY_FRAMES || 120), input: '' },
 ];
+// PLAY_QUERY=<k=v&...>: more of the page's parameters (a network check: relay=ws://127.0.0.1:9123&room=..,
+// beside a gasm-run in the same room; the hashes then aren't expected to match).
+const EXTRA = process.env.PLAY_QUERY ? `&${process.env.PLAY_QUERY}` : '';
 
 // Reference hashes from the native runner (same module, same data, same input).
 function native(c, dir) {
@@ -202,7 +205,7 @@ try {
     }
     if (ref.before !== ref.after) console.log(`      before gasm_exit (what the page sees): ${ref.before}`);
     const want = ref.before;
-    const url = `${base}?hashframes=${c.frames}${c.input ? `&input=${encodeURIComponent(c.input)}` : ''}`;
+    const url = `${base}?hashframes=${c.frames}${c.input ? `&input=${encodeURIComponent(c.input)}` : ''}${EXTRA}`;
     const check = (label, got) => report(!want || got.hash === want, `${c.name}: ${label}`,
       `${got.hash}  (${got.secs.toFixed(1)} s)${want && got.hash !== want ? `\n      native: ${want}` : ''}`);
 

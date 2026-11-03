@@ -13,7 +13,9 @@
 //   input=SCRIPT   with hashframes: scripted input, gasm-run's --input syntax ("60:KEY(Enter),...")
 //   size=WxH       the GL drawing size instead of the display's (hash runs: 1280x720, as gasm-run --headless)
 //   autoplay       start the imported data right away
-//   any parameter the game reads (docs/guide/parameters.md) is passed through
+//   any parameter the game reads (docs/guide/parameters.md) is passed through; relay=ws(s)://host:port
+//                  (a gasm-relay, with room=) also lets the game connect to that host (gasm:net), and
+//                  only that one, for network games
 import { BrowserInput, ProcExit, Resampler } from './vendor/gasm/gasm-host.js';
 import { GasmWorker } from './vendor/gasm/gasm-worker.js';
 import { InputScript } from './vendor/gasm/input-script.js';
@@ -217,11 +219,13 @@ async function play(source) {
   show('setup', HASH_FRAMES > 0);      // keep the page visible in test runs
   $('status').textContent = 'Starting...';
   const params = Object.fromEntries([...query].filter(([k]) => !PAGE_PARAMS.has(k)));
+  let allowNet = false;   // network games: the relay's host only
+  try { if (params.relay) allowNet = [new URL(params.relay).hostname]; } catch { /* not a URL: no network */ }
   const c = freshCanvas();
   try {
     await audioReady;
     worker = await GasmWorker.start({
-      wasm: await loadWasm(), assets: data.assetSpecs(source), params,
+      wasm: await loadWasm(), assets: data.assetSpecs(source), params, allowNet,
       storage: HASH_FRAMES > 0 ? null : STORAGE,     // hash runs: in memory, like gasm-run --headless
       hashing: HASH_FRAMES > 0, virtualTime: HASH_FRAMES > 0, onLog, onAudio, keyboard: true,
       glCanvas: c.transferControlToOffscreen(), size: displaySize(),
