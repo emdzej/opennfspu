@@ -650,7 +650,7 @@ static uint32_t lerp_colour(uint32_t c0, uint32_t c1, float t)
     uint32_t r = ubits((float)(int)((c1 & 0xff0000u) - (c0 & 0xff0000u)) * t + 824633720832.0f);
     uint32_t g = ubits((float)(int)((c1 & 0xff00u) - (c0 & 0xff00u)) * t + 3221225472.0f);
     uint32_t b = ubits(t * (float)(int)((c1 & 0xffu) - (c0 & 0xffu)) + 12582912.0f);
-    return (((c0 & 0xff00u) >> 8) + g & 0xff) << 8 | ((c0 & 0xffu) + b & 0xff) | ((c0 >> 24) + a) * 0x1000000u |
+    return ((((c0 & 0xff00u) >> 8) + g) & 0xff) << 8 | (((c0 & 0xffu) + b) & 0xff) | ((c0 >> 24) + a) * 0x1000000u |
            ((((c0 & 0xff0000u) >> 16) + r) & 0xff) << 16;
 }
 

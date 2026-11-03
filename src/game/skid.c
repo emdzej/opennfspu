@@ -34,7 +34,7 @@ typedef struct {
 
 static unsigned strip_n(const Strip *s) { return s->word >> 4 & 0x3ff; }
 static void strip_setstate(Strip *s, uint32_t st) { s->word = (s->word & 0xfffffff0u) ^ st; }
-static void strip_add2(Strip *s) { s->word = (((s->word & 0xfffffff0u) + 0x20 ^ s->word) & 0x3ff0) ^ s->word; }
+static void strip_add2(Strip *s) { s->word = ((((s->word & 0xfffffff0u) + 0x20) ^ s->word) & 0x3ff0) ^ s->word; }
 
 /* A cell (0x50 bytes, 0x478d20). */
 typedef struct {
@@ -304,7 +304,7 @@ static void trail_mark(SkidTrail *t, const float p[3], const float d[3], float k
     }
     if (cell->sphere[1] < f32(0x5b27b4) && f32(0x5b3ee0) < cell->sphere[1]) cell->sphere[1] = y;
     Strip *s = &cell->strips[t->strip];
-    if (every && 0x3f < (s->word & 0x3ff0)) s->word = (((s->word & 0xfffffff0u) - 0x11 ^ s->word) & 0x3ff0) ^ s->word;
+    if (every && 0x3f < (s->word & 0x3ff0)) s->word = ((((s->word & 0xfffffff0u) - 0x11) ^ s->word) & 0x3ff0) ^ s->word;
     if ((s->word & 0x3ff0) == 0 && t->mode != 3) c &= 0xffffffu;
     unsigned n = strip_n(s);
     if (s_nverts < n + 2) return;

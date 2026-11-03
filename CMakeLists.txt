@@ -6,6 +6,11 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0 CACHE STRING "Minimum macOS version")
 project(OpenNFSPU VERSION 0.1.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(PU_WARN -Wall -Wextra -Wno-unused-parameter)
+# GCC's guesses at snprintf truncation: the port bounds its strings with snprintf on purpose (the
+# original's fixed buffers).
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  list(APPEND PU_WARN -Wno-format-truncation)
+endif()
 
 # The portable core: everything except host backends (no platform headers). The THRASH driver
 # (src/render/thrash*.c) is the only GL user; the native build leaves it out (tests and tools run without

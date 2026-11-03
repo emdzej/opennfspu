@@ -19,16 +19,16 @@ static void block565(uint8_t *dst, int stride, const uint8_t *src)
     c[1] = le16(src + 2);
     if (c[1] < c[0]) {
         uint32_t a = c[0], b = c[1];
-        c[2] = (((b & 0xf800) * 0x5556 + (a & 0xf800) * 0xaaaa & 0xf800ffffu) |
-                ((b & 0x7e0) * 0x5556 + (a & 0x7e0) * 0xaaaa & 0x7e00000) |
-                ((b & 0x1f) * 0x5556 + (a & 0x1f) * 0xaaaa & 0x1f0000)) >> 16;
-        c[3] = (((a & 0xf800) * 0x5556 + (b & 0xf800) * 0xaaaa & 0xf800ffffu) |
-                ((a & 0x7e0) * 0x5556 + (b & 0x7e0) * 0xaaaa & 0x7e00000) |
-                ((a & 0x1f) * 0x5556 + (b & 0x1f) * 0xaaaa & 0x1f0000)) >> 16;
+        c[2] = ((((b & 0xf800) * 0x5556 + (a & 0xf800) * 0xaaaa) & 0xf800ffffu) |
+                (((b & 0x7e0) * 0x5556 + (a & 0x7e0) * 0xaaaa) & 0x7e00000) |
+                (((b & 0x1f) * 0x5556 + (a & 0x1f) * 0xaaaa) & 0x1f0000)) >> 16;
+        c[3] = ((((a & 0xf800) * 0x5556 + (b & 0xf800) * 0xaaaa) & 0xf800ffffu) |
+                (((a & 0x7e0) * 0x5556 + (b & 0x7e0) * 0xaaaa) & 0x7e00000) |
+                (((a & 0x1f) * 0x5556 + (b & 0x1f) * 0xaaaa) & 0x1f0000)) >> 16;
     } else {
         c[3] = 0;
-        c[2] = (((c[1] & 0xf800) + (c[0] & 0xf800) & 0x1f001) | ((c[1] & 0x7e0) + (c[0] & 0x7e0) & 0xfc0) |
-                ((c[1] & 0x1f) + (c[0] & 0x1f) & 0x3e)) >> 1;
+        c[2] = ((((c[1] & 0xf800) + (c[0] & 0xf800)) & 0x1f001) | (((c[1] & 0x7e0) + (c[0] & 0x7e0)) & 0xfc0) |
+                (((c[1] & 0x1f) + (c[0] & 0x1f)) & 0x3e)) >> 1;
     }
     for (int r = 0; r < 4; r++, dst += stride) {
         uint8_t b = src[4 + r];

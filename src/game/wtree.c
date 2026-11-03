@@ -1587,8 +1587,8 @@ void WSurface_Light(const WSurface *s, const float p[3], float out[4])
     WTreeElem *e = t.elem;
     if (!e) return;
     int n = e->vt->nvertices(e);
-    const float *v[4];
-    uint16_t col[4];
+    const float *v[4] = {0};
+    uint16_t col[4] = {0};
     for (int i = 0; i < n && i < 4; i++) {
         v[i] = e->vt->vertex(e, i);
         col[i] = e->vt->colour(e, i);

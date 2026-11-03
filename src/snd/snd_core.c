@@ -139,7 +139,7 @@ static int shape(int x) { return x * 2 - (x * x) / 0x7f; }
    0x4000 and 0xc000). */
 static void pan_table(void)
 {
-    uint16_t sp[4];
+    uint16_t sp[4] = {0};
     int n = s_channels;
     if (n == 1) {
         for (int i = 0; i < 0x100; i++) s_pan[i][0] = 0x7f;

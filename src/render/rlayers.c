@@ -1058,7 +1058,7 @@ static EaglLayer *exec_vertexlight_ambient(EaglLayer *l, EaglStream *s0, EaglStr
    out once a draw (0x61c170, its stamp 0x61e1d0); the primitives clipped off are skipped unless every
    vertex is inside. Without the lights the layers end here (no next layer). */
 static float s_beam_pts[256][4];   /* 0x61d178 */
-static struct { int stamp; float u, v, w; } s_beam_at[256];   /* 0x61c170 */
+static struct { int stamp; float uvw[3]; } s_beam_at[256];   /* 0x61c170 */
 static int s_beam_stamp;           /* 0x61e1d0 */
 
 static void beam_uv(float *p, float out[3])
@@ -1110,7 +1110,7 @@ static EaglLayer *exec_uvlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
     uint32_t (*pc)[2] = c->primcodes;
     if (!all) s_beam_stamp += idx != NULL;
     else if (idx)
-        for (uint32_t k = 0; k < npos; k++) beam_uv(s_beam_pts[k], &s_beam_at[k].u);
+        for (uint32_t k = 0; k < npos; k++) beam_uv(s_beam_pts[k], s_beam_at[k].uvw);
     for (int k = 0; k < n;) {
         if (!all && (*pc)[0] != 0) {
             k += per;
@@ -1121,10 +1121,10 @@ static EaglLayer *exec_uvlight(EaglLayer *l, EaglStream *s0, EaglStream *s1)
                 if (idx) {
                     int i = idx[k];
                     if (!all && s_beam_at[i].stamp != s_beam_stamp) {
-                        beam_uv(s_beam_pts[i], &s_beam_at[i].u);
+                        beam_uv(s_beam_pts[i], s_beam_at[i].uvw);
                         s_beam_at[i].stamp = s_beam_stamp;
                     }
-                    uvw[0] = s_beam_at[i].u, uvw[1] = s_beam_at[i].v, uvw[2] = s_beam_at[i].w;
+                    uvw[0] = s_beam_at[i].uvw[0], uvw[1] = s_beam_at[i].uvw[1], uvw[2] = s_beam_at[i].uvw[2];
                 } else {
                     beam_uv(s_beam_pts[k < 256 ? k : 255], uvw);
                 }
