@@ -52,7 +52,7 @@ static char car_name[64];     /* --param car=<name>: that car in the viewer (Gam
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
-static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests;
+static char fe_cb[512];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests;
                                  "=<name>" types the name into UserList.NameInput, "^" goes back a screen, "@x:y"
                                  clicks there, "$acc:text" sets a text) */
 static int fe_frames;

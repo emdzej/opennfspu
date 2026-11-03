@@ -231,6 +231,8 @@ static void draw_cars(RCamera *c)
    Track_Load, 6, (the collision sounds) 7, Race_SelectTrackDefaults 0x414dd0 (8 before the cars, 9
    after them), and the race's start; 10 ends the screen. 0 for another frame, 1 done, -1 failed. */
 static int s_loadstep;
+static int32_t s_netclock;   /* (0x6559f8: the race loop's clock in ticks, a network race's from its start) */
+
 static int load(const char *track, const char *carname)
 {
     char v[8];
@@ -370,7 +372,10 @@ static int load(const char *track, const char *carname)
     set_env();
     plat_set_frame_rate(60.0);
     LoadingScreen(10);
-    if (g_race_mode == 3) Net_RaceStart();   /* (RaceLoop 0x415300's, before its first tick) */
+    if (g_race_mode == 3) {
+        Net_RaceStart();   /* (RaceLoop 0x415300's, before its first tick) */
+        s_netclock = 0;    /* (0x6559f8 = 0) */
+    }
     return 1;
 }
 
@@ -698,12 +703,30 @@ bool DRIVE_selftest(const char *track, const char *car)
             s_slot++;
             continue;
         }
+        if (g_race_mode == 3 && Net_InGame() && !g_race_network) {
+            /* RaceLoop in the input exchange: the controls sampled and queued on the clock (32 Hz,
+               0x606aa4), the simulation run up to the ticks everyone's controls have come for (its target
+               the clock's or +0xf0 * 2 + 1, the lesser, less one) */
+            if (!(s_netclock & 1)) {
+                read_controls();
+                Input_QueuePacket();   /* 0x413820 */
+            }
+            s_netclock++;
+            continue;
+        }
         if (!(g_sim_tick & 1)) {
             read_controls();
             if (g_replay_mode < 2) Input_QueuePacket();   /* 0x413820 */
             Sim_HalfStep(g_sim_tick >> 1);   /* 0x415f10 */
         }
         Sim_Step();   /* 0x415010 */
+    }
+    if (g_race_mode == 3 && Net_InGame() && !g_race_network && !held) {
+        int target = g_net->ctlin * 2 + 1 < s_netclock ? g_net->ctlin * 2 + 1 : s_netclock;
+        for (int k = 0; k < 32 && g_sim_tick <= target - 1; k++) {
+            if (!(g_sim_tick & 1)) Sim_HalfStep(g_sim_tick >> 1);   /* 0x415f10 */
+            Sim_Step();   /* 0x415010 */
+        }
     }
     race_actions();
     {

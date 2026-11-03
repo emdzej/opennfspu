@@ -25,6 +25,9 @@ uint8_t *Input_ReplayBuffer(void);
 
 /* Clears the rings and the replay (a race's start); the replay's reading restarts at its beginning. */
 void Input_Reset(bool keep_replay);
+/* The rings as RaceLoop starts them (a network race's): each player's first slot taken (an empty packet),
+   the next one queued, none counted. 0x415e20 */
+void Input_RaceReset(void);
 /* The packet into player n's ring; false if its slot is still taken. 0x415ea0 */
 bool Input_Enqueue(int player, const uint8_t packet[4]);
 /* The local player's sampled packet queued (one player). 0x413820 */

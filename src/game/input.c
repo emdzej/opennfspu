@@ -44,6 +44,19 @@ void Input_Reset(bool keep_replay)
     }
 }
 
+void Input_RaceReset(void)   /* 0x415e20 */
+{
+    for (int p = 0; p < PLAYERS; p++) {
+        for (int i = 0; i < RING; i++) {
+            taken[p][i] = i < 1;
+            memset(ring[p][i], 0, 4);
+        }
+        queued[p] = 1;
+    }
+    g_input_count = 0;
+    /* (0x608af0, the half-steps counted, and the bytes 0x5cc81c, 0x5cc81d: the port has no reader of them) */
+}
+
 uint8_t *Input_ReplayBuffer(void) { return replay; }
 
 bool Input_Enqueue(int player, const uint8_t p[4])

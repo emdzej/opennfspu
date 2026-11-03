@@ -825,6 +825,7 @@ void Net_RaceStart(void)
        start was given up), then the session's go waited for (+0xc4, with the pump 0x4b0d70; the port's
        wait sleeps so gasm's threads run) */
     if (Net_Live()) Net_SyncBarrier();
+    Input_RaceReset();   /* 0x415e20 */
     if (Net_InGame() && !g_net->aborted) Net_SendGo();
     while (Net_InGame() && g_net->startwait) {
         App_WaitActive();
