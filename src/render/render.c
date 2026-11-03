@@ -1,5 +1,6 @@
 /* The render system (render.h): Render_Init and the render system object, the graphics device, the
    render-state object, display mode and quality, cameras and views, the race frame. */
+#include "wide.h"
 #include "render/render.h"
 #include "render/rdraw.h"
 #include "render/drive_selftest.h"
@@ -363,10 +364,9 @@ void Render_SetMode(RenderSystem *r, int mode)
     Render_DetectCard();
     Render_SetupQuality();
     EAGL_SetDisplaySize((float)w, (float)h);
-    /* (a port addition, --param aspect=16:9 or 16:10: the projections take the display's true shape,
-       Hor+; the original's take 4:3 whatever the mode, 1280 x 1024's too) */
-    char v[8];
-    bool wide = plat_param("aspect", v, sizeof v) && (strcmp(v, "16:9") == 0 || strcmp(v, "16:10") == 0);
+    /* (a port addition, true widescreen, wide.h: the projections take the display's true shape, Hor+;
+       the original's take 4:3 whatever the mode, 1280 x 1024's too) */
+    bool wide = Wide_Shape() != WIDE_NONE;
     EAGL_SetWide(wide ? ((float)w * 3.0f) / ((float)h * 4.0f) : 1.0f);
 }
 

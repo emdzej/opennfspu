@@ -7,6 +7,7 @@
    answer depends on the card, the profile's value is used and noted. */
 #include "render/thrash_internal.h"
 #include "platform.h"
+#include "wide.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -788,10 +789,9 @@ static void modes_init(void)
     static const int wide[2][4][2] = {{{1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}},
                                       {{1280, 800}, {1680, 1050}, {1920, 1200}, {2560, 1600}}};
     memset(modes, 0, sizeof modes);
-    /* (a port addition, --param aspect=16:9 or 16:10: four modes of that shape after the five; the
-       options never offer the list's last, 0x4bc2f0, so the fourth only fills that place) */
-    char v[8];
-    int k = !plat_param("aspect", v, sizeof v) ? -1 : strcmp(v, "16:9") == 0 ? 0 : strcmp(v, "16:10") == 0 ? 1 : -1;
+    /* (a port addition, true widescreen, wide.h: four modes of that shape after the five; the options
+       never offer the list's last, 0x4bc2f0, so the fourth only fills that place) */
+    int k = Wide_Shape() - 1;
     nmodes = k < 0 ? 5 : 9;
     for (int i = 0; i < nmodes; i++) {
         const int *m = i < 5 ? wh[i] : wide[k][i - 5];

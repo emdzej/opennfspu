@@ -223,6 +223,8 @@ async function play(source) {
   $('status').textContent = 'Starting...';
   const params = Object.fromEntries([...query].filter(([k]) => !PAGE_PARAMS.has(k)));
   if (!('aspect' in params) && $('aspect').value) params.aspect = $('aspect').value;   // (the address wins)
+  if (params.aspect === 'auto') params.aspect = screenShape() || undefined;
+  if (!params.aspect) delete params.aspect;
   // The stage takes the game's shape: the races fill a widescreen one, the 4:3 menus have bars at the sides.
   $('stage').style.setProperty('--ar', { '16:9': 16 / 9, '16:10': 16 / 10 }[params.aspect] ?? 4 / 3);
   let allowNet = false;   // network games: the relay's host only
@@ -475,12 +477,18 @@ $('saves-input').onchange = async () => {
 refreshSaves();
 
 // ---- the screen shape (a port addition: --param aspect=16:9 or 16:10), kept in this browser ---------
+/** 'match my screen': the nearest of 4:3 (''), 16:10 and 16:9 to the screen's own shape. */
+function screenShape() {
+  const r = screen.width / screen.height;
+  const shapes = [['', 4 / 3], ['16:10', 16 / 10], ['16:9', 16 / 9]];
+  return shapes.reduce((a, b) => (Math.abs(r - b[1]) < Math.abs(r - a[1]) ? b : a))[0];
+}
 try {
   const v = localStorage.getItem(WIDE_KEY);   // ('1': 16:9, as the first switch kept it)
-  $('aspect').value = v === '1' ? '16:9' : ['16:9', '16:10'].includes(v) ? v : '';
+  $('aspect').value = v === '1' ? '16:9' : ['16:9', '16:10', 'auto'].includes(v) ? v : '';
 } catch { /* no storage: 4:3 */ }
 if (query.has('aspect')) {   // the address decides
-  $('aspect').value = ['16:9', '16:10'].includes(query.get('aspect')) ? query.get('aspect') : '';
+  $('aspect').value = ['16:9', '16:10', 'auto'].includes(query.get('aspect')) ? query.get('aspect') : '';
   $('aspect').disabled = true;
 }
 $('aspect').onchange = () => {

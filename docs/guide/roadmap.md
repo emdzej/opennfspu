@@ -16,7 +16,9 @@ the original does.
   play page, and the HUD checked at every size (it keeps to the corners at its art's pixel size, as the
   original's does at every size).
 - **Next:** a switch in the game's own graphics options, in place of the parameter.
-- **Next:** the window's own shape when it is resized.
+- **Done:** `aspect=auto` (and the play page's "match my screen"): the shape nearest the display's when the
+  game starts.
+- **Next:** the window's own shape when it is resized, while the game runs.
 - **Later:** the front end. Its screens are laid out for 640 x 480 and are shown with black bars at the sides.
   Widening them means placing each screen's parts again.
 
