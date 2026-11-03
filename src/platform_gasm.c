@@ -67,12 +67,15 @@ bool plat_mouse(float *x, float *y, uint32_t *buttons, float *wheel)
     *x = *y = *wheel = 0;
     *buttons = 0;
     if (gasm_pointer(p, sizeof p) < (int32_t)sizeof p) return false;
-    uint32_t b;
+    uint32_t b, pressed;
     memcpy(x, p + GASM_POINTER_OFF_X, 4);
     memcpy(y, p + GASM_POINTER_OFF_Y, 4);
     memcpy(wheel, p + GASM_POINTER_OFF_WHEEL_Y, 4);
     memcpy(&b, p + GASM_POINTER_OFF_BUTTONS, 4);
-    *buttons = b & 7u;
+    memcpy(&pressed, p + GASM_POINTER_OFF_PRESSED, 4);
+    /* A button pressed since the last frame counts as down for this one even if it is already up again:
+       DirectInput's buffered mouse never loses a click, a held-state read does when a frame is long. */
+    *buttons = (b | pressed) & 7u;
     return true;
 }
 
