@@ -62,8 +62,9 @@ static int16_t car_node(Car *c)
 static int step(int n, int by) { return Road_Step(g_road, n, by, -1); }   /* 0x481670 */
 static float absf(float v) { return v <= K(0x5b23f8) ? -v : v; }
 static int dir_of_race(void) { return g_race_reverse ? -1 : 1; }
-/* The score plus a value, truncated as __ftol does (the x87's sum of the integer and the float). */
-static int32_t add(int32_t s, double v) { return (int32_t)((double)s + v); }
+/* The score plus a value, truncated as __ftol does: the x87's sum of the integer (fild, exact) and the
+   value, rounded to its single precision first. */
+static int32_t add(int32_t s, double v) { return (int32_t)(float)((double)s + v); }
 static int32_t addk(int32_t s, uint32_t va) { return add(s, (double)K(va)); }
 static int32_t subk(int32_t s, uint32_t va) { return add(s, -(double)K(va)); }
 
@@ -378,11 +379,11 @@ static void racer_lane(Car *c)
     int len = g_road->nnodes, d = car_node(c);
     if (0 < d && len / 2 < d) d -= len;
     else if (d < 0 && d < -(len / 2)) d += len;
-    double from = (double)d * (double)K(0x5b2460);
-    if (from <= (double)K(0x5b23f8)) from = -from;
+    float from = (float)d * K(0x5b2460);
+    if (from <= K(0x5b23f8)) from = -from;
     int place = 0;
     while (place < g_ncars && g_ordered.c[place] != c) place++;
-    if (from < (double)place * (double)K(0x5b2410)) return;
+    if (from < (float)place * K(0x5b2410)) return;
     int n = car_node(c), lane = I(0x1020);
     if (lane == 6 - node_i(n, 0x38) || lane == node_i(n, 0x3c) + 7) s_score[1] = addk(s_score[1], 0x5b248c);
     else if (6 < lane) s_score[2] = addk(s_score[2], 0x5b248c);
