@@ -25,9 +25,9 @@ Rendering goes through EA's **THRASH** driver interface (`_THRASH_*`, 42 entry p
 loads from `Drivers/dx7z.dll` (Direct3D 7) or `voodoo2z.dll` (Glide). The port implements THRASH on OpenGL ES
 3.0 (`gasm:gl`; WebGL 2 in browsers) following dx7z.dll, and ports the game above it unchanged in structure.
 
-**State:** early (docs/guide/status.md). THRASH, EAGL2, the real library's files/shapes/textures, cars (textured,
-coloured) and the track world draw are ported; viewers: `--param car=<name>`, `--param track=<name>`. Next: sky,
-cameras, then one car driving (docs/re/port-plan.md step 4).
+**State:** single player playable (docs/guide/status.md): the front end, Quick Race, the knockouts, the Evolution
+career, Factory Driver, the races with AI, traffic and police, the HUD, sound and replays. Multiplayer (the network
+game, `PENDING_NOTE`s in src/game) is deferred. Viewers: `--param car=<name>`, `track=<name>`, `drive=<track>`, `fe=<layout>`.
 
 ## Hard rules
 
