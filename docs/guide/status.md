@@ -1,11 +1,11 @@
 # Status
 
-**Early: the game starts in the front end; Quick Race lets you pick the track, the car and the opponents and starts the race; the Evolution career runs its tournaments with the garage (the dealer, used cars, parts, paint, the car setup); Escape pauses a race, and its menu goes back to the menus.**
+**In progress, single player playable (multiplayer is not ported): the game starts in the front end; Quick Race lets you pick the track, the car and the opponents and starts the race; the Evolution career runs its tournaments with the garage (the dealer, used cars, parts, paint, the car setup); Escape pauses a race, and its menu goes back to the menus.**
 
 | Part | State |
 |---|---|
 | Build: `opennfspu.wasm` on gasm 0.16.0, native build for tools and tests | in place |
-| Bundles for macOS, Linux and Windows, the browser player | in place (they start the module; there is no game yet) |
+| Bundles for macOS, Linux and Windows, the browser player | in place (they run the game) |
 | File layer: the installed game folder or an ISO image of it, case-insensitive names | in place |
 | The original program read at run time (`Porsche.exe` 3.5, size and CRC-32 checked) | in place |
 | The 3D driver (THRASH, the original's Direct3D 7 path) on OpenGL ES 3.0, EAGL2 | in place |

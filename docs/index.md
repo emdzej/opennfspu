@@ -33,8 +33,8 @@ features:
     link: /play/
     linkText: Play
     target: _self
-  - title: Early, and honest about it
-    details: The project infrastructure, the file layer and the data format decoders come first. The game is not playable yet.
+  - title: In progress, and honest about it
+    details: Single player runs from the menus to the race and back (Quick Race, the knockouts, the Evolution career, Factory Driver). Multiplayer is not ported. Expect rough edges.
     link: /guide/status
     linkText: Status
 ---
@@ -51,7 +51,7 @@ portable game runtime: the same module natively (`gasm-run`) and in the browser.
 
 ## Status
 
-Early: infrastructure and format decoders. The game is not playable yet. Details in
+In progress: single player is playable (Quick Race, the knockouts, the Evolution career, Factory Driver); multiplayer is not ported. Details in
 [Status](/guide/status).
 
 ## Sibling projects

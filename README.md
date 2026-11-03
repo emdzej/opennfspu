@@ -9,8 +9,8 @@ drawing through gasm's OpenGL ES 3.0 (`gasm:gl`; WebGL 2 in the browser) where t
 It contains no original code, assets or data: it reads the data files, and the tables of the original game
 program, from your own copy of the game.
 
-**Status: early.** The infrastructure (build, gasm bundles, browser player, site) and the data format
-decoders come first; the game is not playable yet. Details:
+**Status: in progress.** Single player is playable from the menus through the races (Quick Race, the
+knockouts, the Evolution career, Factory Driver); multiplayer is not ported. Details:
 [opennfspu.emdzej.pl/guide/status](https://opennfspu.emdzej.pl/guide/status).
 
 ## Game data
