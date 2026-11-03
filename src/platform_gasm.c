@@ -373,7 +373,7 @@ static void refill_after_gap(void)
     static float silence[APP_AUDIO_RATE * 160 / 1000 * 2];
     static double last = -1;
     double now = gasm_time_ms();
-    if (0 <= last && now - last > 80.0) gasm_audio_push(silence, APP_AUDIO_RATE * 160 / 1000);
+    if (0 <= last && now - last > 60.0) gasm_audio_push(silence, APP_AUDIO_RATE * 160 / 1000);
     last = now;
 }
 
