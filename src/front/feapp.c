@@ -1451,6 +1451,7 @@ static void on_up(FertControl *c)
         }
         const char *panel = data_str(c, "panel");
         if (panel) select_panel_deep(FEApp_Top(), panel);
+        Audio_UI(5);   /* (FERadioItem's v9 0x4cfcc0: 0x4aab80) */
         return;
     }
     if (!strcmp(c->id, "NFS5.GOTOBUTTON") || !strcmp(c->id, "NFS5.BOTTOMBARBUTTON")) {   /* 0x4c8f50 */
