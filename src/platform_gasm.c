@@ -21,6 +21,8 @@
 /* The window title (gasm 0.6 custom section, also readable by launchers without running the module). */
 GASM_TITLE("Need for Speed: Porsche Unleashed");
 
+_Static_assert(PLAT_NET_CONNECTING == GASM_NET_CONNECTING && PLAT_NET_OPEN == GASM_NET_OPEN && PLAT_NET_CLOSED == GASM_NET_CLOSED &&
+               PLAT_NET_ERROR == GASM_NET_ERROR, "PLAT_NET_* must be gasm:net's states");
 _Static_assert(PAD_A == GASM_BTN_A && PAD_B == GASM_BTN_B && PAD_X == GASM_BTN_X && PAD_Y == GASM_BTN_Y &&
                PAD_L == GASM_BTN_L && PAD_R == GASM_BTN_R && PAD_SELECT == GASM_BTN_SELECT &&
                PAD_START == GASM_BTN_START && PAD_UP == GASM_BTN_UP && PAD_DOWN == GASM_BTN_DOWN &&
@@ -503,3 +505,11 @@ bool plat_event_wait(PlatEvent *e, double ms)
 void plat_mutex_destroy(PlatMutex *m) { free(m); }
 void plat_event_destroy(PlatEvent *e) { free(e); }
 double plat_time_ms(void) { return gasm_time_ms(); }
+
+/* ---- message connections (gasm:net) ---- */
+
+int32_t plat_net_open(const char *url) { return gasm_net_open(url, (uint32_t)strlen(url)); }
+int plat_net_state(int32_t conn) { return conn > 0 ? (int)gasm_net_state(conn) : PLAT_NET_ERROR; }
+bool plat_net_send(int32_t conn, const void *data, uint32_t len) { return conn > 0 && len && gasm_net_send(conn, data, len) == 0; }
+int32_t plat_net_recv(int32_t conn, void *dst, uint32_t cap) { return conn > 0 ? gasm_net_recv(conn, dst, cap) : -1; }
+void plat_net_close(int32_t conn) { if (conn > 0) gasm_net_close(conn); }

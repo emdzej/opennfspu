@@ -131,3 +131,9 @@ bool plat_event_wait(PlatEvent *e, double ms)
     if (!e->manual) e->set = false;
     return true;
 }
+
+int32_t plat_net_open(const char *url) { return -1; }
+int plat_net_state(int32_t conn) { return PLAT_NET_ERROR; }
+bool plat_net_send(int32_t conn, const void *data, uint32_t len) { return false; }
+int32_t plat_net_recv(int32_t conn, void *dst, uint32_t cap) { return -1; }
+void plat_net_close(int32_t conn) {}

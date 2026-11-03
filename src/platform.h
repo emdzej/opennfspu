@@ -71,3 +71,14 @@ void plat_event_destroy(PlatEvent *e);
 void plat_event_set(PlatEvent *e);
 void plat_event_reset(PlatEvent *e);
 bool plat_event_wait(PlatEvent *e, double ms);
+
+/* Message connections (gasm:net: WebSocket semantics, reliable and ordered, binary): a ws:// or wss://
+   URL; the runner may refuse it (gasm-run --allow-net). open: a handle > 0, or -1. state: PLAT_NET_*.
+   send: false unless open. recv: the next message's length (copied only if it fits in cap, else it stays
+   queued), 0 if none, -1 once closed and drained. Not in the native build (open fails). */
+enum { PLAT_NET_CONNECTING, PLAT_NET_OPEN, PLAT_NET_CLOSED, PLAT_NET_ERROR };
+int32_t plat_net_open(const char *url);
+int plat_net_state(int32_t conn);
+bool plat_net_send(int32_t conn, const void *data, uint32_t len);
+int32_t plat_net_recv(int32_t conn, void *dst, uint32_t cap);
+void plat_net_close(int32_t conn);

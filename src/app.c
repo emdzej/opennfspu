@@ -34,6 +34,7 @@
 #include "game/music.h"
 #include "front/feaccess.h"
 #include "real/thread.h"
+#include "real/wsock.h"
 #include "render/render.h"
 #include "render/thrash.h"
 #include "static_init.h"
@@ -269,6 +270,11 @@ bool app_frame(void)
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
+        else if (selftest == 3) {
+            WS_selftest();
+            THRASH.fn.clearwindow();
+            THRASH.fn.pageflip();
+        }
         else {
             THRASH.fn.clearwindow();
             THRASH.fn.pageflip();
