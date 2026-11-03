@@ -665,6 +665,8 @@ FertControl *FEApp_Top(void) { return s_depth ? s_stack[s_depth - 1] : NULL; }
 
 static int data_int_of(const FertControl *c, const char *name);
 static bool indicator_click(FertControl *c, int32_t mx);
+static void indicator_drag(FertControl *w, int32_t mx);
+static bool indicator_up(FertControl *w, FertControl *c);
 static const char *data_str(const FertControl *c, const char *name)
 {
     for (int k = 0; k < c->nparts; k++) {
@@ -1500,6 +1502,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
             if (h) on_enter(h);
         }
         FEChronicle_Move(h, x, y);
+        indicator_drag(w, x);
         if (h) FECar3D_Move(h, x, y);
         break;
     }
@@ -1521,6 +1524,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         if (target && type == 4 && FECtrl_Click(target)) break;
         if (target && type == 4 && FECtrl_DeadZonePress(target, w->mouse[0])) break;
         if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
+        if (target && type == 8 && indicator_up(w, target)) break;
         if (target && type == 8 && camera_click(w, target, type, x, y)) break;
         if (target && type == 8) on_up(target);
         break;
@@ -2833,20 +2837,44 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
-/* A click on a changeable bar sets its accessor there (FEGouraudIndicatorBar_v5 0x4c9f50). */
-static bool indicator_click(FertControl *c, int32_t mx)
+/* A press on a changeable bar sets its accessor there and holds the focus (FEGouraudIndicatorBar_v5
+   0x4c9f50); moved while held it follows the mouse (_v8 0x4ca070); let go, the focus goes (_v9 0x4ca050). */
+static bool indicator_set(FertControl *c, int32_t mx)
 {
-    if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
     FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
-    if (!a || !data_int_of(c, "changeable")) return true;
+    if (!a || !data_int_of(c, "changeable")) return false;
     int32_t r[4];
     control_rect(c, r);
     int n = FEAccess_Count(a), w = r[2] - r[0];
-    if (w <= 0) return true;
+    if (w <= 0 || mx < r[0] || r[2] <= mx) return false;   /* (0x4e2290: in its bar) */
     int p = (mx - r[0]) * n / w;
     if (n <= p) p = n - 1;
     if (p < 0) p = 0;
     FEAccess_SetPos(a, p);
+    return true;
+}
+
+static bool indicator_click(FertControl *c, int32_t mx)
+{
+    if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
+    if (indicator_set(c, mx) && s_parent) {
+        c->feflags |= 0x40;   /* 0x4c7940 */
+        s_parent->focus = c;
+    }
+    return true;
+}
+
+static void indicator_drag(FertControl *w, int32_t mx)
+{
+    FertControl *c = w->focus;
+    if (c && (c->feflags & 0x40) && !strcmp(c->id, "NFS5.GouraudIndicatorBar")) indicator_set(c, mx);
+}
+
+static bool indicator_up(FertControl *w, FertControl *c)
+{
+    if (strcmp(c->id, "NFS5.GouraudIndicatorBar")) return false;
+    c->feflags &= ~0x40u;   /* 0x4c7970 */
+    if (w->focus == c) w->focus = NULL;
     return true;
 }
 
