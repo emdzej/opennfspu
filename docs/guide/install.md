@@ -3,7 +3,7 @@
 OpenNFSPU ships as one WebAssembly module, `opennfspu.wasm`, plus ready-to-run **bundles** of that module
 with gasm's native runner `gasm-run` for macOS, Linux and Windows. None of them contains any of the game:
 you need your own copy, installed and updated to version 3.5 (see [Game data](/guide/game-data)).
-OpenNFSPU is early work: read [Status](/guide/status) first.
+Single player is playable and multiplayer is not ported yet: see [Status](/guide/status).
 
 ## Download a bundle
 

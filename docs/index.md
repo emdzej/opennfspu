@@ -4,7 +4,7 @@ layout: home
 hero:
   name: OpenNFSPU
   text: Porsche Unleashed, reimplemented
-  tagline: "A faithful reimplementation of Need for Speed: Porsche Unleashed (Electronic Arts, 2000) in C11, ported function by function from the Windows game. It runs the game from your own copy, as one WebAssembly module for the gasm runtime, natively and in the browser. Early work in progress."
+  tagline: "A faithful reimplementation of Need for Speed: Porsche Unleashed (Electronic Arts, 2000) in C11, ported function by function from the Windows game. It runs the game from your own copy, as one WebAssembly module for the gasm runtime, natively and in the browser. Single player is playable; multiplayer is still to come."
   actions:
     - theme: brand
       text: Get started
