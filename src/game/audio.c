@@ -41,6 +41,8 @@ static int32_t opt(uint32_t va)
     return (int32_t)exe_u32(va);
 }
 
+int Audio_MusicLevel(int level) { return opt(0x5d14b0) * level >> 7; }   /* 0x4a80c0 */
+
 /* 0x5d1764: a 129-step fade in; read from its end, 0x5d17e4 - i, the fade out. */
 static int fade_in(int i) { return (int8_t)exe_data(0x5d1764 + (uint32_t)i, 1)[0]; }
 static int fade_out(int i) { return (int8_t)exe_data((uint32_t)(0x5d17e4 - i), 1)[0]; }

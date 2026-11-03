@@ -101,7 +101,7 @@ const char *FEData_TourTrack(void);
 void FEData_TourResult(int race, const int *places, const int *times, const bool *clean, int n);
 void FEData_TourEnd(void);
 void FEData_TourForfeit(void);   /* FORFEITTOURNY's yes: the tournament's races open again (0x5033f0) */
-/* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags pend). */
+/* The career race's laps (0x4fb630: its +0x3a2, 1 when 0; its reverse +0x3a4 and mirror +0x3a5 flags are read with it, feapp.c). */
 int FEData_TourLaps(void);
 /* The career race's traffic count (0x4fb630); slots[] its own traffic cars' ids (nfs5.car kind 1) when
    the tournament has its own (all 0 otherwise: the track's). */

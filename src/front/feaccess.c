@@ -23,6 +23,8 @@
 #include <strings.h>
 
 void Audio_UI(int patch);   /* game/audio.h (whose car.h this file's CAR_SIZE clashes with) */
+int Audio_MusicLevel(int level);   /* (game/audio.h) */
+extern int32_t g_audio_fx;         /* (game/audio.h) */
 void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
@@ -45,6 +47,7 @@ struct FEAccessor {
     int32_t dz[16];  /* ACC_DEADZONE: each joystick's value (+0x28), the one shown (+0x68), the save's load */
     int dzpad;
     unsigned dzserial;
+    void (*changed)(FEAccessor *a);   /* the callback its set runs (+0x10, 0x4bbe20) */
 };
 
 enum { NACC = 256 };
@@ -171,9 +174,15 @@ static void add_list(const char *name, uint32_t list, uint32_t key)   /* FEListA
     if (a) a->list = list, a->key = key;
 }
 
+/* The music level's callback (0x4e3e50): the music's volume at once; the effects' (0x4e3e90): their
+   volume (0x5d1744). */
+static void music_level(FEAccessor *a) { Music_SetVolume(Audio_MusicLevel(a->min + a->pos)); }
+static void sfx_level(FEAccessor *a) { g_audio_fx = a->min + a->pos; }
+
 /* The audio data area (FEdaAudio_v0 0x4e3fb0): the five levels 0..127 (FEIntAccessor 0x4b9ef0, options
-   0x37 .. 0x3b), the 3D mode and the quality (FEListAccessor 0x4bb260, options 0x36, 0x35, the string
-   lists 0x5b6c1c, 0x5b6c08). (The CD player's accessors and the levels' callbacks into the sound pend.) */
+   0x37 .. 0x3b; the music's and the effects' with their callbacks, run once as they are made), the 3D
+   mode and the quality (FEListAccessor 0x4bb260, options 0x36, 0x35, the string lists 0x5b6c1c,
+   0x5b6c08), the CD player's. */
 static void audio(void)
 {
     static const struct { const char *name; uint32_t key; } lv[5] = {
@@ -181,7 +190,12 @@ static void audio(void)
         {"Audio.SpeechLevel", 0x5d6168}, {"Audio.AmbientLevel", 0x5d6158}};
     for (int i = 0; i < 5; i++) {
         FEAccessor *a = add(lv[i].name, ACC_INT, 0x80, 0, option(lv[i].key, 0x7f));
-        if (a) a->key = lv[i].key;
+        if (!a) continue;
+        a->key = lv[i].key;
+        if (i < 2) {
+            a->changed = i == 0 ? music_level : sfx_level;
+            a->changed(a);
+        }
     }
     add_list("Audio.Mode", 0x5b6c1c, 0x5d6198);
     add_list("Audio.Quality", 0x5b6c08, 0x5d61a0);
@@ -2170,6 +2184,7 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
     if (!a->count) return;
     a->pos = ((pos % a->count) + a->count) % a->count;
     if (a->kind == ACC_CDTITLE) FECD_SetPos(a->pos);   /* FECurrentSongSelection_v11 0x4be9a0: it plays */
+    if (a->changed) a->changed(a);
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
     if (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) a->cval = colour_row(a, a->pos);
 }

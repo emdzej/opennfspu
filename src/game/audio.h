@@ -12,6 +12,8 @@
 
 extern int32_t g_sound_quality;
 extern int32_t g_audio_fx;         /* 0x5d1744: the effects' volume, 0 .. 0x7f (the options') */    /* 0x657c98: 0 high .. 2 low, 3 none */
+/* A music level (0 .. 0x7f, the options') through the mix's music share (0x5d14b0). 0x4a80c0 */
+int Audio_MusicLevel(int level);
 
 bool Audio_Init(void);
 void Audio_Shutdown(void);

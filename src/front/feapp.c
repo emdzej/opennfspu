@@ -33,7 +33,6 @@
 #include "real/font.h"
 #include "exe.h"
 #include "app.h"
-#include "pending.h"
 #include "front/fetrans.h"
 #include "render/carpages.h"
 #include "platform.h"
@@ -854,7 +853,8 @@ static bool prize_race(int type)
 }
 
 /* The callbacks the bottom bar's buttons and the screens' controls name (0x50cd90 through the screen's
-   callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, the screens' own pending. */
+   callback list; FECallBackList_Dispatch 0x50b7f0): the common ones here, some screens' own in their modules
+   (the chronicle's, the factory's); what's left is the network game's. */
 /* 0x4d1e40(-1): the screens of the stack's history popped, back to its first (the player screens over
    the game setup's, 0x4d2e70's). */
 static void back_to_first(void)
@@ -1221,8 +1221,8 @@ static void callback(const char *cb)
         s_factory_race = false;
         set_direction(0);
         if (!can_play()) return;
-        /* The race description the screens leave in the options (0x4d2e70's end; the data areas'
-           accessors pending: fe.txt's as the original's defaults). */
+        /* The race description the screens leave in the options (0x4d2e70's end), from the data areas'
+           accessors. */
         char v[64];
         (void)v;
         s_tour_race = -1;
@@ -1352,7 +1352,7 @@ static void callback(const char *cb)
         s_result = FE_PLAY;
     } else {
         char m[160];
-        snprintf(m, sizeof m, "front end: callback %s (0x50cd90, pending)", cb);
+        snprintf(m, sizeof m, "front end: callback %s (0x50cd90: the network game's)", cb);
         plat_log(m);
     }
 }
@@ -2210,8 +2210,8 @@ static bool wordwrap_draw(FertControl *c, int32_t ox, int32_t oy)
    drawn by its accessor (the parts lists': FEPartsAllPartsAccessor_v15 0x514ef0, FEPartsShoppingBasket_v15
    0x515800): a category's label (its string centred between two lines) where the category changes, the
    chosen row on the selected colour, a group's header with its icon (WeeIcons.fsh 3 shut / 0xb open), the
-   part's name and its price right of ID_PRICEPOS. The row chosen is kept in view (the scroll bar the
-   original keeps, +0x1bc, pends). */
+   part's name and its price right of ID_PRICEPOS, beside the list's scroll bar (+0x1bc) when the rows
+   overflow the box. */
 /* A list's scroll bar (FEEmbossedVerticalSlider_MainFunctionality, 0x154 bytes, vtable 0x5b6a64; 0x4da860),
    over its value (the list's "<name> Sliderbar", FEPositionableAccessor 0x4bbdd0: a place of a count): the
    up and down arrows (WeeIcons.fsh ARup/ARov/ARin, A2up/A2ov/A2in: normal, hovered, pressed), the track
@@ -3315,7 +3315,7 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
     {
         /* FEMainScreen_v1 0x50faf0 (the main list's, which every screen's runs too): the create player's
            OK with a name typed, the select name's remove and continue with players (the latter where the
-           former is). (Its multiplayer buttons and the menu music's turn are elsewhere or pend.) */
+           former is). (Its multiplayer buttons are the network game's; the menu music's turn is menu_music.) */
         FEAccessor *users = FEAccess_Find("UserList.UserList");
         bool any = users && FEAccess_Count(users) > 0;
         enable(w, "ID_CREATEPLAYEROKBUTTON", FEData_NameInput()[0] != 0);
