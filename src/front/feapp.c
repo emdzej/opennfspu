@@ -81,6 +81,7 @@ static int s_driver_pic = 8;          /* 0x5d8f2c: the create player screen's dr
 static void inputbox_keys(FertControl *c, const uint8_t *k, int nk);
 static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool badge_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_click(FertControl *c);
 static void dialog_open(int kind, const char *text, int b1, int b2);
 static bool s_sound;
@@ -2710,6 +2711,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.INPUTBOX")) return inputbox_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE") || !strcmp(c->id, "NFS5.PLAYERPICTURE")) return picture_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.BADGE")) return badge_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
@@ -2836,6 +2838,64 @@ static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy)
    chosen player's driver, its stem's digit (0 .. 8) of ALLdrivr.fsh, at its place when there are players
    (FE_LoadDriverPictures 0x4db650 converts it, or the player's own picture "<name>.<ext>", into
    SaveData\pic16.fsh with gimme.dll first: the port shows the own picture through feuserpic.c). */
+
+/* Factory Driver's badge (FEPlayerBadge, vtable 0x5b63d0): its art made as its screen shows it (slot 21
+   0x4cebd0, by the rank 0x51a680; none before the first level): the rank's licence (license*.fsh, the
+   names at 0x5d8e50), the licence's shadow (LicenseShadow.fsh 0 and 1), Univers14b and Univers10b; freed
+   by slot 22 (0x4ced30: the port's go with the next rank's). Its draw (v15 0x4cee10) at the control's
+   corner at its fade: the licence, the shadows right (+0xf4) and below (+0x83) but on a low end card
+   (FELOWENDCARD 0x657e60, no alpha 0x4e2da0, under 33 MB 0x4e2db0: the port has neither), the player's
+   name centred at (+0x7a, +0xb) in the rank's colour (0x5d8e60, opaque already), the rank's title at
+   (+0x62, +0x32) in black: string 0xda8 + rank, 11 before for a woman's picture (4 .. 7, 0x501a90). */
+static struct {
+    int rank;
+    char lic[300], shadow[300];
+    HudFont *big, *small;
+} s_badge = {-1, "", "", NULL, NULL};
+
+static bool badge_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    int rank = FEFactory_Rank();
+    if (rank < 0 || (c->feflags & 0x20)) return true;
+    if (rank != s_badge.rank) {
+        if (s_badge.lic[0]) FEShapes_Release(s_badge.lic);
+        if (s_badge.shadow[0]) FEShapes_Release(s_badge.shadow);
+        if (s_badge.big) FEFont_Release(s_badge.big);
+        if (s_badge.small) FEFont_Release(s_badge.small);
+        char name[64], path[300];
+        snprintf(name, sizeof name, "%s.fsh", exe_str(exe_u32(0x5d8e50 + 4u * (uint32_t)(rank & 3))));
+        FE_ResolvePath(name, s_badge.lic, sizeof s_badge.lic);   /* "%s%s.fsh" 0x5cccc8 of 0x65b334 */
+        FEShapes_Load(s_badge.lic);
+        snprintf(name, sizeof name, "%s.fsh", exe_str(0x5d8f18));   /* "LicenseShadow" */
+        FE_ResolvePath(name, s_badge.shadow, sizeof s_badge.shadow);
+        FEShapes_Load(s_badge.shadow);
+        snprintf(path, sizeof path, exe_str(0x5d8f04), FE_DIR_ART);   /* "%sUnivers14b.ffn" */
+        s_badge.big = FEFont_Get(path);
+        snprintf(path, sizeof path, exe_str(0x5d8ef0), FE_DIR_ART);   /* "%sUnivers10b.ffn" */
+        s_badge.small = FEFont_Get(path);
+        s_badge.rank = rank;
+    }
+    FeImage *lic = FEShapes_Image(s_badge.lic, 0);
+    if (!lic) return true;
+    int32_t r[4];
+    FertControl_rect(c, r);   /* 0x4c8240 */
+    float x = (float)(r[0] + ox), y = (float)(r[1] + oy);
+    uint32_t white = (uint32_t)g_fe_fade << 24 | 0xffffffu;   /* 0x4d8280 of 0x4c8410 */
+    FE2D_DepthStep();
+    FE2D_Image(lic, x, y, (float)lic->w, (float)lic->h, white, 0, false);   /* 0x4d95a0 */
+    if (Options_Int(0x5d5d8c, 0) == 0) {   /* FELOWENDCARD */
+        FeImage *s0 = FEShapes_Image(s_badge.shadow, 0), *s1 = FEShapes_Image(s_badge.shadow, 1);
+        if (s0) FE2D_Image(s0, x + 0xf4, y, (float)s0->w, (float)s0->h, white, 0, false);
+        if (s1) FE2D_Image(s1, x, y + 0x83, (float)s1->w, (float)s1->h, white, 0, false);
+    }
+    Save *sv = FESave_Current();
+    uint32_t colour = exe_u32(0x5d8e60 + 4u * (uint32_t)rank) | (uint32_t)g_fe_fade << 24;
+    if (s_badge.big) FE2D_Text(s_badge.big, x + 0x7a, y + 0xb, 1, colour, sv ? sv->player : "", 1.0f, 1.0f);   /* 0x4d9e00 */
+    bool woman = sv && 3 < sv->info && sv->info < 8;
+    int id = rank <= 3 ? (woman ? 0xd9d : 0xda8) + rank : 0;
+    if (s_badge.small) FE2D_Text(s_badge.small, x + 0x62, y + 0x32, 0, 0xff000000u, FEStrings_Get(id), 1.0f, 1.0f);
+    return true;
+}
 
 static bool picture_draw(FertControl *c, int32_t ox, int32_t oy)
 {
