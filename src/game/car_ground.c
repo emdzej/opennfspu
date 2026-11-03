@@ -47,10 +47,13 @@ static void cross3(const float a[3], const float b[3], float out[3])   /* 0x5325
 
 static void unit3(const float v[3], float out[3])   /* 0x532640 */
 {
-    float r = K(0x5b24a8) / sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);   /* (single precision: 0x532890) */
-    out[0] = r * v[0];
-    out[1] = v[1] * r;
-    out[2] = v[2] * r;
+    /* (single precision, 0x532890, with the x87's exponent: a car at rest has a velocity near 1e-20,
+       whose squares are below a float's normal range) */
+    double s = Math_X87(Math_X87(Math_X87((double)v[0] * v[0]) + Math_X87((double)v[1] * v[1])) + Math_X87((double)v[2] * v[2]));
+    double r = Math_X87((double)K(0x5b24a8) / Math_X87(sqrt(s)));
+    out[0] = (float)(r * v[0]);
+    out[1] = (float)((double)v[1] * r);
+    out[2] = (float)((double)v[2] * r);
 }
 
 /* Angles in turns (2 pi as the double at 0x5bb2c0). 0x532550, 0x532560 */

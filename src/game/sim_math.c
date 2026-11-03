@@ -22,6 +22,13 @@ static double two_pi(void)
     return d;
 }
 
+double Math_X87(double x)
+{
+    int e;
+    double m = frexp(x, &e);
+    return ldexp((double)(float)m, e);
+}
+
 /* 0x532570: the sine and cosine of an angle in turns (0x532550 / 0x532560). */
 void Math_SinCosTurns(float t, float *s, float *c)
 {
