@@ -27,9 +27,10 @@ the original does.
   opponents' racing line driving, the traffic's lane driving, the police's chase and turning round, and the
   AI drive of opponents, traffic and police now give the same results bit for bit, through the start's
   countdown, a car put back on the road and the opponents' finish. Each step is compared from the port's
-  own state, so this doesn't yet prove a whole race runs the same: the game's own replay.rpl, recorded by
-  the original, plays through to its end, but whether it matches the original frame for frame isn't
-  confirmed. Next: the original's whole race loop under the emulator, to compare a race from its start.
+  own state, and in a free run: the original's code for one car, every step in order, each on the state
+  the original left, gives the same car as the port over 600 ticks for the player and 300 for an opponent
+  of the game's own replay.rpl. Not covered yet: the parts of the race loop outside the car's own steps
+  (the world's objects, the other cars at once), and a whole race from its start.
 - **Two-player split screen.** The race code has a split-screen mode: communication mode 1, with a second
   player's camera and the catch-up logic. The original never runs it: the front end's race set-up
   (0x4eab10) writes the mode before every race, 0 (or 4 in a network game), over `fe.txt`'s `comm_mode`.

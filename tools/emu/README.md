@@ -89,6 +89,17 @@ PY=/path/to/venv/bin/python tools/emu/sweep_forces.sh 450:20:6600 7000
 git apply -R tools/emu/forcesdump.patch
 ```
 
+A free run: `--param fdfn=1` dumps every wrapped call of one car, and `freerun.sh <ticks> <frames>`
+runs them in order under the emulator with `FD_CARRY`, each on the state the emulator left. Where the
+original came out different from the port, its words go into the next call's car (and its random
+generator), so the original then runs on its own values rather than the port's; a carried word the port
+changed between the two calls (by code no wrapped call covers) is reported as `uncovered`. The packet
+task (0x499150) is the run's input (the replay file or the controls) and is taken from the port.
+
+```sh
+CAR=1 PY=/path/to/venv/bin/python tools/emu/freerun.sh 1000:1:1600 2900   # an opponent, 600 ticks
+```
+
 What the comparisons showed: the game runs the x87 at single precision, so every add, multiply, divide
 and root rounds to a float. The runtime's `asin` (0x5a27c0) keeps that precision for its root, and
 `fpatan` is exact. The port computes these steps in floats, in the original's order. The x87 keeps its

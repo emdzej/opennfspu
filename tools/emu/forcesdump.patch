@@ -325,7 +325,7 @@ index 4fef594..5b97b0b 100644
      Car *c = car;
      if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
 diff --git a/src/game/car_ground.c b/src/game/car_ground.c
-index 4ce8464..92cea3e 100644
+index 84beca3..a57e06b 100644
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
 @@ -1,12 +1,14 @@
@@ -343,7 +343,7 @@ index 4ce8464..92cea3e 100644
  #include "game/sim_math.h"
  #include "game/sim_rand.h"
  #include "pending.h"
-@@ -526,7 +528,277 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
+@@ -529,7 +531,280 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -492,13 +492,15 @@ index 4ce8464..92cea3e 100644
 +    return want;
 +}
 +void (*g_fd_extra)(void *car);
-+bool FD_Active(void *car, uint32_t va) { return (uint32_t)fd_want() == va && fd_on(car); }
++static int s_fd_depth;   /* (fdfn=1: every wrapped call of the car, not those within one being dumped) */
++bool FD_Active(void *car, uint32_t va) { return (fd_want() == 1 ? s_fd_depth == 0 : (uint32_t)fd_want() == va) && fd_on(car); }
 +/* Runs fn on the car, dumped when the tick is chosen and fdfn (hex, default 49bcb0) names va. */
 +void FD_Wrap(void (*fn)(void *), void *car, uint32_t va)
 +{
 +    Car *c = car;
 +    bool on = FD_Active(c, va);
 +    if (on) {
++        s_fd_depth++;
 +        s_fd_car = c;
 +        char f[32];
 +        snprintf(f, sizeof f, "FD fn 0 %x", va);
@@ -615,6 +617,7 @@ index 4ce8464..92cea3e 100644
 +        char b[128];
 +        snprintf(b, sizeof b, "FD postglob 0 rand=%u,%u,%u", r[0], r[1], r[2]);
 +        plat_log(b);
++        s_fd_depth--;
 +    }
 +}
 +void CarSim_Forces(void *car) { FD_Wrap(forces_, car, 0x49bcb0); }
@@ -622,7 +625,7 @@ index 4ce8464..92cea3e 100644
  {
      Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
-@@ -641,7 +913,13 @@ static void player_distance(Car *c)
+@@ -644,7 +919,13 @@ static void player_distance(Car *c)
  
  /* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
     segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
@@ -636,7 +639,7 @@ index 4ce8464..92cea3e 100644
  {
      int16_t old = s->node;
      if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
-@@ -757,7 +1035,9 @@ void CarSim_BodyPlane(Car *c)
+@@ -760,7 +1041,9 @@ void CarSim_BodyPlane(Car *c)
      memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
  }
  

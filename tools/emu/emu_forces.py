@@ -155,6 +155,24 @@ def tracker(b):
     return bytes(b)
 TRACK = [0x7bc + 0xc4 * i for i in range(4)] + [0x8]
 
+# FD_CARRY=<file>: a free run. The words the emulator ended the previous call with where it disagreed with
+# the port go into this call's state (and its random generator), so the original runs on its own
+# values; a word the port changed between the calls (code the dump doesn't cover) takes the port's.
+import json
+CARRY = os.environ.get('FD_CARRY')
+NOCARRY = {0x434, 0xed4, 0x454, 0xe94, 0x550}   # (links: the two sides encode them differently)
+carried, uncovered = 0, []
+if CARRY and os.path.exists(CARRY):
+    cj = json.load(open(CARRY))
+    if cj.get('self') == self_i:
+        pre = bytearray(pre)
+        cpost = bytes.fromhex(cj['post'])
+        for o, v in cj['diff'].items():
+            o = int(o)
+            if cpost[o:o + 4] == pre[o:o + 4]: pre[o:o + 4] = bytes.fromhex(v); carried += 1
+            else: uncovered.append(o)
+        pre = bytes(pre)
+        if cj.get('rand') and cj.get('portrand') == glob['glob']['rand']: glob['glob']['rand'] = cj['rand']
 desc_a = alloc(desc)
 specs_a = alloc(specs)
 parts_a = [alloc(parts.get(i, bytes(0x200))) for i in range(20)]
@@ -479,3 +497,9 @@ if fn == 0x40b600:
     w = bytes(mu.mem_read(0x5e6650, 0x70))
     print('lane emu', ' '.join(f'{0x5e6650 + o:x}={struct.unpack_from("<i", w, o)[0]}/{struct.unpack_from("<f", w, o)[0]:.9g}' for o in range(0, 0x70, 4)))
 print('rand emu', struct.unpack('<I', mu.mem_read(0x5d1028, 4))[0], 'port', glob['postglob']['rand'])
+if CARRY:
+    er = ','.join(str(struct.unpack('<I', mu.mem_read(a, 4))[0]) for a in (0x5d1028, 0x5d102c, 0x655a0c))
+    print('carried', carried, 'uncovered', ' '.join(hex(o) for o in uncovered))
+    json.dump({'self': self_i, 'post': bytes(post).hex(), 'portrand': glob['postglob']['rand'],
+               'rand': er if er != glob['postglob']['rand'] else None,
+               'diff': {str(o): emu[o:o + 4].hex() for o, *_ in diffs if o not in NOCARRY}}, open(CARRY, 'w'))
