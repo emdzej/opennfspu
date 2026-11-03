@@ -2897,12 +2897,13 @@ static bool indicator_up(FertControl *w, FertControl *c)
 }
 
 /* An input box's tick (FUN_004cc000): its accessor's string (stars for showstars) into hitext's text;
-   one always focused (data.alwaysfocused, FEInputBox_v20 0x4cbe70) takes the focus (0x4c7940). */
+   one always focused (data.alwaysfocused, FEInputBox_v20 0x4cbe70) takes the focus (0x4c7940: its flag
+   0x40, which the keys go by; not the window's +0x120, the control the mouse's buttons go to first, so
+   the screen's other controls still take their clicks). */
 static void inputbox_sync(FertControl *w, FertControl *c)
 {
     if (data_int_of(c, "alwaysfocused") && !(c->feflags & 0x40)) {
         c->feflags |= 0x40;
-        w->focus = c;
         refresh_state(c);
     }
     int k = FertControl_findPart(c, "hitext");
