@@ -207,7 +207,9 @@ void FEShapes_Load(const char *path)
                 }
                 placed[i] = 1;
                 if (!w) {
-                    w = WINDOW_new(256, 256, depth, 0);   /* 0x5356c0 (an 8-bit page's palette: pending) */
+                    /* 0x5356c0. (An 8-bit page would get a copy of the first shape's clut: the depth is a
+                       clut's, 15, 24 or 32 by 0x5de890, never 8, so the original never takes that way.) */
+                    w = WINDOW_new(256, 256, depth, 0);
                     if (!w) break;
                     WINDOW_select(w);
                     WINDOW_clear(0);   /* (0x537c40(0): black) */
