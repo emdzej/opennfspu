@@ -152,12 +152,23 @@ static void decode(Movie *m, int32_t now, bool check)
     m->time_buf[i] = dest;
 }
 
-static void keys(Movie *m)
+/* An Escape pressed since the movie last looked (the original's keyboard buffer keeps the presses until
+   0x55fd10 reads them; the port's last a frame, and the movie doesn't look at every frame). */
+static bool escape_seen;
+
+static void latch_keys(void)
 {
     uint8_t k[16];
     int n = plat_key_presses(k, 16);
     for (int i = 0; i < n; i++)
-        if (k[i] == 0x01) m->quit = 1;   /* (DIK_ESCAPE: 0x55fd10's 0x1b) */
+        if (k[i] == 0x01) escape_seen = true;   /* DIK_ESCAPE */
+}
+
+static void keys(Movie *m)
+{
+    latch_keys();
+    if (escape_seen) m->quit = 1;   /* (0x55fd10's 0x1b) */
+    escape_seen = false;
     int32_t x, y;
     uint32_t b;
     if (MOUSE_state(&x, &y, &b) && (b & 0xf)) m->quit = 1;
@@ -356,8 +367,8 @@ static void next_movie(void)
 void FEIntro_Start(void)
 {
     Render_SetVideoMode(g_render, 640, 480, 16, 2);   /* 0x467f00 (then 0x55fde0: the keys flushed) */
-    uint8_t k[16];
-    while (plat_key_presses(k, 16) > 0) {}
+    plat_key_flush();
+    escape_seen = false;
     FEApp_Sound();
     memset(&s, 0, sizeof s);
     next_movie();
@@ -427,6 +438,7 @@ void FE_LoadingScreen(int step)
 
 bool FEIntro_Frame(void)
 {
+    latch_keys();
     switch (s.step) {
     case I_CLEAR:
         THRASH.fn.window(2);
@@ -455,8 +467,8 @@ bool FEIntro_Frame(void)
         if (--s.n == 0) {
             MEM_purge(s.loadscrn);
             s.loadscrn = NULL;
-            uint8_t k[16];
-            while (plat_key_presses(k, 16) > 0) {}
+            plat_key_flush();   /* (0x55fde0) */
+            escape_seen = false;
             s.step = I_DONE;
         }
         return true;

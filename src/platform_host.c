@@ -10,6 +10,7 @@ void plat_log(const char *msg) { fprintf(stderr, "%s\n", msg); }
 uint32_t plat_pad(int player) { return 0; }
 bool plat_keys(uint8_t keys[KEY_COUNT]) { memset(keys, 0, KEY_COUNT); return false; }
 int plat_key_presses(uint8_t *codes, int cap) { return 0; }
+void plat_key_flush(void) {}
 
 bool plat_param(const char *name, char *dst, size_t cap)
 {

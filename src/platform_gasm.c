@@ -153,6 +153,8 @@ int plat_key_presses(uint8_t *codes, int cap)
     return n;
 }
 
+void plat_key_flush(void) { npresses = 0; }
+
 /* ---- storage ---- */
 
 /* Storage keys are [A-Za-z0-9._-]: a file's name is its key with each other byte, and '-', as '-' and two
