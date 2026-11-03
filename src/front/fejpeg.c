@@ -1,8 +1,9 @@
 /* JPEG for a player's own picture (gimme.dll's reader, IJG's libjpeg, see feuserpic.c): Huffman-coded
    sequential or progressive DCT, 8-bit samples, one (grey) or three (YCbCr) components with sampling
    factors up to 2 x 2, any number of scans, restart intervals. Arithmetic-coded and lossless files are
-   refused. libjpeg smooths the blocks of a progressive file whose AC bands never all arrive (a truncated
-   one); the port doesn't (pend). */
+   refused. A progressive file whose first AC bands never all arrive (a truncated one, or bits never
+   refined) has its blocks smoothed as libjpeg does: their five lowest AC coefficients, where unknown
+   and zero, predicted from the DC values of the blocks around (the JPEG standard's K.8). */
 #include "front/fejpeg.h"
 #include <math.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@ typedef struct {
     int bw, bh;            /* blocks across and down (whole MCUs) */
     int cw, ch;            /* the blocks its own size covers (a one-component scan's) */
     int16_t *coef;         /* bw * bh blocks of 64 coefficients, zigzag order */
+    int bits[64];          /* each coefficient's bits still missing (the last scan's Al), -1 none yet */
     uint8_t *data;         /* bw * 8 by bh * 8 samples */
 } Comp;
 
@@ -193,6 +195,53 @@ static bool block(Jpeg *j, Comp *c, int16_t *z)
     return true;
 }
 
+/* The prediction of one AC coefficient from num, its quantiser q and its missing bits al (clamped below
+   what those bits could have held). */
+static int predict(int num, int q, int al)
+{
+    int neg = num < 0, p;
+    if (neg) num = -num;
+    p = ((q << 7) + num) / (q << 8);
+    if (al > 0 && p >= 1 << al) p = (1 << al) - 1;
+    return neg ? -p : p;
+}
+
+/* The smoothing (progressive files only): for each of the component's blocks inside the picture, its
+   neighbours' DC values (the edge blocks repeated past the picture's edge) give AC01, AC10, AC20, AC11
+   and AC02 where they are still zero and not all their bits arrived. Useful only with the DC known, the
+   six quantisers non-zero and one of the five incomplete. */
+static void smooth(const Jpeg *j, Comp *c)
+{
+    const uint16_t *q = j->q[c->tq];
+    if (c->bits[0] < 0) return;
+    bool useful = false;
+    for (int k = 0; k < 6; k++)
+        if (!q[k]) return;
+    for (int k = 1; k < 6; k++)
+        if (c->bits[k] != 0) useful = true;
+    if (!useful) return;
+    int16_t *dc = malloc((size_t)c->cw * (size_t)c->ch * sizeof *dc);
+    if (!dc) return;
+    for (int by = 0; by < c->ch; by++)
+        for (int bx = 0; bx < c->cw; bx++) dc[by * c->cw + bx] = c->coef[((size_t)by * (size_t)c->bw + (size_t)bx) * 64];
+    for (int by = 0; by < c->ch; by++)
+        for (int bx = 0; bx < c->cw; bx++) {
+            int u = by ? by - 1 : by, d = by + 1 < c->ch ? by + 1 : by;
+            int l = bx ? bx - 1 : bx, r = bx + 1 < c->cw ? bx + 1 : bx;
+            int d1 = dc[u * c->cw + l], d2 = dc[u * c->cw + bx], d3 = dc[u * c->cw + r];
+            int d4 = dc[by * c->cw + l], d5 = dc[by * c->cw + bx], d6 = dc[by * c->cw + r];
+            int d7 = dc[d * c->cw + l], d8 = dc[d * c->cw + bx], d9 = dc[d * c->cw + r];
+            int16_t *z = c->coef + ((size_t)by * (size_t)c->bw + (size_t)bx) * 64;
+            int q0 = q[0];
+            /* (zigzag 1 .. 5: AC01, AC10, AC20, AC11, AC02) */
+            const int num[6] = {0, 36 * q0 * (d4 - d6), 36 * q0 * (d2 - d8), 9 * q0 * (d2 + d8 - 2 * d5),
+                                5 * q0 * (d1 - d3 - d7 + d9), 9 * q0 * (d4 + d6 - 2 * d5)};
+            for (int k = 1; k < 6; k++)
+                if (c->bits[k] != 0 && z[k] == 0) z[k] = (int16_t)predict(num[k], q[k], c->bits[k]);
+        }
+    free(dc);
+}
+
 /* a block's coefficients dequantised and through the inverse DCT into out (stride) */
 static void idct(const Jpeg *j, const Comp *c, const int16_t *z, uint8_t *out, int stride)
 {
@@ -333,6 +382,7 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
                 c->ch = ((j->height * c->v + j->vmax - 1) / j->vmax + 7) / 8;
                 c->coef = calloc((size_t)c->bw * (size_t)c->bh, 64 * sizeof *c->coef);
                 if (!c->coef) goto done;
+                for (int k = 0; k < 64; k++) c->bits[k] = j->progressive ? -1 : 0;
             }
             frame = true;
         } else if (m >= 0xc3 && m <= 0xcf && m != 0xc4 && m != 0xc8 && m != 0xcc) {
@@ -355,6 +405,9 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
             j->bitcnt = 0, j->marker = false, j->eobrun = 0;
             for (int i = 0; i < j->nc; i++) j->c[i].pred = 0;
             if (!scan(j, sc, ns)) goto done;
+            if (j->progressive)
+                for (int i = 0; i < ns; i++)
+                    for (int k = j->ss; k <= j->se; k++) j->c[sc[i]].bits[k] = j->al;
             scanned = true;
             continue;   /* (the bit reader stopped at the next marker) */
         }
@@ -364,6 +417,7 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
         ok = true;
         for (int i = 0; ok && i < j->nc; i++) {   /* the samples, every block of the padded MCUs */
             Comp *c = &j->c[i];
+            if (j->progressive) smooth(j, c);
             int stride = c->bw * 8;
             c->data = malloc((size_t)stride * (size_t)c->bh * 8);
             if (!c->data) ok = false;
