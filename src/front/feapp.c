@@ -34,6 +34,7 @@
 #include "exe.h"
 #include "app.h"
 #include "front/fetrans.h"
+#include "front/fedrift.h"
 #include "render/carpages.h"
 #include "platform.h"
 #include "render/r3dcar.h"
@@ -85,6 +86,8 @@ static bool badge_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_click(FertControl *c);
 static bool camera_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool mini_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool glintyline_draw(FertControl *c);
+static void glintylines_drop(void);
 static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
 static void camera_update(FertControl *w, FertControl *c);
 static void dialog_open(int kind, const char *text, int b1, int b2);
@@ -2140,6 +2143,7 @@ static void screen_entered(void)
     }
     lists_drop_stale();
     FEMovieBox_Drop(on_stack);
+    glintylines_drop();
     FECarLogo_Drop(on_stack);
     FETrackMap_Drop(on_stack);
     FEHudPreview_Drop(on_stack);
@@ -2720,6 +2724,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.BADGE")) return badge_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) return camera_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.MINIBADGE") || !strcmp(c->id, "NFS5.MINIPLAYERPICTURE")) return mini_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.GLINTYLINE")) return glintyline_draw(c);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
@@ -2946,6 +2951,47 @@ static bool mini_draw(FertControl *c, int32_t ox, int32_t oy)
     FE2D_DepthStep();
     FE2D_Image(img, (float)(r[0] + ox), (float)(r[1] + oy), (float)(r[2] - r[0]), (float)(r[3] - r[1]),
                (uint32_t)g_fe_fade << 24 | 0xffffffu, 0, false);   /* 0x4d8280 of 0x4c8410, 0x4d95e0 */
+    return true;
+}
+
+/* A glinty line (FEGlintyLineControl, vtable 0x5bae14): one of the drifting lines sliding to and fro
+   across its rectangle (data.horizontal: a horizontal one), a glint running along it now and then, in
+   its area's colour faded (_v15 0x521d40: 0x4d82a0, 0x51f320). Made as its screen comes on (_v21
+   0x521c70: the box 0x51f1e0 from its rectangle, 0x4c8240, and the line 0x51f220); drawn where the
+   rectangle was then, without the window's offset or its transition's. */
+typedef struct { const FertControl *c; DriftLine line; uint32_t colour; } GlintyLine;
+static GlintyLine *s_glines;
+static int s_nglines;
+
+static void glintylines_drop(void)   /* (_v22 0x521d20, the screen gone) */
+{
+    int n = 0;
+    for (int i = 0; i < s_nglines; i++)
+        if (on_stack(s_glines[i].c)) s_glines[n++] = s_glines[i];
+    s_nglines = n;
+}
+
+static bool glintyline_draw(FertControl *c)
+{
+    GlintyLine *g = NULL;
+    for (int i = 0; i < s_nglines && !g; i++)
+        if (s_glines[i].c == c) g = &s_glines[i];
+    if (!g) {
+        GlintyLine *ng = realloc(s_glines, sizeof *ng * (size_t)(s_nglines + 1));
+        if (!ng) return true;
+        s_glines = ng;
+        g = &s_glines[s_nglines++];
+        g->c = c;
+        int32_t r[4];
+        FertControl_rect(c, r);
+        DriftLine_Box(r[0], r[1], r[2], r[3], data_int_of(c, "horizontal") != 0);   /* ("data.horizontal" 0x5dd8c0) */
+        DriftLine_Init(&g->line);
+        int k = FertControl_findPart(c, "area");   /* ("area.color" 0x5dd8b4) */
+        FertAttr *ca = k < 0 ? NULL : FertAttrList_find(&c->parts[k]->attrs, "color");
+        g->colour = ca ? FertAttr_color(ca) : 0;
+    }
+    uint32_t a = (g->colour >> 24) * (uint32_t)g_fe_fade / 0xff;   /* 0x4d82a0 of 0x4c8410 */
+    DriftLine_Draw(&g->line, g_fe_fade == 0xff ? g->colour : a << 24 | (g->colour & 0xffffffu));
     return true;
 }
 
