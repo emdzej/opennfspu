@@ -274,12 +274,13 @@ bool app_frame(void)
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
-        else if (selftest >= 3 && selftest <= 7) {
+        else if (selftest >= 3 && selftest <= 8) {
             if (selftest == 3) WS_selftest();
             else if (selftest == 4) UDP_selftest();
             else if (selftest == 5) NETGATHR_selftest();
             else if (selftest == 6) PACKET_selftest();
-            else CONMAN_selftest();
+            else if (selftest == 7) CONMAN_selftest();
+            else CONMAN_localtest();
             THRASH.fn.clearwindow();
             THRASH.fn.pageflip();
         }

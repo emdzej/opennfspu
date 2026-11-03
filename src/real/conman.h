@@ -12,7 +12,8 @@
    messages 0xb.
 
    The provider is a provider's GUID, or 1 for a modem (serial lines: pending, as the TCP/IP stream
-   provider CONMAN adds next to UDP). */
+   provider CONMAN adds next to UDP); the host's own player joins in this process on a memory link
+   (mempipe.c: CONMAN_call and CONMAN_dial with the same name). */
 #pragma once
 #include "real/llpacket.h"
 #include "real/netlist.h"
@@ -93,7 +94,7 @@ typedef struct ConPlayer {
 #define CONP_OPEN    0x01   /* the packet connection is open */
 #define CONP_INGAME  0x02   /* the gathering has it (killed when it goes) */
 #define CONP_MODEM   0x04
-#define CONP_CALLED  0x08   /* it called the host (a text address) */
+#define CONP_CALLED  0x08   /* on a memory link */
 #define CONP_TIMEOUT 0x10
 #define CONP_LIVE    0x20
 #define CONP_STREAM  0x40   /* on the TCP/IP connection */
@@ -168,3 +169,4 @@ bool CONMAN_isnet(const ConMan *cm);                                            
 bool CONMAN_ismodem(const ConMan *cm);                                               /* 0x55d4b0 */
 
 void CONMAN_selftest(void);   /* --param thrash_test=7 */
+void CONMAN_localtest(void);  /* --param thrash_test=8 */

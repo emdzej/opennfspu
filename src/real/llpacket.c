@@ -56,7 +56,7 @@ static void tick(void)
     CS_leave(active.cs);
 }
 
-int PACKET_open(PacketConn *pc, const PacketProto *proto, const PacketLink *link, int maxdata, uint32_t flags)
+int PACKET_open(PacketConn *pc, const PacketProto *proto, const void *link, int maxdata, uint32_t flags)
 {
     if (!lists_ready) lists_init();
     if (pc) {
@@ -120,6 +120,9 @@ int PACKET_send(PacketConn *pc, const void *data, uint32_t lenflags)
 
 /* The data to the connection's owner (0x586c20; no filters). */
 static int deliver(PacketConn *pc, const uint8_t *data, int len) { return pc->receive(pc, data, len); }
+int PACKET_deliver(PacketConn *pc, const uint8_t *data, int len) { return deliver(pc, data, len); }
+NetList *PACKET_active(void) { return &active; }
+NetList *PACKET_closedlist(void) { return &closed; }
 
 /* ---------------------------------------------------------------- the protocol 0x5e2e58 */
 
@@ -547,8 +550,9 @@ static int pk_close(PacketConn *pc)
    heard (the idle callback can give up). 0x594f50 */
 static uint8_t next_id = 1;   /* 0x5e2e50 */
 
-static int pk_init(PacketConn *pc, const PacketLink *link, int maxdata, int flags)
+static int pk_init(PacketConn *pc, const void *linkp, int maxdata, int flags)
 {
+    const PacketLink *link = linkp;
     if (maxdata < 6) maxdata = 6;
     if (maxdata < link->mindata) maxdata = link->mindata;
     int half = (1 << (flags & 0x1f)) / 2, n = half - 1;

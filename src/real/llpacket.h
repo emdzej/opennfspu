@@ -34,7 +34,7 @@ typedef struct PacketLink {
 /* A protocol (0x5e2e58; PACKET 0x5e1c50 and UNRELY 0x5e1c70 the others). */
 typedef struct PacketProto {
     int kind;
-    int (*init)(PacketConn *pc, const PacketLink *link, int maxdata, int flags);   /* +0x04 */
+    int (*init)(PacketConn *pc, const void *link, int maxdata, int flags);   /* +0x04: a link layer, or the memory's name */
     int (*send)(PacketConn *pc, const void *data, uint32_t lenflags);              /* +0x08 */
     int (*freeslots)(PacketConn *pc);                                              /* +0x0c */
     int (*tick)(PacketConn *pc);                                                   /* +0x10 */
@@ -64,10 +64,16 @@ struct PacketConn {
 
 /* A packet connection over the gathering connection to pc->addr (the caller sets it). 0x582500 */
 int PACKET_connect(PacketConn *pc, int maxdata, uint32_t flags, NetConn *conn);
-int PACKET_open(PacketConn *pc, const PacketProto *proto, const PacketLink *link, int maxdata, uint32_t flags);   /* 0x55ff80 */
+int PACKET_open(PacketConn *pc, const PacketProto *proto, const void *link, int maxdata, uint32_t flags);   /* 0x55ff80 */
 int PACKET_close(PacketConn *pc);                                    /* 0x560240 */
 int PACKET_send(PacketConn *pc, const void *data, uint32_t lenflags); /* 0x5601d0 */
 void PACKET_closeall(void);                                          /* 0x560160 */
+
+/* For the other protocols: the open connections (0x6b7c60) and the closed ones (0x6b7c40), and the data
+   handed to a connection's owner (0x586c20). */
+NetList *PACKET_active(void);
+NetList *PACKET_closedlist(void);
+int PACKET_deliver(PacketConn *pc, const uint8_t *data, int len);
 
 /* The socket callback's first look: a packet connection to the sender takes the data. 0x5821c0 */
 bool PACKET_dispatch(NetConn *c, const NetAddr *from);

@@ -88,8 +88,13 @@ address as a type 0x77 packet and reads the other's), `=5` the gathering (one in
   [0xff][password][name][text] and its answer [0xfe][1 in / 2 the wrong password], the events to the game
   (codes 0..0xd in conman.h). The transport's calls 0x580170..0x5802d0 are NET_find .. NET_setmessage.
   0x5e8e50 (the gathering's password, the finds' user) is in the zeroed data: an empty text. Pending: the
-  TCP/IP stream provider CONMAN adds next to UDP (0x581ff0, transport 0x5e1a28, the text-address packet
-  connection 0x5833f0) and the modems' serial lines (0x55e890). The guest's messages 1 and 3 have no
+  TCP/IP stream provider CONMAN adds next to UDP (0x581ff0, transport 0x5e1a28) and the modems' serial
+  lines (0x55e890).
+- The memory link (src/real/mempipe.c, protocol 0x5e1af8, 0x5825a0..0x583400): how the host's own player
+  joins its game in the same process (Net_HostGame's 0x48b540: CONMAN_call on the host and CONMAN_dial on
+  its own guest with the GUID text 0x5d06bc, 0x1000 bytes). Two named pipes (a ring in a file mapping, a
+  semaphore, a mutex: "<name>_SERVER/_CLIENTPipe" ...), a reader thread each, heartbeat counts in the
+  pipes' headers. The port's named objects replace Windows'. Self-test `--param thrash_test=8`. The guest's messages 1 and 3 have no
   poster in the exe. Self-test `--param thrash_test=7` (find, join with a password, five packets each way).
 - The port's timer moves at frames; the main thread's sleeps inside a frame move it on by their time
   (src/real/thread.c), so the requests' tick time-outs end while the main thread waits, as the

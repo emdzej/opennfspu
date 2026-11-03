@@ -4,6 +4,7 @@
 #include "pending.h"
 #include "platform.h"
 #include "real/mem.h"
+#include "real/mempipe.h"
 #include "real/systask.h"
 #include "real/udp.h"
 #include <stdio.h>
@@ -74,13 +75,6 @@ static const uint8_t *tcp_register(const char *name)
 {
     PENDING_NOTE(0x581ff0, "the TCP/IP stream provider");
     return NULL;
-}
-
-/* A packet connection over a TCP/IP connection to a text address (protocol 0x5e1af8). 0x5833f0 */
-static int stream_open(PacketConn *pc, const char *text, int32_t arg, int flags)
-{
-    PENDING_NOTE(0x5833f0, "the TCP/IP packet connection");
-    return 0;
 }
 
 /* A packet connection on a serial line (the modem's link 0x5df480, PACKET or UNRELY). 0x55e890 */
@@ -395,8 +389,8 @@ static void bury(ConServer *s)
     }
 }
 
-/* A call to a text address (message 4: a direct connection), the player asked of the game and its hello
-   waited for. 0x55b7b0 */
+/* A player on the memory link of that name (message 4: the host's own player in this process), asked of
+   the game and its hello waited for. 0x55b7b0 */
 static void call_player(ConServer *s, const char *text, int32_t arg)
 {
     int32_t reason = 0;
@@ -409,7 +403,7 @@ static void call_player(ConServer *s, const char *text, int32_t arg)
     player_calls(p);
     fix_address(&s->cm, &p->info);
     memcpy(p->info.name, exe_data(0x5d93ec, 6), 6);   /* "local" */
-    if (event(&s->cm, &p->info, CON_ASKS, 0, 0) && stream_open(&p->link.pc, text, arg, 0)) {
+    if (event(&s->cm, &p->info, CON_ASKS, 0, 0) && MEMPIPE_connect(&p->link.pc, text, arg, 0)) {
         p->flags |= CONP_OPEN;
         deadline(&p->link, 5000);
         while (!(p->hello & 1)) {
@@ -797,12 +791,12 @@ static bool dial(ConClient *cl, const char *number)
     return serial_open(&cl->link.pc, 0xfa, flags_of()) != 0;
 }
 
-/* A host at a text address (message 4). 0x55cdf0 */
+/* The host on the memory link of that name (message 4). 0x55cdf0 */
 static int call_host(ConClient *cl, const char *text, int32_t arg)
 {
     deadline(&cl->link, 0);
     cl->linkflags &= ~CONP_OPEN;
-    if (stream_open(&cl->link.pc, text, arg, 1)) {
+    if (MEMPIPE_connect(&cl->link.pc, text, arg, 1)) {
         deadline(&cl->link, 5000);
         cl->linkflags |= CONP_OPEN;
         if (hello(cl, no_password) == 1) {
@@ -1193,5 +1187,50 @@ void CONMAN_selftest(void)
     if (!started_test) {
         started_test = true;
         if (!THREAD_createarg(selftest_thread, NULL, 0x4000, 0, 0, &rec)) plat_log("conman: no threads");
+    }
+}
+
+/* --param thrash_test=8: the host and its own player in one process, as Net_HostGame joins them
+   (0x48b540: both ends on the memory link named by the GUID text 0x5d06bc, 0x1000 bytes each way). */
+static void localtest_thread(void *arg)
+{
+    char t[48];
+    NetGameInfo gi;
+    memset(&gi, 0, sizeof gi);
+    snprintf(gi.name, sizeof gi.name, "local race");
+    gi.maxplayers = 4;
+    ConServer *s = CONMAN_host(test_event, 2, NULL, &gi, 0, 0, NULL);
+    NetPlayerInfo self;
+    memset(&self, 0, sizeof self);
+    snprintf(self.name, sizeof self.name, "me");
+    ConClient *cl = CONMAN_guest(test_event, 3, NULL, &self, 0, 0);
+    plat_log(s && cl ? "conman: local host and guest" : "conman: local failed");
+    if (!s || !cl) return;
+    const char *name = exe_str(0x5d06bc);
+    CONMAN_call(s, name, 0x1000);
+    CONMAN_dial(cl, name, 0x1000);
+    for (int i = 0; i < 200 && !(test_player && (cl->linkflags & CONP_LIVE)); i++) THREAD_sleep(20);
+    for (int i = 0; test_player && i < 3; i++) {
+        snprintf(t, sizeof t, "to the guest %d", i);
+        CONMAN_sendto(s, test_player, t, (uint32_t)strlen(t));
+        snprintf(t, sizeof t, "to the host %d", i);
+        CONMAN_send(cl, t, (uint32_t)strlen(t));
+        THREAD_sleep(30);
+    }
+    THREAD_sleep(500);
+    CONMAN_guestend(cl);
+    THREAD_sleep(500);
+    CONMAN_hostend(s);
+    snprintf(t, sizeof t, "conman: local done, %d packets", test_got);
+    plat_log(t);
+}
+
+void CONMAN_localtest(void)
+{
+    static ThreadRec rec;
+    static bool started_test;
+    if (!started_test) {
+        started_test = true;
+        if (!THREAD_createarg(localtest_thread, NULL, 0x4000, 0, 0, &rec)) plat_log("conman: no threads");
     }
 }
