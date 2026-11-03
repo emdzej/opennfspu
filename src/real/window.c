@@ -749,6 +749,118 @@ void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha)
     movdfl(shape, x, y, &t);
 }
 
+/* ---------------------------------------------------------------- the shape over the window (0x56d270) */
+
+/* 0x56d020: a premultiplied 8888 pixel over an 8-bit one: none at alpha 0; the pixel's palette colour
+   times 255 - alpha (/ 256) plus the colour's, byte arithmetic, only when that palette colour has an
+   alpha (else it stays), then the nearest entry. */
+static void over8_row(void *dst, const void *src, int n)
+{
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4, d++) {
+        if (!s[3]) continue;
+        uint32_t px = RGB_pixelcolour(*d);
+        if (px & 0xff000000u) {
+            unsigned k = (uint8_t)(0xff - s[3]);
+            px = (uint32_t)(uint8_t)(((px >> 16 & 0xff) * k >> 8) + s[2]) << 16 |
+                 (uint32_t)(uint8_t)(((px >> 8 & 0xff) * k >> 8) + s[1]) << 8 | (uint8_t)(((px & 0xff) * k >> 8) + s[0]);
+        }
+        *d = (uint8_t)RGB_colourmatch(px);
+    }
+}
+static void over1555_row(void *dst, const void *src, int n)   /* 0x56d0d0 */
+{
+    uint16_t *d = dst;
+    const uint32_t *s = src;
+    for (; n > 0; n--) over1555(d++, *s++);
+}
+static void over565_row(void *dst, const void *src, int n)   /* 0x56d100 */
+{
+    uint16_t *d = dst;
+    const uint32_t *s = src;
+    for (; n > 0; n--) over565(d++, *s++);
+}
+static void over24_row(void *dst, const void *src, int n)   /* 0x56d130: byte arithmetic, none at alpha 0 */
+{
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4, d += 3) {
+        if (!s[3]) continue;
+        unsigned k = (uint8_t)(0xff - s[3]);
+        d[2] = (uint8_t)((d[2] * k >> 8) + s[2]);
+        d[1] = (uint8_t)((d[1] * k >> 8) + s[1]);
+        d[0] = (uint8_t)((d[0] * k >> 8) + s[0]);
+    }
+}
+/* 0x56d1a0: over a 32-bit pixel; a clear pixel takes the colour and its alpha, else the channels as 24
+   bits and the alpha 255 - (255 - its) * (255 - the colour's) / 256. */
+static void over32_row(void *dst, const void *src, int n)
+{
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--, s += 4, d += 4) {
+        uint8_t a = s[3], r = s[2], g = s[1], b = s[0];
+        if (!a) continue;
+        if (d[3] == 0) {
+            d[3] = a;
+        } else {
+            unsigned k = (uint8_t)(0xff - a);
+            r = (uint8_t)(r + (d[2] * k >> 8));
+            g = (uint8_t)(g + (d[1] * k >> 8));
+            b = (uint8_t)(b + (d[0] * k >> 8));
+            d[3] = (uint8_t)~(uint8_t)((0xffu - d[3]) * k >> 8);
+        }
+        d[0] = b, d[2] = r, d[1] = g;
+    }
+}
+/* 0x573c70: a getclut16aptr entry (its alpha over its 565 colour, premultiplied) over a 565 pixel: none
+   under alpha 0x10, the colour from 0xfc, else the pixel's fields times 255 - alpha added in. */
+static void over565_clut(uint16_t *d, uint32_t c)
+{
+    if (c < 0x10000000u) return;
+    if (c < 0xfc000000u) {
+        uint32_t px = *d;
+        uint32_t packed = ((px << 16) & 0xf8000000u) | (px & 0x1f) | ((px & 0x7e0) << 8);
+        uint64_t m = (uint64_t)packed * (~c >> 24 & 0xff);
+        uint32_t lo = (uint32_t)m, hi = (uint32_t)(m >> 32);
+        c += (hi << 8) & 0xf800;
+        c += (lo >> 16) & 0x7e0;
+        c += (lo >> 8) & 0x1f;
+    }
+    *d = (uint16_t)c;
+}
+static const uint32_t *s_over_clut;   /* 0x6a6344 */
+static void over_clut(void *dst, const void *src, int n)   /* 0x56d3c0 */
+{
+    uint16_t *d = dst;
+    const uint8_t *s = src;
+    for (; n > 0; n--) over565_clut(d++, s_over_clut[*s++]);
+}
+
+void WINDOW_drawshapeover(const uint8_t *shape, int x, int y)
+{
+    if (WINDOW_cur.lock != 0 && WINDOW_cur.lock != -1) {
+        if (!WINDOW_cur.pixels) {   /* the driver's path: the chop blended (0x5728f0, a 64 x 64 chop) */
+            intptr_t blend = THRASH.fn.getstate(10), tex = THRASH.fn.getstate(1);
+            Chop *c = chop_get();
+            THRASH.fn.setstate(10, 2);
+            if (c) chop_draw(c, shape, x, y, (int16_t)(shape[4] | shape[5] << 8), (int16_t)(shape[6] | shape[7] << 8));
+            THRASH.fn.setstate(10, (uintptr_t)blend);
+            THRASH.fn.settexture((ThrashTexture)tex);
+        }
+        if (WINDOW_cur.lock != -1 && !WINDOW_cur.pixels) return;
+    }
+    BlitTable t = {{over8_row, over1555_row, over565_row, over24_row, over32_row}, NULL, 3, 0x7d};   /* 0x5df9e8 */
+    static uint32_t clut[256];
+    if (SHAPE_typevalid(shape) == 8 && WINDOW_cur.depth == 16) {
+        s_over_clut = getclut16aptr(shape, clut);   /* 0x534750 */
+        t.forced = over_clut;
+        t.target = 0x7b;
+    }
+    movdfl(shape, x, y, &t);
+}
+
 /* A shape scaled to w x h at (x, y) on the current window (negative sizes mirror), sampled at the pixel
    centres; an 8-bit shape on a 15- or 16-bit window through its palette (0x58af95), any other converted
    to the window's type first and copied (0x58ae13). The translucent row drawers of 0x5deb14 aren't

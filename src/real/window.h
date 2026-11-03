@@ -77,6 +77,9 @@ void WINDOW_drawshape(const uint8_t *shape, int x, int y);
 /* The shape faded to alpha (0..255) over the current window: its 8888 colours (each channel times alpha)
    over the pixels, an 8-bit shape's palette on a 16-bit window. 0x53fe10 */
 void WINDOW_drawshapealpha(const uint8_t *shape, int x, int y, int alpha);
+/* The shape over the current window: its 8888 colours (premultiplied by their alpha) over the pixels, an
+   8-bit shape's palette (getclut16aptr) on a 16-bit window. 0x56d270 */
+void WINDOW_drawshapeover(const uint8_t *shape, int x, int y);
 /* A shape scaled to w x h at (x, y) on the current window (a negative size mirrors). 0x5628c0 */
 void WINDOW_drawscaled(const uint8_t *shape, int x, int y, int w, int h);
 

@@ -2,10 +2,14 @@
 #include "front/fe3d.h"
 #include "render/carlight.h"
 #include "front/fe_parts.h"
+#include "front/feaccess.h"
 #include "front/femovie.h"
 #include "app.h"
 #include "exe.h"
+#include "real/mem.h"
+#include "real/shape.h"
 #include "real/window.h"
+#include "support/ufile.h"
 #include "game/sim_math.h"
 #include "render/camera_math.h"
 #include "render/carpages.h"
@@ -164,12 +168,23 @@ typedef struct {
     FE3DObject *wall;         /* +0x318: trackwall (the model +0x314 is "track") */
     float from[4], to[4];     /* +0x324, +0x330: the place (x y z) and x turn it zooms between */
     int32_t zoom_at;          /* +0x320: the tick the zoom started (-1 not yet) */
+    int pic, npics;           /* +0x2ec, +0x2f0: the track art's picture drawn last (of 5) */
+    int painted;              /* +0x2f4: the drum face drawn last (0 .. 2) */
+    int32_t drum_at;          /* +0x2f8: the tick the drum's wait or turn started */
+    bool drum_turning;        /* +0x2fc */
+    int face;                 /* +0x300: the drum's face shown (0 .. 2) */
+    const uint8_t *shown_rec; /* +0x304: the track record shown */
+    int wall_at, wall_to;     /* +0x308, +0x30c: the room's quarter turn and the one it turns to */
+    int32_t last;             /* +0x310: the last tick's time */
+    bool seen;                /* +0x344, +0x345 */
+    bool shown_mirror, shown_reverse;   /* +0x346, +0x347 */
     /* the victory room's */
     FEMovie *movie;           /* +0x2f0 */
     bool garage;              /* FEGarage3DRoom (its v15's shadow) */
 } FE3DRoom;
 
 static FE3DRoom *s_room;
+static bool s_turn_up;        /* 0x690a84: the location screens' last arrow, 0 on (INC), 1 back (DEC) */
 static RCamera *s_camera;     /* the application's +0xfc */
 static char s_carfile[64];
 
@@ -288,16 +303,116 @@ static FE3DRoom *track_new(void)
     memcpy(r->pos, from, 12);
     r->rot[0] = from[3];
     r->zoom_at = -1;
+    r->pic = -1, r->npics = 5, r->painted = -1;
+    r->drum_at = r->last = ticks();
     static const uint32_t none[4] = {0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu};
     r->model = FE3DObject_New(2, "track", none, 0, -1, 0, NULL);
     r->wall = FE3DObject_New(2, "trackwall", none, 0, -1, 0, NULL);
     return r;
 }
 
+/* FETrackSelect3DRoom_v1 0x4ea050: the track shown (0x4fb630 for Game.GameType). A new one, or its
+   mirror or reverse changed, turns the room a quarter (down after an INC arrow, up after a DEC) and
+   paints the drum's next face with the track art's first picture; the room turns 0.0028571428 a tick
+   (0x5b73f4) towards its quarter, wrapped into 0 .. 1. The trackwall's drum has three faces (texture
+   pages 1, 3, 2 for faces 0, 1, 2): the face after the shown one is painted with the art's next picture
+   (TrackArt\<record +0x44>.fsh, five, mirrored for a mirrored race; the first with its marker, "star"
+   or for a reverse race "fin", over it), then the drum waits 0x200 ticks and turns a third over 64
+   (0x5b2828), its hinges 0x14 .. 0x1f the turn. */
+static int16_t sh16(const uint8_t *p, int off) { return (int16_t)(p[off] | p[off + 1] << 8); }
+
+static void track_tick(FE3DRoom *r)
+{
+    bool rev = false, mir = false, changed = false;
+    const uint8_t *rec = FEData_ShownTrack(&rev, &mir);
+    if (!r->seen) r->seen = true, r->shown_mirror = mir, r->shown_reverse = rev;
+    if ((rec != r->shown_rec && r->shown_rec) || r->shown_mirror != mir || r->shown_reverse != rev) {
+        r->shown_reverse = rev, r->shown_mirror = mir;
+        r->painted = r->face < 0 ? r->face + 3 : r->face;
+        r->wall_to = (r->wall_to + (s_turn_up ? 1 : -1) + 4) % 4;
+        r->pic = 4;
+        changed = true;
+        if (!r->drum_turning) r->drum_turning = true, r->drum_at = ticks();
+    }
+    r->shown_rec = rec;
+    if (r->wall_at != r->wall_to) {   /* (0x4e6eb0 marks the room busy, 0x4e6ec0 not: unused by the port) */
+        float goal = (float)r->wall_to * 0.25f;
+        if (goal == 0 && s_turn_up) goal = 1.0f;
+        if (r->rot[1] == goal) {
+            r->wall_at = r->wall_to;
+        } else {
+            bool above = goal <= r->rot[1];
+            float d = (float)(ticks() - r->last) * 0.0028571428f;
+            r->rot[1] = s_turn_up ? d + r->rot[1] : r->rot[1] - d;
+            if ((r->rot[1] < goal && above) || (goal < r->rot[1] && !above)) r->rot[1] = goal;
+            while (1.0f < r->rot[1]) r->rot[1] -= 1.0f;
+            if (r->rot[1] < 0) {
+                float f = r->rot[1];
+                do f += 1.0f; while (f < 0);
+                r->rot[1] = f;
+            }
+        }
+    }
+    int next = r->face + 1 > 2 ? r->face - 2 : r->face + 1;
+    CarPage *pages = r->wall ? r->wall->car.pages : NULL;
+    while (rec && (r->painted != next || changed)) {
+        changed = false;
+        r->painted = r->painted + 1 > 2 ? r->painted - 2 : r->painted + 1;
+        if (++r->pic >= r->npics) r->pic = 0;
+        char path[300];
+        snprintf(path, sizeof path, exe_str(0x5cccc8), FE_DIR_TRACKART, (const char *)rec + 0x44);   /* "%s%s.fsh" */
+        uint8_t *fsh = UTIL_loadfileabort(path, 0);   /* 0x59d690 */
+        if (!fsh) break;
+        uint8_t *pic = (uint8_t *)SHAPE_entry(fsh, r->pic);
+        int page = r->painted == 1 ? 3 : r->painted == 2 ? 2 : 1;
+        CarPage *p = pages && (uint32_t)page < r->wall->car.npages ? &pages[page] : NULL;
+        Window *w = p ? CarPage_Lock(p) : NULL;   /* 0x4479c0 */
+        if (w && pic) {
+            if (mir) SHAPE_horizflip(pic);
+            WINDOW_select(w);
+            WINDOW_drawshape(pic, 0, 0);
+            WINDOW_deselect();
+            if (mir) SHAPE_horizflip(pic);
+            uint8_t *mark = r->pic == 0 ? (uint8_t *)SHAPE_entry(fsh, rev ? 6 : 5) : NULL;
+            if (mark) {
+                int mx = sh16(mark, 8) < 0 ? -sh16(mark, 8) : sh16(mark, 8);
+                if (mir) {
+                    SHAPE_horizflip(mark);
+                    int px = sh16(pic, 8) < 0 ? -sh16(pic, 8) : sh16(pic, 8);
+                    mx = sh16(pic, 4) - mx + px - sh16(mark, 4);
+                }
+                WINDOW_select(w);
+                WINDOW_drawshapeover(mark, mx, sh16(mark, 0xa));   /* 0x56d270 */
+                WINDOW_deselect();
+                if (mir) SHAPE_horizflip(mark);
+            }
+        }
+        MEM_purge(fsh);
+        if (p) CarPage_Unlock(p);   /* 0x443bb0 */
+    }
+    float f = r->face == 0 ? 0.001f : (float)r->face * 0.3334f;   /* 0x5b73f0 */
+    if (!r->drum_turning) {
+        if (0x200 < ticks() - r->drum_at) r->drum_turning = true, r->drum_at = ticks();
+    } else {
+        float k = (float)(ticks() - r->drum_at) * 0.015625f;
+        if (1.0f < k) {
+            k = 1.0f;
+            if (++r->face > 2) r->face = 0;
+            r->drum_turning = false;
+            r->drum_at = ticks();
+        }
+        f += k * 0.3334f;
+    }
+    if (r->wall)
+        for (int h = 0x14; h <= 0x1f; h++) hinge(r->wall, h, f, 0, 0);
+    r->last = ticks();
+}
+
 /* 0x4e9d00: the zoom in; the track model and the wall four times a quarter turn apart, hinges 13 and 14
    turning (a 128th of a turn a tick); both lit by the room. */
 static void track_draw(FE3DRoom *r, EaglMatStack *model)
 {
+    track_tick(r);
     int32_t t = ticks();
     if (r->zoom_at < 0) r->zoom_at = t;   /* (0x4e09c0: the screen up) */
     int dt = t - r->zoom_at;
@@ -339,6 +454,7 @@ static void room_free(FE3DRoom *r)
 
 static float s_fade = 1.0f;
 void FE3D_SetFade(float f) { s_fade = f; }
+void FE3D_SetTurnUp(bool up) { s_turn_up = up; }
 
 /* An object's light block from the room's colours, or the car's fixed light (0x4e7b60). */
 static void light(FE3DRoom *r, FE3DObject *o, bool car)

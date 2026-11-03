@@ -3779,6 +3779,68 @@ int FEData_KnockoutDirection(void)
     return FEAccess_ItemId(FEAccess_Find(nm));
 }
 
+/* The track the location screens show and its direction (0x4fb630 by Game.GameType): Track1.Track's for
+   the quick race, multiplayer and the test drives (types 0, 3, 6 .. 8; the direction Track1.Direction's
+   but for the test drives), LoopedTrack.Track's for the quick knockout (with Track1.Direction's), the
+   knockout's slot (its race's once it is on, with that slot's direction), the career's next race (its
+   +0x3a4 reverse, +0x3a5 mirror), the mission's and the prize race's. NULL without one. */
+const uint8_t *FEData_ShownTrack(bool *reverse, bool *mirror)
+{
+    *reverse = *mirror = false;
+    if (!s_trk) return NULL;
+    const char *name = NULL;
+    int dir = 0;
+    FEAccessor *a = NULL;
+    switch (s_fe_gametype) {
+    case 0:
+    case 3:
+    case 1:
+        a = FEAccess_Find(s_fe_gametype == 1 ? "LoopedTrack.Track" : "Track1.Track");
+        dir = FEAccess_ItemId(FEAccess_Find("Track1.Direction"));
+        break;
+    case 2:
+        if (FEData_KnockoutOn()) {
+            char nm[32];
+            snprintf(nm, sizeof nm, "Track%d.Track", ko_get(KO_RACE) + 1);
+            a = FEAccess_Find(nm);
+            dir = FEData_KnockoutDirection();
+        } else
+            a = FEAccess_Find("Knockout.Track");
+        break;
+    case 4:
+    case 5: {
+        name = FEData_TourTrack();
+        const uint8_t *r = FEData_Tournament();
+        int race = FEData_TourRace();
+        if (r && race >= 0) *reverse = r[0x3a4 + 0xa4 * race] != 0, *mirror = r[0x3a5 + 0xa4 * race] != 0;
+        break;
+    }
+    case 6:
+    case 7:
+    case 8:
+        a = FEAccess_Find("Track1.Track");
+        break;
+    case 9: {
+        int laps;
+        name = FEFactory_Track(&laps);
+        break;
+    }
+    case 10:
+    case 11: {
+        int laps, traffic;
+        name = FEData_PrizeRace(&laps, reverse, mirror, &traffic);
+        break;
+    }
+    default:
+        return NULL;
+    }
+    if (dir) *reverse = dir == 0x19b || dir == 0x19d, *mirror = dir == 0x19c || dir == 0x19d;
+    if (a) return a->count ? s_trk + TRK_SIZE * track_rec(a, a->pos) : NULL;
+    for (size_t i = 0; name && i < s_trk_size / TRK_SIZE; i++)
+        if (!strcasecmp((const char *)s_trk + TRK_SIZE * i + 8, name)) return s_trk + TRK_SIZE * i;
+    return NULL;
+}
+
 int FEData_KnockoutTraffic(void)
 {
     /* (0x4fb630 for the knockout: its race's Track<n>.Traffic, none before it is on, 0x4dd9b0) */

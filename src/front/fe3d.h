@@ -41,6 +41,8 @@ void FE3DObject_Draw(FE3DObject *o, EaglMatStack *model);           /* 0x4d1030 
 void FE3D_SetRoom(const char *id);
 /* The room's light by its transition: 1 on, 0 off (0x4e7b60: 1 - its counter / 0x200). */
 void FE3D_SetFade(float f);
+/* The location screens' arrows (0x690a84): false after an INC, true after a DEC (the track room turns up). */
+void FE3D_SetTurnUp(bool up);
 /* The car a screen's 3D car control shows in the room (its car file; NULL: none) in its colours (the
    description's order, +0x218: body, slots 0x7c, 0x80, interior; NULL the port's silver). */
 void FE3D_SetCar(const char *file, const uint32_t *colours);

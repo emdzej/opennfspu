@@ -1070,6 +1070,7 @@ static void callback(const char *cb)
         /* 0x50d4c0 / 0x50d500: the slot's track on or back (0x690a84 the room's way) */
         FEAccessor *a = FEAccess_Find("Knockout.Track");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[13] == 'I' ? 1 : -1));
+        FE3D_SetTurnUp(!(cb[13] == 'I'));
     } else if (!strcmp(cb, "MAKERANDOMKNOCKOUT")) {
         /* 0x50cc30: every slot's traffic, direction, laps and track at random (the C runtime's rand) */
         for (int k = 1; k <= 7; k++) {
@@ -1118,6 +1119,7 @@ static void callback(const char *cb)
         /* the pre-race screen's arrows (FEPreRaceCallBackList): the tournament's next or last race left */
         FEAccessor *a = FEAccess_Find("Tournament.RemainingTracks");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[11] == 'I' ? 1 : -1));
+        FE3D_SetTurnUp(!(cb[11] == 'I'));
     } else if (!strncmp(cb, "SETTYPE", 7) && strcmp(cb, "SETTYPECAREERMODE")) {
         /* FEMainScreen_v59 .. _v64 (0x510510 ..): Game.GameType 0 quick race, 1 quick knockout, 2 knockout,
            3 multiplayer, 9 Factory Driver (its screen, factorydriver or factdone once done) */
@@ -1245,6 +1247,7 @@ static void callback(const char *cb)
            accessor's slots 0x54 / 0x50, round), 0x690a84 the room's turn 0 or 1 */
         FEAccessor *a = FEAccess_Find(cb[0] == 'T' ? "Track1.Track" : "LoopedTrack.Track");
         if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + (cb[strlen(cb) - 3] == 'I' ? 1 : -1));
+        FE3D_SetTurnUp(!(cb[strlen(cb) - 3] == 'I'));
     } else if (!strcmp(cb, "FORFEITTOURNY")) {
         /* the pre-race screen's (0x505780): its question (+0x2e8, FEDialogTwoItem 0x5131f0(0x338), the
            buttons 700 and 0x2bd) */

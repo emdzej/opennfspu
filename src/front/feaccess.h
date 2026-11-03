@@ -223,6 +223,8 @@ int FEData_KnockoutDirection(void);
 void FEData_KnockoutOpponent(int racer, RaceOpponent *o);
 /* The knockout race's traffic count (its Track<n>.Traffic, 0x4fb630). */
 int FEData_KnockoutTraffic(void);
+/* The track record the location screens show (0x4fb630 for Game.GameType) and its direction. */
+const uint8_t *FEData_ShownTrack(bool *reverse, bool *mirror);
 /* The other race kinds' n opponents (0x4eb230): OpponentCar.Car's cars picked again (0x4f45c0), their
    personalities picked of Game.Difficutly's difficulty (0x4e2940); their count. */
 int FEData_RaceOpponents(int n, RaceOpponent out[8]);
