@@ -25,6 +25,7 @@
 #include "render/rtex.h"
 #include "render/rlists.h"
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -362,6 +363,21 @@ void Render_SetMode(RenderSystem *r, int mode)
     Render_DetectCard();
     Render_SetupQuality();
     EAGL_SetDisplaySize((float)w, (float)h);
+    /* (a port addition, --param aspect=16:9: the projections take the display's true shape, Hor+; the
+       original's take 4:3 whatever the mode, 1280 x 1024's too) */
+    char v[8];
+    bool wide = plat_param("aspect", v, sizeof v) && strcmp(v, "16:9") == 0;
+    EAGL_SetWide(wide ? ((float)w * 3.0f) / ((float)h * 4.0f) : 1.0f);
+}
+
+/* (port) The camera's horizontal half field of view on the display: halffov, wider by the Hor+ factor
+   (EAGL_SetWide) for the culls that turn by it. */
+float RCamera_HalfFovX(const RCamera *c)
+{
+    float k = EAGL_Wide();
+    if (k == 1.0f) return c->halffov;
+    const double rad = 3.14159265358979323846 / 180.0;
+    return (float)(atan(tan(c->halffov * rad) * k) / rad);
 }
 
 static const ThrashAbout *about(void) { return THRASH.fn.about ? THRASH.fn.about() : NULL; }   /* (no driver: none) */

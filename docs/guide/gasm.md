@@ -48,6 +48,13 @@ The original renders through Direct3D 7. OpenNFSPU uses `gasm:gl`, OpenGL ES 3.0
 natively `gasm-run` runs it on ANGLE (Metal, Direct3D 11 or Vulkan), in the browser on WebGL 2. Headless
 runs use gasm's null GL, so the hashes are the same everywhere.
 
+The original's "wide screen" option is a letterbox: it crops the 4:3 picture to a band with black bars above
+and below. `--param aspect=16:9` adds true widescreen, which the original doesn't have. The options' screen
+size list gets 1280 x 720, 1600 x 900 and 1920 x 1080, and the race draws at the display's real shape. The
+vertical view stays as it is and the sides widen (Hor+), and the HUD keeps to the corners. The front end
+stays 640 x 480 with black bars at the sides. In the browser player it goes in the address:
+`/play/?aspect=16:9`. Without the parameter the game draws exactly as before.
+
 ## Determinism
 
 gasm runs are deterministic: the same module, data and input give the same frame and audio hashes on every

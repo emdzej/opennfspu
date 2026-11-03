@@ -566,7 +566,7 @@ void Scroller_dtor(Scroller *s)   /* Scroller_BasicSky_v1 0x45eaa0 */
 static void dome_planes(float plane[4])
 {
     RCamera *c = g_render->camera;
-    float a = c->halffov * 0.0027777778f;   /* 0x5b3e84 */
+    float a = RCamera_HalfFovX(c) * 0.0027777778f;   /* 0x5b3e84 (port: Hor+ wider) */
     if (a < exe_f32(0x5b3e80)) a = exe_f32(0x5b3e80);
     a += 0.25f;
     double s = sin_turns(a), co = cos_turns(a);

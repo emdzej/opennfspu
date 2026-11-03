@@ -274,6 +274,14 @@ static int load(const char *track, const char *carname)
            of video memory): level 3. Until the first race the front end runs at
            the level's initial 0, as the original's does. */
         RTex_detectquality(&RTex_machine);
+        {   /* --param res=<w>x<h>: the viewer's display mode, as fe.txt's WIDTH and HEIGHT give the race */
+            char v[16];
+            int w, h;
+            if (plat_param("res", v, sizeof v) && sscanf(v, "%dx%d", &w, &h) == 2) {
+                g_renderopts.width = w, g_renderopts.height = h;
+                Render_SetVideoMode(g_render, w, h, 16, 2);
+            }
+        }
         HUD_LoadArt();   /* 0x427a20 */
         LoadingScreen(1);
         return 0;

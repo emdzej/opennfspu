@@ -108,7 +108,10 @@ static void vis_begin(WorldVis *v, const RCamera *c)
     v->dist2 = c->viewdist * c->viewdist;
     v->dist = c->viewdist;
     float pts[5][4];
-    view_area(v, c->frame.orient, c->halffov, c->viewdist, 0.75f, pts);
+    /* (port: Hor+ widens x, the same y: 0.75 of the 4:3 tangent) */
+    float hx = RCamera_HalfFovX(c), ya = 0.75f;
+    if (hx != c->halffov) ya = 0.75f * tanf(c->halffov * 0.017453292f) / tanf(hx * 0.017453292f);
+    view_area(v, c->frame.orient, hx, c->viewdist, ya, pts);
     v->narea = (uint32_t)WTree_Hull(5, &pts[0][0], &v->area[0][0]);   /* (room for 7) */
     float mnx = 1e9f, mnz = 1e9f, mxx = -1e9f, mxz = f32(0x5b4688);
     for (uint32_t i = 0; i < v->narea; i++) {
@@ -138,13 +141,13 @@ static void vis_begin(WorldVis *v, const RCamera *c)
         Vec3_Unit(f, f);
         float in[4] = {f[0], f[1], f[2], 1.0f}, o[4];
         EaglMatrix m;
-        EAGL_MatAxisAngle(&m, c->halffov, 0.0f, 1.0f, 0.0f);
+        EAGL_MatAxisAngle(&m, hx, 0.0f, 1.0f, 0.0f);
         EAGL_MatTransform4(&m, 1, in, 16, o, 16);   /* 0x53a0a0 */
         v->planes[1][0] = o[2];
         v->planes[1][1] = 0.0f;
         v->planes[1][2] = -o[0];
         v->planes[1][3] = 0.0f;
-        EAGL_MatAxisAngle(&m, -c->halffov, 0.0f, 1.0f, 0.0f);
+        EAGL_MatAxisAngle(&m, -hx, 0.0f, 1.0f, 0.0f);
         EAGL_MatTransform4(&m, 1, in, 16, o, 16);
         v->planes[0][0] = -o[2];
         v->planes[0][1] = 0.0f;

@@ -18,6 +18,14 @@ void EAGL_SetDisplaySize(float w, float h)
     display_h = h;
 }
 
+/* (a port addition, render.c's --param aspect=16:9: the display's width to height over 4:3's. The
+   original's projections take a 640 x 480 screen; wider, the vertical field stays and the horizontal one
+   widens by this, Hor+. 1 leaves them as they were.) */
+static float wide = 1.0f;
+
+void EAGL_SetWide(float w) { wide = w; }
+float EAGL_Wide(void) { return wide; }
+
 /* The device that owns a view keeps the view it is drawing (+0x14 of the original's object). */
 typedef struct { uint32_t pad[5]; EaglView *current; } EaglOwner;
 
@@ -117,6 +125,7 @@ void EAGL_ViewSetPerspective(EaglView *v, float fov, float aspect, float znear, 
     float t = ftan(fov * DEG_TO_HALF_RAD);
     float cot = 1.0f / t;
     p->m[0] = cot * v->proj_sx;
+    if (wide != 1.0f) p->m[0] /= wide;
     p->m[5] = -(cot * v->proj_sy * aspect);
     p->m[8] = -v->proj_ox;
     p->m[9] = -v->proj_oy;
@@ -134,6 +143,11 @@ void EAGL_ViewSetPerspective(EaglView *v, float fov, float aspect, float znear, 
     float half = fov * DEG_TO_HALF_RAD;
     v->cull_tanx = ftan(half);
     v->cull_cosx = fsin(HALF_PI - half);
+    if (wide != 1.0f) {   /* (the wider horizontal half angle; the vertical tests stay) */
+        float halfx = atanf(v->cull_tanx * wide);
+        v->cull_tanx = tanf(halfx);
+        v->cull_cosx = cosf(halfx);
+    }
     float halfy = half * aspect;
     v->cull_tany = ftan(halfy);
     v->cull_cosy = fsin(HALF_PI - halfy);

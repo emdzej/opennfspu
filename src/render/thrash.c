@@ -763,7 +763,8 @@ int THRASH_writerect(int x, int y, int w, int h, const void *src)
 
 /* ---------------------------------------------------------------- about, init, modes */
 
-static ThrashMode modes[6];
+static ThrashMode modes[10];
+static int nmodes = 5;
 static ThrashAbout about;
 static const char author[] = "AUTHOR: Daniel Kennett, Wednesday 07:51PM Mar 01, 2000";
 
@@ -783,9 +784,14 @@ static void texformats_init(void)
    or one fewer when fewer fit). */
 static void modes_init(void)
 {
-    static const int wh[5][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200}};
+    static const int wh[9][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200},
+                                 {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}};
     memset(modes, 0, sizeof modes);
-    for (int i = 0; i < 5; i++) {
+    /* (a port addition, --param aspect=16:9: four 16:9 modes after the five; the options never offer
+       the list's last, 0x4bc2f0, so 2560 x 1440 only fills that place) */
+    char v[8];
+    nmodes = plat_param("aspect", v, sizeof v) && strcmp(v, "16:9") == 0 ? 9 : 5;
+    for (int i = 0; i < nmodes; i++) {
         modes[i + 1].width = wh[i][0];
         modes[i + 1].height = wh[i][1];
         modes[i + 1].bpp = 16;
@@ -827,7 +833,7 @@ const ThrashAbout *THRASH_about(void)
     about.ncluts = 4;
     about.cluts = cluts;
     about.modes = modes;
-    about.nmodes = 5;
+    about.nmodes = nmodes;
     memcpy(about.name, "DX7 3rash", 10);
     about.subtype = CARD_SUBTYPE;
     about.textureramsize = 32 << 20;
@@ -922,7 +928,7 @@ bool THRASH_setvideomode(int mode, int backbuffers, int bpp)
     if (!modes[1].width) THRASH_init();
     int depth = bpp == 1 ? 16 : bpp == 2 ? 32 : bpp;
     if (in_scene) error("D3D Setting videomode in 3d scene !!!!");
-    const ThrashMode *m = mode >= 1 && mode <= 5 ? &modes[mode] : &modes[1];
+    const ThrashMode *m = mode >= 1 && mode <= nmodes ? &modes[mode] : &modes[1];
     if (m->bpp < depth) depth = 16;
     if (device_open) {
         THRASH_treset();

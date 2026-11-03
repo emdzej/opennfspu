@@ -125,6 +125,8 @@ void EAGL_ViewFree(EaglView *v);                                                
 void EAGL_ViewSetViewport(EaglView *v, float w, float h, float x, float y, float minz, float maxz); /* 0x538b10 */
 /* The display size the viewport is clamped to: the original asks its device object (*0x69ed0c, slot 6). */
 void EAGL_SetDisplaySize(float w, float h);
+void EAGL_SetWide(float w);   /* (port: the display's aspect over 4:3, Hor+ projections) */
+float EAGL_Wide(void);
 void EAGL_ViewGetViewport(const EaglView *v, float *w, float *h, float *x, float *y, float *minz, float *maxz); /* 0x538df0 */
 void EAGL_ViewSetPerspective(EaglView *v, float fov, float aspect, float znear, float zfar); /* 0x538f20 */
 void EAGL_ViewSetOrtho(EaglView *v, float height, float znear, float zfar);    /* 0x539040 */

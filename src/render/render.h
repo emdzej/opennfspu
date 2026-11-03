@@ -214,6 +214,7 @@ RenderSystem *Render_Construct(RenderSystem *r, const char *driver, int device, 
 void Render_Shutdown(void);                              /* 0x467680 */
 /* The driver opened, its display chosen, the video mode set (GLIDE_env 0x556910, the real library's). */
 bool GLIDE_env(bool windowed, const char *driver, int display, int mode);
+float RCamera_HalfFovX(const RCamera *c);              /* (port: halffov on a wider display) */
 void Render_SetMode(RenderSystem *r, int mode);         /* 0x467f70: the video mode, when not the one set */
 void Render_SetVideoMode(RenderSystem *r, int w, int h, int bpp, int buffers);   /* 0x467f00 */
 int Render_ModeCount(void);                               /* 0x44e5d0 */
