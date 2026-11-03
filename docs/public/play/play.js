@@ -222,7 +222,7 @@ async function play(source) {
   show('setup', HASH_FRAMES > 0);      // keep the page visible in test runs
   $('status').textContent = 'Starting...';
   const params = Object.fromEntries([...query].filter(([k]) => !PAGE_PARAMS.has(k)));
-  if (!('aspect' in params) && $('widescreen').checked) params.aspect = '16:9';   // (the address wins)
+  if (!('aspect' in params) && $('aspect').value) params.aspect = $('aspect').value;   // (the address wins)
   let allowNet = false;   // network games: the relay's host only
   try { if (params.relay) allowNet = [new URL(params.relay).hostname]; } catch { /* not a URL: no network */ }
   const c = freshCanvas();
@@ -472,14 +472,17 @@ $('saves-input').onchange = async () => {
 };
 refreshSaves();
 
-// ---- true widescreen (a port addition: --param aspect=16:9), kept in this browser ----------------
-try { $('widescreen').checked = localStorage.getItem(WIDE_KEY) === '1'; } catch { /* no storage: off */ }
+// ---- the screen shape (a port addition: --param aspect=16:9 or 16:10), kept in this browser ---------
+try {
+  const v = localStorage.getItem(WIDE_KEY);   // ('1': 16:9, as the first switch kept it)
+  $('aspect').value = v === '1' ? '16:9' : ['16:9', '16:10'].includes(v) ? v : '';
+} catch { /* no storage: 4:3 */ }
 if (query.has('aspect')) {   // the address decides
-  $('widescreen').checked = query.get('aspect') === '16:9';
-  $('widescreen').disabled = true;
+  $('aspect').value = ['16:9', '16:10'].includes(query.get('aspect')) ? query.get('aspect') : '';
+  $('aspect').disabled = true;
 }
-$('widescreen').onchange = () => {
-  try { localStorage.setItem(WIDE_KEY, $('widescreen').checked ? '1' : '0'); } catch { /* kept for this visit */ }
+$('aspect').onchange = () => {
+  try { localStorage.setItem(WIDE_KEY, $('aspect').value); } catch { /* kept for this visit */ }
 };
 
 if (!hasOpfs) message('This browser has no private file storage (OPFS), so the game data can\'t be imported. Play without importing works.', 'warn');

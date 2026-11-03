@@ -784,16 +784,19 @@ static void texformats_init(void)
    or one fewer when fewer fit). */
 static void modes_init(void)
 {
-    static const int wh[9][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200},
-                                 {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}};
+    static const int wh[5][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200}};
+    static const int wide[2][4][2] = {{{1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}},
+                                      {{1280, 800}, {1680, 1050}, {1920, 1200}, {2560, 1600}}};
     memset(modes, 0, sizeof modes);
-    /* (a port addition, --param aspect=16:9: four 16:9 modes after the five; the options never offer
-       the list's last, 0x4bc2f0, so 2560 x 1440 only fills that place) */
+    /* (a port addition, --param aspect=16:9 or 16:10: four modes of that shape after the five; the
+       options never offer the list's last, 0x4bc2f0, so the fourth only fills that place) */
     char v[8];
-    nmodes = plat_param("aspect", v, sizeof v) && strcmp(v, "16:9") == 0 ? 9 : 5;
+    int k = !plat_param("aspect", v, sizeof v) ? -1 : strcmp(v, "16:9") == 0 ? 0 : strcmp(v, "16:10") == 0 ? 1 : -1;
+    nmodes = k < 0 ? 5 : 9;
     for (int i = 0; i < nmodes; i++) {
-        modes[i + 1].width = wh[i][0];
-        modes[i + 1].height = wh[i][1];
+        const int *m = i < 5 ? wh[i] : wide[k][i - 5];
+        modes[i + 1].width = m[0];
+        modes[i + 1].height = m[1];
         modes[i + 1].bpp = 16;
         modes[i + 1].unknown3 = 4;
         modes[i + 1].unknown4 = 1;

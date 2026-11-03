@@ -363,10 +363,10 @@ void Render_SetMode(RenderSystem *r, int mode)
     Render_DetectCard();
     Render_SetupQuality();
     EAGL_SetDisplaySize((float)w, (float)h);
-    /* (a port addition, --param aspect=16:9: the projections take the display's true shape, Hor+; the
-       original's take 4:3 whatever the mode, 1280 x 1024's too) */
+    /* (a port addition, --param aspect=16:9 or 16:10: the projections take the display's true shape,
+       Hor+; the original's take 4:3 whatever the mode, 1280 x 1024's too) */
     char v[8];
-    bool wide = plat_param("aspect", v, sizeof v) && strcmp(v, "16:9") == 0;
+    bool wide = plat_param("aspect", v, sizeof v) && (strcmp(v, "16:9") == 0 || strcmp(v, "16:10") == 0);
     EAGL_SetWide(wide ? ((float)w * 3.0f) / ((float)h * 4.0f) : 1.0f);
 }
 

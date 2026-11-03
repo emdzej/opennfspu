@@ -223,14 +223,15 @@ try {
     rmSync(dir, { recursive: true, force: true });
     // (the hash runs keep their storage in memory, so these saves don't reach them)
   }
-  // The widescreen switch is kept in this browser across visits (then cleared for the hash runs).
+  // The screen shape is kept in this browser across visits (then set back to 4:3 for the hash runs).
   {
-    await page.evaluate('document.getElementById("widescreen").click()');
+    const pick = (v) => page.evaluate(`(() => { const e = document.getElementById("aspect"); e.value = "${v}"; e.dispatchEvent(new Event("change")); })()`);
+    await pick('16:10');
     await page.open(base);
-    const kept = await page.evaluate('document.getElementById("widescreen").checked');
-    await page.evaluate('document.getElementById("widescreen").click()');
+    const kept = await page.evaluate('document.getElementById("aspect").value');
+    await pick('');
     const off = await page.evaluate('localStorage.getItem("opennfspu.widescreen")');
-    report(kept === true && off === '0', 'widescreen: the switch is kept', `kept ${kept}, then ${off}`);
+    report(kept === '16:10' && off === '', 'screen shape: the choice is kept', `kept ${kept}, then "${off}"`);
   }
   if (process.env.PLAY_SAVES_ONLY) throw Object.assign(new Error('saves only'), { savesOnly: true });
 
