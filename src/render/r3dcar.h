@@ -195,7 +195,7 @@ void R3DCar_Free(R3DCar *car);                          /* R3DCar_v0 0x437980 + 
    true as the original does even when the .crp is missing (then car->loaded stays false). 0x441940 */
 bool R3DCar_LoadCrp(R3DCar *car, const char *name);
 void R3DCar_LoadTpg(R3DCar *car, const char *name);    /* 0x437780 */
-void R3DCar_LoadStyles(R3DCar *car, int style);         /* 0x437a30 (the options; the timed extents pend) */
+void R3DCar_LoadStyles(R3DCar *car, int style);         /* 0x437a30 (the options, the hood, trunk and headlight extents) */
 
 /* The data of a part's article item of a kind (R3D_VT ...) and index (-1: the kind's plain id) through
    the part's cache; NULL if none. 0x43c700 */
