@@ -294,6 +294,7 @@ a.VPFeature:hover, .VPFeature.link:hover {
   border-radius: 6px;
   box-shadow: 0 0 0 1px var(--pu-glass-line), 0 10px 24px rgba(11, 15, 15, 0.18);
 }
+.shots figure.wide { grid-column: 1 / -1; }
 .shots figcaption { font-size: 0.85em; color: var(--vp-c-text-2); margin-top: 6px; }
 
 /* Keyboard keys in the controls tables: glass keys. */

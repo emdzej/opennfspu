@@ -28,6 +28,10 @@ features:
     details: One opennfspu.wasm for macOS, Linux, Windows and the browser on the gasm WebAssembly game runtime. The original's Direct3D 7 rendering goes to OpenGL ES 3.0 (WebGL 2 in the browser).
     link: /guide/gasm
     linkText: Running on gasm
+  - title: Beyond the original
+    details: Opt-in true widescreen (16:9 and 16:10, wider at the sides), network races over a relay in place of EA's servers, saves that move between the browser and the desktop. Off, the game is the original.
+    link: /guide/beyond
+    linkText: What it adds
   - title: In the browser
     details: Choose your game folder once and run it in the browser. Your data stays on your device.
     link: /play/
@@ -53,6 +57,7 @@ Renders of OpenNFSPU itself (headless runs of `opennfspu.wasm` on the game's own
   <figure><img src="/screenshots/castle.jpg" alt="The castle track from the chase camera" loading="lazy"><figcaption>The castle track, from the chase camera</figcaption></figure>
   <figure><img src="/screenshots/canyon.jpg" alt="The canyon track" loading="lazy"><figcaption>The canyon track</figcaption></figure>
   <figure><img src="/screenshots/cockpit.jpg" alt="The driver's seat camera on the Autobahn" loading="lazy"><figcaption>The driver's seat on the Autobahn, in the rain</figcaption></figure>
+  <figure class="wide"><img src="/screenshots/alps-wide.jpg" alt="A race in the Alps in true 16:9 widescreen" loading="lazy"><figcaption>True 16:9 widescreen, <a href="/guide/beyond">an option the original doesn't have</a></figcaption></figure>
 </div>
 
 ## Built for gasm

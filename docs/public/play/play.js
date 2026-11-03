@@ -223,6 +223,8 @@ async function play(source) {
   $('status').textContent = 'Starting...';
   const params = Object.fromEntries([...query].filter(([k]) => !PAGE_PARAMS.has(k)));
   if (!('aspect' in params) && $('aspect').value) params.aspect = $('aspect').value;   // (the address wins)
+  // The stage takes the game's shape: the races fill a widescreen one, the 4:3 menus have bars at the sides.
+  $('stage').style.setProperty('--ar', { '16:9': 16 / 9, '16:10': 16 / 10 }[params.aspect] ?? 4 / 3);
   let allowNet = false;   // network games: the relay's host only
   try { if (params.relay) allowNet = [new URL(params.relay).hostname]; } catch { /* not a URL: no network */ }
   const c = freshCanvas();
