@@ -12,9 +12,10 @@ the original does.
   gets 1280 x 720, 1600 x 900 and 1920 x 1080, and the race draws at the display's real shape. The vertical
   view stays and the sides widen (Hor+). The world's and the sky's culling widen with it, and the HUD keeps to
   the corners. See [Running on gasm](/guide/gasm#graphics).
-- **Next:** a switch in the game's own graphics options and on the play page, in place of the parameter.
+- **Done:** a switch on the play page ("True widescreen"), and the HUD checked at 1280 x 720, 1600 x 900
+  and 1920 x 1080 (it keeps to the corners at its art's pixel size, as the original's does at every size).
+- **Next:** a switch in the game's own graphics options, in place of the parameter.
 - **Next:** other shapes: 16:10, and the window's own shape when it is resized.
-- **Next:** the HUD checked at every 16:9 size. It has only been looked at at 1280 x 720.
 - **Later:** the front end. Its screens are laid out for 640 x 480 and are shown with black bars at the sides.
   Widening them means placing each screen's parts again.
 
