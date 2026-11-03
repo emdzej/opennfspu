@@ -196,6 +196,35 @@ try {
   const shot = await page.send('Page.captureScreenshot', { format: 'png' });   // the page as Chrome renders it
   writeFileSync(join(OUT, 'page.png'), Buffer.from(shot.result.data, 'base64'));
 
+  // Saves: import a zip made by the system's zip (deflated, in a folder, with a stray file), then export
+  // them again: the same bytes back, under the same names. PLAY_SAVES_ONLY=1 stops after it.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'opennfspu-saves-'));
+    const sav = Buffer.alloc(4096); for (let i = 0; i < sav.length; i++) sav[i] = (i * 7) & 0xff;
+    const lst = Buffer.from('8Tester');
+    mkdirSync(join(dir, 'opennfspu'));
+    writeFileSync(join(dir, 'opennfspu/8Tester.sav'), sav);
+    writeFileSync(join(dir, 'opennfspu/player.lst'), lst);
+    writeFileSync(join(dir, 'opennfspu/not a save.txt'), 'x');
+    execFileSync('zip', ['-qr', 'saves.zip', 'opennfspu'], { cwd: dir });
+    await page.setFiles('#saves-input', [join(dir, 'saves.zip')]);
+    await page.until('/Kept in this browser: 1 player, 0 replays and 2 files/.test(document.getElementById("saves-desc").textContent)', 10000);
+    const back = await page.evaluate(`(async () => {
+      const { saves } = globalThis.opennfspuPlay;
+      const { blob } = await saves.exportSaves();
+      const files = await saves.unzip(await blob.arrayBuffer());
+      return JSON.stringify(files.map(([k, v]) => [k, Array.from(v)]));
+    })()`);
+    const got = new Map(JSON.parse(back));
+    const same = (k, b) => got.has(k) && Buffer.from(got.get(k)).equals(b);
+    const msg = await page.evaluate('document.getElementById("message").textContent');
+    report(got.size === 2 && same('8Tester.sav', sav) && same('player.lst', lst) && /Skipped.*not a save\.txt/.test(msg),
+      'saves: import a zip, export it back', `${[...got.keys()].join(', ')}; ${msg}`);
+    rmSync(dir, { recursive: true, force: true });
+    // (the hash runs keep their storage in memory, so these saves don't reach them)
+  }
+  if (process.env.PLAY_SAVES_ONLY) throw Object.assign(new Error('saves only'), { savesOnly: true });
+
   let imported = false;
   for (const c of CASES) {
     const nat = native(c, GAME);
@@ -289,8 +318,10 @@ try {
   report(!bad.length, 'no uncaught exceptions', bad.slice(0, 3).join('\n      '));
   console.log(`screenshots in ${OUT}`);
 } catch (e) {
-  failed = true;
-  console.error(`FAIL  ${e.message}`);
+  if (!e.savesOnly) {
+    failed = true;
+    console.error(`FAIL  ${e.message}`);
+  }
 } finally {
   const exited = new Promise((r) => chrome.once('exit', r));
   chrome.kill(); server.kill();

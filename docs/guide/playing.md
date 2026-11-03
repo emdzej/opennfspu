@@ -19,8 +19,20 @@ Then:
   visits start at once with **Play**. **Remove imported data** deletes the copy.
 - **Play without importing** reads the files from the folder or image you picked. You pick it again next time.
 
-Nothing is uploaded: the files are read in your browser. Saves (profiles, options) are kept in the
-browser's storage for this site (IndexedDB).
+Nothing is uploaded: the files are read in your browser. Saves (the players and their careers, the
+options, HUD layouts, track records and replays) are kept in the browser's storage for this site
+(IndexedDB).
+
+## Your saves
+
+**Export saves (.zip)** downloads them as a zip with one file per save. **Import saves** takes such a zip,
+or the save files themselves. Files with the same names are replaced, and the others are kept. Import while
+no game runs: the game reads its saves when it starts.
+
+The zip has the same layout as the folder where the desktop version keeps its saves
+(`~/Library/Application Support/gasm/opennfspu/` on macOS, `~/.local/share/gasm/opennfspu/` on Linux,
+`%APPDATA%\gasm\opennfspu\` on Windows; see [Installing](/guide/install)). So players move both ways: unpack
+an export there, or zip that folder's files and import them here.
 
 ## While playing
 

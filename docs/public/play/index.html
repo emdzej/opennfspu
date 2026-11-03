@@ -94,6 +94,20 @@
         </div>
       </div>
     </div>
+
+    <div class="card" id="saves">
+      <h2>Your saves</h2>
+      <p class="small" id="saves-desc">The players, options, track records and replays are kept in this browser.</p>
+      <div class="row">
+        <button id="export-saves">Export saves (.zip)</button>
+        <button id="import-saves">Import saves</button>
+      </div>
+      <p class="small">To move them to another browser or computer. The zip holds one file per save, as
+        the desktop version keeps them (<code>&lt;data folder&gt;/gasm/opennfspu</code>, for example
+        <code>~/Library/Application Support/gasm/opennfspu</code> on macOS), so it works both ways.
+        Importing replaces the saves with the same names and keeps the others.</p>
+      <input id="saves-input" type="file" accept=".zip,.sav,.hud,.lst,.txt,.trk,.rpl,application/zip" multiple hidden>
+    </div>
   </section>
 
   <section id="game" hidden>
