@@ -31,10 +31,11 @@ the original does.
   the original, plays through to its end, but whether it matches the original frame for frame isn't
   confirmed. Next: the original's whole race loop under the emulator, to compare a race from its start.
 - **Two-player split screen.** The race code has a split-screen mode: communication mode 1, with a second
-  player's camera and the catch-up logic. The front end never offers it. The original reads it from `fe.txt`
-  (`comm_mode`, `numplayerracecars`, `car[1].class`, `catchup_logic`, all in the shipped file), and the port
-  doesn't read those race keys from `fe.txt` yet. Porting it means the race's `fe.txt` keys, then the two views,
-  cameras and HUDs, and the second player's controls.
+  player's camera and the catch-up logic. The original never runs it: the front end's race set-up
+  (0x4eab10) writes the mode before every race, 0 (or 4 in a network game), over `fe.txt`'s `comm_mode`.
+  So it is dead code in the shipped game, and turning it on would be a port addition, opt-in like true
+  widescreen. Porting it means the two views, cameras and HUDs, and the second player's controls; parts
+  of the race already follow the mode (the sound's panning, the traffic's cap, the police).
 - **The network game's leftovers:** the observer's view and one race-progress message.
 - **The front end's save:** the opponents' cars aren't read back from the player's save. The race picks
   them again anyway.
