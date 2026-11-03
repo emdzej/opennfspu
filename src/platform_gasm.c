@@ -364,21 +364,6 @@ static bool mount_game(void)
 static bool running;
 static double audio_acc;   /* fractional audio frames carried between frames */
 
-/* gasm-run 0.16.0's window drops the queued samples while it buffers again after running dry, so after
-   one long frame (a load) it never fills up again and stays silent; nor does it fill at the start, as the
-   intro's movies push a frame's worth each frame. Before the first frame's sound and after a gap that
-   emptied it, a block of silence longer than its largest target (150 ms) lets it start. (A run can't tell
-   a window from a headless run here: the block comes first in every run, headless audio hashes with it.
-   Headless time is the frames': no gaps after that. Until a runner with the fix.) */
-static void refill_after_gap(void)
-{
-    static float silence[APP_AUDIO_RATE * 160 / 1000 * 2];
-    static double last = -1;
-    double now = gasm_time_ms();
-    if (last < 0 || now - last > 60.0) gasm_audio_push(silence, APP_AUDIO_RATE * 160 / 1000);
-    last = now;
-}
-
 /* --param frametime=1: the frames slower than the frame rate (the time in the game's frame, the time since
    the previous one), to see where a window run falls behind its audio. */
 static bool frametime_on;
@@ -444,7 +429,7 @@ PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
     }
     /* The sound for the time since the previous frame (the runner's clock: in a window frames that come
        late, as a movie's in a slow window, still keep its queue full; headless it is the frames' time, the
-       frame rate's share). At most the buffer: a longer gap is the silence below. */
+       frame rate's share). At most the buffer: a longer gap is lost. */
     double now = gasm_time_ms();
     static double last_ms = -1;
     audio_acc += 0 <= last_ms ? (now - last_ms) * APP_AUDIO_RATE / 1000.0 : APP_AUDIO_RATE / frame_hz;
@@ -453,7 +438,6 @@ PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
     unsigned n = (unsigned)audio_acc;
     audio_acc -= n;
     app_audio(audio_buf, n);
-    refill_after_gap();
     gasm_audio_push(audio_buf, n);
     if (frametime_on) frametime_log(t0);
 }

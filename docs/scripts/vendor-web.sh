@@ -10,7 +10,7 @@ out=public/play/vendor
 [ -f "$nm/gasm-host/gasm-host.js" ] || { echo "no $nm/gasm-host: run pnpm install in docs/ first" >&2; exit 1; }
 rm -rf "$out"
 mkdir -p "$out/gasm/lib" "$out/csfs/core" "$out/csfs/fsa" "$out/csfs/opfs"
-# gasm-host.js re-exports ./lib/*.js (0.16.0; lib/threads.js is imported by gasm-worker.js); gasm-worker.js imports ./gasm-host.js and ./webgpu-gfx.js;
+# gasm-host.js re-exports ./lib/*.js (0.16.1; lib/threads.js is imported by gasm-worker.js); gasm-worker.js imports ./gasm-host.js and ./webgpu-gfx.js;
 # gasm-present.js is the WebGL 2 upscaler, input-script.mjs the --input parser (the page's hash runs).
 cp "$nm/gasm-host/gasm-host.js" "$nm/gasm-host/gasm-worker.js" "$nm/gasm-host/webgpu-gfx.js" \
    "$nm/gasm-host/gasm-present.js" "$out/gasm/"

@@ -14,7 +14,7 @@ Each [release](https://github.com/emdzej/opennfspu/releases) has:
 | macOS 11 or later (Apple Silicon and Intel) | `opennfspu-gasm-<version>-macos-universal.zip` | `Porsche Unleashed (gasm).app` |
 | Linux x86_64 / arm64 | `opennfspu-gasm-<version>-linux-<arch>.tar.gz` | `./opennfspu.sh` |
 | Windows x86_64 | `opennfspu-gasm-<version>-windows-x86_64.zip` | `OpenNFSPU.cmd` |
-| any system with gasm-run 0.16.0 or newer | `opennfspu-<version>.wasm` | `gasm-run opennfspu-<version>.wasm --asset-dir <your game folder>` |
+| any system with gasm-run 0.16.1 or newer | `opennfspu-<version>.wasm` | `gasm-run opennfspu-<version>.wasm --asset-dir <your game folder>` |
 
 Every file has a `.sha256` next to it:
 

@@ -81,7 +81,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 OPENNFSPU_DATA=/Volumes/dropbox/NFS_PU.iso ./build/vfs_test     # the same against the disc image
 ```
 
-gasm module: gasm **0.16.0** (the pin is `GASM_VERSION` in `tools/fetch-gasm-sdk.sh`; it fetches wasi-sdk and the
+gasm module: gasm **0.16.1** (the pin is `GASM_VERSION` in `tools/fetch-gasm-sdk.sh`; it fetches wasi-sdk and the
 C SDK and Binaryen's `wasm-opt` into `.deps/`, `tools/fetch-gasm-runner.sh macos-universal` the released `gasm-run`). The module is
 built `LOOP THREADS` (gasm_loop.c, Asyncify: `src/platform_gasm.c`'s `gasm_main` waits a frame between the game's
 frames; gasm's cooperative threads carry the network library's), `-DOPENNFSPU_LOOP_THREADS=OFF` for the plain exports:

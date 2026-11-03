@@ -11,7 +11,7 @@ git clone https://github.com/emdzej/opennfspu && cd opennfspu
 
 `tools/fetch-gasm-sdk.sh` downloads wasi-sdk (clang and the C library for wasm32) and gasm's C SDK
 (`gasm.h`, the GLES 3.0 headers with `gasm_gl.c`, and a CMake toolchain) into `.deps/`. The gasm version is
-pinned there (`GASM_VERSION`, currently 0.16.0).
+pinned there (`GASM_VERSION`, currently 0.16.1).
 
 ```sh
 tools/fetch-gasm-sdk.sh

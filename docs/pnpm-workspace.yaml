@@ -1,0 +1,4 @@
+# @emdzej/gasm-host is pinned to the gasm release (GASM_VERSION); a release younger than pnpm's minimum
+# release age would otherwise be refused.
+minimumReleaseAgeExclude:
+  - '@emdzej/gasm-host@0.16.1'

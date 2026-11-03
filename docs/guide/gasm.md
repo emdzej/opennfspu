@@ -1,7 +1,7 @@
 # Running on gasm
 
 [gasm](https://gasm.emdzej.pl) is a WebAssembly game runtime: one module runs natively through
-`gasm-run` (macOS, Linux, Windows) and in the browser. OpenNFSPU is built for gasm **0.16.0**. The bundles
+`gasm-run` (macOS, Linux, Windows) and in the browser. OpenNFSPU is built for gasm **0.16.1**. The bundles
 include the right `gasm-run`; to use it directly:
 
 ```sh

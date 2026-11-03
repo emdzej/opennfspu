@@ -4,7 +4,7 @@
 
 | Part | State |
 |---|---|
-| Build: `opennfspu.wasm` on gasm 0.16.0, native build for tools and tests | in place |
+| Build: `opennfspu.wasm` on gasm 0.16.1, native build for tools and tests | in place |
 | Bundles for macOS, Linux and Windows, the browser player | in place (they run the game) |
 | File layer: the installed game folder or an ISO image of it, case-insensitive names | in place |
 | The original program read at run time (`Porsche.exe` 3.5, size and CRC-32 checked) | in place |
