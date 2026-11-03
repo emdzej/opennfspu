@@ -325,6 +325,33 @@ static void tray_setstate(HudVisual *v, int32_t s)   /* 0x4343f0 */
     ((HTray *)v)->since = g_sim_tick;   /* (0x606ac8, the race loop's tick: the same count) */
 }
 
+/* The trays dragged with the mouse (HTray_v9 0x434450, every tray class's slot 9): a left press (2) in it
+   takes it, the pointer's place in it kept; a release (1) in it lets it go, the layouts written for the
+   player (HUD_LoadLayout 0x41ea70) when it was held, racing (0x657424 0) and shown (state 3). (A release
+   outside keeps it held.) While held it follows the pointer, kept on the screen, through its setpos. */
+static int tray_input(HudVisual *v, int x, int y, int click)
+{
+    HTray *t = (HTray *)v;
+    if (t->x <= x && x <= t->w + t->x && t->y <= y && y <= t->h + t->y) {
+        if (click == 2) {
+            if (!t->drag) t->drag = 1, t->dx = x - t->x, t->dy = y - t->y;
+        } else if (click == 1) {
+            if (t->drag && g_race_view == 0 && v->state == 3) HudConfig_Save(g_race_player);
+            t->drag = 0;
+        }
+    }
+    if (t->drag) {
+        x -= t->dx, y -= t->dy;
+        if (x < 1) x = 0;
+        if (y < 1) y = 0;
+        if (g_display.width <= t->w + x) x = g_display.width - t->w;
+        if (g_display.height <= t->h + y) y = g_display.height - t->h;
+        t->homex = x, t->homey = y;
+        if (v->vt->setpos) v->vt->setpos(v, x, y);   /* (slot 12) */
+    }
+    return 0;
+}
+
 static int tray_progress(HudVisual *v)   /* 0x434950 */
 {
     if (v->state != 1 && v->state != 2) return 100;
@@ -606,7 +633,7 @@ static void gear_reset(HudVisual *v)
     combo_reset(c);
 }
 
-static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl gear_vt = {combo_destroy, gear_draw, gear_reset, tray_setstate, combo_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *gear_new(void)
 {
@@ -689,8 +716,8 @@ static void figures_reset(HudVisual *v, int size_off, bool choice)
 static void speed_reset(HudVisual *v) { figures_reset(v, 0x9c, false); }
 static void tachdigital_reset(HudVisual *v) { figures_reset(v, 0x14, true); }
 
-static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
-static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl speed_vt = {combo_destroy, speed_draw, speed_reset, tray_setstate, combo_setpos, tray_progress, NULL, tray_input, NULL};
+static const HudVisualVtbl tachdigital_vt = {combo_destroy, tachdigital_draw, tachdigital_reset, tray_setstate, combo_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *figures_new(const HudVisualVtbl *vt, int place, int w, int h, bool keep)
 {
@@ -803,8 +830,8 @@ static void multitime_draw(HudVisual *v)
 static void time_reset(HudVisual *v) { figures_reset(v, 0xa4, false); }        /* 0x431760 */
 static void multitime_reset(HudVisual *v) { figures_reset(v, 0x0, true); }     /* 0x42a290 */
 
-static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
-static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl time_vt = {combo_destroy, time_draw, time_reset, tray_setstate, combo_setpos, tray_progress, NULL, tray_input, NULL};
+static const HudVisualVtbl multitime_vt = {combo_destroy, multitime_draw, multitime_reset, tray_setstate, combo_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
 {
@@ -990,7 +1017,7 @@ static void position_destroy(HudVisual *v)   /* 0x42ad40 */
     free(p);
 }
 
-static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl position_vt = {position_destroy, position_draw, position_reset, tray_setstate, position_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *position_new(void)
 {
@@ -1207,7 +1234,7 @@ static void gdamage_reset(HudVisual *v)
     if (g->title) g->title->colour = (uint32_t)HudConfig_i32(0x18), g->title->colour2 = c14;
 }
 
-static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl gdamage_vt = {gdamage_destroy, gdamage_draw, gdamage_reset, tray_setstate, gdamage_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *gdamage_new(void)
 {
@@ -1389,7 +1416,7 @@ static void tdamage_destroy(HudVisual *v)   /* 0x42fe80 */
     free(d);
 }
 
-static const HudVisualVtbl tdamage_vt = {tdamage_destroy, tdamage_draw, tdamage_reset, tray_setstate, tdamage_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl tdamage_vt = {tdamage_destroy, tdamage_draw, tdamage_reset, tray_setstate, tdamage_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *tdamage_new(void)
 {
@@ -1836,7 +1863,7 @@ static void map_destroy(HudVisual *v)   /* 0x4320f0 */
 /* Kept hidden but with its layout's +0x40 on and the HUD shown. 0x433360 */
 static bool map_hidden(HudVisual *v) { (void)v; return !(HudConfig_choicei32(0x40) != 0 && always); }   /* 0x41e7d0, 0x41e7c0 */
 
-static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL, NULL, map_hidden};
+static const HudVisualVtbl map_vt = {map_destroy, map_draw, map_reset, tray_setstate, map_setpos, tray_progress, NULL, tray_input, map_hidden};
 
 static HudVisual *map_new(void)
 {
@@ -3153,8 +3180,8 @@ static void tach_setpos(HudVisual *v, int x, int y)
     if (d->value) d->value->x = (int)ex, d->value->y = ly + HudConfig_i32(0x38);
 }
 
-static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL, NULL, NULL};
-static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL, NULL, NULL};
+static const HudVisualVtbl speedometer_vt = {dial_destroy, speedometer_draw, dial_reset, tray_setstate, dial_setpos, tray_progress, NULL, tray_input, NULL};
+static const HudVisualVtbl tach_vt = {dial_destroy, tach_draw, dial_reset, tray_setstate, tach_setpos, tray_progress, NULL, tray_input, NULL};
 
 static HudVisual *speedometer_new(void)
 {
@@ -3343,7 +3370,7 @@ static void rearview_destroy(HudVisual *v)   /* 0x42c5a0 */
     free(v);
 }
 
-static const HudVisualVtbl rearview_vt = {rearview_destroy, rearview_draw, rearview_reset, tray_setstate, rearview_setpos, tray_progress, NULL, NULL, rearview_hidden};
+static const HudVisualVtbl rearview_vt = {rearview_destroy, rearview_draw, rearview_reset, tray_setstate, rearview_setpos, tray_progress, NULL, tray_input, rearview_hidden};
 
 static HudVisual *rearview_new(void)   /* 0x42c470 */
 {
@@ -4603,6 +4630,8 @@ int HUD_HandleInput(int x, int y, int event)
     x = s_mouse_x, y = s_mouse_y;
     int c = event;   /* (0x435370: 2 the left button went down, 1 it came up; the buttons act on 1) */
     int a = 0;
+    for (int i = 0; i < nlist; i++)   /* (the front visuals, entry +4: the trays dragged) */
+        if (list[i].front && list[i].v->vt->input) list[i].v->vt->input(list[i].v, x, y, c);
     if (nmodal && modal[0]->vt->input) a = modal[0]->vt->input(modal[0], x, y, c);
     switch (a) {
     case 2:   /* resume */

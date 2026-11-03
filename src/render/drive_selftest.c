@@ -459,7 +459,8 @@ bool g_drive_paused;
 
 /* --param hudscript=<frame>@<x>:<y>,<frame>=<text>,...: the race's frames (from its start) at which the
    mouse goes to (x, y) in the display mode's pixels, the left button down that frame and up the next,
-   or the text's keys are typed one a frame (tests of the HUD's menus). */
+   or the text's keys are typed one a frame (tests of the HUD's menus); <frame>!<x>:<y> the mouse there
+   with the button held, <frame>^<x>:<y> there with it let go (drags). */
 static void hud_script(void)
 {
     static char sc[256];
@@ -473,11 +474,13 @@ static void hud_script(void)
         while (*q >= '0' && *q <= '9') q++;
         const char *end = strchr(q, ',');
         if (!end) end = q + strlen(q);
-        if (*q == '@') {
+        if (*q == '@' || *q == '!' || *q == '^') {
             int x = atoi(q + 1);
             const char *c = strchr(q, ':');
             int y = c && c < end ? atoi(c + 1) : 0;
-            if (frame == f) MOUSE_Override(true, x, y, 1);
+            if (*q != '@') {
+                if (frame == f) MOUSE_Override(true, x, y, *q == '!');
+            } else if (frame == f) MOUSE_Override(true, x, y, 1);
             else if (frame == f + 1) MOUSE_Override(true, x, y, 0);
         } else if (*q == '=') {
             int i = frame - f;
