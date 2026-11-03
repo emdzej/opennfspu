@@ -11,13 +11,13 @@
 #   ./play --help                           this
 #
 # Environment: DATA=<folder> (default ./game), ISO=<image> (default /Volumes/dropbox/NFS_PU.iso),
-# BUILD=0 (don't build, run what is there). Saves go to gasm's storage for opennfspu, the same as the
-# bundles' (--profile: a storage of its own, opennfspu-<name>).
+# BUILD=0 (don't build, run what is there), GASM_RUN=<gasm-run> (another runner). Saves go to gasm's
+# storage for opennfspu, the same as the bundles' (--profile: a storage of its own, opennfspu-<name>).
 set -euo pipefail
 cd "$(dirname "$0")"
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
@@ -27,7 +27,9 @@ case "$(uname -s)-$(uname -m)" in
   Linux-aarch64) PLAT=linux-arm64 ;;
   *) echo "play: unsupported host $(uname -s)-$(uname -m)" >&2; exit 1 ;;
 esac
-RUN=.deps/gasm-runner-$PLAT/gasm-run
+RUN=${GASM_RUN:-.deps/gasm-runner-$PLAT/gasm-run}
+# (another gasm-run, e.g. one built from gasm's tree, finds ANGLE in the released runner's folder)
+[[ -n "${GASM_RUN:-}" && -z "${GASM_ANGLE_DIR:-}" ]] && export GASM_ANGLE_DIR="$PWD/.deps/gasm-runner-$PLAT"
 WASM=build-gasm/opennfspu.wasm
 
 if [[ "${BUILD:-1}" != 0 ]]; then
