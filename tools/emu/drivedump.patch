@@ -1,0 +1,94 @@
+--- a/src/game/car_drive.c
++++ b/src/game/car_drive.c
+@@ -550,6 +550,7 @@
+ {
+     float load = *CAR_F(c, 0x4a0) * spec_f(c, 0xf4) * K(0x5b25bc);   /* the weight along the ground's normal */
+     bool alt = g_race_alt_grip && WSurface_FindAbove(&c->body, CAR_F(c, 0x330), NULL) == 0;   /* 0x473290 */
++    extern int s_dd_above_x; s_dd_above_x = alt;
+     float front = spec_f(c, 0xf0);
+     bool assisted = (*CAR_I(c, CAR_FLAGS) & 8) || *CAR_I(c, 0xda8);
+     for (int i = 0; i < 4; i++) {
+@@ -855,7 +856,67 @@
+ static int clampi(int v, int lo, int hi) { return v < lo ? lo : hi < v ? hi : v; }
+ 
+ /* 0x49ef50 */
++static void drive_(Car *c);
++
++/* TEMP: --param drivedump=<tick>: the player's car around 0x49ef50 for the emulator comparison */
++#include "platform.h"
++#include "game/race_progress.h"
++#include <stdio.h>
++#include <stdlib.h>
++void SimRand_Peek(uint32_t o[3]);
++static int s_dd_tick = -2;
++int s_dd_above_x = -1;
++#define s_dd_above s_dd_above_x
++static void dd_hex(const char *tag, int k, const void *p, size_t n)
++{
++    static char line[0x6000];
++    const uint8_t *b = p;
++    int o = snprintf(line, sizeof line, "DD %s %d ", tag, k);
++    for (size_t i = 0; i < n && o + 3 < (int)sizeof line; i++) o += snprintf(line + o, sizeof line - (size_t)o, "%02x", b[i]);
++    plat_log(line);
++}
++static bool dd_on(Car *c)
++{
++    static int step = 1, last = -1;
++    if (s_dd_tick == -2) {
++        char v[32];
++        s_dd_tick = -1;
++        if (plat_param("drivedump", v, sizeof v)) { s_dd_tick = atoi(v); char *q = strchr(v, ':'); if (q) step = atoi(q + 1); q = q ? strchr(q + 1, ':') : NULL; last = q ? atoi(q + 1) : s_dd_tick; }
++    }
++    return s_dd_tick >= 0 && g_sim_tick >= s_dd_tick && g_sim_tick <= last && (g_sim_tick - s_dd_tick) % step == 0 && c == g_cars[g_race_local];
++}
++static void dd_state(Car *c, const char *phase)
++{
++    char t[16];
++    snprintf(t, sizeof t, "%scar", phase);
++    dd_hex(t, 0, c->b, CAR_SIZE);
++    if (phase[1] == 'r') {   /* pre */
++        dd_hex("desc", 0, CAR_DESCB(c), CARDESC_SIZE);
++        dd_hex("specs", 0, CAR_SPECSB(c), CARSPECS_SIZE);
++        for (int i = 0; i < CAR_NPARTS; i++) if (c->p[CARP_PARTS + i]) dd_hex("part", i, c->p[CARP_PARTS + i], CARPART_SIZE);
++        for (int i = 0; i < g_racers.n; i++) { dd_hex("racer", i, g_racers.c[i]->b, CAR_SIZE); }
++        uint32_t r[3];
++        SimRand_Peek(r);
++        char b[256];
++        snprintf(b, sizeof b, "DD glob tick=%d rally=%d players=%d mode=%d demo=%d altgrip=%d nracers=%d self=%d rand=%u,%u,%u", g_sim_tick, g_race_rally, g_race_players, g_race_mode, g_race_demo, g_race_alt_grip, g_racers.n, -1, r[0], r[1], r[2]);
++        plat_log(b);
++        for (int i = 0; i < g_racers.n; i++) if (g_racers.c[i] == c) { snprintf(b, sizeof b, "DD self %d", i); plat_log(b); }
++    } else {
++        uint32_t r[3];
++        SimRand_Peek(r);
++        char b[256];
++        snprintf(b, sizeof b, "DD postglob front=%d rear=%d thr=%a brk=%a steer=%a grav=%a,%a,%a above=%d rand=%u,%u,%u", g_drive_front_down, g_drive_rear_down, g_drive_throttle, g_drive_brake, g_drive_steer, g_drive_gravity[0], g_drive_gravity[1], g_drive_gravity[2], s_dd_above, r[0], r[1], r[2]);
++        plat_log(b);
++    }
++}
+ static void drive(Car *c)
++{
++    bool dd = dd_on(c);
++    if (dd) dd_state(c, "pre");
++    drive_(c);
++    if (dd) dd_state(c, "post");
++}
++static void drive_(Car *c)
+ {
+     g_drive_front_down = 1;
+     g_drive_rear_down = 1;
+@@ -951,6 +1012,7 @@
+     *WF(c, 1, 0xa8) = (l1 * share * torque) / (l1 + l0);
+     *WF(c, 2, 0xa8) = ((K(0x5b24a8) - share) * l2 * torque) / (l2 + l3);
+     *WF(c, 3, 0xa8) = ((K(0x5b24a8) - share) * l3 * torque) / (l2 + l3);
++    if (dd_on(c)) { char b[200]; snprintf(b, sizeof b, "DD mid split %a %a %a %a T=%a share=%a l=%a,%a", *WF(c, 0, 0xa8), *WF(c, 1, 0xa8), *WF(c, 2, 0xa8), *WF(c, 3, 0xa8), torque, share, l0, l1); plat_log(b); }   /* TEMP */
+     for (int w = 0; w < 4; w++) {
+         *WI(c, w, 0xbc) = 0;
+         *WF(c, w, 0x98) = 0;
+--- a/src/game/sim_rand.c
++++ b/src/game/sim_rand.c
+@@ -36,3 +36,5 @@
+     }
+     return r;
+ }
++
++void SimRand_Peek(uint32_t o[3]) { load(); o[0] = state, o[1] = mult, o[2] = product; }   /* TEMP */
