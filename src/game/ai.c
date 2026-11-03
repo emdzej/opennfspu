@@ -210,7 +210,7 @@ void AI_Plan(Car *c)
         node_vec(n, 0x28, v);
         float side = dot3(v, fw);
         node_vec(n, 0x1c, v);
-        float a = (float)(acos((double)dot3(v, fw)) * exe_f64(0x5b2688));
+        float a = (float)(Math_Acos(dot3(v, fw)) * exe_f64(0x5b2688));   /* 0x5a0e10 */
         if (K(0x5b23f8) <= side) {
             if (right < a) right = a;
         } else if (left < a)
@@ -276,8 +276,11 @@ void AI_Steer(Car *c)
     int8_t gear = (int8_t)c->b[0xd82];
     int g = 1 < gear ? gear : 2;
     float ratio = *SPEC_F(c, 0x60 + 4 * g);
-    float d = ratio * *CAR_F(c, 0xeb8) - ratio * *CAR_F(c, 0xd60);
-    int t = (int)(d / *SPEC_F(c, 0x94) * K(0x5b26b0));
+    float want = ratio * *CAR_F(c, 0xeb8);
+    float d = want - ratio * *CAR_F(c, 0xd60);
+    /* (the original stores d with a pop and divides what is left on the x87's stack: the throttle goes by
+       the target speed alone, not by the gap to it; d only decides the brake below) */
+    int t = (int)(want / *SPEC_F(c, 0x94) * K(0x5b26b0));
     if (0xfd < t) t = 0xfe;
     c->b[0xd9c] = (uint8_t)t;
     c->b[0xd9d] = 0;

@@ -16,10 +16,28 @@ fn = 0x49bcb0
 parts, elems, upd, above, glob, racers, edges = {}, {}, [], [], {}, {}, []
 self_i = -1
 collided, nobjects, postracers = None, 0, {}
+nodes_rec, nroad, rnodes = [], 0, {}
+ranked = None
+import os
+road_all = {}
+aispecs = None
+def lines():
+    if os.environ.get('FD_ROAD') and os.path.exists(os.environ['FD_ROAD']):
+        yield from open(os.environ['FD_ROAD'])
+    yield from open(sys.argv[2])
+for line in lines():
+    q = line.split()
+    if len(q) > 2 and q[0] == 'FD' and q[1].startswith('road') and q[1] not in ('road',):
+        road_all[(q[1], q[2])] = q[3:] if q[1] == 'roadhdr' else bytes.fromhex(q[3]) if len(q) > 3 else b''
+        continue
+    if len(q) > 3 and q[0] == 'FD' and q[1] == 'aispecs':
+        aispecs = bytes.fromhex(q[3])
+        continue
 for line in open(sys.argv[2]):
     p = line.split()
     if not p or p[0] != 'FD': continue
     tag, key = p[1], p[2]
+    if (tag.startswith('road') and tag != 'road') or tag == 'aispecs': continue
     if tag in ('glob', 'postglob'):
         glob[tag] = dict(t.split('=', 1) for t in p[3:] if '=' in t)
         continue
@@ -31,6 +49,12 @@ for line in open(sys.argv[2]):
         continue
     if tag == 'objects':
         nobjects = int(p[3])
+        continue
+    if tag == 'ranked':
+        ranked = p[3:]
+        continue
+    if tag == 'road':
+        nroad = int(p[3])
         continue
     if tag == 'self':
         self_i = int(key)
@@ -47,6 +71,8 @@ for line in open(sys.argv[2]):
     elif tag == 'elem': elems[int(key, 16)] = data
     elif tag == 'upd': upd.append((int(key), data))
     elif tag == 'racer': racers[int(key)] = data
+    elif tag == 'node': nodes_rec.append(data)
+    elif tag == 'rnode': rnodes[int(key)] = data
     elif tag == 'postracer': postracers[int(key)] = data
     elif tag == 'edge': edges.append(data)
 
@@ -63,7 +89,7 @@ for i in range(nsec):
     vsz, va, rsz, roff = struct.unpack_from('<IIII', exe, o + 8)
     mu.mem_write(base + va, exe[roff:roff + min(rsz, vsz if vsz else rsz)])
 HEAP, STK, RET, STUB = 0x20000000, 0x10000000, 0x0dead000, 0x0dead100
-mu.mem_map(HEAP, 0x400000)
+mu.mem_map(HEAP, 0x1000000)
 mu.mem_map(STK - 0x100000, 0x100000)
 mu.mem_map(RET, 0x1000)
 mu.mem_write(RET, b'\xf4' * 0x200)
@@ -104,13 +130,14 @@ struct.pack_into('<I', img, 0x558, desc_a)
 struct.pack_into('<I', img, 0x760, specs_a)
 for i in range(20): struct.pack_into('<I', img, 0x768 + 4 * i, parts_a[i])
 for o in TRACK: img[o:o + 0x30] = tracker(img[o:o + 0x30])
+if aispecs: struct.pack_into('<I', img, 0x764, alloc(aispecs))
 car = alloc(bytes(img))
 idx = struct.unpack_from('<i', pre, 0x520)[0]
 mu.mem_write(0x65808c + 0x580 * idx, desc)
 g = glob['glob']
 w32(0x606ac4, int(g['tick'])); w32(0x6573f8, int(g['rally'])); w32(0x657408, int(g['network']))
 w32(0x657a2c, int(g['damage'])); w32(0x657400, int(g['derby'])); w32(0x6573e8, int(g['mode']))
-for k, va in (('players', 0x657404), ('demo', 0x5e67b0), ('altgrip', 0x606ae0)):
+for k, va in (('players', 0x657404), ('demo', 0x5e67b0), ('altgrip', 0x606ae0), ('started', 0x606ac0)):
     if k in g: w32(va, int(g[k]))
 # the racers (the draft reads their positions), the car itself among them
 w32(0x5e8ae8, len(racers))
@@ -125,11 +152,60 @@ for i in sorted(racers):
     wu32(0x5e8b34 + 4 * i, a)
 racer_a = {}
 for i in sorted(racers): racer_a[i] = struct.unpack('<I', mu.mem_read(0x5e8b34 + 4 * i, 4))[0]
+if ranked is not None:
+    # the track's road width (0x5e6e34), reversed (0x657430), the cars in the race's order (0x5e8b88)
+    wu32(0x5e6e34, int(ranked[0], 16))
+    w32(0x657430, int(ranked[1]))
+    order = [int(x) for x in ranked[2:]]
+    if any(k < 0 for k in order): print('a ranked car not among the racers: unsupported')
+    for j, k in enumerate(order): wu32(0x5e8b88 + 4 * j, racer_a.get(k, 0))
+    w32(0x5e8b58, len(order))   # (the race's cars' count bounds the order)
 if collided is not None:
     # the cars checked this tick before this one (0x628cdc, count 0x628f5c)
     if any(k < 0 for k in collided): print('collided with a car not among the racers (traffic): unsupported')
     w32(0x628f5c, len(collided))
     for j, k in enumerate(collided): wu32(0x628cdc + 4 * j, racer_a.get(k, 0))
+def vec(data, n=None):
+    b = alloc(data) if data else 0
+    return alloc(struct.pack('<III', b, b + len(data), b + len(data)))
+if ('roadhdr', '0') in road_all:
+    # the whole road in the original's layout (0x47fbd0): the three vectors behind pointers
+    nn, length, last, nseg, nj = (int(x) for x in road_all[('roadhdr', '0')])
+    nodes_a = alloc(road_all[('roadnodes', '0')])
+    nn_a = alloc(road_all.get(('roadnn', '0'), bytes(nn)))
+    ne_a = alloc(road_all.get(('roadne', '0'), bytes(nn)))
+    segs = bytearray(road_all[('roadseg', '0')])
+    juncs = bytearray(road_all[('roadjunc', '0')])
+    seg_a = alloc(bytes(len(segs)))
+    jn_a = alloc(bytes(len(juncs)) or bytes(4))
+    for i in range(nseg):
+        for o in (0x20, 0x24):
+            v = struct.unpack_from('<I', segs, 0x28 * i + o)[0]
+            struct.pack_into('<I', segs, 0x28 * i + o, jn_a + 0x38 * (v - 1) if v else 0)
+    for i in range(nj):
+        for k in range(8):
+            v = struct.unpack_from('<I', juncs, 0x38 * i + 4 * k)[0]
+            struct.pack_into('<I', juncs, 0x38 * i + 4 * k, seg_a + v - 1 if v else 0)
+    mu.mem_write(seg_a, bytes(segs))
+    mu.mem_write(jn_a, bytes(juncs))
+    segvec = alloc(struct.pack('<III', seg_a, seg_a + len(segs), seg_a + len(segs)))
+    jnvec = alloc(struct.pack('<III', jn_a, jn_a + len(juncs), jn_a + len(juncs)))
+    inner = [vec(road_all.get(('roadnl', str(i)), b'')) for i in range(nj)]
+    nl = alloc(struct.pack('<%dI' % len(inner), *inner)) if inner else 0
+    nearvec = alloc(struct.pack('<III', nl, nl + 4 * len(inner), nl + 4 * len(inner)))
+    road = alloc(struct.pack('<iiiIIIIII', nn, length, last, nodes_a, nn_a, ne_a, segvec, jnvec, nearvec))
+    wu32(0x628bc0, road)
+    if ('roadline', '0') in road_all:
+        # the AI's racing line (0x5e671c: +0x4c the .lsp file, +0x58 its points from +4)
+        ln = alloc(road_all[('roadline', '0')])
+        wu32(0x5e671c, alloc(bytes(0x4c) + struct.pack('<IIII', ln, 0, 0, ln + 4) + bytes(0x40)))
+    nroad = 0
+if nroad:
+    # the road (0x628bc0: +0 the node count, +0xc the nodes, 0x50 bytes each): the nodes the car was on
+    arr = alloc(bytes(nroad * 0x50))
+    for k, d in rnodes.items(): mu.mem_write(arr + 0x50 * k, d)
+    road = alloc(struct.pack('<iiiI', nroad, 0, 0, arr) + bytes(0x40))
+    wu32(0x628bc0, road)
 r = [int(x) for x in g['rand'].split(',')]
 wu32(0x5d1028, r[0]); wu32(0x5d102c, r[1]); wu32(0x655a0c, r[2])
 
@@ -153,6 +229,12 @@ def hook(uc, addr, size, ud):
         uc.mem_write(this, tracker(data))
         log.append(f'update {want}')
         ret(uc, 8)
+    elif addr == 0x4743a0:
+        # the tracker's road node search (thiscall: the point; ret 4): the port's tracker after it
+        if nodes_rec: uc.mem_write(this, tracker(nodes_rec.pop(0)))
+        else: log.append('node search with none recorded')
+        log.append('node')
+        ret(uc, 4)
     elif addr == 0x473290:
         v = above.pop(0) if above else 0
         log.append(f'above {v}')
@@ -176,6 +258,9 @@ def hook(uc, addr, size, ud):
         # passed the box test
         if nobjects: log.append('objects unsupported')
         ret(uc, 8, 0)
+    elif addr == 0x5a520c:
+        # the runtime's per-thread data (errno for a maths function's domain error): a scratch block
+        ret(uc, 0, TLS)
     elif addr == STUB_N:
         n, verts, nv = info[this]
         out = struct.unpack('<I', uc.mem_read(sp + 4, 4))[0]
@@ -184,8 +269,9 @@ def hook(uc, addr, size, ud):
     elif addr == STUB_V:
         n, verts, nv = info[this]
         i = struct.unpack('<i', uc.mem_read(sp + 4, 4))[0]
-        ret(uc, 4, verts + 12 * min(i, nv))
-for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
+        ret(uc, 4, verts + 12 * (i % nv if i >= nv else i))   # (past the last wraps round, 0x485f80, 0x485a60)
+TLS = alloc(bytes(0x100))
+for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, 0x4743a0, 0x5a520c, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
 def bad(uc, access, addr, size, value, ud):
     print('bad access', hex(addr), 'at', hex(uc.reg_read(UC_X86_REG_EIP)))
     return False
@@ -207,7 +293,7 @@ if mu.reg_read(UC_X86_REG_EIP) != RET:
 emu = bytes(mu.mem_read(car, len(post)))
 want = bytearray(post)
 for o in TRACK: want[o:o + 0x30] = tracker(want[o:o + 0x30])
-skip = set(range(0x558, 0x55c)) | set(range(0x760, 0x764)) | set(range(0x768, 0x7b8))
+skip = set(range(0x558, 0x55c)) | set(range(0x760, 0x768)) | set(range(0x768, 0x7b8))
 for o in TRACK: skip |= set(range(o + 0x28, o + 0x30))
 def same(o, a, b):
     # +0x434, the car hit: the original's pointer, the port's index plus one (read only against 0)

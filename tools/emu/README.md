@@ -42,13 +42,23 @@ dumped; `FN=` for `sweep_forces.sh`) and `--param fdcar=<i>` (the car, default t
 | 49fb20 | the drive task (with the drive step 0x49ef50; the racers are in the dump for the draft) |
 | 494f90 | the walls (Edges): the edge query 0x474030 answered from the port's record |
 | 4083c0 | the AI's drive (opponents not driven by a replay) |
+| 49aee0 | the road tracking: the node search 0x4743a0 answered from the port's record, the road's nodes dumped |
+| 40b670, 40c000 | the AI's plan and steering (opponents): the whole road and the racing line (.lsp) rebuilt once |
 | 498f60 | the collisions: the walls, the objects (only ticks where none passes the box test), and the cars checked before this one (0x628cdc), compared after as well |
 
 +0x434 (the car hit) is the original's pointer and the port's index plus one; it compares as equal
 when both are set.
 
-In a replay every racer is driven by its recorded packets through the human drive, so the opponents
-take the same path as the player. The sweep reports how many words the port changed, so that a pass on
+The whole road is dumped once per run (`FD road*`, its pointers as indices) and rebuilt in the
+original's layout (0x47fbd0: the segments, junctions and near lists behind vector pointers);
+`sweep_forces.sh` keeps those lines in `/tmp/fdroad.txt` and passes them with `FD_ROAD`.
+
+`emu_replay.py <exe> <replay.rpl> <log>` plays a replay file's packets with the original's reader
+(0x4144d0) in the port's order and compares each packet and the assists it sets with `PK` lines
+(tick, player, the four bytes, the three assists) logged from the port's `play`.
+
+In a replay only the humans' packets are recorded; the opponents drive again by the AI (its racing
+state: the track, AI_Plan, AI_Steer, the drive task). The sweep reports how many words the port changed, so that a pass on
 a task that returned early shows as one. Apply
 one dump patch at a time (both add to `sim_rand.c`):
 

@@ -10,6 +10,9 @@ void Math_SinCosTurns(float turns, float *s, float *c);                         
 /* The runtime's asin as the game runs it (0x5a27c0): the root of (1 + x)(1 - x) at the x87's single
    precision, its fpatan at full. */
 float Math_Asin(float x);
+/* The runtime's acos as the game runs it (0x5a0e10): the same root, unrounded (fpatan) for the caller's
+   next step. */
+double Math_Acos(float x);
 void Mat3_RotX(float m[9], float turns);                                        /* 0x532310 */
 void Mat3_RotY(float m[9], float turns);                                        /* 0x532370 */
 void Mat3_RotZ(float m[9], float turns);                                        /* 0x5323d0 */

@@ -49,7 +49,15 @@
      WTree *t = world_tree();
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
-@@ -526,9 +526,143 @@
+@@ -7,6 +7,7 @@
+ #include "exe.h"
+ #include "game/car_physics.h"
+ #include "game/road.h"
++#include "game/race.h"
+ #include "game/sim_math.h"
+ #include "game/sim_rand.h"
+ #include "pending.h"
+@@ -526,8 +527,216 @@
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -66,13 +74,19 @@
 +void SimRand_Peek(uint32_t o[3]);
 +extern void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);
 +static Car *s_fd_car;
++static uint32_t fbits_u(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
 +static void fd_hex(const char *tag, const char *k, const void *p, size_t n)
 +{
-+    static char line[0x6000];
++    static const char hx[] = "0123456789abcdef";
++    size_t cap = 2 * n + 64;
++    char *line = malloc(cap);
++    if (!line) return;
 +    const uint8_t *b = p;
-+    int o = snprintf(line, sizeof line, "FD %s %s ", tag, k);
-+    for (size_t i = 0; i < n && o + 3 < (int)sizeof line; i++) o += snprintf(line + o, sizeof line - (size_t)o, "%02x", b[i]);
++    int o = snprintf(line, cap, "FD %s %s ", tag, k);
++    for (size_t i = 0; i < n; i++) { line[o++] = hx[b[i] >> 4]; line[o++] = hx[b[i] & 15]; }
++    line[o] = 0;
 +    plat_log(line);
++    free(line);
 +}
 +static void fd_elem(const WTreeElem *e)
 +{
@@ -101,16 +115,61 @@
 +    char k[32];
 +    snprintf(k, sizeof k, "%d", fd_index(s));
 +    if (kind == 0) { fd_hex("upd", k, s, sizeof *s); fd_elem(s->elem); }
++    else if (kind == 2) fd_hex("node", k, s, sizeof *s);
 +    else { char b[64]; snprintf(b, sizeof b, "FD above %s %u", k, v); plat_log(b); }
 +}
 +extern void (*g_wedge_hook)(const float out[6], uint16_t flag, bool hit);
 +static void fd_edge(const float out[6], uint16_t flag, bool hit)
-+{
+ {
 +    uint8_t b[28];
 +    memcpy(b, out, 24);
 +    uint32_t f = flag | (hit ? 0x10000u : 0);
 +    memcpy(b + 24, &f, 4);
 +    fd_hex("edge", "0", b, 28);
++}
++/* The road once (its pointers as indices: a segment's junctions as index + 1, a junction's ends as the
++   byte offset into the segments + 1, 0 for none). */
++static void fd_road_all(void)
++{
++    static bool done;
++    if (done || !g_road || !g_road->nnodes) return;
++    done = true;
++    const Road *r = g_road;
++    char b[160];
++    snprintf(b, sizeof b, "FD roadhdr 0 %d %d %d %d %d", r->nnodes, r->length, r->lastnode, r->nseg, r->njunctions);
++    plat_log(b);
++    fd_hex("roadnodes", "0", r->nodes, (size_t)r->nnodes * ROAD_NODE_SIZE);
++    extern const uint8_t *AI_LineData(size_t *n);
++    size_t ln;
++    const uint8_t *ld = AI_LineData(&ln);
++    if (ld) fd_hex("roadline", "0", ld, ln);
++    if (r->node_near) fd_hex("roadnn", "0", r->node_near, (size_t)r->nnodes);
++    if (r->node_end) fd_hex("roadne", "0", r->node_end, (size_t)r->nnodes);
++    RoadSegment *sg = malloc(sizeof *sg * (size_t)(r->nseg + 1));
++    for (int i = 0; i < r->nseg; i++) {
++        sg[i] = r->seg[i];
++        uint32_t j0 = r->seg[i].junction0 ? (uint32_t)(r->seg[i].junction0 - r->junctions) + 1 : 0;
++        uint32_t j1 = r->seg[i].junction1 ? (uint32_t)(r->seg[i].junction1 - r->junctions) + 1 : 0;
++        memcpy(&sg[i].junction0, &j0, 4);
++        memcpy(&sg[i].junction1, &j1, 4);
++    }
++    fd_hex("roadseg", "0", sg, sizeof *sg * (size_t)r->nseg);
++    free(sg);
++    RoadJunction *jn = malloc(sizeof *jn * (size_t)(r->njunctions + 1));
++    for (int i = 0; i < r->njunctions; i++) {
++        jn[i] = r->junctions[i];
++        for (int k = 0; k < 8; k++) {
++            uint32_t v = r->junctions[i].end[k] ? (uint32_t)((const uint8_t *)r->junctions[i].end[k] - (const uint8_t *)r->seg) + 1 : 0;
++            memcpy(&jn[i].end[k], &v, 4);
++        }
++    }
++    fd_hex("roadjunc", "0", jn, sizeof *jn * (size_t)r->njunctions);
++    free(jn);
++    for (int i = 0; r->near && i < r->njunctions; i++) {
++        char k[8];
++        snprintf(k, sizeof k, "%d", i);
++        fd_hex("roadnl", k, r->near[i].e, sizeof *r->near[i].e * (size_t)r->near[i].n);
++    }
 +}
 +static void fd_car(Car *c, const char *tag)
 +{
@@ -138,7 +197,7 @@
 +}
 +static void forces_(void *car);
 +static int fd_want(void)
- {
++{
 +    static int want = -1;
 +    if (want < 0) {
 +        char v[32];
@@ -151,7 +210,7 @@
 +/* Runs fn on the car, dumped when the tick is chosen and fdfn (hex, default 49bcb0) names va. */
 +void FD_Wrap(void (*fn)(void *), void *car, uint32_t va)
 +{
-     Car *c = car;
++    Car *c = car;
 +    bool on = FD_Active(c, va);
 +    if (on) {
 +        s_fd_car = c;
@@ -159,6 +218,8 @@
 +        snprintf(f, sizeof f, "FD fn 0 %x", va);
 +        plat_log(f);
 +        fd_car(c, "pre");
++        if (c->p[CARP_AISPECS]) fd_hex("aispecs", "0", c->p[CARP_AISPECS], AISPECS_SIZE);
++        fd_road_all();
 +        if (g_fd_extra) g_fd_extra(c);
 +        fd_hex("desc", "0", CAR_DESCB(c), CARDESC_SIZE);
 +        fd_hex("specs", "0", CAR_SPECSB(c), CARSPECS_SIZE);
@@ -169,12 +230,33 @@
 +        SimRand_Peek(r);
 +        char b[256];
 +        for (int i = 0; i < g_racers.n; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_racers.c[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_racers.c[i]->b, CAR_SIZE); }
-+        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u players=%d demo=%d altgrip=%d nracers=%d", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2], g_race_players, g_race_demo, g_race_alt_grip, g_racers.n);
++        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u players=%d demo=%d altgrip=%d nracers=%d started=%d", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2], g_race_players, g_race_demo, g_race_alt_grip, g_racers.n, g_race_started);
 +        plat_log(b);
++        {
++            extern float g_track_road_width;
++            extern int32_t g_race_reverse;
++            char m[512];
++            int o = snprintf(m, sizeof m, "FD ranked 0 %08x %d", fbits_u(g_track_road_width), g_race_reverse);
++            for (int i = 0; i < g_ranked.n; i++) {
++                int k = -1;
++                for (int j = 0; j < g_racers.n; j++) if (g_racers.c[j] == g_ranked.c[i]) k = j;
++                o += snprintf(m + o, sizeof m - (size_t)o, " %d", k);
++            }
++            plat_log(m);
++        }
 +        g_wsurf_hook = fd_hook;
 +        g_wedge_hook = fd_edge;
 +    }
++    int16_t node0 = c->body.node;
 +    fn(car);
++    if (on && g_road && g_road->nnodes) {
++        char b[64];
++        snprintf(b, sizeof b, "FD road 0 %d", g_road->nnodes);
++        plat_log(b);
++        int16_t ns[2] = {node0, c->body.node};
++        for (int i = 0; i < 2; i++)
++            if (ns[i] >= 0 && ns[i] < g_road->nnodes) { char k[8]; snprintf(k, sizeof k, "%d", ns[i]); fd_hex("rnode", k, g_road->nodes + ns[i] * ROAD_NODE_SIZE, ROAD_NODE_SIZE); }
++    }
 +    if (on) {
 +        g_wsurf_hook = NULL;
 +        g_wedge_hook = NULL;
@@ -190,10 +272,35 @@
 +void CarSim_Forces(void *car) { FD_Wrap(forces_, car, 0x49bcb0); }
 +static void forces_(void *car)
 +{
-+    Car *c = car;
+     Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
      int rate, ticks;
-     float dt;
+@@ -641,8 +850,14 @@
+ 
+ /* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
+    segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
++static void tracknode_(WSurface *s, const float p[3]);
+ void WSurface_TrackNode(WSurface *s, const float p[3])
+ {
++    tracknode_(s, p);
++    if (g_wsurf_hook) g_wsurf_hook(s, 2, 0);
++}
++static void tracknode_(WSurface *s, const float p[3])
++{
+     int16_t old = s->node;
+     if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
+         int a = Road_NearestInSegment(g_road, Road_SegmentOf(g_road, s->node), p, s->node);
+@@ -757,7 +972,9 @@
+     memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
+ }
+ 
+-void CarSim_Track(void *car)
++static void track_(void *car);
++void CarSim_Track(void *car) { FD_Wrap(track_, car, 0x49aee0); }
++static void track_(void *car)
+ {
+     Car *c = car;
+     if (!c->b[0x7f] || c->b[0x7d] || !c->b[0x7c]) return;
 --- a/src/game/sim_rand.c
 +++ b/src/game/sim_rand.c
 @@ -36,3 +36,5 @@
@@ -316,3 +423,81 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
+--- a/src/game/input.c
++++ b/src/game/input.c
+@@ -222,7 +222,10 @@
+     return gear;
+ }
+ 
+-void CarSim_PacketTask(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void carsim_packettask_(void *car);
++void CarSim_PacketTask(void *car) { FD_Wrap(carsim_packettask_, car, 0x499150); }
++static void carsim_packettask_(void *car)
+ {
+     Car *c = car;
+     uint8_t *b = c->b;
+--- a/src/game/race_progress.c
++++ b/src/game/race_progress.c
+@@ -229,7 +229,10 @@
+     }
+ }
+ 
+-void CarSim_RaceTask(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void carsim_racetask_(void *car);
++void CarSim_RaceTask(void *car) { FD_Wrap(carsim_racetask_, car, 0x4169d0); }
++static void carsim_racetask_(void *car)
+ {
+     Car *c = car;
+     if (g_sim_tick & 1) return;
+--- a/src/game/car_respawn.c
++++ b/src/game/car_respawn.c
+@@ -266,7 +266,10 @@
+     }
+ }
+ 
+-void CarSim_HitTask(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void carsim_hittask_(void *car);
++void CarSim_HitTask(void *car) { FD_Wrap(carsim_hittask_, car, 0x4102e0); }
++static void carsim_hittask_(void *car)
+ {
+     Car *c = car;
+     if (c->b[0x7d]) return;
+--- a/src/game/ai.c
++++ b/src/game/ai.c
+@@ -128,6 +128,7 @@
+     line_size = 0;
+ }
+ 
++const uint8_t *AI_LineData(size_t *n) { *n = line_size; return line; }   /* (forcesdump) */
+ void AI_LinePoint(int n, float out[2])
+ {
+     if (line && 4 + 8 * (size_t)n + 8 <= line_size) {
+@@ -152,7 +153,11 @@
+     return 0 <= j ? &r->junctions[j] : NULL;
+ }
+ 
+-void AI_Plan(Car *c)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void ai_plan_(Car *c);
++static void ai_plan__task(void *car) { ai_plan_(car); }
++void AI_Plan(Car *c) { FD_Wrap(ai_plan__task, c, 0x40b670); }
++static void ai_plan_(Car *c)
+ {
+     const Road *r = g_road;
+     int node = car_node(c);
+@@ -270,7 +275,11 @@
+     }
+ }
+ 
+-void AI_Steer(Car *c)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void ai_steer_(Car *c);
++static void ai_steer__task(void *car) { ai_steer_(car); }
++void AI_Steer(Car *c) { FD_Wrap(ai_steer__task, c, 0x40c000); }
++static void ai_steer_(Car *c)
+ {
+     const Road *r = g_road;
+     int8_t gear = (int8_t)c->b[0xd82];
