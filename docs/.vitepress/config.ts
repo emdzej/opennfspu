@@ -63,7 +63,7 @@ export default defineConfig({
 
   head: [
     ["link", { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" }],
-    ["meta", { name: "theme-color", content: "#a3121e" }],
+    ["meta", { name: "theme-color", content: "#bc0000" }],
     ["meta", { property: "og:title", content: "OpenNFSPU: Need for Speed: Porsche Unleashed, reimplemented" }],
     [
       "meta",
