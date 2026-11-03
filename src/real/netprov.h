@@ -7,6 +7,7 @@
 #include "real/netlist.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 /* An address as the library keeps it (20 bytes): for UDP the sockaddr_in (16 bytes, then zeros), for IPX
    the network, the node and the socket (0x586f80). */
@@ -138,6 +139,15 @@ struct NetConn {
 };
 
 #define NET_MAXPROVIDERS 16
+
+/* strncpy into a fixed field (padded with zeros, no end when the text fills it), as the original's. */
+static inline void NET_field(char *dst, const char *src, size_t n)
+{
+    size_t k = 0;
+    while (k < n && src[k]) k++;
+    memcpy(dst, src, k);
+    memset(dst + k, 0, n - k);
+}
 
 extern const NetProvider *g_net_providers[NET_MAXPROVIDERS];   /* 0x6b49e0 */
 extern const NetTransport *g_net_transports[NET_MAXPROVIDERS]; /* 0x6b4a20 */

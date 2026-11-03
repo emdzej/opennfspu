@@ -292,7 +292,7 @@ static int gathr_host(NetConn *c, NetGameInfo *info, const char *password, NetPl
     c->keepalive = ping_ticks();
     c->host = c->self.addr;
     c->joined = alive_ticks();
-    if (password) strncpy(sv->password, password, 0x10);
+    if (password) NET_field(sv->password, password, 0x10);
     else sv->password[0] = 0;
     advert_name(c->guid, sv->advert);
     if (c->provider->advertise(c->socket, sv->advert)) return 1;
@@ -546,7 +546,7 @@ static void dispatch(NetReq *r, const NetAddr *from, uint8_t type, const uint8_t
         r->info.i[0] = (int32_t)get_be(data + 0x50, 4);
         r->info.i[1] = (int32_t)get_be(data + 0x54, 4);
         r->info.maxplayers = (int32_t)get_be(data + 0x58, 4);
-        strncpy(r->info.name, (const char *)data + 0x28, 0x20);
+        NET_field(r->info.name, (const char *)data + 0x28, 0x20);
         r->players = get_be(data + 0x6c, 4);
         r->result = 1;
         if (r->games) {
@@ -628,7 +628,15 @@ static bool gathr_receive(NetConn *c, const NetAddr *from, uint8_t type, const u
     NetReq local;
     memset(&local, 0, sizeof local);
     local.conn = c;
+    /* (the request on the stack is the connection's only while it is dispatched) */
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
     if (!c->req) c->req = &local;
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
     dispatch(c->req, from, type, data, len);
     if (c->req == &local) c->req = NULL;
     if (!c->packets) c->provider->discard(c->socket, NULL, '=');

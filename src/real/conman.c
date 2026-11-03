@@ -774,11 +774,11 @@ static int hello(ConClient *cl, const char *password)
     memset(b, 0, 0x59);
     b[0] = 0xff;
     char *t = (char *)b + 1;
-    strncpy(t, password, 0xf);
+    NET_field(t, password, 0xf);
     int n = (int)strlen(t) + 1;
-    strncpy(t + n, cl->self.name, 0x34);
+    NET_field(t + n, cl->self.name, 0x34);
     n += (int)strlen(t + n) + 1;
-    strncpy(t + n, cl->self.extra, 0x14);
+    NET_field(t + n, cl->self.extra, 0x14);
     n += (int)strlen(t + n) + 1;
     if (!PACKET_send(&cl->link.pc, b, (uint32_t)(n + 1))) return 0;
     deadline(&cl->link, 5000);
