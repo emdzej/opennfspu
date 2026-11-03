@@ -77,6 +77,10 @@ int WS_recv(int s, void *buf, int len, int flags);         /* Ordinal 16 (flags 
 int WS_shutdown(int s, int how);                /* Ordinal 22 */
 int WS_getsockopt(int s, int level, int name, void *v, int *len);   /* Ordinal 7 (SO_ERROR) */
 
+/* ICMP.DLL's IcmpSendEcho to the address (its echo answered by the other host's WinSock, kind 7 and 8 on
+   the relay): the round trip in ms, -1 with no answer in the time. */
+int WS_echo(const uint8_t addr[4], const void *data, int len, uint32_t timeout_ms);
+
 /* The relay's messages read into the sockets' queues (each blocking call does it; the frame too). */
 void WS_pump(void);
 

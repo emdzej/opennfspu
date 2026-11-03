@@ -13,6 +13,7 @@
 #include "platform.h"
 #include "real/systask.h"
 #include "real/thread.h"
+#include "real/icmp.h"
 #include "real/ipx.h"
 #include "real/udp.h"
 #include "vfs.h"
@@ -237,13 +238,88 @@ NetGameRec *NetGame_FromText(const char *text, int32_t id)   /* 0x48c240 */
     return g;
 }
 
-/* ICMP pings of the games (0x48c3b0 starts the pinger 0x55d520, 0x48c460 stops it, 0x48c5c0 pings a game
-   every 5 s by its address text, 0x48c540 the answer): gasm has no ICMP, the games' pings stay as found. */
-static void pinger_start(void) { PENDING_NOTE(0x48c3b0, "the games' ICMP pings (0x55d520)"); }
-static void pinger_stop(void) {}
-static void game_free(NetGameRec *g) { free(g); }   /* (0x48c310: and its pings' answers forgotten) */
+/* ICMP pings of the games: each ping asked has a cookie (the game, or NULL once the game is gone) in the
+   pinger's list (0x628c60, its section 0x628c64) until its answer comes. */
+typedef struct PingCookie {
+    struct PingCookie *next;
+    NetGameRec *g;
+} PingCookie;
+static NetList *s_pings;    /* 0x628c60 */
+static CritSec *s_pingcs;   /* 0x628c64 */
 
-int Net_GamePing(NetGameRec *g) { return g->ping; }   /* 0x48c5c0 */
+static void pinger_start(void)   /* 0x48c3b0 */
+{
+    s_pingcs = CS_create();
+    s_pings = calloc(1, sizeof *s_pings);
+    if (s_pings) NetList_Init(s_pings, NULL, NULL);
+    ICMP_start();   /* 0x55d520 */
+}
+
+static void pinger_stop(void)   /* 0x48c460 */
+{
+    ICMP_stop();   /* 0x55d760 */
+    if (s_pings) {
+        for (PingCookie *c; (c = NetList_Pop(s_pings));) free(c);
+        NetList_Free(s_pings);
+        free(s_pings);
+    }
+    s_pings = NULL;
+    if (s_pingcs) CS_destroy(s_pingcs);
+    s_pingcs = NULL;
+}
+
+/* A game gone: its pings' answers forgotten. 0x48c310 */
+static void game_free(NetGameRec *g)
+{
+    if (s_pings) {
+        CS_enter(s_pingcs);
+        for (NetNode *n = s_pings->head; n; n = n->next)
+            if (((PingCookie *)n)->g == g) ((PingCookie *)n)->g = NULL;
+        CS_leave(s_pingcs);
+    }
+    free(g);
+}
+
+/* A ping's answer: the game's ping (if it is still there), the cookie dropped. 0x48c540 */
+static void ping_answer(void *arg, int32_t ms)
+{
+    PingCookie *c = arg;
+    CritSec *cs = s_pingcs;
+    CS_enter(cs);
+    if (c->g) {
+        c->g->pinging = 0;
+        c->g->ping = ms;
+    }
+    if (s_pings) NetList_Remove(s_pings, c);
+    free(c);
+    CS_leave(cs);
+}
+
+/* The game's ping: with the pinger running, one asked every 5 s (not while one is out) when its name is a
+   dotted address. 0x48c5c0 */
+int Net_GamePing(NetGameRec *g)
+{
+    if (!s_pingcs) return g->ping;
+    CS_enter(s_pingcs);
+    if (!g->pinging && TIMER_RATE * 5 < (int32_t)TIMER_count - g->pinged) {
+        unsigned a, b, c, d;
+        if (sscanf(g->name, "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {   /* (0x5d0670 "%d.%d.%d.%d") */
+            PingCookie *k = calloc(1, sizeof *k);
+            if (k) {
+                k->g = g;
+                NetList_Append(s_pings, k);
+                char text[32];
+                snprintf(text, sizeof text, "%u.%u.%u.%u", a & 0xff, b & 0xff, c & 0xff, d & 0xff);
+                ICMP_ping(text, ping_answer, k);   /* 0x55d7c0 */
+            }
+            g->pinging = 1;
+        }
+        g->pinged = (int32_t)TIMER_count;
+    }
+    int r = g->ping;
+    CS_leave(s_pingcs);
+    return r;
+}
 
 static NetPlayer *player_new(const char *name, int32_t number)
 {

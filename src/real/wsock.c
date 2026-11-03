@@ -12,7 +12,7 @@ enum { WSAEWOULDBLOCK = 10035, WSAEALREADY = 10037, WSAENOTSOCK = 10038, WSAEINV
        FIONBIO = 0x8004667e };
 enum { NSOCK = 32, QUEUE = 256, HEADER = 9, MAXMSG = 0x10000, BACKLOG = 5 };
 /* A message's kind (its header's last byte): a datagram, or a stream's handshake, data and end. */
-enum { K_DGRAM = 0, K_SYN = 1, K_SYNACK = 2, K_DATA = 3, K_FIN = 4, K_RST = 5, K_IPX = 6 };
+enum { K_DGRAM = 0, K_SYN = 1, K_SYNACK = 2, K_DATA = 3, K_FIN = 4, K_RST = 5, K_IPX = 6, K_ECHO = 7, K_ECHOREPLY = 8 };
 #define CONNECT_MS 21000.0   /* (Windows' connect gives up after about 21 seconds without an answer) */
 
 typedef struct Datagram {
@@ -210,6 +210,45 @@ static bool drop_unicast(void)
     return drop;
 }
 
+/* ICMP's echo (the port's: gasm has no ICMP): a request [id 4][data] is answered by the host's WinSock
+   at once, as a system answers pings; the replies' ids are kept for the asker to find. */
+static uint32_t echo_got[16];
+static int echo_ngot;
+
+static void echo_in(const uint8_t from[4], uint8_t kind, const uint8_t *d, int n)
+{
+    if (kind == K_ECHO) {
+        emit(from, 0, 0, K_ECHOREPLY, d, n);
+    } else if (n >= 4) {
+        memcpy(&echo_got[echo_ngot++ % 16], d, 4);
+    }
+}
+
+int WS_echo(const uint8_t addr[4], const void *data, int len, uint32_t timeout_ms)
+{
+    static uint32_t next_id = 1;
+    uint8_t mine[4];
+    own_addr(mine);
+    if (addr[0] == 127 || (me >= 0 && !memcmp(addr, mine, 4))) return 0;
+    if (conn <= 0 || me < 0 || len < 0 || len > 0x100) return -1;
+    uint8_t b[4 + 0x100];
+    uint32_t id = next_id++;
+    memcpy(b, &id, 4);
+    memcpy(b + 4, data, (size_t)len);
+    double t0 = plat_time_ms();
+    if (!emit(addr, 0, 0, K_ECHO, b, 4 + len)) return -1;
+    while (plat_time_ms() - t0 < (double)timeout_ms) {
+        WS_pump();
+        for (int i = 0; i < 16; i++)
+            if (echo_got[i] == id) {
+                echo_got[i] = 0;
+                return (int)(plat_time_ms() - t0);
+            }
+        plat_thread_sleep_ms(1);
+    }
+    return -1;
+}
+
 /* A peer gone from the room: its streams reset. */
 static void peer_left(int index)
 {
@@ -260,6 +299,8 @@ void WS_pump(void)
                 if (p[8] == K_DGRAM || p[8] == K_IPX) {
                     if (is_broadcast(p) || (!memcmp(p, mine, 4) && !drop_unicast()))
                         deliver(p[8] == K_IPX ? WS_AF_IPX : WS_AF_INET, from, fp, tp, p + HEADER, (int)n - 2 - HEADER);
+                } else if (p[8] == K_ECHO || p[8] == K_ECHOREPLY) {
+                    if (!memcmp(p, mine, 4)) echo_in(from, p[8], p + HEADER, (int)n - 2 - HEADER);
                 } else if (!memcmp(p, mine, 4)) {
                     deliver_stream(from, fp, tp, p[8], p + HEADER, (int)n - 2 - HEADER);
                 }

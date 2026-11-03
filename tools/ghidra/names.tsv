@@ -2706,3 +2706,11 @@
 00560b50	SAP_socket	net	high	The SAP socket (0x452)
 00560c20	SAP_thread	net	high	Answers SAP queries, broadcasts the response
 00560e50	SAP_stop	net	high	The SAP thread stopped
+0048c3b0	Net_PingerStart	net	high	The games' pinger started (list, section, ICMP thread)
+0048c460	Net_PingerStop	net	high	The games' pinger stopped
+0048c540	Net_PingAnswer	net	high	A ping's answer to its game
+0048c5c0	Net_GamePing	net	high	A game's ping, one asked every 5 s by its dotted name
+0055d520	ICMP_start	net	high	The ping thread started
+0055d580	ICMP_thread	net	high	ICMP.DLL echoes from a queue (four tries, 2.5 s)
+0055d760	ICMP_stop	net	high	The ping thread ended
+0055d7c0	ICMP_ping	net	high	A dotted address pinged through the thread
