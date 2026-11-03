@@ -15,6 +15,7 @@ pre = post = desc = specs = None
 fn = 0x49bcb0
 parts, elems, upd, above, glob, racers, edges = {}, {}, [], [], {}, {}, []
 self_i = -1
+collided, nobjects, postracers = None, 0, {}
 for line in open(sys.argv[2]):
     p = line.split()
     if not p or p[0] != 'FD': continue
@@ -24,6 +25,12 @@ for line in open(sys.argv[2]):
         continue
     if tag == 'fn':
         fn = int(p[3], 16)
+        continue
+    if tag == 'collided':
+        collided = [int(x) for x in p[3:]]
+        continue
+    if tag == 'objects':
+        nobjects = int(p[3])
         continue
     if tag == 'self':
         self_i = int(key)
@@ -40,6 +47,7 @@ for line in open(sys.argv[2]):
     elif tag == 'elem': elems[int(key, 16)] = data
     elif tag == 'upd': upd.append((int(key), data))
     elif tag == 'racer': racers[int(key)] = data
+    elif tag == 'postracer': postracers[int(key)] = data
     elif tag == 'edge': edges.append(data)
 
 pe = struct.unpack_from('<I', exe, 0x3c)[0]
@@ -115,6 +123,13 @@ for i in sorted(racers):
         for j in range(20): struct.pack_into('<I', b, 0x768 + 4 * j, parts_a[j])
         a = alloc(bytes(b))
     wu32(0x5e8b34 + 4 * i, a)
+racer_a = {}
+for i in sorted(racers): racer_a[i] = struct.unpack('<I', mu.mem_read(0x5e8b34 + 4 * i, 4))[0]
+if collided is not None:
+    # the cars checked this tick before this one (0x628cdc, count 0x628f5c)
+    if any(k < 0 for k in collided): print('collided with a car not among the racers (traffic): unsupported')
+    w32(0x628f5c, len(collided))
+    for j, k in enumerate(collided): wu32(0x628cdc + 4 * j, racer_a.get(k, 0))
 r = [int(x) for x in g['rand'].split(',')]
 wu32(0x5d1028, r[0]); wu32(0x5d102c, r[1]); wu32(0x655a0c, r[2])
 
@@ -156,6 +171,11 @@ def hook(uc, addr, size, ud):
         uc.mem_write(fl, struct.pack('<H', f & 0xffff))
         log.append('edge %d' % (f >> 16))
         ret(uc, 0xc, (uc.reg_read(UC_X86_REG_EAX) & ~0xff) | (f >> 16))
+    elif addr == 0x4737d0:
+        # the world's objects near the car (thiscall: point, radius; ret 8): none when none of the port's
+        # passed the box test
+        if nobjects: log.append('objects unsupported')
+        ret(uc, 8, 0)
     elif addr == STUB_N:
         n, verts, nv = info[this]
         out = struct.unpack('<I', uc.mem_read(sp + 4, 4))[0]
@@ -165,7 +185,7 @@ def hook(uc, addr, size, ud):
         n, verts, nv = info[this]
         i = struct.unpack('<i', uc.mem_read(sp + 4, 4))[0]
         ret(uc, 4, verts + 12 * min(i, nv))
-for a in (0x473fc0, 0x473290, 0x474030, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
+for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
 def bad(uc, access, addr, size, value, ud):
     print('bad access', hex(addr), 'at', hex(uc.reg_read(UC_X86_REG_EIP)))
     return False
@@ -189,11 +209,15 @@ want = bytearray(post)
 for o in TRACK: want[o:o + 0x30] = tracker(want[o:o + 0x30])
 skip = set(range(0x558, 0x55c)) | set(range(0x760, 0x764)) | set(range(0x768, 0x7b8))
 for o in TRACK: skip |= set(range(o + 0x28, o + 0x30))
+def same(o, a, b):
+    # +0x434, the car hit: the original's pointer, the port's index plus one (read only against 0)
+    if o == 0x434: return (a == bytes(4)) == (b == bytes(4))
+    return a == b
 diffs = []
 for o in range(0, len(want) - 3, 4):
     if o in skip: continue
     a, b = emu[o:o + 4], bytes(want[o:o + 4])
-    if a != b:
+    if not same(o, a, b):
         diffs.append((o, struct.unpack('<f', a)[0], struct.unpack('<f', b)[0], struct.unpack('<i', a)[0], struct.unpack('<i', b)[0]))
 print('calls', log, 'left', len(upd), len(above), len(edges))
 changed = sum(1 for o in range(0, len(want) - 3, 4) if o not in skip and pre[o:o + 4] != bytes(want[o:o + 4]))
@@ -201,4 +225,13 @@ print('port changed', changed, 'words')
 print('differing words', len(diffs))
 for o, fa, fb, ia, ib in diffs[:60]:
     print(f'+0x{o:04x} emu {fa:.9g} port {fb:.9g} (int {ia} {ib})')
+for i, d in sorted(postracers.items()):
+    if i == self_i or i not in racer_a: continue
+    e = bytes(mu.mem_read(racer_a[i], len(d)))
+    n = sum(1 for o in range(0, len(d) - 3, 4) if o not in skip and not same(o, e[o:o + 4], d[o:o + 4]))
+    if n:
+        print('racer', i, 'differing words', n)
+        for o in range(0, len(d) - 3, 4):
+            if o not in skip and not same(o, e[o:o + 4], d[o:o + 4]):
+                print(f'  racer {i} +0x{o:04x} emu {struct.unpack_from("<f", e, o)[0]:.9g} port {struct.unpack_from("<f", d, o)[0]:.9g}')
 print('rand emu', struct.unpack('<I', mu.mem_read(0x5d1028, 4))[0], 'port', glob['postglob']['rand'])

@@ -42,6 +42,10 @@ dumped; `FN=` for `sweep_forces.sh`) and `--param fdcar=<i>` (the car, default t
 | 49fb20 | the drive task (with the drive step 0x49ef50; the racers are in the dump for the draft) |
 | 494f90 | the walls (Edges): the edge query 0x474030 answered from the port's record |
 | 4083c0 | the AI's drive (opponents not driven by a replay) |
+| 498f60 | the collisions: the walls, the objects (only ticks where none passes the box test), and the cars checked before this one (0x628cdc), compared after as well |
+
++0x434 (the car hit) is the original's pointer and the port's index plus one; it compares as equal
+when both are set.
 
 In a replay every racer is driven by its recorded packets through the human drive, so the opponents
 take the same path as the player. The sweep reports how many words the port changed, so that a pass on

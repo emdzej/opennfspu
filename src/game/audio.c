@@ -1400,7 +1400,7 @@ static float rough_dist(const float *p, float x, float z)
 void Audio_HitSound(const float p[3])
 {
     SceneList *l = Scene_List();
-    float best = 10000.0f;   /* 0x461c3c00 */
+    float best = 9999.0f;   /* 0x461c3c00 */
     SceneElem *hit = NULL;
     for (int i = 0; l && i < l->n; i++) {
         SceneElem *e = l->e[i];

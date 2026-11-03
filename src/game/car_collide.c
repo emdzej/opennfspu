@@ -425,7 +425,7 @@ void CarSim_Collide(void *car)
             /* The spins in radians for the impulses, back to turns after. */
             for (int k = 0; k < 3; k++) CAR_F(c, 0x388)[k] *= 6.2831855f, CAR_F(o, 0x388)[k] *= 6.2831855f;   /* 0x40c90fdb */
             CarSim_Cars(c, o);   /* 0x498040 */
-            for (int k = 0; k < 3; k++) CAR_F(c, 0x388)[k] *= 0.15915494f, CAR_F(o, 0x388)[k] *= 0.15915494f;   /* 0x3e22f981 */
+            for (int k = 0; k < 3; k++) CAR_F(c, 0x388)[k] *= bits(0x3e22f981), CAR_F(o, 0x388)[k] *= bits(0x3e22f981);   /* (a little under 1 / 2 pi) */
             CarSim_ClampSpin(c);   /* 0x496440 */
             CarSim_ClampSpin(o);
         }

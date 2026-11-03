@@ -49,7 +49,7 @@
      WTree *t = world_tree();
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
-@@ -526,9 +526,135 @@
+@@ -526,9 +526,143 @@
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -121,7 +121,7 @@
 +    fd_hex(tag, "0", img, CAR_SIZE);
 +}
 +static bool fd_on(Car *c)
- {
++{
 +    static int start = -2, step = 1, last = -1;
 +    if (start == -2) {
 +        char v[32];
@@ -137,22 +137,29 @@
 +           c == g_cars[car >= 0 ? car : g_race_local];
 +}
 +static void forces_(void *car);
-+/* Runs fn on the car, dumped when the tick is chosen and fdfn (hex, default 49bcb0) names va. */
-+void FD_Wrap(void (*fn)(void *), void *car, uint32_t va)
-+{
-     Car *c = car;
++static int fd_want(void)
+ {
 +    static int want = -1;
 +    if (want < 0) {
 +        char v[32];
 +        want = plat_param("fdfn", v, sizeof v) ? (int)strtol(v, NULL, 16) : 0x49bcb0;
 +    }
-+    bool on = (uint32_t)want == va && fd_on(c);
++    return want;
++}
++void (*g_fd_extra)(void *car);
++bool FD_Active(void *car, uint32_t va) { return (uint32_t)fd_want() == va && fd_on(car); }
++/* Runs fn on the car, dumped when the tick is chosen and fdfn (hex, default 49bcb0) names va. */
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va)
++{
+     Car *c = car;
++    bool on = FD_Active(c, va);
 +    if (on) {
 +        s_fd_car = c;
 +        char f[32];
 +        snprintf(f, sizeof f, "FD fn 0 %x", va);
 +        plat_log(f);
 +        fd_car(c, "pre");
++        if (g_fd_extra) g_fd_extra(c);
 +        fd_hex("desc", "0", CAR_DESCB(c), CARDESC_SIZE);
 +        fd_hex("specs", "0", CAR_SPECSB(c), CARSPECS_SIZE);
 +        for (int i = 0; i < CAR_NPARTS; i++) if (c->p[CARP_PARTS + i]) { char k[8]; snprintf(k, sizeof k, "%d", i); fd_hex("part", k, c->p[CARP_PARTS + i], CARPART_SIZE); }
@@ -172,6 +179,7 @@
 +        g_wsurf_hook = NULL;
 +        g_wedge_hook = NULL;
 +        fd_car(c, "post");
++        for (int i = 0; i < g_racers.n; i++) if (g_racers.c[i] != c) { char k[8]; snprintf(k, sizeof k, "%d", i); fd_hex("postracer", k, g_racers.c[i]->b, CAR_SIZE); }
 +        uint32_t r[3];
 +        SimRand_Peek(r);
 +        char b[128];
@@ -262,3 +270,49 @@
  {
      float worst = 0.0f;
      float back[3];
+@@ -405,7 +409,45 @@
+ 
+ void CarSim_ClearCollided(void) { g_ncollided = 0; }
+ 
++#include "platform.h"
++#include <stdio.h>
++static void collide_(void *car);
++static void collide_extra(void *car);
+ void CarSim_Collide(void *car)
++{
++    extern void (*g_fd_extra)(void *car);
++    g_fd_extra = collide_extra;
++    FD_Wrap(collide_, car, 0x498f60);
++    g_fd_extra = NULL;
++}
++static void collide_extra(void *car)
++{
++    Car *c = car;
++    {
++        char b[256];
++        int o = snprintf(b, sizeof b, "FD collided 0");
++        for (int i = 0; i < g_ncollided; i++) {
++            int k = -1;
++            for (int j = 0; j < g_racers.n; j++) if (g_racers.c[j] == g_collided[i]) k = j;
++            o += snprintf(b + o, sizeof b - (size_t)o, " %d", k);
++        }
++        plat_log(b);
++        int n = 0;
++        if (*CAR_I(c, 0x43c) == 0) {
++            WTreeElems *near = WTree_ObjectsNear(CAR_F(c, 0x330), 5.0f);
++            for (uint32_t i = 0; near && i < near->n; i++) {
++                WTreeObject *ob = (WTreeObject *)near->e[i];
++                float ctr[3];
++                ob->e.vt->centre(&ob->e, ctr);
++                if (near_box(c, ctr, ob->ovt->radius(ob))) n++;
++            }
++            if (near) WTreeElems_free(near);
++        }
++        snprintf(b, sizeof b, "FD objects 0 %d", n);
++        plat_log(b);
++    }
++}
++static void collide_(void *car)
+ {
+     Car *c = car;
+     if (!c->b[0x7f] || c->b[0x7d]) return;
