@@ -20,6 +20,7 @@
 #include "real/netprov.h"
 #include "real/thread.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* What CONMAN tells the game (on the stack, 0x5c bytes and up). */
@@ -85,11 +86,17 @@ typedef struct ConLink {
 typedef struct ConPlayer {
     struct ConPlayer *next;
     NetPlayerInfo info;    /* +0x04 */
-    uint32_t unused60;
+    void *user;            /* +0x60: the game's (its player record, 0x490fc0) */
     ConLink link;          /* +0x64 */
     uint32_t flags;        /* +0xdc: CONP_* */
     uint32_t hello;        /* +0xe0: 1 its hello came, 2 with the password */
 } ConPlayer;
+
+/* The game's record of a player the host's events name (who is its ConPlayer's info; the original's who+0x5c). */
+static inline void **CONMAN_user(const NetPlayerInfo *who)
+{
+    return &((ConPlayer *)((char *)who - offsetof(ConPlayer, info)))->user;
+}
 
 #define CONP_OPEN    0x01   /* the packet connection is open */
 #define CONP_INGAME  0x02   /* the gathering has it (killed when it goes) */
@@ -100,7 +107,7 @@ typedef struct ConPlayer {
 #define CONP_STREAM  0x40   /* on the TCP/IP connection */
 
 struct ConMan {
-    int32_t user;               /* +0x00 */
+    intptr_t user;              /* +0x00 */
     int32_t kind;               /* +0x04: 1 the host, 2 a guest */
     NetConn conn;               /* +0x08 (its owner the CONMAN) */
     uintptr_t provider;         /* +0xbc: a GUID, or 1 a modem */
@@ -143,7 +150,7 @@ typedef struct ConClient {
 } ConClient;
 
 /* The host: a game of info (its most players) on the provider; NULL if its thread didn't start. 0x55a800 */
-ConServer *CONMAN_host(ConEventFn event, uintptr_t provider, const uint8_t *game, const NetGameInfo *info, int32_t user,
+ConServer *CONMAN_host(ConEventFn event, uintptr_t provider, const uint8_t *game, const NetGameInfo *info, intptr_t user,
                        int32_t port, const char *password);
 void CONMAN_hostend(ConServer *s);                                                   /* 0x55bd30 */
 int CONMAN_setinfo(ConServer *s, const NetGameInfo *info);                           /* 0x55be10 */
@@ -152,7 +159,7 @@ int CONMAN_sendto(ConServer *s, const NetPlayerInfo *who, const void *data, uint
 int CONMAN_sendto_unreliable(ConServer *s, const NetPlayerInfo *who, const void *data, uint32_t len);   /* 0x55c010 */
 
 /* A guest of the player self. 0x55c0d0 */
-ConClient *CONMAN_guest(ConEventFn event, uintptr_t provider, const uint8_t *game, const NetPlayerInfo *self, int32_t user,
+ConClient *CONMAN_guest(ConEventFn event, uintptr_t provider, const uint8_t *game, const NetPlayerInfo *self, intptr_t user,
                         int32_t port);
 void CONMAN_guestend(ConClient *c);                                                  /* 0x55cf10 */
 int CONMAN_find(ConClient *c, int32_t ticks);                                        /* 0x55cfd0 */
@@ -165,6 +172,9 @@ int CONMAN_send_unreliable(ConClient *c, const void *data, uint32_t len);       
 
 int CONMAN_totext(ConMan *cm, const NetAddr *a, char *text, uint32_t *port);         /* 0x55d300 */
 int CONMAN_parse(ConMan *cm, const char *text, int port, NetAddr *out);              /* 0x55d340 */
+/* This end's address (the bound socket's "0." made the host's), 0x55d3b0; two addresses the same, 0x55d440. */
+bool CONMAN_localaddr(ConMan *cm, NetAddr *out);
+bool CONMAN_sameaddr(ConMan *cm, const NetAddr *a, const NetAddr *b);
 bool CONMAN_isnet(const ConMan *cm);                                                 /* 0x55d490 */
 bool CONMAN_ismodem(const ConMan *cm);                                               /* 0x55d4b0 */
 

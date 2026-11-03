@@ -14,7 +14,9 @@
 #include <stdint.h>
 
 extern int32_t g_replay_mode;    /* 0x5e99f4: 0, 1 racing (recording), 2 replaying, 3 the replay ended */
-extern uint8_t g_input_packet[4];   /* 0x5e99dc: the local player's last sampled packet */
+extern uint8_t g_input_packet[4];
+extern int32_t g_input_count;     /* 0x5cc818: the local packets queued */
+extern uint8_t g_input_stopped;   /* 0x5cc81c: the input's ring overran (the race stopped taking packets) */   /* 0x5e99dc: the local player's last sampled packet */
 extern int32_t g_replay_final;   /* 0x606a80: the tick the recording stopped at (its buffer full, or saved) */
 
 enum { REPLAY_BYTES = 0x19000 };

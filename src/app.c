@@ -14,6 +14,7 @@
 #include "render/r3dcar.h"
 #include "game/race_progress.h"
 #include "game/mission.h"
+#include "game/net.h"
 #include "game/car_drive.h"
 #include "front/fefactory.h"
 #include "snd/snd.h"
@@ -274,13 +275,14 @@ bool app_frame(void)
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
-        else if (selftest >= 3 && selftest <= 8) {
+        else if (selftest >= 3 && selftest <= 9) {
             if (selftest == 3) WS_selftest();
             else if (selftest == 4) UDP_selftest();
             else if (selftest == 5) NETGATHR_selftest();
             else if (selftest == 6) PACKET_selftest();
             else if (selftest == 7) CONMAN_selftest();
-            else CONMAN_localtest();
+            else if (selftest == 8) CONMAN_localtest();
+            else Net_Selftest();
             THRASH.fn.clearwindow();
             THRASH.fn.pageflip();
         }

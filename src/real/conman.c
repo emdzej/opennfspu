@@ -122,11 +122,22 @@ static bool fix_address(ConMan *cm, NetPlayerInfo *p)
     return true;
 }
 
+bool CONMAN_localaddr(ConMan *cm, NetAddr *out)
+{
+    NetPlayerInfo p;
+    memset(&p, 0, sizeof p);
+    if (!fix_address(cm, &p)) return false;
+    *out = p.addr;
+    return true;
+}
+
 static bool same_addr(ConMan *cm, const NetAddr *a, const NetAddr *b)   /* 0x55d440 */
 {
     if (CONMAN_isnet(cm)) return NETCONN_same(&cm->conn, a, b);
     return !memcmp(a, b, sizeof *a);
 }
+
+bool CONMAN_sameaddr(ConMan *cm, const NetAddr *a, const NetAddr *b) { return same_addr(cm, a, b); }
 
 /* The gathering's messages: event 0xb. 0x55d280 */
 static void on_message(NetConn *c, const uint8_t *data, int len)
@@ -598,7 +609,7 @@ static void players_free(ConServer *s)   /* 0x55bdc0 */
     NetList_Free(&s->dead);
 }
 
-ConServer *CONMAN_host(ConEventFn fn, uintptr_t provider, const uint8_t *game, const NetGameInfo *info, int32_t user,
+ConServer *CONMAN_host(ConEventFn fn, uintptr_t provider, const uint8_t *game, const NetGameInfo *info, intptr_t user,
                        int32_t port, const char *password)
 {
     int n = info->maxplayers;
@@ -1002,7 +1013,7 @@ static void guest_thread(void *arg)
     cl->flags &= ~CON_RUNNING;
 }
 
-ConClient *CONMAN_guest(ConEventFn fn, uintptr_t provider, const uint8_t *game, const NetPlayerInfo *self, int32_t user,
+ConClient *CONMAN_guest(ConEventFn fn, uintptr_t provider, const uint8_t *game, const NetPlayerInfo *self, intptr_t user,
                         int32_t port)
 {
     ConClient *cl = MEM_alloc("CONMAN", (int)sizeof(ConClient), exe_u32(0x5deb60));

@@ -8,11 +8,13 @@
 #include "render/r3dcar.h"
 #include <string.h>
 
-enum { RING = 0x80, PLAYERS = 4, REPLAY_SIZE = REPLAY_BYTES };
+enum { RING = 0x80, PLAYERS = 8, REPLAY_SIZE = REPLAY_BYTES };   /* (8 players: the network game's) */
 
 int32_t g_replay_mode;
 int32_t g_replay_final;
 uint8_t g_input_packet[4];
+int32_t g_input_count;
+uint8_t g_input_stopped;
 
 static uint8_t ring[PLAYERS][RING][4];   /* 0x606af0 */
 static int32_t taken[PLAYERS][RING];     /* 0x607af0 */
