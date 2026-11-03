@@ -3292,11 +3292,12 @@ int FEData_BuyCar(void)
     if (!nc) return -1;
     sv->cars = nc;
     SaveCar *c = &sv->cars[sv->ncars];
-    {   /* +0x674 .. +0x680: the accessor's colours (slots 0x74 .. 0x80; 0x84, 0x88 pend: 0) */
+    {   /* +0x674 .. +0x688: the accessor's colours (slots 0x74 .. 0x80), its stripe package (0x84,
+           0x508530: 0) and race number (0x88, 0x501cc0: -1, none) */
         uint32_t col[4];
         FEAccess_CarColours(d, col);
         int32_t v[4] = {(int32_t)col[0], (int32_t)col[3], (int32_t)col[1], (int32_t)col[2]};
-        car_object(sv, c, r, v, 0, 0);
+        car_object(sv, c, r, v, 0, -1);
     }
     memcpy(c->rec + 0x6a4, &price, 4);
     sv->ncars++;
