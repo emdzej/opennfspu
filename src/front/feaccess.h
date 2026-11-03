@@ -47,7 +47,8 @@ const char *FEAccess_TextAt(const FEAccessor *a, int i);
 int FEAccess_ItemId(const FEAccessor *a);
 
 /* Its text for a control's argument (slot 5, 0x4bc0e0): SHORT the item's, PERCENT the position in
-   per cent, another argument itself (the kinds' own arguments pend). */
+   per cent, another argument itself; the kinds' own arguments (the tracks', the tournaments', the cars',
+   the knockout's, ...) first. */
 const char *FEAccess_TextArg(const FEAccessor *a, const char *arg);
 /* A car accessor's current car file (its .crp's name), NULL for other kinds. */
 const char *FEAccess_CarFile(const FEAccessor *a);

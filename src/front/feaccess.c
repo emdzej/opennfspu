@@ -2429,6 +2429,26 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
         }
         return exe_str(0x5d79a0);   /* "This is a bug" */
     }
+    if (a->kind == ACC_TRACK && arg && *arg) {
+        /* FETrackAccessor_v5 0x4f9cf0: the chosen track's (the place back to 0 past the list's end):
+           DIFFICULTY its difficulty's string (+0x78, from 0x1c2), SHORT its name's string after its own
+           by 0x28, RECORDTIME its record list's first time (0x4fa6c0: +0x1b0 +0x48); else "this is a bug" */
+        static char rb[32];
+        refresh(a);
+        if (a->count <= a->pos) ((FEAccessor *)a)->pos = 0;   /* (its slot 11, 0x2c) */
+        const uint8_t *t = s_trk ? s_trk + TRK_SIZE * track_rec(a, a->pos) : NULL;
+        if (!t) return "";
+        const char *x = NULL;
+        if (!strcmp(arg, "DIFFICULTY")) x = FEStrings_Get(rec16(t, 0x78) + 0x1c2);
+        else if (!strcmp(arg, "SHORT")) x = FEStrings_Get(rec32(t, 4) + 0x28);
+        else if (!strcmp(arg, "RECORDTIME")) {
+            const uint8_t *r = track_by_id(rec16(t, 0));
+            if (!r) return "";
+            HTime_Format(rec32(r, 0x1b0 + 0x48), rb, false);
+            return rb;
+        } else return exe_str(0x5db2b8);
+        return x ? x : "";
+    }
     if (a->kind == ACC_INT && arg && !strcmp(a->name, "Knockout.TrackNumber")) {
         /* FEKnockoutTrackNumberAccessor_v5 0x4ba290: "<d>TRACKNUMBER" its number, "<d>TRACKNAME",
            "<d>TRACKLAPS", "<d>TRACKDIRECTION", "<d>TRACKTRAFFIC" slot d's, for the slots raced (fewer
