@@ -4,7 +4,7 @@ layout: home
 hero:
   name: OpenNFSPU
   text: Porsche Unleashed, reimplemented
-  tagline: "A faithful reimplementation of Need for Speed: Porsche Unleashed (Electronic Arts, 2000) in C11, ported function by function from the Windows game. It runs the game from your own copy, as one WebAssembly module for the gasm runtime, natively and in the browser. Single player is playable; multiplayer is still to come."
+  tagline: "A faithful reimplementation of Need for Speed: Porsche Unleashed (Electronic Arts, 2000) in C11, ported function by function from the Windows game. It runs the game from your own copy, as one WebAssembly module for the gasm runtime, natively and in the browser. Single player is playable; multiplayer is in progress."
   actions:
     - theme: brand
       text: Get started
@@ -34,7 +34,7 @@ features:
     linkText: Play
     target: _self
   - title: In progress, and honest about it
-    details: Single player runs from the menus to the race and back (Quick Race, the knockouts, the Evolution career, Factory Driver). Multiplayer is not ported. Expect rough edges.
+    details: Single player runs from the menus to the race and back (Quick Race, the knockouts, the Evolution career, Factory Driver). Multiplayer (games by IP address over gasm's relay) is in progress. Expect rough edges.
     link: /guide/status
     linkText: Status
 ---
@@ -65,7 +65,7 @@ portable game runtime: the same module natively (`gasm-run`) and in the browser.
 
 ## Status
 
-In progress: single player is playable (Quick Race, the knockouts, the Evolution career, Factory Driver); multiplayer is not ported. Details in
+In progress: single player is playable (Quick Race, the knockouts, the Evolution career, Factory Driver); multiplayer is in progress (games by IP address over gasm's relay). Details in
 [Status](/guide/status).
 
 ## Sibling projects

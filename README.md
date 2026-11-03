@@ -10,7 +10,8 @@ It contains no original code, assets or data: it reads the data files, and the t
 program, from your own copy of the game.
 
 **Status: in progress.** Single player is playable from the menus through the races (Quick Race, the
-knockouts, the Evolution career, Factory Driver); multiplayer is not ported. Details:
+knockouts, the Evolution career, Factory Driver); multiplayer works as games by IP address between
+`gasm-run`s over gasm's relay, still in progress. Details:
 [opennfspu.emdzej.pl/guide/status](https://opennfspu.emdzej.pl/guide/status).
 
 ## Game data

@@ -20,6 +20,21 @@ gasm-run opennfspu.wasm --asset-dir "/path/to/Need For Speed - Porsche Unleashed
 | `--input "60:KEY(Enter)"` | with `--headless`: scripted input |
 | `--param name=value` | a launch parameter for the game |
 
+## Network games
+
+gasm has no raw sockets: its `gasm:net` reaches other players through a relay server (`gasm-relay`, from
+gasm). The port puts the original's network library on it: each player in a relay room gets an address
+`10.0.0.<n>`, in the order they joined, the first `10.0.0.1`. Start the relay, then each player's game:
+
+```sh
+gasm-relay 0.0.0.0:9123 --max-peers 8
+gasm-run opennfspu.wasm --asset-dir <game folder> --allow-net \
+  --param relay=ws://<relay host>:9123 --param room=<name>
+```
+
+All players use the same `room`. In the game: Multiplayer, Peer to peer IP. The host chooses create, the
+others type the host's address (shown at the top right of the host's create screen) and connect.
+
 ## Graphics
 
 The original renders through Direct3D 7. OpenNFSPU uses `gasm:gl`, OpenGL ES 3.0 with WebGL 2's rules:
