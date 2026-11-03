@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <strings.h>
 #include <wasi/api.h>
 
@@ -363,6 +364,29 @@ static bool mount_game(void)
 static bool running;
 static double audio_acc;   /* fractional audio frames carried between frames */
 
+/* --param frametime=1: the frames slower than the frame rate (the time in the game's frame, the time since
+   the previous one), to see where a window run falls behind its audio. */
+static bool frametime_on;
+static double wall_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+}
+static void frametime_log(double t0)
+{
+    static double last;
+    static uint32_t n;
+    double t1 = wall_ms(), gap = last ? t1 - last : 0;
+    last = t1;
+    n++;
+    if (t1 - t0 > 1000.0 / frame_hz || gap > 2000.0 / frame_hz) {
+        char m[96];
+        snprintf(m, sizeof m, "frametime: frame %u game %.1f ms, since the last %.1f ms", n, t1 - t0, gap);
+        plat_log(m);
+    }
+}
+
 #ifdef PU_LOOP_THREADS
 #define PU_EXPORT(name)
 #else
@@ -385,6 +409,8 @@ PU_EXPORT("gasm_init") int32_t pu_gasm_init(void)
     snprintf(m, sizeof m, "OpenNFSPU: game data from %s", vfs_describe());
     plat_log(m);
     if (!app_init()) return 1;
+    char ft[8];
+    frametime_on = plat_param("frametime", ft, sizeof ft) && ft[0] == '1';
     running = true;
     return 0;
 }
@@ -395,6 +421,7 @@ PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
     if (!running) return;
     for (uint32_t p = 0; p < 4; p++) pads[p] = gasm_input_pad(p);
     poll_key_events();
+    double t0 = frametime_on ? wall_ms() : 0;
     if (!app_frame()) {
         running = false;
         app_exit();
@@ -405,6 +432,7 @@ PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
     audio_acc -= n;
     app_audio(audio_buf, n);
     gasm_audio_push(audio_buf, n);
+    if (frametime_on) frametime_log(t0);
 }
 
 PU_EXPORT("gasm_exit") void pu_gasm_exit(void)
