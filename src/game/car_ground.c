@@ -27,6 +27,13 @@ static float exe_f32(uint32_t va)
     return f;
 }
 #define K(va) exe_f32(va)
+static double exe_f64(uint32_t va)   /* (a qword constant: fmul QWORD PTR) */
+{
+    uint64_t u = (uint64_t)exe_u32(va) | (uint64_t)exe_u32(va + 4) << 32;
+    double d;
+    memcpy(&d, &u, 8);
+    return d;
+}
 
 static float dot3(const float *a, const float *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }   /* Vec3_Dot */
 
@@ -234,7 +241,7 @@ float CarSim_Ground(Car *c, float out[3])
                 /* The front wheels' tyre bumps. */
                 double a = CarSim_TyreBump(c);
                 double ph = sin(((double)i * K(0x5b23f0) + *CAR_F(c, t + 0x84)) * K(0x5b4a08));
-                contact[i][1] = (float)(ph * a * K(0x5b4a00) + contact[i][1]);
+                contact[i][1] = (float)(ph * a * exe_f64(0x5b4a00) + contact[i][1]);   /* (a double: 1/1500) */
             }
         } else {
             /* Off the polygons: the car's own ground plane (point +0x400, normal +0x3e8), level ground
