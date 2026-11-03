@@ -591,7 +591,7 @@ static void race_actions(void)
             if (Input_Action(ACT_HUDTRANSPARENCY, true)) HUD_ToggleTrays();     /* 0x427590 */
             if (Input_Action(ACT_SFX, true)) Audio_ToggleSfx();   /* 0x4ab2b0 */
             if (Input_Action(ACT_MUSIC, true)) Music_Next();      /* 0x4ad560 */
-            if (Input_Action(ACT_CYCLECAMERA, true) && g_replay_mode < 2) Camera_NextMode(0);   /* 0x465920 */
+            if (Input_Action(ACT_CYCLECAMERA, true) && g_replay_mode < 2 && !Net_Finished()) Camera_NextMode(0);   /* 0x465920 (0x415af3) */
             g_look[0] = Input_Action(ACT_LOOKFORWARD, false);
             g_look[1] = Input_Action(ACT_LOOKRIGHT, false);
             g_look[2] = Input_Action(ACT_LOOKBEHIND, false);

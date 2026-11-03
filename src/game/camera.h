@@ -64,6 +64,8 @@ extern int32_t g_tvmode;
 /* The camera on the car with its mode. 0x465650 (the race's set-up also points +0 and +4 at the car) */
 void Camera_Init(int p, Car *car, int mode);
 void Camera_SetMode(int p, int mode);        /* 0x465650 */
+/* The camera's car (0x465c40): the viewed player once a network race is finished, else the local car. */
+int Camera_ViewedCar(void);
 void Camera_NextMode(int p);                 /* 0x465920: the car's camera list's next */
 void Camera_Update(void);                    /* 0x463af0 */
 /* Camera p put at once at its mode's offset in the car's frame (a car put back on the road: 0x461770,

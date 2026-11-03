@@ -39,7 +39,6 @@ the original does.
   So it is dead code in the shipped game, and turning it on would be a port addition, opt-in like true
   widescreen. Porting it means the two views, cameras and HUDs, and the second player's controls; parts
   of the race already follow the mode (the sound's panning, the traffic's cap, the police).
-- **The network game's leftovers:** the observer's view and one race-progress message.
 - **The front end's save:** the opponents' cars aren't read back from the player's save. The race picks
   them again anyway.
 

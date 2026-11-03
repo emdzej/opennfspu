@@ -4306,12 +4306,13 @@ static void replay_names(HReplay *r)
     }
 }
 
-/* HReplay_v1 0x42d160: in the race-over's replay, shown (fading in) while the mouse is about, faded out
-   after forty frames away; drawn while not hidden. */
+/* HReplay_v1 0x42d160: in the race-over's replay, or in a network race this machine has finished (the
+   session's +0xbd: it watches the others), shown (fading in) while the mouse is about, faded out after
+   forty frames away; drawn while not hidden. */
 static void replay_draw(HudVisual *v)
 {
     HReplay *r = (HReplay *)v;
-    if (g_race_view != 2) return;   /* (or a network game's observer: not ported) */
+    if (g_race_view != 2 && !(g_race_mode == 3 && Net_Finished())) return;
     if (r->hover[7] < 0x28 || r->keep) {
         if (v->state == 0 || v->state == 2) v->vt->setstate(v, 1);
     } else if (v->state == 3 || v->state == 1) {
@@ -4833,7 +4834,7 @@ int HUD_HandleInput(int x, int y, int event)
     /* The race over (its replay): with no modal's action, the replay panel's. 7 restart (the results'
        screens not shown again, the next song), 0xe the race's screens again, 0xf the save's
        question (HReplaySave). */
-    if (g_race_view != 2 || a != 0 || !s_replay) return a;
+    if (!(g_race_view == 2 || (g_race_mode == 3 && Net_Finished())) || a != 0 || !s_replay) return a;   /* (0x426423) */
     a = s_replay->vt->input(s_replay, x, y, c);
     if (a == 7) {
         HUD_ReplayRestart();

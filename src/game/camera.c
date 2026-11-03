@@ -1,5 +1,6 @@
 /* The race cameras (see camera.h). */
 #include "game/camera.h"
+#include "game/net.h"
 #include "game/race_progress.h"
 #include "exe.h"
 #include "game/car_drive.h"
@@ -1046,8 +1047,12 @@ static void mode_changed(int p)
     c->lookspeed = 0;
     reload_flags(c);
     c->flags &= 0xfe;
-    if ((c->mode < 2 || 7 < c->mode) && g_replay_mode < 2) mode_fixed(p);
+    /* (0x465853: in a live network session snapped unless this machine has finished, else outside a
+       replay) */
+    if ((c->mode < 2 || 7 < c->mode) && (Net_Live() ? !g_net->finished : g_replay_mode < 2)) mode_fixed(p);
 }
+
+int Camera_ViewedCar(void) { return Net_Finished() ? s_viewed : g_race_local; }
 
 /* The car's camera list (its description's +0x208, four words: the front end's Car%d._CAMERA). */
 static int listed(int p, int i)
@@ -1102,6 +1107,7 @@ void Camera_Init(int p, Car *car, int mode)
     memset(c, 0, sizeof *c);
     WSurface_Init(&c->surf);
     c->car = c->base = car;
+    if (p == 0) s_viewed = g_race_local;   /* (the race's start, 0x413d29: the viewed player the local one) */
     /* 0x463f70: the driver's eye (drivercampos) as mode 1's offset and the driver's turns (drivercamrot)
        as the first camera's tilt, from the camera's car. */
     const R3DCar *r = car ? car->p[CARP_R3D] : NULL;

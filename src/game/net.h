@@ -175,6 +175,9 @@ extern NetSession *g_net;   /* 0x628c70 */
 
 /* In a session: its guest, the connection not lost. */
 static inline bool Net_Live(void) { return g_net && g_net->client && !g_net->lost; }
+/* This machine has finished its network race (+0xbd, its 0xb7 sent): it watches the others, with the
+   replay's panel and cameras (0x42d160, 0x465c40, 0x465853). */
+static inline bool Net_Finished(void) { return Net_Live() && g_net->finished; }
 /* In a game: and let in, a number given. */
 static inline bool Net_InGame(void) { return Net_Live() && g_net->in && g_net->me >= 0; }
 
