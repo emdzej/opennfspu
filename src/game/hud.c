@@ -3414,6 +3414,96 @@ static HudVisual *rearview_new(void)   /* 0x42c470 */
 
 bool HUD_RearViewShown(void) { return always && s_rearview && s_rearview->tray.base.state == 3; }   /* 0x427560 */
 
+/* ---- the network race's leader (HLeader, 0xd0 bytes, vtable 0x5b2c34; 0x428490): the leading player's
+   picture (their block 0, pic16.fsh) in a tray, the caption under it ---- */
+
+typedef struct {
+    HTray tray;
+    HudArt *pic;   /* +0xc4: DashHud\pic16.fsh, 54 x 64 (0x420cb0), redrawn from the leader's block */
+    HText *text;   /* +0xc8 */
+} HLeader;
+
+/* The picture 2 in, the caption at the bottom left inside the layout's insets. HLeader_v12 0x4287c0 */
+static void leader_setpos(HudVisual *v, int x, int y)
+{
+    HLeader *l = (HLeader *)v;
+    int32_t px, py;
+    HudConfig_setpos(HUDPOS_LEADER, x, y);   /* 0x4207a0 */
+    HudConfig_pos(HUDPOS_LEADER, &px, &py);
+    tray_place(&l->tray, px, py);
+    if (l->pic) HudArt_place(l->pic, px + 2, py + 2);
+    if (!l->text || !l->text->font || !l->text->font->font) return;
+    const char *s = LOC_string(HudConfig_loc(), 0x4710);
+    float a, b, w, th;
+    text_extent(l->text, s ? s : "", &a, &b, &w, &th);
+    l->text->x = HudConfig_i32(0x34) + px;
+    l->text->y = (int)((float)(HudConfig_i32(0xf8) - HudConfig_i32(0x38)) - th + (float)py);
+}
+
+/* In a network race only: the first racer in first place (else the first racer), their player's
+   picture once it has come whole drawn into the art's page, then the tray, the picture and the caption.
+   (The original holds the session's lock, +0x10, around it; the port's session runs on the game's
+   thread.) HLeader_v1 0x4286b0 */
+static void leader_draw(HudVisual *v)
+{
+    HLeader *l = (HLeader *)v;
+    if (v->state == 0) return;   /* 0x42a310 */
+    int lead = 0;
+    for (int i = 0; i < g_racers.n; i++)
+        if (*CAR_I(g_racers.c[i], 0xb48) == 1) {
+            lead = i;
+            break;
+        }
+    if (g_racers.n <= 0) return;
+    NetPlayer *pl = Net_PlayerByCar(*CAR_I(g_racers.c[lead], 0x524));   /* 0x48d650 */
+    if (!pl) return;
+    const uint8_t *pic = Net_PlayerBlock(pl, 0);   /* 0x4903a0 */
+    if (!pic) return;
+    uint32_t off;
+    memcpy(&off, pic + 0x14, 4);
+    tray_draw(&l->tray);   /* 0x434070 */
+    HudArt_redraw(l->pic, (uint8_t *)pic + off, 0x40, 0x10);   /* 0x423e00 */
+    if (l->pic) HudArt_draw(l->pic);
+    const char *s = LOC_string(HudConfig_loc(), 0x4710);
+    text_print(l->text, s ? s : "", 1.0f, 1.0f);   /* 0x431230 */
+}
+
+/* The layout again: the size, the place, the divider's colours, the caption's. HLeader_v2 0x428890 */
+static void leader_reset(HudVisual *v)
+{
+    HLeader *l = (HLeader *)v;
+    int32_t px, py;
+    tray_setsize(&l->tray, HudConfig_i32(0xf4), HudConfig_i32(0xf8), 0);   /* 0x434000 */
+    HudConfig_pos(HUDPOS_LEADER, &px, &py);
+    v->vt->setpos(v, px, py);
+    tray_colours(&l->tray);   /* 0x434550 */
+    if (l->text) l->text->colour = (uint32_t)HudConfig_i32(0x18), l->text->colour2 = (uint32_t)HudConfig_i32(0x14);
+}
+
+static void leader_destroy(HudVisual *v)   /* HLeader_v0 0x428660 */
+{
+    HLeader *l = (HLeader *)v;
+    HudArt_free(l->pic);
+    text_free(l->text);
+    free(l);
+}
+
+static const HudVisualVtbl leader_vt = {leader_destroy, leader_draw, leader_reset, tray_setstate, leader_setpos, tray_progress, NULL, tray_input, NULL};
+
+static HudVisual *leader_new(void)   /* 0x428490 */
+{
+    HLeader *l = calloc(1, sizeof *l);
+    if (!l) return NULL;
+    int32_t x, y;
+    HudConfig_pos(HUDPOS_LEADER, &x, &y);
+    int w = HudConfig_i32(0xf4), h = HudConfig_i32(0xf8);
+    tray_init(&l->tray, &leader_vt, x, y, w, h, 0, false, 0, false, false);   /* 0x433ef0 */
+    l->pic = HudArt_load(exe_str(0x5ccce0), 0, (w - 0x36) / 2 + x, HudConfig_i32(0x38) + y, 0x36, 0x40, false, false, false);   /* "pic16" */
+    l->text = text_new(HudConfig_font(0x4c), (uint32_t)HudConfig_i32(0x18), (uint32_t)HudConfig_i32(0x14), 0, 0, 0, 0, 0, false);   /* 0x430e50 */
+    leader_setpos(&l->tray.base, x, y);
+    return &l->tray.base;
+}
+
 /* ---- the lap's announcements (0x427790) ---- */
 
 static int32_t s_laps_done, s_bestlap;   /* 0x60ca90, 0x60ca94 */
@@ -4380,7 +4470,7 @@ void HUD_Init(void)
     add(tachdigital_new(), true, false);
     s_mapv = map_new();   /* 0x431e50 (0x60ca34) */
     add(s_mapv, true, true);   /* (drawn last) */
-    PENDING_NOTE(0x428490, "HLeader (0x60ca38): the network race leader's picture (draws only in a network session)");
+    add(leader_new(), true, true);   /* 0x428490 (0x60ca38) */
     add(rearview_new(), true, true);   /* 0x42c470 (0x60ca3c) */
     add(countdown_new(), false, false);
     s_congrats = congrats_new();   /* 0x41cb10 (0x60ca64) */

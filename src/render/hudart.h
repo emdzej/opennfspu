@@ -35,4 +35,7 @@ void HudArt_place(HudArt *a, int x, int y);                         /* 0x423b10 
 void HudArt_setuv(HudArt *a, float u, float v, float du, float dv); /* 0x423910 */
 void HudArt_setcolours(HudArt *a, uint32_t c0, uint32_t c1, uint32_t c2, uint32_t c3);   /* 0x423d90 */
 void HudArt_setcorners(HudArt *a, const float xyz[12]);             /* 0x423c20: four corners x y z */
-void HudArt_draw(HudArt *a);                                        /* 0x423a30 */
+void HudArt_draw(HudArt *a);
+/* The art's page drawn again from one image: a size x size window of the depth, black, the image at its
+   corner (its centre set to none, in the image), into the art's texture. 0x423e00 */
+void HudArt_redraw(HudArt *a, uint8_t *shape, int size, int depth);                                        /* 0x423a30 */

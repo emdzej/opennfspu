@@ -138,6 +138,19 @@ HudArt *HudArt_load(const char *name, int index, int x, int y, int w, int h, boo
 
 void HudArt_free(HudArt *a) { free(a); }
 
+void HudArt_redraw(HudArt *a, uint8_t *shape, int size, int depth)
+{
+    shape[8] = shape[9] = shape[0xa] = shape[0xb] = 0;   /* (its centre: the image drawn from the corner) */
+    Window *w = WINDOW_create(size, size, depth, 0, 0);   /* 0x5356c0 */
+    if (!w) return;
+    WINDOW_select(w);
+    WINDOW_clear(0);
+    WINDOW_drawshape(shape, 0, 0);
+    if (a && a->texture) Texture_reload(a->texture, w->shape);   /* 0x536280 */
+    WINDOW_deselect();
+    WINDOW_destroy(w);
+}
+
 void HudArt_place(HudArt *a, int x, int y)
 {
     if (a->centred) {
