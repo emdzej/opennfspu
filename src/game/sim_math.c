@@ -25,8 +25,9 @@ static double two_pi(void)
 /* 0x532570: the sine and cosine of an angle in turns (0x532550 / 0x532560). */
 void Math_SinCosTurns(float t, float *s, float *c)
 {
-    *s = (float)sin((double)t * two_pi());
-    *c = (float)cos((double)t * two_pi());
+    double a = (float)((double)t * two_pi());   /* (the x87 at single precision rounds the product) */
+    *s = (float)sin(a);
+    *c = (float)cos(a);
 }
 
 void Mat3_TurnX(float m[9], float t)

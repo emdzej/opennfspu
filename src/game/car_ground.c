@@ -60,7 +60,7 @@ static double turns_rad(float t)
     const uint8_t *p = exe_data(0x5bb2c0, 8);
     if (p) memcpy(&k, p, 8);
     else k = 6.283185307179586;
-    return t * k;
+    return (float)(t * k);   /* (rounded, as the x87 at single precision leaves it) */
 }
 
 static const float *car_up(Car *c) { return CAR_F(c, 0x370); }

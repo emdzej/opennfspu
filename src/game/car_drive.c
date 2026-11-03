@@ -168,7 +168,7 @@ void CarSim_Controls(Car *c)
    0x493b30. */
 static double part_wear(Car *c, const uint8_t *part)
 {
-    double z = K(0x5b23f8);
+    float z = K(0x5b23f8);
     int k = 0;
     for (int j = 0; j < 10; j++)
         if (part[0x48 + j]) {
@@ -179,7 +179,7 @@ static double part_wear(Car *c, const uint8_t *part)
     float a, b;
     memcpy(&a, part + 0x60, 4);
     memcpy(&b, part + 0x164, 4);
-    return z * ((double)K(0x5b246c) - (double)a * K(0x5b3284)) + b;
+    return z * (K(0x5b246c) - a * K(0x5b3284)) + b;
 }
 
 static int16_t part_type(const uint8_t *part)
@@ -191,7 +191,7 @@ static int16_t part_type(const uint8_t *part)
 
 float CarSim_EngineWear(Car *c)
 {
-    double sum = *CAR_F(c, 0x4e8);
+    float sum = *CAR_F(c, 0x4e8);
     int n = 1;
     for (int i = 0; i < CAR_NPARTS; i++) {
         const uint8_t *part = c->p[CARP_PARTS + i];
@@ -205,7 +205,7 @@ float CarSim_EngineWear(Car *c)
 
 static float wear_sum(Car *c, int16_t type)
 {
-    double sum = K(0x5b23f8);
+    float sum = K(0x5b23f8);
     for (int i = 0; i < CAR_NPARTS; i++) {
         const uint8_t *part = c->p[CARP_PARTS + i];
         if (part && part_type(part) == type) sum = part_wear(c, part) + sum;
@@ -219,7 +219,7 @@ float CarSim_GearboxWear(Car *c) { return wear_sum(c, 3); }      /* 0x493a10 */
 /* The suspension's: the mean wear of its springs, shocks and sway bars (types 4, 5, 8). 0x493b30 */
 float CarSim_SuspensionWear(Car *c)
 {
-    double sum = K(0x5b23f8);
+    float sum = K(0x5b23f8);
     int n = 0;
     for (int i = 0; i < CAR_NPARTS; i++) {
         const uint8_t *part = c->p[CARP_PARTS + i];
@@ -236,7 +236,7 @@ float CarSim_SuspensionWear(Car *c)
 /* The body's: its first nine zones summed, scaled. 0x493c00 */
 float CarSim_BodyWear(Car *c)
 {
-    double sum = K(0x5b23f8);
+    float sum = K(0x5b23f8);
     for (int k = 0; k < 9; k++) sum += *CAR_F(c, 0x4e4 + 4 * k);
     return (float)(sum * K(0x5b49b0));
 }
@@ -257,24 +257,26 @@ void CarSim_SlopePull(Car *c)
 
 static float spec_f(Car *c, int off) { return *SPEC_F(c, off); }
 
-/* The drag left by the cars ahead (drafting): 1 less the best slipstream of a race car within a third
-   of this car's speed (in metres) straight ahead. 0x49d7a0 */
+/* The drag left by the cars ahead (drafting): 1 less the best slipstream of a race car (the racers'
+   list, 0x5e8ae8: not the traffic or the police) within a third of this car's speed (in metres)
+   straight ahead. In float steps, as the x87 at single precision computes them (0x532890 the length,
+   0x532640 the unit vector, 0x532680 the dot product). 0x49d7a0 */
 float CarSim_DraftFactor(Car *c)
 {
     float best = 0.0f, speed = *CAR_F(c, 0xd60);
-    for (int i = 0; i < g_ncars; i++) {
-        Car *o = g_cars[i];
-        if (!o || *CAR_I(o, 0) == *CAR_I(c, 0) || !(K(0x5b243c) < speed)) continue;
+    for (int i = 0; i < g_racers.n; i++) {
+        Car *o = g_racers.c[i];
+        if (*CAR_I(o, 0) == *CAR_I(c, 0) || !(K(0x5b243c) < speed)) continue;
         float d[3] = {CAR_F(o, 0x330)[0] - CAR_F(c, 0x330)[0], CAR_F(o, 0x330)[1] - CAR_F(c, 0x330)[1],
                       CAR_F(o, 0x330)[2] - CAR_F(c, 0x330)[2]};
-        float dist = (float)sqrt((double)d[1] * d[1] + (double)d[0] * d[0] + (double)d[2] * d[2]);
+        float dist = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
         if (!(dist < speed * K(0x5b2680) && K(0x5b2604) < dist)) continue;
-        double r = (double)K(0x5b24a8) / dist;
-        float u[3] = {(float)(r * d[0]), (float)(d[1] * r), (float)(d[2] * r)};
-        double a = (double)u[0] * CAR_F(c, 0x37c)[0] + (double)u[1] * CAR_F(c, 0x37c)[1] + (double)u[2] * CAR_F(c, 0x37c)[2];
+        float r = K(0x5b24a8) / sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        float u[3] = {r * d[0], d[1] * r, d[2] * r};
+        float a = u[0] * CAR_F(c, 0x37c)[0] + u[1] * CAR_F(c, 0x37c)[1] + u[2] * CAR_F(c, 0x37c)[2];
         if (!(K(0x5b4a48) < a)) continue;
-        double f = (a - K(0x5b4a48)) * K(0x5b4a44) * K(0x5b23f0) * ((double)K(0x5b24a8) - ((double)dist * K(0x5b2600)) / speed);
-        if (best <= f) best = (float)f;
+        float f = (a - K(0x5b4a48)) * K(0x5b4a44) * K(0x5b23f0) * (K(0x5b24a8) - dist * K(0x5b2600) / speed);
+        if (best <= f) best = f;
     }
     return K(0x5b24a8) - best;
 }
@@ -328,14 +330,14 @@ void CarSim_AutoShift(Car *c)
 
 /* The torque curve at rpm (held to [0, redline]): the specs' table every 500 rpm from +0x9c,
    interpolated. */
-static double torque_at(Car *c, float rpm)
+static float torque_at(Car *c, float rpm)
 {
     float redline = spec_f(c, 0x94);
     if (redline <= rpm) rpm = redline;
     if (!(K(0x5b23f8) < rpm)) rpm = K(0x5b23f8);
     int i = (int)(rpm * K(0x5b4a30));
-    double a = spec_f(c, 0x9c + 4 * i), b = spec_f(c, 0xa0 + 4 * i);
-    return (b - a) * ((double)rpm - (double)(i * 500)) * K(0x5b4a30) + a;
+    float a = spec_f(c, 0x9c + 4 * i), b = spec_f(c, 0xa0 + 4 * i);
+    return (rpm - (float)(i * 500)) * K(0x5b4a30) * (b - a) + a;   /* (0x49e726: in this order) */
 }
 
 float CarSim_Engine(Car *c)
@@ -343,10 +345,11 @@ float CarSim_Engine(Car *c)
     uint8_t *b = c->b;
     uint32_t r = SimRand_Next();
     float redline = spec_f(c, 0x94), jump = redline * K(0x5b272c);
-    double noise = (double)(r & 0xffff) * K(0x5b253c);
-    double wear = (double)CarSim_EngineWear(c) * K(0x5b4a64);
+    /* (in float steps throughout, as the x87 at single precision computes them) */
+    float noise = (float)(r & 0xffff) * K(0x5b253c);
+    float wear = CarSim_EngineWear(c) * K(0x5b4a64);
     float fwd = *CAR_F(c, 0xd60);
-    float drag = (float)(CarSim_DraftFactor(c) * (double)(fwd * spec_f(c, 0x1b0) * fwd * fwd));   /* 0x49d7a0 */
+    float drag = CarSim_DraftFactor(c) * (fwd * spec_f(c, 0x1b0) * fwd * fwd);   /* 0x49d7a0 */
     int8_t gear = (int8_t)b[0xd82];
     float *rpm = CAR_F(c, 0xdb4);
     /* The engine speed the throttle asks for. */
@@ -441,9 +444,9 @@ float CarSim_Engine(Car *c)
     gear = (int8_t)b[0xd82];
     int8_t rg = (b[0xd84] == 0 || b[0xd83] != 0) ? gear : (int8_t)b[0xd81];
     float wheel = spec_f(c, 0x60 + 4 * rg) * fwd;   /* the engine speed the wheels turn it at */
-    double torque = torque_at(c, *rpm) * spec_f(c, 0x190 + 4 * gear);
-    torque = ((double)K(0x5b24a8) - (double)CarSim_GearboxWear(c) * K(0x5b3284)) *
-             (double)(float)(((double)K(0x5b24a8) - (double)CarSim_EngineWear(c) * K(0x5b4a64)) * (double)(float)torque);
+    float torque = torque_at(c, *rpm) * spec_f(c, 0x190 + 4 * gear);
+    torque = (K(0x5b24a8) - CarSim_EngineWear(c) * K(0x5b4a64)) * torque;
+    torque = (K(0x5b24a8) - CarSim_GearboxWear(c) * K(0x5b3284)) * torque;
     float aw = wheel < K(0x5b23f8) ? -wheel : wheel;
     float slip = target - aw;
     float as = slip < K(0x5b23f8) ? -slip : slip;
@@ -452,15 +455,15 @@ float CarSim_Engine(Car *c)
     if ((K(0x5b4a60) < d && b[0xd84] == 0 && gear != 1) || (gear >= 2 && fwd < K(0x5b2444)) ||
         (gear == 0 && K(0x5b2604) < fwd) || (*CAR_I(c, 0xdb8) == 1 && *cut == 0)) {
         /* The clutch slipping: the engine pulled down to the wheels by what they can take. */
-        double f = torque * K(0x5b243c);
+        float f = torque * K(0x5b243c);
         if (f < K(0x5b23f8)) f = -f;
         if (spec_f(c, 0x5c) <= K(0x5b23f8))
-            f = (double)K(0x5b242c) - (f - ((double)*CAR_F(c, 0xab0) + *CAR_F(c, 0x9ec)));
+            f = K(0x5b242c) - (f - (*CAR_F(c, 0xab0) + *CAR_F(c, 0x9ec)));
         else
-            f = (double)K(0x5b3d60) - (f - ((double)*CAR_F(c, 0xab0) + *CAR_F(c, 0x9ec) + *CAR_F(c, 0x928) + *CAR_F(c, 0x864)));
-        double tp = (double)b[0xd7c] * K(0x5b4a54);
+            f = K(0x5b3d60) - (f - (*CAR_F(c, 0xab0) + *CAR_F(c, 0x9ec) + *CAR_F(c, 0x928) + *CAR_F(c, 0x864)));
+        float tp = (float)b[0xd7c] * K(0x5b4a54);
         if (tp < K(0x5b25f0)) tp = K(0x5b25f0);
-        float lim = (float)(((double)K(0x5b24a8) - g_drive_throttle) * K(0x5b242c) + f / tp);
+        float lim = (K(0x5b24a8) - g_drive_throttle) * K(0x5b242c) + f / tp;
         if (*SPEC_I(c, 0x54) < 5 && gear > 2) *rpm -= d * K(0x5b49d4);
         if (g_drive_throttle < K(0x5b23f0) || noise < wear) {
             *rpm -= d * K(0x5b49d4);
@@ -491,7 +494,7 @@ float CarSim_Engine(Car *c)
             }
             if (target < *rpm) *rpm = target;
             if (g_race_rally) {
-                double k = *CAR_F(c, 0xdc0);
+                float k = *CAR_F(c, 0xdc0);
                 if (k < K(0x5b23f8)) k = -k;
                 k += K(0x5b24a8);
                 if (K(0x5b2580) <= k) k = K(0x5b2580);
@@ -503,9 +506,9 @@ float CarSim_Engine(Car *c)
         float step = spec_f(c, 0x170 + 4 * gear) * K(0x5b4a50), dd = -d;
         if (aw <= redline + K(0x5b24e0)) {
             if (*cut > 0) torque *= K(0x5b2404);
-            double g = (double)CarSim_GearboxWear(c) * K(0x5b3714) + K(0x5b24a8);
+            float g = CarSim_GearboxWear(c) * K(0x5b3714) + K(0x5b24a8);
             if (K(0x5b2400) <= g) g = K(0x5b2400);
-            torque = g * (double)(float)-(torque * spec_f(c, 0x98));
+            torque = g * -(torque * spec_f(c, 0x98));
             if (gear == 0) {
                 if (dd <= step) dd = step;
             } else if (step < dd) {
@@ -526,7 +529,7 @@ float CarSim_Engine(Car *c)
     if (K(0x5b23f8) <= *rpm) {
         float lim = redline * K(0x5b3f64);
         if (lim < *rpm) *rpm = lim;
-        return (float)(torque - drag);
+        return torque - drag;
     }
     float v = -(fwd * K(0x5b2644));
     if ((torque <= K(0x5b23f8) || v <= K(0x5b23f8) || torque - v <= K(0x5b23f8)) &&
@@ -603,14 +606,14 @@ void CarSim_TyreLoads(Car *c)
     *CAR_F(c, 0xab0) = other + *CAR_F(c, 0xab0);
     if (K(0x5b2400) < *CAR_F(c, 0xd60)) {
         /* Downforce with the speed (less with the aero parts' wear). */
-        double a = (double)K(0x5b24a8) - (double)CarSim_AeroWear(c) * K(0x5b3284);
-        double df = a * spec_f(c, 0x10c) * *CAR_F(c, 0xd60);
-        *CAR_F(c, 0x864) = (float)(df + *CAR_F(c, 0x864));
-        *CAR_F(c, 0x928) = (float)(df + *CAR_F(c, 0x928));
-        double dr = a * spec_f(c, 0x110) * *CAR_F(c, 0xd60);
-        *CAR_F(c, 0x9ec) = (float)(dr + *CAR_F(c, 0x9ec));
-        *CAR_F(c, 0xab0) = (float)(dr + *CAR_F(c, 0xab0));
-        if (K(0x5b4a0c) < *CAR_F(c, 0x3a0)) *CAR_F(c, 0x84) = (float)(dr * K(0x5b2608) + *CAR_F(c, 0x84));
+        float a = K(0x5b24a8) - CarSim_AeroWear(c) * K(0x5b3284);
+        float df = a * spec_f(c, 0x10c) * *CAR_F(c, 0xd60);
+        *CAR_F(c, 0x864) = df + *CAR_F(c, 0x864);
+        *CAR_F(c, 0x928) = df + *CAR_F(c, 0x928);
+        float dr = a * spec_f(c, 0x110) * *CAR_F(c, 0xd60);
+        *CAR_F(c, 0x9ec) = dr + *CAR_F(c, 0x9ec);
+        *CAR_F(c, 0xab0) = dr + *CAR_F(c, 0xab0);
+        if (K(0x5b4a0c) < *CAR_F(c, 0x3a0)) *CAR_F(c, 0x84) = dr * K(0x5b2608) + *CAR_F(c, 0x84);
     }
 }
 
@@ -625,13 +628,15 @@ float CarSim_TyreWear(Car *c) { return wear_sum(c, 9); }   /* 0x4938f0 */
 #define WF(c, w, off) CAR_F(c, 0x7b8 + 0xc4 * (w) + (off))
 #define WI(c, w, off) CAR_I(c, 0x7b8 + 0xc4 * (w) + (off))
 
+/* (0x532550 / 0x532560 take the angle times 2 pi, which the x87 at single precision rounds to a float
+   before fsin / fcos; their results stay unrounded) */
 static double turns_to_rad(double t)
 {
     double k;
     const uint8_t *p = exe_data(0x5bb2c0, 8);
     if (p) memcpy(&k, p, 8);
     else k = 6.283185307179586;
-    return t * k;
+    return (float)(t * k);
 }
 
 /* atan2 in turns (0x5bb2c8 is 1 / 2 pi). 0x5325d0 */
@@ -647,7 +652,7 @@ static double atan2_turns(float y, float x)
 /* A wheel locked (or held by the handbrake): the friction circle against its sliding. 0x4a1a50 */
 static void tyre_locked(Car *c, int w)
 {
-    float cap = (float)(((double)K(0x5b24a8) - (double)CarSim_TyreWear(c) * K(0x5b3284)) * *WF(c, w, 0xac));
+    float cap = (K(0x5b24a8) - CarSim_TyreWear(c) * K(0x5b3284)) * *WF(c, w, 0xac);
     float a = *WF(c, w, 0x9c), b = *WF(c, w, 0xa4);
     if (a < K(0x5b23f8)) a = -a;
     if (b < K(0x5b23f8)) b = -b;
@@ -678,7 +683,7 @@ static void tyre_grip(Car *c, int w)
         small = l;
     }
     float mag = small * K(0x5b2468) + big;
-    float cap = (float)(((double)K(0x5b24a8) - (double)CarSim_TyreWear(c) * K(0x5b3284)) * *WF(c, w, 0xac));
+    float cap = (K(0x5b24a8) - CarSim_TyreWear(c) * K(0x5b3284)) * *WF(c, w, 0xac);
     int32_t front = *WI(c, w, 0xc0);
     float lf = *WF(c, w, 0x98);
     if (lf < K(0x5b23f8)) lf = -lf;
@@ -719,10 +724,12 @@ static void tyre_grip(Car *c, int w)
 /* Rotates (x, z) by t turns. */
 static void rotate(float *x, float *z, float t)
 {
-    double sn = sin(turns_to_rad(t)), cs = cos(turns_to_rad(t));
+    /* (0x4a1f39: the sine kept as a float, the cosine on the stack; each product a float) */
+    float sn = (float)sin(turns_to_rad(t));
+    double cs = cos(turns_to_rad(t));
     float a = *x, b = *z;
-    *x = (float)(cs * a - (double)(float)sn * b);
-    *z = (float)(cs * b + (double)(float)sn * a);
+    *x = (float)(cs * a) - sn * b;
+    *z = sn * a + (float)(cs * b);
 }
 
 void CarSim_Tyre(Car *c, int w)
@@ -787,24 +794,25 @@ void CarSim_Tyre(Car *c, int w)
     /* The sideways force by the slip angle. */
     float vx = *WF(c, w, 0x9c);
     vz = *WF(c, w, 0xa4);
-    double ang, a;
+    /* (the original's x87 runs at single precision, Direct3D's setting: each step rounds to a float) */
+    float ang, a;
     if ((vz < K(0x5b23f8) ? -vz : vz) == K(0x5b23f8)) {
         ang = K(0x5b23f8);
         a = K(0x5b23f8);
     } else {
-        ang = atan2_turns(vx, vz * K(0x5b2448));
+        ang = (float)atan2_turns(vx, vz * K(0x5b2448));
         if (K(0x5b23f8) < vz && K(0x5b23f8) < vx) {
-            ang = ((double)K(0x5b23f0) - ang) * K(0x5b26b0);
+            ang = (K(0x5b23f0) - ang) * K(0x5b26b0);
         } else {
-            if (K(0x5b23f8) < vz && vx < K(0x5b23f8)) ang = (double)K(0x5b2448) - ang;
+            if (K(0x5b23f8) < vz && vx < K(0x5b23f8)) ang = K(0x5b2448) - ang;
             ang = ang * K(0x5b26b0);
         }
-        a = (float)ang;
+        a = ang;
     }
-    double aa = ang < K(0x5b23f8) ? -ang : ang;
+    float aa = ang < K(0x5b23f8) ? -ang : ang;
     if (*WI(c, w, 0xc0) == 0) {
         float m = K(0x5b24a8);
-        if (K(0x5b24a8) < (float)aa && (m = (float)aa, K(0x5b2580) < m)) m = K(0x5b2580);
+        if (K(0x5b24a8) < aa && (m = aa, K(0x5b2580) < m)) m = K(0x5b2580);
         float lat = m * load * K(0x5b23f0);
         if (a < K(0x5b23f8)) lat = -lat;
         float al = lat < K(0x5b23f8) ? -lat : lat;
@@ -812,14 +820,14 @@ void CarSim_Tyre(Car *c, int w)
         else *WF(c, w, 0x90) = vx <= al ? vx : al;
     } else {
         if (K(0x5b26a8) < aa) aa = K(0x5b26a8);
-        double lat = aa * load * K(0x5b49b0);
+        float lat = aa * load * K(0x5b49b0);
         if (a < K(0x5b23f8)) lat = -lat;
-        *WF(c, w, 0x90) = (float)lat;
+        *WF(c, w, 0x90) = lat;
         float ax = vx < K(0x5b23f8) ? -vx : vx, az = vz < K(0x5b23f8) ? -vz : vz;
         if (az + ax < K(0x5b2644)) {
-            double al = lat < K(0x5b23f8) ? -lat : lat;
-            if (vx <= K(0x5b23f8)) *WF(c, w, 0x90) = (float)(-al < vx ? vx : -al);
-            else *WF(c, w, 0x90) = (float)(vx <= al ? vx : al);
+            float al = lat < K(0x5b23f8) ? -lat : lat;
+            if (vx <= K(0x5b23f8)) *WF(c, w, 0x90) = -al < vx ? vx : -al;
+            else *WF(c, w, 0x90) = vx <= al ? vx : al;
         }
     }
     *WF(c, w, 0x94) = 0;
@@ -829,10 +837,11 @@ void CarSim_Tyre(Car *c, int w)
     if (steer != K(0x5b23f8)) {
         /* Back into the car's frame. */
         float t = steer * K(0x5b4aa0);
-        double sn = sin(turns_to_rad(t)), cs = cos(turns_to_rad(t));
+        float sn = (float)sin(turns_to_rad(t));
+        double cs = cos(turns_to_rad(t));
         float x = *WF(c, w, 0x90), z = *WF(c, w, 0x98);
-        *WF(c, w, 0x90) = (float)(cs * x - (double)(float)sn * z);
-        *WF(c, w, 0x98) = (float)((double)(float)sn * x + cs * z);
+        *WF(c, w, 0x90) = (float)(cs * x) - sn * z;
+        *WF(c, w, 0x98) = sn * x + (float)(cs * z);
     }
 }
 
@@ -886,7 +895,7 @@ static void drive(Car *c)
     float shake = 0.0f;
     if ((g_sim_tick & 3) == 0) {
         uint32_t r = SimRand_Next();
-        shake = (float)((((double)(r & 0xffff) * K(0x5b253c) - K(0x5b23f0)) * CarSim_TyreBump(c)) * K(0x5b23f0));
+        shake = ((float)(r & 0xffff) * K(0x5b253c) - K(0x5b23f0)) * CarSim_TyreBump(c) * K(0x5b23f0);
         if (speed < K(0x5b243c)) shake = shake * speed * K(0x5b49ec);
         wobble = shake + wobble;
     }
@@ -928,7 +937,7 @@ static void drive(Car *c)
     }
     *CAR_I(c, 0xd2c) = 0;
     /* The brakes (held to what stops the car this tick), shared front and rear by the specs' +0x108. */
-    float brake = (float)(((double)K(0x5b24a8) - (double)CarSim_BrakeWear(c) * K(0x5b3284)) * spec_f(c, 0x104) * g_drive_brake);
+    float brake = (K(0x5b24a8) - CarSim_BrakeWear(c) * K(0x5b3284)) * spec_f(c, 0x104) * g_drive_brake;
     float af = fwd < K(0x5b23f8) ? -fwd : fwd;
     if (af * K(0x5b2644) < brake) brake = af * K(0x5b2644);
     if (K(0x5b23f8) < fwd) brake = -brake;
@@ -986,7 +995,7 @@ static void drive(Car *c)
     v[1] = acc[1] * dt + v[1];
     v[2] = acc[2] * dt + v[2];
     w[0] = tw[0] * dt + w[0];
-    w[2] = (float)((double)tw[2] * dt + w[2]);
+    w[2] = tw[2] * dt + w[2];
     w[1] = tw[1] * (DESC_I(c, 0x518) ? K(0x5b24b8) : K(0x5b4a74)) + w[1];
     *CAR_F(c, 0xe08) = *CAR_F(c, 0xe08) * K(0x5b260c) + F[0] * K(0x5b2468);
     *CAR_F(c, 0xe04) = F[2] * K(0x5b2604) + *CAR_F(c, 0xe04) * K(0x5b25e8);
