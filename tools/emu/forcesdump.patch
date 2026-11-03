@@ -1,21 +1,22 @@
 --- a/src/game/wtree.c
 +++ b/src/game/wtree.c
-@@ -1285,7 +1285,15 @@
+@@ -1285,8 +1285,16 @@
      return best;
  }
  
 +void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);   /* (forcesdump) */
 +static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out);
  uint16_t WSurface_FindAbove(WSurface *s, const float p[3], WTreeElem **out)
-+{
+ {
 +    uint16_t r = above_(s, p, out);
 +    if (g_wsurf_hook) g_wsurf_hook(s, 1, r);
 +    return r;
 +}
 +static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out)
- {
++{
      load_consts();
      WTree *t = world_tree();
+     if (!s->cell || !WTree_CellContains(s->cell, p)) {
 @@ -1313,7 +1321,13 @@
      return best->flags;
  }
@@ -30,9 +31,25 @@
  {
      WTreeElem *old = s->elem;
      if (old && old->vt->contains(old, p) && keep) {
+@@ -1398,7 +1412,15 @@
+     return (float)plane_height(s.normal, v, p);
+ }
+ 
++void (*g_wedge_hook)(const float out[6], uint16_t flag, bool hit);   /* (forcesdump) */
++static bool edge_(WSurface *s, const float seg[6], float out[6], uint16_t *flag);
+ bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
++{
++    bool r = edge_(s, seg, out, flag);
++    if (g_wedge_hook) g_wedge_hook(out, *flag, r);
++    return r;
++}
++static bool edge_(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
+ {
+     load_consts();
+     WTree *t = world_tree();
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
-@@ -526,7 +526,115 @@
+@@ -526,9 +526,135 @@
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -86,6 +103,15 @@
 +    if (kind == 0) { fd_hex("upd", k, s, sizeof *s); fd_elem(s->elem); }
 +    else { char b[64]; snprintf(b, sizeof b, "FD above %s %u", k, v); plat_log(b); }
 +}
++extern void (*g_wedge_hook)(const float out[6], uint16_t flag, bool hit);
++static void fd_edge(const float out[6], uint16_t flag, bool hit)
++{
++    uint8_t b[28];
++    memcpy(b, out, 24);
++    uint32_t f = flag | (hit ? 0x10000u : 0);
++    memcpy(b + 24, &f, 4);
++    fd_hex("edge", "0", b, 28);
++}
 +static void fd_car(Car *c, const char *tag)
 +{
 +    static uint8_t img[CAR_SIZE];
@@ -95,20 +121,26 @@
 +    fd_hex(tag, "0", img, CAR_SIZE);
 +}
 +static bool fd_on(Car *c)
-+{
+ {
 +    static int start = -2, step = 1, last = -1;
 +    if (start == -2) {
 +        char v[32];
 +        start = -1;
 +        if (plat_param("forcesdump", v, sizeof v)) { start = atoi(v); char *q = strchr(v, ':'); if (q) step = atoi(q + 1); q = q ? strchr(q + 1, ':') : NULL; last = q ? atoi(q + 1) : start; }
 +    }
-+    return start >= 0 && g_sim_tick >= start && g_sim_tick <= last && (g_sim_tick - start) % step == 0 && c == g_cars[g_race_local];
++    static int car = -2;
++    if (car == -2) {
++        char v[16];
++        car = plat_param("fdcar", v, sizeof v) ? atoi(v) : -1;
++    }
++    return start >= 0 && g_sim_tick >= start && g_sim_tick <= last && (g_sim_tick - start) % step == 0 &&
++           c == g_cars[car >= 0 ? car : g_race_local];
 +}
 +static void forces_(void *car);
 +/* Runs fn on the car, dumped when the tick is chosen and fdfn (hex, default 49bcb0) names va. */
 +void FD_Wrap(void (*fn)(void *), void *car, uint32_t va)
 +{
-+    Car *c = car;
+     Car *c = car;
 +    static int want = -1;
 +    if (want < 0) {
 +        char v[32];
@@ -129,13 +161,16 @@
 +        uint32_t r[3];
 +        SimRand_Peek(r);
 +        char b[256];
-+        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2]);
++        for (int i = 0; i < g_racers.n; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_racers.c[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_racers.c[i]->b, CAR_SIZE); }
++        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u players=%d demo=%d altgrip=%d nracers=%d", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2], g_race_players, g_race_demo, g_race_alt_grip, g_racers.n);
 +        plat_log(b);
 +        g_wsurf_hook = fd_hook;
++        g_wedge_hook = fd_edge;
 +    }
 +    fn(car);
 +    if (on) {
 +        g_wsurf_hook = NULL;
++        g_wedge_hook = NULL;
 +        fd_car(c, "post");
 +        uint32_t r[3];
 +        SimRand_Peek(r);
@@ -146,9 +181,11 @@
 +}
 +void CarSim_Forces(void *car) { FD_Wrap(forces_, car, 0x49bcb0); }
 +static void forces_(void *car)
- {
-     Car *c = car;
++{
++    Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
+     int rate, ticks;
+     float dt;
 --- a/src/game/sim_rand.c
 +++ b/src/game/sim_rand.c
 @@ -36,3 +36,5 @@
@@ -182,3 +219,46 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
+--- a/src/game/ai_drive.c
++++ b/src/game/ai_drive.c
+@@ -718,7 +718,10 @@
+     F(0x38c) = F(0x38c) * K(0x5b25f4);
+ }
+ 
+-void AI_DriveTask(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void aidrive_(void *car);
++void AI_DriveTask(void *car) { FD_Wrap(aidrive_, car, 0x4083c0); }
++static void aidrive_(void *car)
+ {
+     Car *c = car;
+     uint32_t f = (uint32_t)I(CAR_FLAGS);
+--- a/src/game/car_drive.c
++++ b/src/game/car_drive.c
+@@ -1046,7 +1046,10 @@
+         for (int j = 0; j < 3; j++) v[j] *= 0.5f;
+ }
+ 
+-void CarSim_Drive(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void drive_(void *car);
++void CarSim_Drive(void *car) { FD_Wrap(drive_, car, 0x49fb20); }
++static void drive_(void *car)
+ {
+     Car *c = car;
+     if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
+--- a/src/game/car_collide.c
++++ b/src/game/car_collide.c
+@@ -160,7 +160,11 @@
+     return h < K(0x5b23f8) ? -h : h;
+ }
+ 
+-void CarSim_Edges(Car *c)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void edges_(Car *c);
++static void edges_task(void *car) { edges_(car); }
++void CarSim_Edges(Car *c) { FD_Wrap(edges_task, c, 0x494f90); }
++static void edges_(Car *c)
+ {
+     float worst = 0.0f;
+     float back[3];

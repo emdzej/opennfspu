@@ -13,7 +13,8 @@ exe = open(sys.argv[1], 'rb').read()
 cw = int(sys.argv[3], 16) if len(sys.argv) > 3 else 0x007f
 pre = post = desc = specs = None
 fn = 0x49bcb0
-parts, elems, upd, above, glob = {}, {}, [], [], {}
+parts, elems, upd, above, glob, racers, edges = {}, {}, [], [], {}, {}, []
+self_i = -1
 for line in open(sys.argv[2]):
     p = line.split()
     if not p or p[0] != 'FD': continue
@@ -23,6 +24,9 @@ for line in open(sys.argv[2]):
         continue
     if tag == 'fn':
         fn = int(p[3], 16)
+        continue
+    if tag == 'self':
+        self_i = int(key)
         continue
     if tag == 'above':
         above.append(int(p[3]))
@@ -35,6 +39,8 @@ for line in open(sys.argv[2]):
     elif tag == 'part': parts[int(key)] = data
     elif tag == 'elem': elems[int(key, 16)] = data
     elif tag == 'upd': upd.append((int(key), data))
+    elif tag == 'racer': racers[int(key)] = data
+    elif tag == 'edge': edges.append(data)
 
 pe = struct.unpack_from('<I', exe, 0x3c)[0]
 nsec = struct.unpack_from('<H', exe, pe + 6)[0]
@@ -96,10 +102,24 @@ mu.mem_write(0x65808c + 0x580 * idx, desc)
 g = glob['glob']
 w32(0x606ac4, int(g['tick'])); w32(0x6573f8, int(g['rally'])); w32(0x657408, int(g['network']))
 w32(0x657a2c, int(g['damage'])); w32(0x657400, int(g['derby'])); w32(0x6573e8, int(g['mode']))
+for k, va in (('players', 0x657404), ('demo', 0x5e67b0), ('altgrip', 0x606ae0)):
+    if k in g: w32(va, int(g[k]))
+# the racers (the draft reads their positions), the car itself among them
+w32(0x5e8ae8, len(racers))
+for i in sorted(racers):
+    if i == self_i: a = car
+    else:
+        b = bytearray(racers[i])
+        struct.pack_into('<I', b, 0x558, desc_a)
+        struct.pack_into('<I', b, 0x760, specs_a)
+        for j in range(20): struct.pack_into('<I', b, 0x768 + 4 * j, parts_a[j])
+        a = alloc(bytes(b))
+    wu32(0x5e8b34 + 4 * i, a)
 r = [int(x) for x in g['rand'].split(',')]
 wu32(0x5d1028, r[0]); wu32(0x5d102c, r[1]); wu32(0x655a0c, r[2])
 
 log = []
+last_edge = [None]
 def ret(uc, n, eax=None):
     sp = uc.reg_read(UC_X86_REG_ESP)
     ra = struct.unpack('<I', uc.mem_read(sp, 4))[0]
@@ -122,6 +142,20 @@ def hook(uc, addr, size, ud):
         v = above.pop(0) if above else 0
         log.append(f'above {v}')
         ret(uc, 8, v)
+    elif addr == 0x474030:
+        # the wall edge query (thiscall: segment, out edge, out flag; ret 0xc): the port asks once where
+        # the original's Edges asks again after a miss (0x495380), with the same answer
+        ra = struct.unpack('<I', uc.mem_read(sp, 4))[0]
+        if ra == 0x495385 and last_edge[0] is not None: d = last_edge[0]
+        elif edges: d = edges.pop(0)
+        else: log.append('edge with none recorded'); d = bytes(24) + struct.pack('<I', 0)
+        last_edge[0] = d
+        out, fl = struct.unpack('<II', uc.mem_read(sp + 8, 8))
+        f = struct.unpack_from('<I', d, 24)[0]
+        uc.mem_write(out, d[:24])
+        uc.mem_write(fl, struct.pack('<H', f & 0xffff))
+        log.append('edge %d' % (f >> 16))
+        ret(uc, 0xc, (uc.reg_read(UC_X86_REG_EAX) & ~0xff) | (f >> 16))
     elif addr == STUB_N:
         n, verts, nv = info[this]
         out = struct.unpack('<I', uc.mem_read(sp + 4, 4))[0]
@@ -131,7 +165,7 @@ def hook(uc, addr, size, ud):
         n, verts, nv = info[this]
         i = struct.unpack('<i', uc.mem_read(sp + 4, 4))[0]
         ret(uc, 4, verts + 12 * min(i, nv))
-for a in (0x473fc0, 0x473290, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
+for a in (0x473fc0, 0x473290, 0x474030, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
 def bad(uc, access, addr, size, value, ud):
     print('bad access', hex(addr), 'at', hex(uc.reg_read(UC_X86_REG_EIP)))
     return False
@@ -161,7 +195,9 @@ for o in range(0, len(want) - 3, 4):
     a, b = emu[o:o + 4], bytes(want[o:o + 4])
     if a != b:
         diffs.append((o, struct.unpack('<f', a)[0], struct.unpack('<f', b)[0], struct.unpack('<i', a)[0], struct.unpack('<i', b)[0]))
-print('calls', log, 'left', len(upd), len(above))
+print('calls', log, 'left', len(upd), len(above), len(edges))
+changed = sum(1 for o in range(0, len(want) - 3, 4) if o not in skip and pre[o:o + 4] != bytes(want[o:o + 4]))
+print('port changed', changed, 'words')
 print('differing words', len(diffs))
 for o, fa, fb, ia, ib in diffs[:60]:
     print(f'+0x{o:04x} emu {fa:.9g} port {fb:.9g} (int {ia} {ib})')

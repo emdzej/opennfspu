@@ -928,7 +928,10 @@ static void drive(Car *c)
         *a0 /= d;
         *a1 /= d;
     }
-    for (int w = 0; w < 2; w++) *CAR_F(c, 0xac8 + 4 * w) = *CAR_F(c, 0xac8 + 4 * w) * K(0x5b23f0) + *WF(c, w, 0xb4) * K(0x5b23f0);
+    /* (in doubles for the x87's exponent range: the filter decays through the denormals, where the
+       halves stay exact until the store) */
+    for (int w = 0; w < 2; w++)
+        *CAR_F(c, 0xac8 + 4 * w) = (float)((double)*WF(c, w, 0xb4) * K(0x5b23f0) + (double)*CAR_F(c, 0xac8 + 4 * w) * K(0x5b23f0));
     float torque = CarSim_Engine(c);   /* 0x49e230 */
     if (!g_drive_front_down && !g_drive_rear_down) {
         memset(CAR_F(c, 0xd4c), 0, 12);
