@@ -139,7 +139,10 @@ void CarSim_ZoneDamage(Car *c, float impact, int z, int kick)
     if (*CAR_I(c, 0x434) == 0) {
         /* (0x532550, 0x532560: the angle in radians rounded to a float, the sine unrounded until the
            product; single precision after) */
-        double a = (float)((double)l[2] * 6.283185307179586);
+        double k = 6.283185307179586;   /* (2 pi as the double at 0x5bb2c0, a float's value) */
+        const uint8_t *kp = exe_data(0x5bb2c0, 8);
+        if (kp) memcpy(&k, kp, 8);
+        double a = (float)((double)l[2] * k);
         float q[3] = {-(float)(sin(a) * *CAR_F(c, 0x3a8)), -(float)(cos(a) * *CAR_F(c, 0x3ac)), 0};
         CAR_F(c, 0x330)[1] = dot3(q, t + 3) * K(0x5b24b8) + CAR_F(c, 0x330)[1];
     }

@@ -10,6 +10,7 @@
 #include "render/render.h"
 #include "render/rtex.h"
 #include "game/camera.h"
+#include "game/sim_math.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,8 +134,8 @@ void Headlights_Update(void)
     if (!s_cop) return;
     s_cop_col[0] = 0xffff0000u;
     s_cop_col[1] = 0xff0000ffu;
-    float t = (float)g_sim_tick * K(0x5b3714) * 6.2831855f;   /* (TIMER_ticks: the simulation's clock) */
-    float sn = sinf(t), cs = cosf(t);
+    float sn, cs;
+    Math_SinCosTurns((float)g_sim_tick * K(0x5b3714), &sn, &cs);   /* (TIMER_ticks: the simulation's clock) */
     const float *r = CAR_F(s_cop, 0x364);
     float q[9] = {cs * r[0] - r[6] * sn, r[1] * cs - r[7] * sn, r[2] * cs - r[8] * sn, r[3], r[4], r[5],
                   sn * r[0] + r[6] * cs, r[7] * cs + r[1] * sn, r[8] * cs + r[2] * sn};
