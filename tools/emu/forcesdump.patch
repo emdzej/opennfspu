@@ -50,7 +50,18 @@
      uint32_t f = (uint32_t)I(CAR_FLAGS);
 --- a/src/game/car_collide.c
 +++ b/src/game/car_collide.c
-@@ -160,7 +160,11 @@
+@@ -10,6 +10,10 @@
+ #include <math.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <stdio.h>
++#include "platform.h"
++extern void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);
++static void fd_line(const char *m) { if (g_wsurf_hook) plat_log(m); }   /* (forcesdump) */
+ 
+ static float exe_f32(uint32_t va)
+ {
+@@ -160,7 +164,11 @@
      return h < K(0x5b23f8) ? -h : h;
  }
  
@@ -63,7 +74,51 @@
  {
      float worst = 0.0f;
      float back[3];
-@@ -405,7 +409,45 @@
+@@ -339,6 +347,7 @@
+         int a = (int)exe_u32(0x5d0b6c + 8u * (unsigned)s), b = (int)exe_u32(0x5d0b70 + 8u * (unsigned)s);
+         float seg[6] = {corner[a][0], 0, corner[a][2], corner[b][0], 0, corner[b][2]}, n[3], at[3];
+         int hit = o->ovt->collide(o, seg, n, at);
++        { uint32_t u[6]; memcpy(u, n, 12); memcpy(u + 3, at, 12); char m[160]; snprintf(m, sizeof m, "FD ocoll 0 %d %08x %08x %08x %08x %08x %08x", hit, u[0], u[1], u[2], u[3], u[4], u[5]); fd_line(m); }
+         if (hit > 1) {
+             memcpy(bn, n, 12);
+             memcpy(bat, at, 12);
+@@ -372,12 +381,35 @@
+     if (*CAR_I(c, 0x43c) != 0) return;
+     WTreeElems *near = WTree_ObjectsNear(CAR_F(c, 0x330), 5.0f);   /* 0x4737d0 */
+     if (!near) return;
++    for (uint32_t i = 0; i < near->n && g_wsurf_hook; i++) {
++        WTreeObject *o = (WTreeObject *)near->e[i];
++        float ctr[3];
++        o->e.vt->centre(&o->e, ctr);
++        /* the object in the original's layout (cylinder 0x38 bytes, box 0x68), its vtable and bundle 0 */
++        uint8_t raw[0x68] = {0};
++        memcpy(raw + 0x08, o->bmin, 12);
++        memcpy(raw + 0x14, o->bmax, 12);
++        memcpy(raw + 0x20, &o->f20, 4);
++        memcpy(raw + 0x24, &o->drivethru, 4);
++        raw[0x2c] = o->f2c;
++        memcpy(raw + 0x2e, &o->entry, 2);
++        if (o->shape == WOBJ_CYLINDER) memcpy(raw + 0x34, &o->radius, 4);
++        else { memcpy(raw + 0x34, o->corner, 0x30); memcpy(raw + 0x64, &o->radius, 4); }
++        static const char hx[] = "0123456789abcdef";
++        char m[0x100];
++        int q = snprintf(m, sizeof m, "FD objraw %u %d ", i, (int)o->shape);
++        for (int b = 0; b < 0x68; b++) { m[q++] = hx[raw[b] >> 4]; m[q++] = hx[raw[b] & 15]; }
++        m[q] = 0;
++        fd_line(m);
++        (void)ctr;
++    }
+     for (uint32_t i = 0; i < near->n; i++) {
+         WTreeObject *o = (WTreeObject *)near->e[i];
+         float ctr[3];
+         o->e.vt->centre(&o->e, ctr);
+         if (!near_box(c, ctr, o->ovt->radius(o))) continue;
+         int kind = o->ovt->hitkind(o, CAR_F(c, 0x33c));
++        { char m[64]; snprintf(m, sizeof m, "FD okind %u %d", i, kind); fd_line(m); }
+         if (kind == 2) {
+             /* The original tells the two apart by RTTI (dynamic_cast to each). */
+             if (o->shape == WOBJ_CYLINDER)
+@@ -405,9 +437,47 @@
  
  void CarSim_ClearCollided(void) { g_ncollided = 0; }
  
@@ -72,7 +127,7 @@
 +static void collide_(void *car);
 +static void collide_extra(void *car);
  void CarSim_Collide(void *car)
-+{
+ {
 +    extern void (*g_fd_extra)(void *car);
 +    g_fd_extra = collide_extra;
 +    FD_Wrap(collide_, car, 0x498f60);
@@ -80,7 +135,7 @@
 +}
 +static void collide_extra(void *car)
 +{
-+    Car *c = car;
+     Car *c = car;
 +    {
 +        char b[256];
 +        int o = snprintf(b, sizeof b, "FD collided 0");
@@ -106,9 +161,11 @@
 +    }
 +}
 +static void collide_(void *car)
- {
-     Car *c = car;
++{
++    Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
+     if (*CAR_I(c, 0x43c) > 0) (*CAR_I(c, 0x43c))--;
+     if (c->b[0x7c]) {
 --- a/src/game/car_drive.c
 +++ b/src/game/car_drive.c
 @@ -1046,7 +1046,10 @@

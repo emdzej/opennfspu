@@ -46,7 +46,7 @@ dumped; `FN=` for `sweep_forces.sh`) and `--param fdcar=<i>` (the car, default t
 | 40b670, 40c000 | the AI's plan and steering (opponents): the whole road and the racing line (.lsp) rebuilt once |
 | 4169d0 | the race task (progress, laps, finish): the race's laps, type and linearity in the dump |
 | 4102e0 | the hit task: the sparks (0x43f3f0, on the renderer's effects) skipped |
-| 498f60 | the collisions: the walls, the objects (only ticks where none passes the box test), and the cars checked before this one (0x628cdc), compared after as well |
+| 498f60 | the collisions: the walls, the world's objects and the cars checked before this one (0x628cdc), compared after as well. The objects are rebuilt in the original's layout (cylinder 0x38 bytes, box 0x68) with copies of its vtables (0x5b490c, 0x5b4938), so its centre, radius and box test run as they are; the hit kind (slot 8, which asks the bundle) and the RTTI casts are answered from the port |
 
 +0x434 (the car hit) is the original's pointer and the port's index plus one; it compares as equal
 when both are set.

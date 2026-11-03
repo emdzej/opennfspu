@@ -18,6 +18,7 @@ self_i = -1
 collided, nobjects, postracers = None, 0, {}
 nodes_rec, nroad, rnodes = [], 0, {}
 ranked = None
+objraw, okinds = {}, []
 import os
 road_all = {}
 aispecs = None
@@ -37,7 +38,7 @@ for line in open(sys.argv[2]):
     p = line.split()
     if not p or p[0] != 'FD': continue
     tag, key = p[1], p[2]
-    if (tag.startswith('road') and tag != 'road') or tag == 'aispecs': continue
+    if (tag.startswith('road') and tag != 'road') or tag in ('aispecs', 'ocoll'): continue
     if tag in ('glob', 'postglob'):
         glob[tag] = dict(t.split('=', 1) for t in p[3:] if '=' in t)
         continue
@@ -49,6 +50,12 @@ for line in open(sys.argv[2]):
         continue
     if tag == 'objects':
         nobjects = int(p[3])
+        continue
+    if tag == 'objraw':
+        objraw[int(key)] = (int(p[3]), bytes.fromhex(p[4]))
+        continue
+    if tag == 'okind':
+        okinds.append(int(p[3]))
         continue
     if tag == 'ranked':
         ranked = p[3:]
@@ -255,10 +262,40 @@ def hook(uc, addr, size, ud):
         log.append('edge %d' % (f >> 16))
         ret(uc, 0xc, (uc.reg_read(UC_X86_REG_EAX) & ~0xff) | (f >> 16))
     elif addr == 0x4737d0:
-        # the world's objects near the car (thiscall: point, radius; ret 8): none when none of the port's
-        # passed the box test
-        if nobjects: log.append('objects unsupported')
-        ret(uc, 8, 0)
+        # the world's objects near the car (thiscall: point, radius; ret 8): the port's, in the original's
+        # layout with copies of the original's vtables (cylinder 0x5b490c, box 0x5b4938), the hit kind
+        # (slot 8, which asks the bundle) answered from the port's record
+        if not objraw:
+            if nobjects: log.append('objects unsupported')
+            ret(uc, 8, 0)
+            return
+        ptrs = []
+        for i in sorted(objraw):
+            shape, raw = objraw[i]
+            src = 0x5b490c if shape == 1 else 0x5b4938
+            vt = bytearray(uc.mem_read(src - 4, 0x34))
+            struct.pack_into('<I', vt, 4 + 0x20, STUB_OK)
+            vta = alloc(bytes(vt)) + 4
+            b = bytearray(raw)
+            struct.pack_into('<I', b, 0, vta)
+            a = alloc(bytes(b))
+            obj_shape[a] = shape
+            ptrs.append(a)
+        arr = alloc(struct.pack('<%dI' % len(ptrs), *ptrs))
+        log.append('objects %d' % len(ptrs))
+        ret(uc, 8, alloc(struct.pack('<III', arr, arr + 4 * len(ptrs), arr + 4 * len(ptrs))))
+    elif addr == STUB_OK:
+        # an object's hit kind (thiscall: the velocity; ret 4)
+        k = okinds.pop(0) if okinds else 0
+        log.append('kind %d' % k)
+        ret(uc, 4, k)
+    elif addr == 0x5a10fb:
+        # the RTTI cast (cdecl: object, 0, from, to, 0): the stand-in's shape
+        o, _, _, to = struct.unpack('<IIII', uc.mem_read(sp + 4, 16))
+        want = {0x5d0590: 1, 0x5d05b8: 2}.get(to)
+        ret(uc, 0, o if obj_shape.get(o) == want else 0)
+    elif addr in (0x59ea80, 0x59ee00, 0x532020, 0x532030):
+        ret(uc, 0)   # the vector's frees and the small-block pool's lock
     elif addr == 0x43f3f0:
         # a hit's sparks (thiscall on the renderer's effects; ret 8): drawing only
         log.append('sparks')
@@ -276,7 +313,10 @@ def hook(uc, addr, size, ud):
         i = struct.unpack('<i', uc.mem_read(sp + 4, 4))[0]
         ret(uc, 4, verts + 12 * (i % nv if i >= nv else i))   # (past the last wraps round, 0x485f80, 0x485a60)
 TLS = alloc(bytes(0x100))
-for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, 0x4743a0, 0x5a520c, 0x43f3f0, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
+STUB_OK = STUB + 0x20
+obj_shape = {}
+wu32(0x5e4fe8, alloc(bytes(0x400)))   # the small-block pool the vector goes back to
+for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, 0x4743a0, 0x5a520c, 0x43f3f0, 0x5a10fb, 0x59ea80, 0x59ee00, 0x532020, 0x532030, STUB_OK, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
 def bad(uc, access, addr, size, value, ud):
     print('bad access', hex(addr), 'at', hex(uc.reg_read(UC_X86_REG_EIP)))
     return False
