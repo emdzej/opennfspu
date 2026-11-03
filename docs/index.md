@@ -41,6 +41,20 @@ features:
 
 <div class="vp-doc" style="max-width: 1152px; margin: 48px auto 0; padding: 0 24px;">
 
+## Screenshots
+
+Renders of OpenNFSPU itself (headless runs of `opennfspu.wasm` on the game's own data, made by
+`tools/screenshots.sh`).
+
+<div class="shots">
+  <figure><img src="/screenshots/menu.jpg" alt="The main menu" loading="lazy"><figcaption>The main menu</figcaption></figure>
+  <figure><img src="/screenshots/quickrace.jpg" alt="Quick Race with the car in the garage" loading="lazy"><figcaption>Quick Race</figcaption></figure>
+  <figure><img src="/screenshots/alps.jpg" alt="A race in the Alps against three opponents" loading="lazy"><figcaption>The Alps, against three AI opponents</figcaption></figure>
+  <figure><img src="/screenshots/castle.jpg" alt="The castle track from the chase camera" loading="lazy"><figcaption>The castle track, from the chase camera</figcaption></figure>
+  <figure><img src="/screenshots/canyon.jpg" alt="The canyon track" loading="lazy"><figcaption>The canyon track</figcaption></figure>
+  <figure><img src="/screenshots/cockpit.jpg" alt="The driver's seat camera on the Autobahn" loading="lazy"><figcaption>The driver's seat on the Autobahn, in the rain</figcaption></figure>
+</div>
+
 ## Built for gasm
 
 <p><a class="gasm-badge" href="https://gasm.emdzej.pl"><img class="gasm-badge-light" src="https://gasm.emdzej.pl/badge/built-for-gasm-light.svg" alt="Built for gasm" width="120" height="44"><img class="gasm-badge-dark" src="https://gasm.emdzej.pl/badge/built-for-gasm-dark.svg" alt="Built for gasm" width="120" height="44"></a></p>

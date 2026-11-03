@@ -24,9 +24,17 @@ shot() {   # name frames [gasm-run options...]
   local name=$1 frames=$2; shift 2
   "$RUN" "$tmp/opennfspu.wasm" --asset-dir "$DATA" --headless "$frames" --screenshot "$tmp/$name.png" "$@" \
     2>/dev/null | tr '\n' ' '
+  # (the 4:3 picture without the frame's side bars)
+  sips -c 720 960 "$tmp/$name.png" >/dev/null
   sips -s format jpeg -s formatOptions 80 "$tmp/$name.png" --out "$OUT/$name.jpg" >/dev/null
   echo "-> $OUT/$name.jpg ($(($(wc -c < "$OUT/$name.jpg") / 1024)) KB)"
 }
 
-# Add a shot per game state as the port reaches it (frontend, showroom, tracks, replays).
-shot start 60
+# A shot per game state (add them as the port reaches more). Races: start=384 begins straight in the
+# camera's mode, cam=3 a near chase camera.
+shot menu 200 --param intro=0
+shot quickrace 120 --param intro=0 --param fe=quickrace
+shot castle 500 --param start=384 --param drive=castle --param cam=3
+shot alps 900 --param start=384 --param drive=alps --param cam=3 --param opponents=3
+shot canyon 700 --param start=384 --param drive=canyon --param cam=3
+shot cockpit 500 --param start=384 --param drive=autobahn --param cam=1
