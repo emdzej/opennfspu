@@ -528,7 +528,7 @@ static void text_print(HText *t, const char *s, float sx, float sy)
         }
         x = (int)((float)x - t->width);
     }
-    /* (drawn at once instead with the second argument: the HUD editor's, not ported) */
+    /* (drawn at once instead with the second argument: text_print_now, the map's laps) */
     Hud2D_Text(s, t->colour, (float)x, (float)y, t->font->drawer, sx, sy);
 }
 
