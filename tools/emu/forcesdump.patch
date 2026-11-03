@@ -325,7 +325,7 @@ index 4fef594..5b97b0b 100644
      Car *c = car;
      if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
 diff --git a/src/game/car_ground.c b/src/game/car_ground.c
-index 84beca3..a57e06b 100644
+index 84beca3..83b4492 100644
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
 @@ -1,12 +1,14 @@
@@ -343,7 +343,7 @@ index 84beca3..a57e06b 100644
  #include "game/sim_math.h"
  #include "game/sim_rand.h"
  #include "pending.h"
-@@ -529,7 +531,280 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
+@@ -529,7 +531,281 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -465,6 +465,7 @@ index 84beca3..a57e06b 100644
 +    memcpy(img + 0x8, &c->body, sizeof c->body);
 +    fd_hex(tag, "0", img, CAR_SIZE);
 +}
++static bool is_racer(Car *c) { for (int i = 0; i < g_racers.n; i++) if (g_racers.c[i] == c) return true; return false; }
 +static bool fd_on(Car *c)
 +{
 +    static int start = -2, step = 1, last = -1;
@@ -479,7 +480,7 @@ index 84beca3..a57e06b 100644
 +        car = plat_param("fdcar", v, sizeof v) ? atoi(v) : -1;
 +    }
 +    return start >= 0 && g_sim_tick >= start && g_sim_tick <= last && (g_sim_tick - start) % step == 0 &&
-+           c == g_cars[car >= 0 ? car : g_race_local];
++           (car == -2 ? is_racer(c) : c == g_cars[car >= 0 ? car : g_race_local]);   /* (-2: every racer) */
 +}
 +static void forces_(void *car);
 +static int fd_want(void)
@@ -625,7 +626,7 @@ index 84beca3..a57e06b 100644
  {
      Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
-@@ -644,7 +919,13 @@ static void player_distance(Car *c)
+@@ -644,7 +920,13 @@ static void player_distance(Car *c)
  
  /* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
     segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
@@ -639,7 +640,7 @@ index 84beca3..a57e06b 100644
  {
      int16_t old = s->node;
      if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
-@@ -760,7 +1041,9 @@ void CarSim_BodyPlane(Car *c)
+@@ -760,7 +1042,9 @@ void CarSim_BodyPlane(Car *c)
      memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
  }
  
@@ -678,7 +679,7 @@ index 5640140..bf75978 100644
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
 diff --git a/src/game/car_respawn.c b/src/game/car_respawn.c
-index 37aa1fa..4c07984 100644
+index 0a0f39b..d1154de 100644
 --- a/src/game/car_respawn.c
 +++ b/src/game/car_respawn.c
 @@ -17,6 +17,8 @@
@@ -742,10 +743,10 @@ index b60af70..2b4d45a 100644
      Car *c = car;
      uint8_t *b = c->b;
 diff --git a/src/game/race_progress.c b/src/game/race_progress.c
-index 25ab4ec..9987d98 100644
+index 311d8ae..4c78dd4 100644
 --- a/src/game/race_progress.c
 +++ b/src/game/race_progress.c
-@@ -229,7 +229,10 @@ static void SkillTest_Progress(Car *c)
+@@ -231,7 +231,10 @@ static void SkillTest_Progress(Car *c)
      }
  }
  

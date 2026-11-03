@@ -158,21 +158,27 @@ TRACK = [0x7bc + 0xc4 * i for i in range(4)] + [0x8]
 # FD_CARRY=<file>: a free run. The words the emulator ended the previous call with where it disagreed with
 # the port go into this call's state (and its random generator), so the original runs on its own
 # values; a word the port changed between the calls (code the dump doesn't cover) takes the port's.
+# Kept per car: the dumped car's and the other racers' a call changed, for runs of several cars.
 import json
 CARRY = os.environ.get('FD_CARRY')
 NOCARRY = {0x434, 0xed4, 0x454, 0xe94, 0x550}   # (links: the two sides encode them differently)
 carried, uncovered = 0, []
-if CARRY and os.path.exists(CARRY):
-    cj = json.load(open(CARRY))
-    if cj.get('self') == self_i:
-        pre = bytearray(pre)
-        cpost = bytes.fromhex(cj['post'])
-        for o, v in cj['diff'].items():
-            o = int(o)
-            if cpost[o:o + 4] == pre[o:o + 4]: pre[o:o + 4] = bytes.fromhex(v); carried += 1
-            else: uncovered.append(o)
-        pre = bytes(pre)
-        if cj.get('rand') and cj.get('portrand') == glob['glob']['rand']: glob['glob']['rand'] = cj['rand']
+cj = json.load(open(CARRY)) if CARRY and os.path.exists(CARRY) else {'cars': {}}
+def carry_in(i, img):
+    global carried
+    e = cj['cars'].get(str(i))
+    if not e: return img
+    img, cpost = bytearray(img), bytes.fromhex(e['post'])
+    for o, v in e['diff'].items():
+        o = int(o)
+        if cpost[o:o + 4] == img[o:o + 4]: img[o:o + 4] = bytes.fromhex(v); carried += 1
+        else: uncovered.append((i, o))
+    return bytes(img)
+if CARRY:
+    pre = carry_in(self_i, pre)
+    for i in list(racers):
+        if i != self_i: racers[i] = carry_in(i, racers[i])
+    if cj.get('rand') and cj.get('portrand') == glob['glob']['rand']: glob['glob']['rand'] = cj['rand']
 desc_a = alloc(desc)
 specs_a = alloc(specs)
 parts_a = [alloc(parts.get(i, bytes(0x200))) for i in range(20)]
@@ -499,7 +505,12 @@ if fn == 0x40b600:
 print('rand emu', struct.unpack('<I', mu.mem_read(0x5d1028, 4))[0], 'port', glob['postglob']['rand'])
 if CARRY:
     er = ','.join(str(struct.unpack('<I', mu.mem_read(a, 4))[0]) for a in (0x5d1028, 0x5d102c, 0x655a0c))
-    print('carried', carried, 'uncovered', ' '.join(hex(o) for o in uncovered))
-    json.dump({'self': self_i, 'post': bytes(post).hex(), 'portrand': glob['postglob']['rand'],
-               'rand': er if er != glob['postglob']['rand'] else None,
-               'diff': {str(o): emu[o:o + 4].hex() for o, *_ in diffs if o not in NOCARRY}}, open(CARRY, 'w'))
+    print('carried', carried, 'uncovered', ' '.join(f'{i}:{o:#x}' for i, o in uncovered))
+    cj['cars'][str(self_i)] = {'post': bytes(post).hex(), 'diff': {str(o): emu[o:o + 4].hex() for o, *_ in diffs if o not in NOCARRY}}
+    for i, d in postracers.items():
+        if i == self_i or i not in racer_a: continue
+        e = bytes(mu.mem_read(racer_a[i], len(d)))
+        cj['cars'][str(i)] = {'post': d.hex(), 'diff': {str(o): e[o:o + 4].hex() for o in range(0, len(d) - 3, 4)
+                                                        if o not in skip and o not in NOCARRY and not same(o, e[o:o + 4], d[o:o + 4])}}
+    cj['portrand'], cj['rand'] = glob['postglob']['rand'], er if er != glob['postglob']['rand'] else None
+    json.dump(cj, open(CARRY, 'w'))
