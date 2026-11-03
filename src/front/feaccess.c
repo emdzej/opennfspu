@@ -231,7 +231,10 @@ static void dead_zones(void)
     }
 }
 
-/* A dead zone accessor's bytes in the save's accessor section (v8 0x51b770: its place, the 16). */
+/* An accessor's bytes in the save's accessor section (each name and its own data: a dead zone's v8
+   0x51b770 its place and the 16, FEPositionableAccessor's 0x4bc060 its place). The original's loader
+   (0x4b7dc0) walks the names in order, each accessor reading its own; the port, without some of the
+   classes (the network's, the controllers'), finds the name instead. */
 static uint8_t *dz_bytes(const FEAccessor *a, Save *sv, size_t need)
 {
     for (int k = 0; sv && k < sv->nsec; k++) {
@@ -278,10 +281,44 @@ int FEAccess_DeadZone(int axis, bool max, int joy)   /* _v28 0x51b7d0 */
 
 FEAccessor *FEAccess_DeadZoneAccessor(int axis, bool max) { return 0 <= axis && axis < 8 ? FEAccess_Find(dz_name(2 * axis + max)) : NULL; }
 
+/* The kinds kept as FEPositionableAccessor keeps them (v7 0x4bc040 its place, v8 0x4bc060 the place
+   read then set, slot 11): FEIntAccessor's, FEListAccessor's, FEBoolAccessor's (vtables 0x5b502c,
+   0x5b518c, 0x5b4c64; the tournament's event type's 0x5b8960, the knockout's track number's 0x5b50a4
+   the same). The port's other kinds keep their state elsewhere (the save's own sections, options). */
+static bool saved_pos(const FEAccessor *a) { return a->kind == ACC_INT || a->kind == ACC_LIST || a->kind == ACC_BOOL; }
+
+/* The save's accessor section into the accessors (0x4b7dc0, at each save's read; the names in the
+   section's order, each callback run by its set). */
+void FEData_LoadAccessors(Save *sv)
+{
+    for (int k = 0; sv && k < sv->nsec; k++) {
+        SaveSection *x = &sv->sec[k];
+        if (strcmp(x->name, "accessor")) continue;
+        for (size_t j = 4; j < x->size; j++) {
+            if (x->data[j - 1] != 0) continue;
+            const char *nm = (const char *)x->data + j;
+            size_t len = strnlen(nm, x->size - j);
+            if (j + len + 1 + 4 > x->size) break;
+            FEAccessor *a = FEAccess_Find(nm);
+            if (!a || strcmp(a->name, nm) || !saved_pos(a)) continue;
+            int32_t v;
+            memcpy(&v, x->data + j + len + 1, 4);
+            a->pos = v;
+            FEAccess_SetPos(a, v);
+            j += len + 4;
+        }
+    }
+}
+
 void FEData_StoreDeadZones(Save *sv)   /* (the accessors' writer, _v7 0x51b740, into the section read) */
 {
     for (int i = 0; i < s_nacc; i++) {
         FEAccessor *a = &s_acc[i];
+        if (saved_pos(a)) {
+            uint8_t *b = dz_bytes(a, sv, 4);
+            if (b) memcpy(b, &a->pos, 4);   /* (0x4bc040) */
+            continue;
+        }
         if (a->kind != ACC_DEADZONE) continue;
         uint8_t *b = dz_bytes(a, sv, 0x44);
         if (!b) continue;
@@ -1884,6 +1921,14 @@ void FEData_Init(void)
     audio();
     force_feedback();
     dead_zones();
+    /* FEdaCameras_v0 0x4e43e0: the race's four cameras (FEPositionableAccessor 0x4bbdd0 of four each) at
+       0 .. 3 and the one the panel changes */
+    add("Camera.Current", ACC_INT, 4, 0, 0);
+    for (int i = 0; i < 4; i++) {
+        char nm[16];
+        snprintf(nm, sizeof nm, "Camera.%d", i + 1);   /* (0x5d7ad8 ..) */
+        add(nm, ACC_INT, 4, 0, i);
+    }
     setup();
     display();
     graphics();
@@ -1959,6 +2004,7 @@ void FEData_Init(void)
        showcase's texts by number. */
     add("Chronicle.Year", ACC_INT, 0x7cc - 0x79c + 1, 0x79c, 0);
     add("Showcase.Text", ACC_SHOWCASE, 1, 0, 0);
+    if (FESave_HavePlayer()) FEData_LoadAccessors(FESave_Current());   /* (a save read before them) */
 }
 
 FEAccessor *FEAccess_Find(const char *path)
@@ -3405,23 +3451,12 @@ bool FEData_EraEnded(void) { return s_era_ended; }   /* 0x504db0 */
 
 void FEData_Cameras(int32_t out[4])
 {
-    /* FEdaCameras_v0 0x4e43e0: Camera.Current and Camera.1 .. Camera.4 (FEIntAccessor 0x4bbdd0 of four
-       values) at 0, 0, 1, 2, 3; the player's save's accessor values over them (its "accessor" section,
-       0x4b7dc0: each name and its own data, an int's four bytes); 0x4ee430 gives the race the four. */
-    for (int i = 0; i < 4; i++) out[i] = i;
-    Save *sv = FESave_Current();
-    for (int k = 0; sv && k < sv->nsec; k++) {
-        const SaveSection *x = &sv->sec[k];
-        if (strcmp(x->name, "accessor")) continue;
-        for (int i = 0; i < 4; i++) {
-            char nm[16];
-            int len = snprintf(nm, sizeof nm, "Camera.%d", i + 1) + 1;
-            for (size_t j = 0; j + (size_t)len + 4 <= x->size; j++)
-                if (!memcmp(x->data + j, nm, (size_t)len)) {
-                    memcpy(&out[i], x->data + j + (size_t)len, 4);
-                    break;
-                }
-        }
+    /* (0x4ee430: Camera.1 .. Camera.4's places, the player's save's over them at its read) */
+    for (int i = 0; i < 4; i++) {
+        char nm[16];
+        snprintf(nm, sizeof nm, "Camera.%d", i + 1);
+        FEAccessor *a = FEAccess_Find(nm);
+        out[i] = a ? a->pos : i;
     }
 }
 

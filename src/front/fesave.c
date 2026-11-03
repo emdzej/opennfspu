@@ -424,6 +424,7 @@ bool FESave_LoadStem(const char *stem, bool write_first)
     snprintf(s_stem, sizeof s_stem, "%s", stem);
     snprintf(s_save.player, sizeof s_save.player, "%s", strcmp(stem, template_stem()) ? stem + 1 : stem);
     FESave_CDApply();
+    FEData_LoadAccessors(&s_save);   /* (0x4b7dc0, the section's loader) */
     write_list_file(stem);
     FESave_ListPlayers();
     /* (0x501020's re-listing of the owned cars up for sale: the market's, front/femarket.c, at its list's

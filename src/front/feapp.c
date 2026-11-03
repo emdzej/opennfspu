@@ -83,6 +83,9 @@ static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool badge_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_click(FertControl *c);
+static bool camera_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
+static void camera_update(FertControl *w, FertControl *c);
 static void dialog_open(int kind, const char *text, int b1, int b2);
 static bool s_sound;
 
@@ -557,6 +560,7 @@ void FEApp_End(void)
     FE3D_Free();
     FEChronicle_Free();    /* 0x506920 (0x4d5d40) */
     FEEndOfEra_Free();
+    FESave_Write();        /* (Save_Write 0x4de850 of the player, 0x501a90, and its picture, 0x500820) */
     FEPointer_Free();      /* 0x4e1450 */
     FEShowcase_Load(NULL); /* 0x5081e0 (the port's: the race's memory) */
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
@@ -1469,6 +1473,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         if (target && type == 4 && FECtrl_Click(target)) break;
         if (target && type == 4 && FECtrl_DeadZonePress(target, w->mouse[0])) break;
         if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
+        if (target && type == 8 && camera_click(w, target, type, x, y)) break;
         if (target && type == 8) on_up(target);
         break;
     }
@@ -2712,6 +2717,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.INPUTBOX")) return inputbox_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE") || !strcmp(c->id, "NFS5.PLAYERPICTURE")) return picture_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.BADGE")) return badge_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) return camera_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
@@ -2935,6 +2941,144 @@ static bool picture_draw(FertControl *c, int32_t ox, int32_t oy)
     return true;
 }
 
+/* The cameras panel (cameras.lay): four buttons choosing which of the race's four cameras the pictures
+   set (FECameraSelect, vtable 0x5b5798: data.accessornum, Camera.Current's place), and four pictures of
+   the views (FECameraPicture, vtable 0x5b5808: data.picturenum, optart.fsh's shape of it) a click puts
+   in the chosen camera (Camera.<Current + 1>). A double click on a picture focuses it, drawn over the
+   others; the next click lets it go and goes on to what is under it. */
+static int s_cam_focus = -1;    /* 0x5d7a20: the picture focused (set -1 by each picture's v20 0x4bf300) */
+static uint32_t s_cam_last[4];  /* each picture's last click's tick (+0x140) */
+
+static FEAccessor *camera(int i)   /* Camera.1 .. Camera.4 */
+{
+    char nm[16];
+    snprintf(nm, sizeof nm, "Camera.%d", i + 1);
+    return FEAccess_Find(nm);
+}
+
+static void keep_state(FertControl *c, const char *name)   /* 0x4c7540: the state by name, kept */
+{
+    FertControl_setState(c, name);
+    c->feflags |= 2;
+}
+
+static void unkeep_state(FertControl *c)   /* 0x4c75d0 */
+{
+    c->feflags &= ~2u;
+    refresh_state(c);
+}
+
+static void unfocus(FertControl *w, FertControl *c)   /* 0x4c7970 */
+{
+    c->feflags &= ~0x40u;
+    if (w->focus == c) w->focus = NULL;
+    refresh_state(c);
+}
+
+/* Their updates: FECameraSelect_v1 0x4befe0 (lit while the panel's camera is its own; its label the
+   camera's number, "%d" 0x5cd1b0 of its place + 1), FECameraPicture_v1 0x4bf450 (lit while some camera
+   shows it and it isn't focused; the focus let go when another picture has it or the screen fades). */
+static void camera_update(FertControl *w, FertControl *c)
+{
+    FEAccessor *cur = FEAccess_Find("Camera.Current");
+    if (!strcmp(c->id, "NFS5.CAMERASELECT")) {
+        int n = data_int_of(c, "accessornum");
+        if (cur && FEAccess_Pos(cur) == n) keep_state(c, exe_str(0x5d7b08));   /* "highlighty" */
+        else if (c->feflags & 2) unkeep_state(c);
+        FEAccessor *a = camera(n);
+        int k = FertControl_findPart(c, "mylabel");
+        FertAttr *t = k < 0 ? NULL : FertAttrList_find(&c->parts[k]->attrs, "text");   /* (its TEXT part's, +0x170) */
+        char v[16];
+        snprintf(v, sizeof v, "%d", (a ? FEAccess_Pos(a) : 0) + 1);
+        if (t && strcmp(FertAttr_str(t), v)) {
+            FertAttr_set(t, v);
+            FertControl_Update(c);
+        }
+        return;
+    }
+    int n = data_int_of(c, "picturenum");
+    bool shown = false;
+    for (int i = 0; i < 4; i++)
+        if (camera(i) && FEAccess_Pos(camera(i)) == n) shown = true;
+    if (shown && !(c->feflags & 0x40)) keep_state(c, exe_str(0x5d7b08));
+    else if (c->feflags & 2) unkeep_state(c);
+    if ((c->feflags & 0x40) && s_cam_focus != n) unfocus(w, c);
+    if (FETrans_Fade(c) != 0xff) {   /* (0x4c8410) */
+        unfocus(w, c);
+        s_cam_focus = -1;
+    }
+}
+
+/* Their clicks: FECameraSelect_v9 0x4bf1c0 (the panel's camera its own); FECameraPicture_v9 0x4bf500. */
+static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y)
+{
+    if (!strcmp(c->id, "NFS5.CAMERASELECT")) {
+        FEAccessor *cur = FEAccess_Find("Camera.Current");
+        if (cur) FEAccess_SetPos(cur, data_int_of(c, "accessornum"));
+        return true;
+    }
+    if (strcmp(c->id, "NFS5.CAMERAPICTURE")) return false;
+    int n = data_int_of(c, "picturenum");
+    if (c->feflags & 0x40) {
+        /* focused: let go, the click to the top window (its slot 3; the port's the picture's window) */
+        unfocus(w, c);
+        s_cam_focus = -1;
+        window_event(w, type, x, y);
+        return true;
+    }
+    uint32_t ticks = (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u), *last = &s_cam_last[n & 3];   /* TIMER_ticks */
+    if (128 / 2 <= ticks - *last) {   /* (0x5deb48 / 2: half a second) */
+        if (s_cam_focus != n) s_cam_focus = -1;
+        *last = ticks;
+        FEAccessor *cur = FEAccess_Find("Camera.Current"), *a = camera(cur ? FEAccess_Pos(cur) : 0);
+        if (a) FEAccess_SetPos(a, n);
+        return true;
+    }
+    if (c->feflags & 2) unkeep_state(c);
+    *last = 0;
+    for (int i = 0; i < w->nchildren; i++)   /* 0x528480: to the front of its window's list, drawn last */
+        if (w->children[i] == c) {
+            memmove(w->children + 1, w->children, sizeof *w->children * (size_t)i);
+            w->children[0] = c;
+            break;
+        }
+    s_cam_focus = n;
+    c->feflags |= 0x40;   /* 0x4c7940 */
+    w->focus = c;
+    refresh_state(c);
+    return true;
+}
+
+/* Their draws: FECameraSelect_v15 0x4bf1e0 (its parts, then the inset while hovered and not disabled,
+   else the shine, over its rectangle); FECameraPicture_v15 0x4bf600 (its picture at its own size in the
+   fade's white first, then the same at 15 x 13). */
+static bool camera_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    int32_t p[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");   /* 0x524b90 */
+    if (pa) FertAttr_point(pa, p);
+    float x = (float)(p[0] + ox), y = (float)(p[1] + oy), w = 15.0f, h = 13.0f;
+    int a = g_fe_fade;   /* 0x4c8410 */
+    if (!strcmp(c->id, "NFS5.CAMERAPICTURE")) {
+        char path[300];
+        FE_ResolvePath("optart.fsh", path, sizeof path);   /* (its shp part's) */
+        FEShapes_Load(path);
+        FeImage *img = FEShapes_Image(path, data_int_of(c, "picturenum"));
+        FE2D_DepthStep();
+        if (img) FE2D_Image(img, x, y, (float)img->w, (float)img->h, (uint32_t)a << 24 | 0xffffffu, 0, false);   /* 0x4d8280, 0x4d95e0 */
+        FEControl_Draw(c, ox, oy);
+    } else {
+        FEControl_Draw(c, ox, oy);
+        int32_t r[4];
+        FertControl_rect(c, r);   /* 0x4c8240 */
+        w = (float)(r[2] - r[0]), h = (float)(r[3] - r[1]);
+    }
+    FE2D_DepthStep();
+    if ((c->feflags & 4) && !(c->feflags & 0x10)) FEStyle_Inset(x, y, w, h, a, 3);   /* 0x5208d0 */
+    else FEStyle_Shine(x, y, w, h, a);   /* 0x521090 */
+    return true;
+}
+
 static bool picture_click(FertControl *c)
 {
     if (strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE")) return false;
@@ -2988,6 +3132,10 @@ static void update_watches(FertControl *w)
         if (c->sub) update_watches(c->sub);
         if (!strcmp(c->id, "NFS5.INPUTBOX")) {
             inputbox_sync(w, c);
+            continue;
+        }
+        if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) {
+            camera_update(w, c);
             continue;
         }
         if (strcmp(c->id, "NFS5.AccessorWatch")) continue;

@@ -109,8 +109,10 @@ int FEData_TourLaps(void);
 int FEData_TourTraffic(int16_t slots[7]);
 #include "front/fesave.h"
 #include "game/race_setup.h"
-/* The dead zones into the save's accessor section, for its write. */
+/* The accessors kept in the save's accessor section into it, for its write (the dead zones, the
+   positionable ones), and from it at its read. */
 void FEData_StoreDeadZones(Save *sv);
+void FEData_LoadAccessors(Save *sv);
 /* A colour accessor's row's colour, its "custom" row (the palette's count; -1 without custom colours),
    custom colours allowed (its box's data.allowcustom), a custom slot's colour chosen (0x4b8f00). */
 uint32_t FEAccess_ColourAt(const FEAccessor *a, int i);
