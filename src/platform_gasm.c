@@ -440,7 +440,14 @@ PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
         app_exit();
         __wasi_proc_exit(0);
     }
-    audio_acc += APP_AUDIO_RATE / frame_hz;
+    /* The sound for the time since the previous frame (the runner's clock: in a window frames that come
+       late, as a movie's in a slow window, still keep its queue full; headless it is the frames' time, the
+       frame rate's share). At most the buffer: a longer gap is the silence below. */
+    double now = gasm_time_ms();
+    static double last_ms = -1;
+    audio_acc += 0 <= last_ms ? (now - last_ms) * APP_AUDIO_RATE / 1000.0 : APP_AUDIO_RATE / frame_hz;
+    last_ms = now;
+    if (audio_acc > 2048) audio_acc = 2048;
     unsigned n = (unsigned)audio_acc;
     audio_acc -= n;
     app_audio(audio_buf, n);
