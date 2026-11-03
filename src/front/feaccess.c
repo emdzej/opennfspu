@@ -2296,6 +2296,20 @@ const char *FEAccess_TextAt(const FEAccessor *a, int i)
 {
     FEAccessor t = *a;   /* (the accessor's slot 0x30: a row's text; the copy at that row) */
     t.pos = i;
+    /* The car lists' rows are the record's full name, its year first (FEGenericCarAccessor_v12 0x4f2660:
+       +2, "'50 356 1100 Cabriolet"; FEOwnedCarAccessor's 0x4f5250 the same in the save's copy), where
+       their box shows the model's (slot 13, +0x34: "356"). */
+    if (a->kind == ACC_MERGED || a->kind == ACC_OWNED) {
+        static char b[64];
+        const uint8_t *r = a->kind == ACC_MERGED ? FEAccess_CarRecord(&t) : NULL;
+        if (a->kind == ACC_OWNED) {
+            refresh(&t);
+            const SaveCar *oc = t.count ? acc_car(&t) : NULL;
+            r = oc ? oc->rec + 4 : NULL;
+        }
+        snprintf(b, sizeof b, "%s", r ? (const char *)r + 2 : "");
+        return b;
+    }
     return FEAccess_Text(&t);
 }
 
