@@ -115,6 +115,7 @@ static int clampnode(int n)
 void AI_Load(void)
 {
     AI_Free();
+    g_race_side = 1;   /* 0x40e6d0 (its one-way flag 0x5e7544 and 0xbe 0x5e7540 are read where used) */
     char path[160];
     /* "%s%s%d.lsp" (0x5cbda8): the directory (0x65b2e4), the track, reversed or not. */
     snprintf(path, sizeof path, "GameData\\Track\\racer\\work\\%s%d.lsp", g_track_name, g_race_reverse);

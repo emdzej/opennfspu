@@ -346,9 +346,9 @@ static int load(const char *track, const char *carname)
     s_slot = s_start;   /* (0x414ed0: the slots from the race's start) */
     SimRand_Seed((uint32_t)g_race_seed);   /* 0x414ed0 (0x4a4560): before the cars' set-up (0x411100) */
     Render_SeedRand((uint32_t)g_race_seed);   /* (0x44fbd0) */
+    AI_Load();             /* 0x406900 (GameStartup's, before the cars): the racing line (0x4031f0) */
     for (int i = 0; i < g_ncars; i++) Car_RaceInit(g_cars[i], i);
     for (int i = 0; i < g_ntraffic; i++) Car_RaceInit(g_traffic[i], (uint32_t)(g_ncars + i));
-    AI_Load();             /* the racing line (0x4031f0) */
     Input_Reset(Replay_Loaded());   /* (a file's replay kept) */
     Controls_Load();   /* RaceLoop: 0x412e20, the options' bindings, 0x4117c0 */
     g_input_cursor = g_input_samples;   /* (0x606ac8) */

@@ -1,6 +1,8 @@
+diff --git a/src/game/ai.c b/src/game/ai.c
+index b2b8db2..79bb20f 100644
 --- a/src/game/ai.c
 +++ b/src/game/ai.c
-@@ -128,6 +128,7 @@
+@@ -128,6 +128,7 @@ void AI_Free(void)
      line_size = 0;
  }
  
@@ -8,7 +10,7 @@
  void AI_LinePoint(int n, float out[2])
  {
      if (line && 4 + 8 * (size_t)n + 8 <= line_size) {
-@@ -152,7 +153,11 @@
+@@ -152,7 +153,11 @@ static const RoadJunction *junction_ahead(int n, int by)
      return 0 <= j ? &r->junctions[j] : NULL;
  }
  
@@ -21,7 +23,7 @@
  {
      const Road *r = g_road;
      int node = car_node(c);
-@@ -270,7 +275,11 @@
+@@ -270,7 +275,11 @@ void AI_Plan(Car *c)
      }
  }
  
@@ -34,9 +36,28 @@
  {
      const Road *r = g_road;
      int8_t gear = (int8_t)c->b[0xd82];
+@@ -573,11 +582,13 @@ void AIi_SpeedTarget(Car *c)
+ 
+ /* AIState_Normal (vtable 0x5b2668, 0x40b630: the set target cleared, active): the speed target, then the
+    lane driver (0x401000, 0x401060, 0x4012b0). 0x40b600 */
+-static void normal_tick(AiState *s)
++static void normal_tick_(void *car)
+ {
+-    AIi_SpeedTarget(s->car);   /* 0x40afd0 */
+-    AI_LaneDrive(s->car);   /* 0x401000, 0x401060, 0x4012b0 */
++    AIi_SpeedTarget(car);   /* 0x40afd0 */
++    AI_LaneDrive(car);   /* 0x401000, 0x401060, 0x4012b0 */
++    { extern bool FD_Active(void *, uint32_t); extern void AI_LaneLog(void); if (FD_Active(car, 0x40b600)) AI_LaneLog(); }
+ }
++static void normal_tick(AiState *s) { FD_Wrap(normal_tick_, s->car, 0x40b600); }
+ static const AiStateVtbl normal_vt = {normal_tick, no_done, not_ready};
+ static void normal_init(AiState *s, Car *c)   /* 0x40b630 */
+ {
+diff --git a/src/game/ai_drive.c b/src/game/ai_drive.c
+index 72b9683..fe888c6 100644
 --- a/src/game/ai_drive.c
 +++ b/src/game/ai_drive.c
-@@ -718,7 +718,10 @@
+@@ -720,7 +720,10 @@ static void stop(Car *c, uint32_t k)
      F(0x38c) = F(0x38c) * K(0x5b25f4);
  }
  
@@ -48,6 +69,33 @@
  {
      Car *c = car;
      uint32_t f = (uint32_t)I(CAR_FLAGS);
+diff --git a/src/game/ai_lane.c b/src/game/ai_lane.c
+index 93edf1d..b92b541 100644
+--- a/src/game/ai_lane.c
++++ b/src/game/ai_lane.c
+@@ -19,6 +19,8 @@
+ #include "render/r3dcar.h"
+ #include <math.h>
+ #include <string.h>
++#include <stdio.h>
++#include "platform.h"
+ 
+ static float exe_f32(uint32_t va)
+ {
+@@ -591,3 +593,11 @@ void AI_LaneChoose(Car *c)
+     lane_target(c);
+     speed_cap(c);
+ }
++void AI_LaneLog(void)   /* (forcesdump) */
++{
++    char m[512];
++    snprintf(m, sizeof m, "FD lane 0 ahead %d %d %d gap %.9g %.9g %.9g cap %.9g %.9g %.9g cap2 %.9g %.9g %.9g scoref %.9g %.9g %.9g lane %d pick %d score %d %d %d",
++             s_ahead[0] ? *CAR_I(s_ahead[0], CAR_INDEX) : -1, s_ahead[1] ? *CAR_I(s_ahead[1], CAR_INDEX) : -1, s_ahead[2] ? *CAR_I(s_ahead[2], CAR_INDEX) : -1,
++             s_gap[0], s_gap[1], s_gap[2], s_cap[0], s_cap[1], s_cap[2], s_cap2[0], s_cap2[1], s_cap2[2], s_scoref[0], s_scoref[1], s_scoref[2], s_lane, s_pick, s_score[0], s_score[1], s_score[2]);
++    plat_log(m);
++}
+diff --git a/src/game/car_collide.c b/src/game/car_collide.c
+index 34c2aa9..2acfcfd 100644
 --- a/src/game/car_collide.c
 +++ b/src/game/car_collide.c
 @@ -10,6 +10,10 @@
@@ -61,7 +109,7 @@
  
  static float exe_f32(uint32_t va)
  {
-@@ -160,7 +164,11 @@
+@@ -160,7 +164,11 @@ static float plane_gap(WSurface *s, const float p[3], float y)
      return h < K(0x5b23f8) ? -h : h;
  }
  
@@ -74,7 +122,7 @@
  {
      float worst = 0.0f;
      float back[3];
-@@ -339,6 +347,7 @@
+@@ -339,6 +347,7 @@ static void hit_box(Car *c, WTreeObject *o)
          int a = (int)exe_u32(0x5d0b6c + 8u * (unsigned)s), b = (int)exe_u32(0x5d0b70 + 8u * (unsigned)s);
          float seg[6] = {corner[a][0], 0, corner[a][2], corner[b][0], 0, corner[b][2]}, n[3], at[3];
          int hit = o->ovt->collide(o, seg, n, at);
@@ -82,7 +130,7 @@
          if (hit > 1) {
              memcpy(bn, n, 12);
              memcpy(bat, at, 12);
-@@ -372,12 +381,35 @@
+@@ -372,12 +381,35 @@ void CarSim_Objects(Car *c)
      if (*CAR_I(c, 0x43c) != 0) return;
      WTreeElems *near = WTree_ObjectsNear(CAR_F(c, 0x330), 5.0f);   /* 0x4737d0 */
      if (!near) return;
@@ -118,7 +166,7 @@
          if (kind == 2) {
              /* The original tells the two apart by RTTI (dynamic_cast to each). */
              if (o->shape == WOBJ_CYLINDER)
-@@ -405,9 +437,47 @@
+@@ -405,7 +437,45 @@ int32_t g_race_nocollision;   /* 0x65740c: NOCOLLISION (the network game's Comms
  
  void CarSim_ClearCollided(void) { g_ncollided = 0; }
  
@@ -127,7 +175,7 @@
 +static void collide_(void *car);
 +static void collide_extra(void *car);
  void CarSim_Collide(void *car)
- {
++{
 +    extern void (*g_fd_extra)(void *car);
 +    g_fd_extra = collide_extra;
 +    FD_Wrap(collide_, car, 0x498f60);
@@ -135,13 +183,13 @@
 +}
 +static void collide_extra(void *car)
 +{
-     Car *c = car;
++    Car *c = car;
 +    {
 +        char b[256];
 +        int o = snprintf(b, sizeof b, "FD collided 0");
 +        for (int i = 0; i < g_ncollided; i++) {
 +            int k = -1;
-+            for (int j = 0; j < g_racers.n; j++) if (g_racers.c[j] == g_collided[i]) k = j;
++            for (int j = 0; j < g_ncars; j++) if (g_cars[j] == g_collided[i]) k = j;
 +            o += snprintf(b + o, sizeof b - (size_t)o, " %d", k);
 +        }
 +        plat_log(b);
@@ -161,14 +209,14 @@
 +    }
 +}
 +static void collide_(void *car)
-+{
-+    Car *c = car;
+ {
+     Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
-     if (*CAR_I(c, 0x43c) > 0) (*CAR_I(c, 0x43c))--;
-     if (c->b[0x7c]) {
+diff --git a/src/game/car_drive.c b/src/game/car_drive.c
+index c0bd7a7..1956768 100644
 --- a/src/game/car_drive.c
 +++ b/src/game/car_drive.c
-@@ -1046,7 +1046,10 @@
+@@ -1046,7 +1046,10 @@ static void drive(Car *c)
          for (int j = 0; j < 3; j++) v[j] *= 0.5f;
  }
  
@@ -180,9 +228,18 @@
  {
      Car *c = car;
      if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
+diff --git a/src/game/car_ground.c b/src/game/car_ground.c
+index 4ce8464..b9a6a8d 100644
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
-@@ -7,6 +7,7 @@
+@@ -1,12 +1,14 @@
+ /* The cars' contact with the ground (see car_ground.h). */
+ #include "game/car_collide.h"
+ #include "game/car_ground.h"
++#include "game/ai_data.h"
+ #include "game/car_damage.h"
+ #include "game/race_car.h"
+ #include "game/car_impulse.h"
  #include "exe.h"
  #include "game/car_physics.h"
  #include "game/road.h"
@@ -190,7 +247,7 @@
  #include "game/sim_math.h"
  #include "game/sim_rand.h"
  #include "pending.h"
-@@ -526,8 +527,216 @@
+@@ -526,7 +528,240 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -253,7 +310,7 @@
 +}
 +extern void (*g_wedge_hook)(const float out[6], uint16_t flag, bool hit);
 +static void fd_edge(const float out[6], uint16_t flag, bool hit)
- {
++{
 +    uint8_t b[28];
 +    memcpy(b, out, 24);
 +    uint32_t f = flag | (hit ? 0x10000u : 0);
@@ -362,9 +419,34 @@
 +        uint32_t r[3];
 +        SimRand_Peek(r);
 +        char b[256];
-+        for (int i = 0; i < g_racers.n; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_racers.c[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_racers.c[i]->b, CAR_SIZE); }
++        for (int i = 0; i < g_ncars; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_cars[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_cars[i]->b, CAR_SIZE); }
++        fd_hex("pers", "0", g_ai_pers, sizeof g_ai_pers);
++        {
++            /* the car lists (the array's VA, its count's VA, the cars by their index in g_cars) */
++            static const struct { const CarList *l; uint32_t va, nva; } L[] = {
++                {&g_racers, 0x5e8e2c, 0x5e8ae8}, {&g_humans, 0x5e8c00, 0x5e8bfc}, {&g_opponents, 0x5e8aec, 0x5e8e28},
++                {&g_viewed, 0x5e8b10, 0x5e8ab8}, {&g_rivals, 0x5e8bd4, 0x5e8bf8}, {&g_roadcars, 0x5e8b60, 0x5e8e24},
++                {&g_chasers, 0x5e8ac4, 0x5e8abc}};
++            for (size_t j = 0; j < sizeof L / sizeof L[0]; j++) {
++                char m[512];
++                int o = snprintf(m, sizeof m, "FD list 0 %x %x", L[j].va, L[j].nva);
++                for (int i = 0; i < L[j].l->n; i++) {
++                    int k = -1;
++                    for (int q = 0; q < g_ncars; q++) if (g_cars[q] == L[j].l->c[i]) k = q;
++                    o += snprintf(m + o, sizeof m - (size_t)o, " %d", k);
++                }
++                plat_log(m);
++            }
++        }
 +        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u players=%d demo=%d altgrip=%d nracers=%d started=%d laps=%d rtype=%d linear=%d", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2], g_race_players, g_race_demo, g_race_alt_grip, g_racers.n, g_race_started, g_race_laps, g_race_type, g_race_linear);
 +        plat_log(b);
++        {
++            extern int32_t g_race_side;
++            int32_t one = 0;
++            if (g_road && g_road->nnodes > 1) memcpy(&one, g_road->nodes + ROAD_NODE_SIZE + 0x38, 4);
++            snprintf(b, sizeof b, "FD glob2 0 side=%d oneway=%d", g_race_side, one == 0);
++            plat_log(b);
++        }
 +        {
 +            extern float g_track_road_width;
 +            extern int32_t g_race_reverse;
@@ -372,7 +454,7 @@
 +            int o = snprintf(m, sizeof m, "FD ranked 0 %08x %d", fbits_u(g_track_road_width), g_race_reverse);
 +            for (int i = 0; i < g_ranked.n; i++) {
 +                int k = -1;
-+                for (int j = 0; j < g_racers.n; j++) if (g_racers.c[j] == g_ranked.c[i]) k = j;
++                for (int j = 0; j < g_ncars; j++) if (g_cars[j] == g_ranked.c[i]) k = j;
 +                o += snprintf(m + o, sizeof m - (size_t)o, " %d", k);
 +            }
 +            plat_log(m);
@@ -394,7 +476,7 @@
 +        g_wsurf_hook = NULL;
 +        g_wedge_hook = NULL;
 +        fd_car(c, "post");
-+        for (int i = 0; i < g_racers.n; i++) if (g_racers.c[i] != c) { char k[8]; snprintf(k, sizeof k, "%d", i); fd_hex("postracer", k, g_racers.c[i]->b, CAR_SIZE); }
++        for (int i = 0; i < g_ncars; i++) if (g_cars[i] != c) { char k[8]; snprintf(k, sizeof k, "%d", i); fd_hex("postracer", k, g_cars[i]->b, CAR_SIZE); }
 +        uint32_t r[3];
 +        SimRand_Peek(r);
 +        char b[128];
@@ -404,26 +486,24 @@
 +}
 +void CarSim_Forces(void *car) { FD_Wrap(forces_, car, 0x49bcb0); }
 +static void forces_(void *car)
-+{
+ {
      Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
-     int rate, ticks;
-@@ -641,8 +850,14 @@
+@@ -641,7 +876,13 @@ static void player_distance(Car *c)
  
  /* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
     segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
 +static void tracknode_(WSurface *s, const float p[3]);
  void WSurface_TrackNode(WSurface *s, const float p[3])
- {
++{
 +    tracknode_(s, p);
 +    if (g_wsurf_hook) g_wsurf_hook(s, 2, 0);
 +}
 +static void tracknode_(WSurface *s, const float p[3])
-+{
+ {
      int16_t old = s->node;
      if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
-         int a = Road_NearestInSegment(g_road, Road_SegmentOf(g_road, s->node), p, s->node);
-@@ -757,7 +972,9 @@
+@@ -757,7 +998,9 @@ void CarSim_BodyPlane(Car *c)
      memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
  }
  
@@ -434,9 +514,11 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d] || !c->b[0x7c]) return;
+diff --git a/src/game/car_physics.c b/src/game/car_physics.c
+index 5640140..bf75978 100644
 --- a/src/game/car_physics.c
 +++ b/src/game/car_physics.c
-@@ -51,7 +51,12 @@
+@@ -51,7 +51,12 @@ static void wheel_marks(Car *c)
      }
  }
  
@@ -450,7 +532,7 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
-@@ -69,7 +74,7 @@
+@@ -69,7 +74,7 @@ void CarSim_Move(void *car)
      CarSim_WheelSpin(c);
  }
  
@@ -459,9 +541,11 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
+diff --git a/src/game/car_respawn.c b/src/game/car_respawn.c
+index 37aa1fa..9a402e4 100644
 --- a/src/game/car_respawn.c
 +++ b/src/game/car_respawn.c
-@@ -266,7 +266,10 @@
+@@ -266,7 +266,10 @@ static void ai_hit(Car *c)
      }
  }
  
@@ -473,9 +557,11 @@
  {
      Car *c = car;
      if (c->b[0x7d]) return;
+diff --git a/src/game/input.c b/src/game/input.c
+index b60af70..2b4d45a 100644
 --- a/src/game/input.c
 +++ b/src/game/input.c
-@@ -222,7 +222,10 @@
+@@ -222,7 +222,10 @@ static int8_t shift(int8_t gear, int32_t ngears)
      return gear;
  }
  
@@ -487,9 +573,11 @@
  {
      Car *c = car;
      uint8_t *b = c->b;
+diff --git a/src/game/race_progress.c b/src/game/race_progress.c
+index 25ab4ec..9987d98 100644
 --- a/src/game/race_progress.c
 +++ b/src/game/race_progress.c
-@@ -229,7 +229,10 @@
+@@ -229,7 +229,10 @@ static void SkillTest_Progress(Car *c)
      }
  }
  
@@ -501,34 +589,37 @@
  {
      Car *c = car;
      if (g_sim_tick & 1) return;
+diff --git a/src/game/sim_rand.c b/src/game/sim_rand.c
+index 4001304..030587a 100644
 --- a/src/game/sim_rand.c
 +++ b/src/game/sim_rand.c
-@@ -36,3 +36,5 @@
+@@ -36,3 +36,5 @@ uint32_t SimRand_Seed(uint32_t n)
      }
      return r;
  }
 +
 +void SimRand_Peek(uint32_t o[3]) { load(); o[0] = state, o[1] = mult, o[2] = product; }   /* (forcesdump) */
+diff --git a/src/game/wtree.c b/src/game/wtree.c
+index f462d43..b76676d 100644
 --- a/src/game/wtree.c
 +++ b/src/game/wtree.c
-@@ -1285,8 +1285,16 @@
+@@ -1285,7 +1285,15 @@ WTreeElem *WSurface_FindBelow(WSurface *s, const float p[3])
      return best;
  }
  
 +void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);   /* (forcesdump) */
 +static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out);
  uint16_t WSurface_FindAbove(WSurface *s, const float p[3], WTreeElem **out)
- {
++{
 +    uint16_t r = above_(s, p, out);
 +    if (g_wsurf_hook) g_wsurf_hook(s, 1, r);
 +    return r;
 +}
 +static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out)
-+{
+ {
      load_consts();
      WTree *t = world_tree();
-     if (!s->cell || !WTree_CellContains(s->cell, p)) {
-@@ -1313,7 +1321,13 @@
+@@ -1313,7 +1321,13 @@ uint16_t WSurface_FindAbove(WSurface *s, const float p[3], WTreeElem **out)
      return best->flags;
  }
  
@@ -542,7 +633,7 @@
  {
      WTreeElem *old = s->elem;
      if (old && old->vt->contains(old, p) && keep) {
-@@ -1398,7 +1412,15 @@
+@@ -1398,7 +1412,15 @@ float WSurface_HeightAt(const float p[3])
      return (float)plane_height(s.normal, v, p);
  }
  
