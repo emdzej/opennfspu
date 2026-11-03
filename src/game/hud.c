@@ -1,4 +1,5 @@
 /* The race HUD (see hud.h). */
+#include "game/net.h"
 #include "game/hud.h"
 #include "game/controls.h"
 #include "real/mouse.h"
@@ -963,17 +964,20 @@ static void position_draw(HudVisual *v)
         text_print(p->name[row], p->namebuf[i], 1.0f, 1.0f);
         char *g = p->gapbuf[i];
         const char *s = g;
-        if (g_race_derby == 1) {
+        if ((*CAR_I(c, 0xb50) == 3 || *CAR_I(c, 0xb50) == 1) && g_race_mode == 3) {
+            /* the network race's player out of it (0x470f) */
+            const char *t = LOC_string(HudConfig_loc(), 0x470f);
+            s = t ? t : "";
+        } else if (g_race_derby == 1) {
             /* the derby's: the car's damage, its ten zones (+0x4e4) summed, cut to a whole number at
                each step (the x87's __ftol), over ten */
             int32_t sum = 0;
             for (int k = 0; k < 10; k++) sum = (int32_t)((double)sum + (double)*CAR_F(c, 0x4e4 + 4 * k));
             snprintf(g, 12, "%d", sum / 10);
-        } else if (g_race_mode == 3) {
-            PENDING_NOTE(0x48d720, "the network race's standings");
-            s = exe_str(0x5ccde4);
-        } else if (*CAR_I(c, 0xb50) == 2) {
-            HTime_Format(*CAR_I(c, 0xb24), g, false);
+        } else if (g_race_mode == 3 ? 0 < Net_Place(i) : *CAR_I(c, 0xb50) == 2) {
+            /* a finished car's time (the network race's: the session's finish of the row's car, 0x48d720,
+               0x48d6a0; one without a place the gap below) */
+            HTime_Format(g_race_mode == 3 ? Net_FinishTime(i) : *CAR_I(c, 0xb24), g, false);
         } else {
             int d = *CAR_I(c, 0xb54) - mine;
             if (g_hud_opponentlist == 1) {
@@ -4554,14 +4558,14 @@ static void race_screens(bool again)
     if (g_race_mode == 6 || g_race_mode == 7 || g_race_mode == 8) return;
     if (s_file_replay) return;
     if (g_race_mode <= 5 && s_congrats && !again) {
-        /* The place: a knockout's 1 (8 when the car was knocked out, +0xb50 3), the network race's by its
-           standings (pending: the car's), else the camera's car's (+0xcd4). (0x60ca98 overrides it when
+        /* The place: a knockout's 1 (8 when the car was knocked out, +0xb50 3), the network race's by the
+           session's finishes, else the camera's car's (+0xcd4). (0x60ca98 overrides it when
            set; nothing sets it here.) */
         Car *c = g_camera_car < g_racers.n ? g_racers.c[g_camera_car] : NULL;
         int place = 0;
         if (g_race_derby == 1) place = c && *CAR_I(c, 0xb50) == 3 ? 8 : 1;
+        else if (g_race_mode == 3) place = Net_Place(g_race_local);   /* 0x48d720 */
         else if (c) place = *CAR_I(c, 0xcd4);
-        if (g_race_mode == 3) PENDING_NOTE(0x48d720, "the network race's place");
         ((HCongrats *)s_congrats)->which = place;   /* 0x41e150 */
         push_modal(s_congrats);
         ((HCongrats *)s_congrats)->raceover = 1;     /* 0x41dd40(0) */
@@ -4795,7 +4799,7 @@ void HUD_RaceOver(void)
        replay: 0x60ca10, cleared instead). */
     raceover_common();
     Car *me = local_car();
-    s_place = me ? *CAR_I(me, 0xcd4) : 0;
+    s_place = g_race_mode == 3 ? Net_Place(g_race_local) : me ? *CAR_I(me, 0xcd4) : 0;
     if (!s_raceover_done && !s_restarted && !s_noscreens) {
         /* The records take the player's time first, when the player has a place (or in a mission). */
         if (s_place != 0 || g_race_mode == 9) {

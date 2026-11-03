@@ -1,4 +1,5 @@
 /* The race's progress (see race_progress.h). */
+#include "game/net.h"
 #include "game/car_respawn.h"
 #include "game/audio.h"
 #include "game/race_progress.h"
@@ -95,7 +96,44 @@ void Race_CarProgress(Car *c)
     int32_t tick = g_sim_tick, len = g_road->length, laps = *CAR_I(c, 0xb20);
     if (laps < 8 && *CAR_F(c, 0xad4 + 4 * laps) < *CAR_F(c, 0xd60)) *CAR_F(c, 0xad4 + 4 * laps) = *CAR_F(c, 0xd60);   /* top speed */
     if (*CAR_I(c, 0xb50) == 0) {
-        if (g_race_mode == 3) PENDING_NOTE(0x416330, "the network race's progress (0x628c70, 0x4900a0, 0x48d990)");
+        if (g_race_mode == 3) {
+            /* the network race: a car whose player is gone (or out of the session, or its event 1) out
+               of the race; in the state mode one whose states stopped */
+            if (g_race_network == 0) {
+                if (c->b[0xd8b] == 1 || !Net_InGame()) {
+                    *CAR_I(c, 0xb50) = 3;
+                    *CAR_I(c, 0xb14) = g_sim_tick;
+                    *CAR_I(c, 0xb24) = 0;
+                }
+            } else if (2 < Net_CarLag(*CAR_I(c, CAR_INDEX))) {
+                *CAR_I(c, 0xb50) = 3;
+                *CAR_I(c, 0xb14) = g_sim_tick;
+                *CAR_I(c, 0xb24) = 0;
+            }
+            if (g_race_mode == 3 && g_race_derby) {
+                /* the derby: out with all eight wheels' damage (+0x4e4) past the limit, else the last
+                   one standing has won */
+                if (*CAR_I(c, 0xb50) == 0) {
+                    int broken = 0;
+                    for (int i = 0; i < 8; i++)
+                        if (K(0x5b2408) < *CAR_F(c, 0x4e4 + 4 * i)) broken++;
+                    if (broken == 8) {
+                        *CAR_I(c, 0xb50) = 3;
+                        *CAR_I(c, 0xb14) = g_sim_tick;
+                    } else {
+                        int out = 0;
+                        for (int i = 0; i < g_race_inputs; i++)
+                            if (*CAR_I(g_humans.c[i], 0xb50) == 3) out++;
+                        if (out < g_race_inputs - 1) goto ranked;
+                        *CAR_I(c, 0xb50) = 2;
+                        *CAR_I(c, 0xb14) = g_sim_tick;
+                    }
+                    *CAR_I(c, 0xb24) = 0;
+                    Net_Finish(tick - 0x1c0, tick);   /* 0x48d990 */
+                }
+                goto ranked;
+            }
+        }
         int node = car_node(c);
         if (*CAR_I(c, 0xb18) != node) {
             *CAR_I(c, 0xb10) = (*CAR_I(c, 0xb20) - *CAR_I(c, 0x534)) * len + node;
@@ -134,14 +172,23 @@ void Race_CarProgress(Car *c)
                 *CAR_F(c, 0xaf8) = g_race_linear ? Race_Progress(node) : (float)*CAR_I(c, 0xb20) + Race_Progress(node);
                 *CAR_I(c, 0xb24) = *CAR_I(c, 0xb24) - 0x1c0;
                 if (*CAR_I(c, CAR_INDEX) == g_race_local) {
-                    PENDING_NOTE(0x48d990, "the network session's best lap");
-                    g_hud_message = 0x14;
+                    if (!Net_Live()) {
+                        g_hud_message = 0x14;
+                    } else {
+                        /* the finish and the best lap to the session */
+                        int32_t best = *CAR_I(c, 0xb28);
+                        for (int i = 1; i < g_race_laps; i++)
+                            if (*CAR_I(c, 0xb28 + 4 * i) < best) best = *CAR_I(c, 0xb28 + 4 * i);
+                        Net_Finish(tick - 0x1c0, best);   /* 0x48d990 */
+                        g_hud_message = g_race_network ? 10 : 0x14;
+                    }
                 }
             }
             if ((*CAR_I(c, CAR_FLAGS) & 4) && g_race_local < g_humans.n && g_humans.c[g_race_local] == c)
                 HUD_LapDone();   /* 0x427790 */
         }
     }
+ranked:
     /* Into the ranking of distances (the latest tick first among equals); the rows after it move down. */
     float d = *CAR_F(c, 0xaf8);
     int i = 0;

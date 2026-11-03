@@ -33,6 +33,7 @@ static int32_t s_modifier[2];        /* 0x5e95cc: the modifier held (1, 2), 0 no
 static uint32_t s_ring[32];          /* 0x5e954c */
 uint16_t g_input_psx;                /* 0x5e9548 */
 static uint8_t s_packet1[4];         /* 0x5e99e0: the second player's */
+const uint8_t *Controls_SecondPacket(void) { return s_packet1; }
 static uint8_t s_key[256];           /* 0x5de028 */
 static uint32_t s_joyflags;          /* 0x5e8e58: the joysticks' directions and button while paused */
 int32_t g_input_samples, g_input_cursor;

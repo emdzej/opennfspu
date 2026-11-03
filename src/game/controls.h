@@ -25,6 +25,8 @@ enum {
 /* The bindings cleared, the latches and the ring with them (0x412e20); then the options' (the race
    loop's Option_Apply over ids 0x14e..0x21d) and the interface defaults over them (0x4117c0). */
 void Controls_Load(void);
+/* The second player's sampled packet (0x5e99e0). */
+const uint8_t *Controls_SecondPacket(void);
 /* A binding by its id (0x14e..0x21d, at 0x5e9130 + 4 id); 0 unbound. */
 uint32_t Controls_Binding(int id);
 /* A binding's option text (Options_Dump 0x4b6010: "Key,SC_UP"); an id's option name (C1_GAS ..), its

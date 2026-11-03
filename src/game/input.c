@@ -3,6 +3,9 @@
 #include "game/ai.h"
 #include "game/camera.h"
 #include "game/scene.h"
+#include "game/net.h"
+#include "game/car_drive.h"
+#include "game/controls.h"
 #include "game/race_progress.h"
 #include "pending.h"
 #include "render/r3dcar.h"
@@ -55,9 +58,19 @@ bool Input_Enqueue(int player, const uint8_t p[4])
 
 void Input_QueuePacket(void)
 {
-    if (g_race_over) return;
-    PENDING_NOTE(0x413820, "the network's and the second player's packets");
-    Input_Enqueue(g_race_local, g_input_packet);
+    if (g_input_stopped || g_race_over) return;
+    if (1 < g_race_players) {
+        Net_Controls();   /* 0x48c930 */
+        return;
+    }
+    if (g_race_inputs < 2) {
+        if (g_race_players == 0) {
+            Input_Enqueue(g_race_local, g_input_packet);
+            g_input_count++;
+        }
+    } else if (Input_Enqueue(0, g_input_packet)) {
+        Input_Enqueue(1, Controls_SecondPacket());   /* 0x5e99e0 */
+    }
 }
 
 void Sim_HalfStep(int n)
@@ -216,7 +229,11 @@ void CarSim_PacketTask(void *car)
             b[0xd85] = packet[0] & 1;
             b[0xd86] = packet[0] >> 1 & 1;
         } else {
-            PENDING_NOTE(0x499150, "a network car's controls");
+            /* a network car of the state mode: its controls from its last state (0x4a0bd0's +0x38..) */
+            *CAR_I(c, 0xd90) = (int8_t)b[0x38];
+            b[0xd7d] = b[0x3a];
+            b[0xd85] = b[0x3b] & 1;
+            b[0xd86] = b[0x3b] >> 1 & 1;
         }
     } else {
         AI_Plan(c);    /* 0x40b670 */

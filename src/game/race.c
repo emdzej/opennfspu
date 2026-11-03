@@ -1,5 +1,6 @@
 /* The race's simulation step (see race.h). */
 #include "game/race.h"
+#include "game/net.h"
 #include "real/systask.h"
 #include "game/skid.h"
 #include "game/track.h"
@@ -111,7 +112,7 @@ void Sim_Step(void)
         CarParticles_TickAll();               /* R3DCarParticle_Tick 0x43f590 */
         Scene_Tick();                         /* 0x470b10 */
     }
-    PENDING_NOTE(0x48ed20, "Net_Tick");
+    Net_Tick();                               /* 0x48ed20 */
     g_sim_tick++;
 }
 
