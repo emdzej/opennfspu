@@ -84,6 +84,7 @@ static bool picture_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool badge_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_click(FertControl *c);
 static bool camera_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool mini_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
 static void camera_update(FertControl *w, FertControl *c);
 static void dialog_open(int kind, const char *text, int b1, int b2);
@@ -2718,6 +2719,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE") || !strcmp(c->id, "NFS5.PLAYERPICTURE")) return picture_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.BADGE")) return badge_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) return camera_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.MINIBADGE") || !strcmp(c->id, "NFS5.MINIPLAYERPICTURE")) return mini_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.KNOCKOUTTRACKLIST")) return ko_list_draw(c, ox, oy);
     if (is_colourbox(c)) {
         /* FEComboBox's draw (0x4c53e0) for a colour box (+0x1de): its colour (its slot 0x74, the
@@ -2900,6 +2902,50 @@ static bool badge_draw(FertControl *c, int32_t ox, int32_t oy)
     bool woman = sv && 3 < sv->info && sv->info < 8;
     int id = rank <= 3 ? (woman ? 0xd9d : 0xda8) + rank : 0;
     if (s_badge.small) FE2D_Text(s_badge.small, x + 0x62, y + 0x32, 0, 0xff000000u, FEStrings_Get(id), 1.0f, 1.0f);
+    return true;
+}
+
+/* Factory Driver's mini badge in its screen's corner: FEMiniBadge (vtable 0x5b6440, _v15 0x4cf040) the
+   rank's licence (its slot 21 0x4cebd0 loads the badge's art, 0 of license*.fsh drawn), and over it
+   FEMiniPlayerPicture (vtable 0x5b6590, _v15 0x4cf6c0) the chosen player's picture (_v1 0x4cf5a0:
+   FE_LoadDriverPictures 0x4db650 of the UserList.UserList stem's name and digit, 0 .. 8), each over
+   its rectangle in the fade's white, neither drawing its parts. Both only from the first rank (0x51a680)
+   and with the rooms' detail on (0x4e2da0 false: the port's display has it on); the picture only with
+   players. */
+static bool mini_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    int rank = FEFactory_Rank();
+    if (rank < 0) return true;
+    FeImage *img = NULL;
+    if (!strcmp(c->id, "NFS5.MINIBADGE")) {
+        char name[64], path[300];
+        snprintf(name, sizeof name, "%s.fsh", exe_str(exe_u32(0x5d8e50 + 4u * (uint32_t)(rank & 3))));
+        FE_ResolvePath(name, path, sizeof path);   /* "%s%s.fsh" 0x5cccc8 of 0x65b334 */
+        FEShapes_Load(path);
+        img = FEShapes_Image(path, 0);
+    } else {
+        FEAccessor *a = FEAccess_Find("UserList.UserList");   /* (_v20 0x4cf500) */
+        if (!a || !FEAccess_Count(a)) return true;   /* (its slot 0x6c: no players) */
+        const char *stem = FESave_PlayerStem(FEAccess_Pos(a));
+        FeImage *own = NULL;
+        UserPicState ps = FEUserPic_Get(stem[0] ? stem + 1 : stem, &own);
+        if (ps == USERPIC_FAILED) return true;
+        if (ps == USERPIC_SHOWN) img = own;
+        else {
+            int n = stem[0] - '0';
+            n = n < 1 ? 0 : n > 8 ? 8 : n;
+            char path[300];
+            FE_ResolvePath("ALLdrivr.fsh", path, sizeof path);   /* ("%sAllDrivr.fsh" 0x5d9824) */
+            FEShapes_Load(path);
+            img = FEShapes_Image(path, n);
+        }
+    }
+    if (!img) return true;
+    int32_t r[4];
+    FertControl_rect(c, r);   /* 0x4c8240 */
+    FE2D_DepthStep();
+    FE2D_Image(img, (float)(r[0] + ox), (float)(r[1] + oy), (float)(r[2] - r[0]), (float)(r[3] - r[1]),
+               (uint32_t)g_fe_fade << 24 | 0xffffffu, 0, false);   /* 0x4d8280 of 0x4c8410, 0x4d95e0 */
     return true;
 }
 
