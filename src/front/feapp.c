@@ -283,6 +283,18 @@ static bool select_panel_deep(FertControl *w, const char *name)
     return false;
 }
 
+/* The panel control of that name in the screen or its open panels' screens; NULL without it. */
+static FertControl *find_panel_deep(FertControl *w, const char *name)
+{
+    for (int i = 0; w && i < w->nchildren; i++)
+        if (!strcmp(w->children[i]->id, "NFS5.PANEL") && !strcmp(w->children[i]->name, name)) return w->children[i];
+    for (int i = 0; w && i < w->nchildren; i++) {
+        FertControl *p = w->children[i]->sub ? find_panel_deep(w->children[i]->sub, name) : NULL;
+        if (p) return p;
+    }
+    return NULL;
+}
+
 /* An attribute of the screen's own part ("screen", "callbacklist", ...); "" without it. */
 static const char *screen_attr(FertControl *w, const char *name)
 {
@@ -3545,6 +3557,17 @@ static void update_watches(FertControl *w)
         }
         if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) {
             csb_tick(c);
+            continue;
+        }
+        if (!strcmp(c->id, "NFS5.TABBUTTON") || !strcmp(c->id, "NFS5.GRAPHICTABBUTTON")) {
+            /* FERadioItem_v1 0x4cfd50: a selected tab whose panel (+0x140) has no screen open (FEPanel
+               0x4ce6b0: +0x14c none, or not started) is deselected (0x4c7900) */
+            const char *panel = data_str(c, "panel");
+            FertControl *p = c->feflags & 8 && panel ? find_panel_deep(FEApp_Top(), panel) : NULL;
+            if (p && !p->sub) {
+                c->feflags &= ~8u;
+                refresh_state(c);
+            }
             continue;
         }
         if (strcmp(c->id, "NFS5.AccessorWatch")) continue;
