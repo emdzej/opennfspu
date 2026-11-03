@@ -20,6 +20,8 @@ nodes_rec, nroad, rnodes = [], 0, {}
 ranked = None
 lists, pers, trafcfg, squares = [], None, None, {}
 states = {}
+swapped = {}
+zones = zonef = None
 objraw, okinds = {}, []
 import os
 road_all = {}
@@ -59,6 +61,9 @@ for line in open(sys.argv[2]):
     if tag == 'okind':
         okinds.append(int(p[3]))
         continue
+    if tag == 'swapped':
+        swapped[int(key)] = int(p[3])
+        continue
     if tag in ('state', 'poststate'):
         states[tag] = (int(key, 16), bytes.fromhex(p[3]), [] if p[4] == '-' else [int(x, 16) for x in p[4].split(',')])
         continue
@@ -87,6 +92,8 @@ for line in open(sys.argv[2]):
     elif tag == 'upd': upd.append((int(key), data))
     elif tag == 'racer': racers[int(key)] = data
     elif tag == 'pers': pers = data
+    elif tag == 'zones': zones = data
+    elif tag == 'zonef': zonef = data
     elif tag == 'squares': squares[int(key)] = data
     elif tag == 'trafcfg': trafcfg = data
     elif tag == 'node': nodes_rec.append(data)
@@ -160,11 +167,15 @@ for k, va in (('players', 0x657404), ('demo', 0x5e67b0), ('altgrip', 0x606ae0), 
     if k in g: w32(va, int(g[k]))
 if 'glob2' in glob:
     w32(0x5e753c, int(glob['glob2']['side'])); w32(0x5e7544, int(glob['glob2']['oneway']))   # (0x40e6d0's)
+    if 'aiticks' in glob['glob2']: w32(0x5e6654, int(glob['glob2']['aiticks']))   # (the AI task's ticks this turn)
+    if 'ailevel' in glob['glob2']: w32(0x6573f4, int(glob['glob2']['ailevel']))   # (the opponents' level)
 # the race's cars (0x5e8b34, count 0x5e8b58; the draft reads the racers' positions), the car itself among
 # them, their personalities (0x5e67c0, 0x54 bytes each; the car's +0xe38 points at its record by +0xe34)
 w32(0x5e8ae8, len(racers))
 if pers is not None: mu.mem_write(0x5e67c0, pers)
 if trafcfg is not None: mu.mem_write(0x5e6d08, trafcfg)   # (0x406c00's)
+if zones is not None: mu.mem_write(0x5e74ac, zones)   # (the track's speed zones and their factors)
+if zonef is not None: mu.mem_write(0x5e74fc, zonef)
 # 0x406900's table of 1 / i at 0x5e7550 ([0] 0, then i = 1 .. 19, single precision)
 import ctypes
 mu.mem_write(0x5e7550, struct.pack('<f', 0) + b''.join(struct.pack('<f', ctypes.c_float(1.0 / i).value) for i in range(1, 20)))
@@ -183,10 +194,15 @@ for i in sorted(racers):
 racer_a = {}
 for i in sorted(racers): racer_a[i] = struct.unpack('<I', mu.mem_read(0x5e8b34 + 4 * i, 4))[0]; with_pers(racer_a[i])
 # +0xed4, the car a traffic car keeps near: the original's pointer, the port's index in the cars plus one
+# +0x454 (the car that hit it) the same; +0x550 (the car it swapped places with) from the port's pointer
+LINKS = (0xed4, 0x454)
 def fix_ed4(a):
-    k = struct.unpack('<i', mu.mem_read(a + 0xed4, 4))[0]
-    if k > 0: wu32(a + 0xed4, racer_a.get(k - 1, 0))
+    for o in LINKS:
+        k = struct.unpack('<i', mu.mem_read(a + o, 4))[0]
+        if k > 0: wu32(a + o, racer_a.get(k - 1, 0))
 for a in set(racer_a.values()) | {car}: fix_ed4(a)
+for i, k in swapped.items():
+    if i in racer_a: wu32(racer_a[i] + 0x550, racer_a.get(k, 0))
 for i, d in squares.items():   # (+0x1014, the car's squares table, 0x40aa10)
     if i in racer_a: wu32(racer_a[i] + 0x1014, alloc(d))
 car_of = {a: i + 1 for i, a in racer_a.items()}
@@ -208,6 +224,7 @@ if collided is not None:
     if any(k < 0 for k in collided): print('collided with a car not among the racers (traffic): unsupported')
     w32(0x628f5c, len(collided))
     for j, k in enumerate(collided): wu32(0x628cdc + 4 * j, racer_a.get(k, 0))
+JN_A = None
 def vec(data, n=None):
     b = alloc(data) if data else 0
     return alloc(struct.pack('<III', b, b + len(data), b + len(data)))
@@ -238,6 +255,11 @@ if ('roadhdr', '0') in road_all:
     nearvec = alloc(struct.pack('<III', nl, nl + 4 * len(inner), nl + 4 * len(inner)))
     road = alloc(struct.pack('<iiiIIIIII', nn, length, last, nodes_a, nn_a, ne_a, segvec, jnvec, nearvec))
     wu32(0x628bc0, road)
+    # +0xe94, the junction an opponent last chose at: the original's pointer, the port's index + 1
+    JN_A = jn_a
+    for a in set(racer_a.values()) | {car}:
+        k = struct.unpack('<i', mu.mem_read(a + 0xe94, 4))[0]
+        if k > 0: wu32(a + 0xe94, jn_a + 0x38 * (k - 1))
     if ('roadline', '0') in road_all:
         # the AI's racing line (0x5e671c: +0x4c the .lsp file, +0x58 its points from +4)
         ln = alloc(road_all[('roadline', '0')])
@@ -375,6 +397,7 @@ if 'state' in states:
     vt, d, cars = states['state']
     b = bytearray(d)
     struct.pack_into('<II', b, 0, vt, car)
+    if vt == 0x5b26c8: struct.pack_into('<I', b, 0xc, car)   # (the chase's follow base at +8 has the car at its +4)
     for o in cars:
         k = struct.unpack_from('<i', b, o)[0]
         struct.pack_into('<I', b, o, racer_a.get(k - 1, 0) if k > 0 else 0)
@@ -384,7 +407,10 @@ if os.environ.get('FD_TRACE'):
     # (FD_TRACE=<va>,<va>,..: the lane driver's lane and scores at each)
     def trace(uc, addr, size, ud):
         w = bytes(uc.mem_read(0x5e6694, 4)) + bytes(uc.mem_read(0x5e66a4, 12))
-        print('trace', hex(addr), struct.unpack('<iiii', w), 'eax', uc.reg_read(UC_X86_REG_EAX), 'edi', uc.reg_read(UC_X86_REG_EDI))
+        esi = uc.reg_read(UC_X86_REG_ESI)
+        try: eb8 = struct.unpack('<f', uc.mem_read(esi + 0xeb8, 4))[0]
+        except Exception: eb8 = None
+        print('trace', hex(addr), 'esi+eb8', eb8, 'ecx', uc.reg_read(UC_X86_REG_ECX), struct.unpack('<iiii', w), 'eax', uc.reg_read(UC_X86_REG_EAX), 'edi', uc.reg_read(UC_X86_REG_EDI), 'ret', hex(struct.unpack('<I', uc.mem_read(uc.reg_read(UC_X86_REG_ESP), 4))[0]), 'args', struct.unpack('<II', uc.mem_read(uc.reg_read(UC_X86_REG_ESP) + 4, 8)))
     for a in os.environ['FD_TRACE'].split(','): mu.hook_add(UC_HOOK_CODE, trace, begin=int(a, 16), end=int(a, 16))
 mu.emu_start(fn, RET, count=50_000_000)
 if mu.reg_read(UC_X86_REG_EIP) != RET:
@@ -398,7 +424,11 @@ for o in TRACK: skip |= set(range(o + 0x28, o + 0x30))
 def same(o, a, b):
     # +0x434, the car hit: the original's pointer, the port's index plus one (read only against 0)
     if o == 0x434: return (a == bytes(4)) == (b == bytes(4))
-    if o == 0xed4: return struct.pack('<i', car_of.get(struct.unpack('<I', a)[0], 0 if a == bytes(4) else -1)) == b
+    if o == 0x550: return True   # (the port keeps it outside the car's bytes)
+    if o == 0xe94 and JN_A is not None:
+        u = struct.unpack('<I', a)[0]
+        return struct.pack('<i', (u - JN_A) // 0x38 + 1 if u else 0) == b
+    if o in LINKS: return struct.pack('<i', car_of.get(struct.unpack('<I', a)[0], 0 if a == bytes(4) else -1)) == b
     return a == b
 diffs = []
 for o in range(0, len(want) - 3, 4):
@@ -426,7 +456,7 @@ if state_a is not None and 'poststate' in states:
     e = bytearray(mu.mem_read(state_a, len(d)))
     for o in cars: struct.pack_into('<i', e, o, car_of.get(struct.unpack_from('<I', e, o)[0], 0))
     if struct.unpack_from('<I', e, 0)[0] != vt: print('state vtable emu', hex(struct.unpack_from('<I', e, 0)[0]), 'port', hex(vt))
-    n = [o for o in range(8, len(d), 4) if e[o:o + 4] != d[o:o + 4]]
+    n = [o for o in range(8, len(d), 4) if e[o:o + 4] != d[o:o + 4] and not (vt == 0x5b26c8 and o == 0xc)]
     print('state differing words', len(n))
     for o in n[:20]: print(f'  state +0x{o:02x} emu {struct.unpack_from("<f", e, o)[0]:.9g} port {struct.unpack_from("<f", d, o)[0]:.9g} (int {struct.unpack_from("<i", e, o)[0]} {struct.unpack_from("<i", d, o)[0]})')
 if fn == 0x40b600:

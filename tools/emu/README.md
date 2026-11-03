@@ -55,7 +55,10 @@ written as the car's address and compared back to the index. All the race's cars
 index in `g_cars`) with the car lists (`FD list`: the array's and count's addresses, the cars), the
 personalities (0x5e67c0; each car's +0xe38 points at its record), and the side and one-way flags 0x40e6d0
 sets (0x5e753c, 0x5e7544), the traffic's configuration as 0x406c00 decodes it (0x5e6d08), each car's
-squares table (+0x1014) and 0x406900's table of 1 / i (0x5e7550). `ARGS=` replaces the replay with
+squares table (+0x1014), 0x406900's table of 1 / i (0x5e7550), the AI's ticks (0x5e6654) and level
+(0x6573f4), the track's speed zones (0x5e74ac, 0x5e74fc); +0x454 (the car that hit it) is mapped like
++0xed4, +0xe94 (the junction last chosen) to the rebuilt junction, +0x550 (the car swapped with) is
+written and not compared. `ARGS=` replaces the replay with
 another run (`--param cops=4 --param aidrive=1` for the police, `--param traffic=3` for the traffic).
 
 The police's states are dumped with the car: 0x40cf90 (the chase), 0x40dcd0 (the roadblock) and

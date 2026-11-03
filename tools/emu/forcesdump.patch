@@ -299,7 +299,7 @@ index c0bd7a7..1956768 100644
      Car *c = car;
      if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
 diff --git a/src/game/car_ground.c b/src/game/car_ground.c
-index 4ce8464..d2cbb26 100644
+index 4ce8464..99eb322 100644
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
 @@ -1,12 +1,14 @@
@@ -317,7 +317,7 @@ index 4ce8464..d2cbb26 100644
  #include "game/sim_math.h"
  #include "game/sim_rand.h"
  #include "pending.h"
-@@ -526,7 +528,252 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
+@@ -526,7 +528,266 @@ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(ki
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
  
@@ -491,6 +491,18 @@ index 4ce8464..d2cbb26 100644
 +        char b[256];
 +        for (int i = 0; i < g_ncars; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_cars[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_cars[i]->b, CAR_SIZE); }
 +        fd_hex("pers", "0", g_ai_pers, sizeof g_ai_pers);
++        {
++            /* the track's speed zones (0x5e74ac: ten node ranges) and their factors (0x5e74fc) */
++            extern int32_t g_track_zone[10][2];
++            extern float g_track_zone_f[10];
++            fd_hex("zones", "0", g_track_zone, sizeof g_track_zone);
++            fd_hex("zonef", "0", g_track_zone_f, sizeof g_track_zone_f);
++        }
++        for (int i = 0; i < g_ncars; i++) {
++            /* (+0x550: the car swapped places with, kept as a pointer outside the car's bytes) */
++            Car *w = g_cars[i]->p[CARP_SWAPPED];
++            for (int k = 0; w && k < g_ncars; k++) if (g_cars[k] == w) { char m[48]; snprintf(m, sizeof m, "FD swapped %d %d", i, k); plat_log(m); }
++        }
 +        for (int i = 0; i < g_ncars; i++) {
 +            const uint8_t *sq = AI_SquaresTable(g_cars[i]);   /* (the car's +0x1014 in the original) */
 +            if (sq) { char k[8]; snprintf(k, sizeof k, "%d", i); fd_hex("squares", k, sq, 0x84); }
@@ -526,7 +538,9 @@ index 4ce8464..d2cbb26 100644
 +            extern int32_t g_race_side;
 +            int32_t one = 0;
 +            if (g_road && g_road->nnodes > 1) memcpy(&one, g_road->nodes + ROAD_NODE_SIZE + 0x38, 4);
-+            snprintf(b, sizeof b, "FD glob2 0 side=%d oneway=%d", g_race_side, one == 0);
++            extern int g_ai_ticks;
++            extern int32_t g_ai_level;
++            snprintf(b, sizeof b, "FD glob2 0 side=%d oneway=%d aiticks=%d ailevel=%d", g_race_side, one == 0, g_ai_ticks, g_ai_level);
 +            plat_log(b);
 +        }
 +        {
@@ -571,7 +585,7 @@ index 4ce8464..d2cbb26 100644
  {
      Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
-@@ -641,7 +888,13 @@ static void player_distance(Car *c)
+@@ -641,7 +902,13 @@ static void player_distance(Car *c)
  
  /* 0x4743a0: the road node for p; with a second segment set (+4, at a junction) and more than one
     segment, the nearer of the nearest nodes in the node's segment and in that one; else the walk. */
@@ -585,7 +599,7 @@ index 4ce8464..d2cbb26 100644
  {
      int16_t old = s->node;
      if (g_road && g_road->nnodes && s->f4 >= 0 && 1 < g_road->nseg) {
-@@ -757,7 +1010,9 @@ void CarSim_BodyPlane(Car *c)
+@@ -757,7 +1024,9 @@ void CarSim_BodyPlane(Car *c)
      memcpy(CAR_F(c, 0x3d0), node_vec(s->node, 0x1c), 12);
  }
  
