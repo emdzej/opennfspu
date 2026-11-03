@@ -208,16 +208,20 @@ for i in sorted(racers): racer_a[i] = struct.unpack('<I', mu.mem_read(0x5e8b34 +
 # +0xed4, the car a traffic car keeps near: the original's pointer, the port's index in the cars plus one
 # +0x454 (the car that hit it) the same; +0x550 (the car it swapped places with) from the port's pointer
 LINKS = (0xed4, 0x454)
+# (the port's index runs on past the race's cars into the traffic list: AIi_CarByIndex)
+link_a = dict(racer_a)
+if trafnodes is not None:
+    for i in range(len(trafnodes)): link_a[len(racers) + i] = struct.unpack('<I', mu.mem_read(0x5e8c24 + 4 * i, 4))[0]
 def fix_ed4(a):
     for o in LINKS:
         k = struct.unpack('<i', mu.mem_read(a + o, 4))[0]
-        if k > 0: wu32(a + o, racer_a.get(k - 1, 0))
+        if k > 0: wu32(a + o, link_a.get(k - 1, 0))
 for a in set(racer_a.values()) | {car}: fix_ed4(a)
 for i, k in swapped.items():
     if i in racer_a: wu32(racer_a[i] + 0x550, racer_a.get(k, 0))
 for i, d in squares.items():   # (+0x1014, the car's squares table, 0x40aa10)
     if i in racer_a: wu32(racer_a[i] + 0x1014, alloc(d))
-car_of = {a: i + 1 for i, a in racer_a.items()}
+car_of = {a: i + 1 for i, a in link_a.items() if a}
 if lists:
     w32(0x5e8b58, len(racers))
     for va, nva, ks in lists:

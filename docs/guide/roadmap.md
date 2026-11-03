@@ -25,9 +25,11 @@ the original does.
   under an x86 emulator (`tools/emu`), each from the same state. The car's drive, forces, moves and turns,
   its walls, world objects and car-to-car collisions, the road tracking, the race's progress and hits, the
   opponents' racing line driving, the traffic's lane driving, the police's chase and turning round, and the
-  AI drive of opponents, traffic and police now give the same results bit for bit. The game's own replay.rpl, recorded by the original, now plays
-  through to its end; whether it matches the original frame for frame isn't confirmed. Still to compare: the AI's other states (the start, recovery and
-  the finish).
+  AI drive of opponents, traffic and police now give the same results bit for bit, through the start's
+  countdown, a car put back on the road and the opponents' finish. Each step is compared from the port's
+  own state, so this doesn't yet prove a whole race runs the same: the game's own replay.rpl, recorded by
+  the original, plays through to its end, but whether it matches the original frame for frame isn't
+  confirmed. Next: the original's whole race loop under the emulator, to compare a race from its start.
 - **Two-player split screen.** The race code has a split-screen mode: communication mode 1, with a second
   player's camera and the catch-up logic. The front end never offers it. The original reads it from `fe.txt`
   (`comm_mode`, `numplayerracecars`, `car[1].class`, `catchup_logic`, all in the shipped file), and the port
