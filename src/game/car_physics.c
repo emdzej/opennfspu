@@ -1,5 +1,6 @@
 /* The cars' simulation (see car_physics.h). */
 #include "game/car_physics.h"
+#include "game/net.h"
 #include "game/skid.h"
 #include "exe.h"
 #include "game/sim_math.h"
@@ -82,7 +83,16 @@ void CarSim_Turn(void *car)
     Mat3_Mul(xy, rz, r);
     float *m = CAR_F(c, 0x364);
     Mat3_Mul(m, r, m);
-    PENDING_NOTE(0x4900a0, "the network game's car correction (0x657408, 0x4900a0, 0x4a0820)");
+    if (g_race_network && *CAR_I(c, 0xdac)) {   /* (a remote car of the state mode, 0x657408) */
+        if (Net_CarLag(*CAR_I(c, 0x520)) < 3) {   /* 0x4900a0 */
+            if (!*CAR_I(c, 0x70)) {
+                *CAR_I(c, 0xda8) = 0;
+                NetCar_Correct(c);   /* 0x4a0820 */
+            } else {
+                *CAR_I(c, 0xda8) = 1;
+            }
+        }
+    }
     CarSim_BodyPoints(c);
     if (--c->b[0x80] == 0) {
         Mat3_Orthonormalize(m);

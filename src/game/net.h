@@ -220,6 +220,8 @@ extern void (*g_net_chathook)(const char *text, int32_t to);          /* 0x6afb2
 /* (Car state packets of the state mode, g_race_network 1: 0x49ff00 out, 0x4a0bd0 in, net_car.c) */
 void NetCar_GetState(uint8_t out[0x24], const void *car);             /* 0x49ff00 */
 void NetCar_SetState(void *car, const uint8_t in[0x24]);              /* 0x4a0bd0 */
+/* A remote car brought towards its last state, each tick (CarSim_Turn's). 0x4a0820 */
+void NetCar_Correct(void *car);
 
 /* ---- the server (net_host.c) ---- */
 
