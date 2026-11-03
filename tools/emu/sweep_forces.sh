@@ -9,7 +9,7 @@ D=$(mktemp -d); cd "$D" && mkdir parts && awk 'BEGIN{n=0} /^FD fn/{n++} {print >
 tot=0; bad=0
 for f in parts/f*.txt; do
   t=$(grep -o "tick=[0-9]*" $f | head -1)
-  r=$("${PY:-python3}" "$OLDPWD/tools/emu/emu_forces.py" "$OLDPWD/game/Porsche.exe" $f 2>&1 | grep -E "differing|did not|bad|Error|order|port changed|unsupported" | tr "\n" " ")
-  tot=$((tot+1)); case "$r" in *"differing words 0 ") ;; *) bad=$((bad+1)); echo "$t $r";; esac
+  r=$("${PY:-python3}" "$OLDPWD/tools/emu/emu_forces.py" "$OLDPWD/game/Porsche.exe" $f 2>&1 | grep -E "differing|did not|bad|Error|order|port changed|unsupported|vtable" | tr "\n" " ")
+  tot=$((tot+1)); if echo "$r" | grep -qE "differing words [1-9]|did not|bad|Error|unsupported|vtable|order" || ! echo "$r" | grep -q "differing words"; then bad=$((bad+1)); echo "$t $r"; fi
 done
 echo "ticks $tot differing $bad"

@@ -54,7 +54,15 @@ when both are set. +0xed4 (the car a traffic car keeps near) is the same but rea
 written as the car's address and compared back to the index. All the race's cars are dumped (by their
 index in `g_cars`) with the car lists (`FD list`: the array's and count's addresses, the cars), the
 personalities (0x5e67c0; each car's +0xe38 points at its record), and the side and one-way flags 0x40e6d0
-sets (0x5e753c, 0x5e7544). `ARGS=` replaces the replay with another run.
+sets (0x5e753c, 0x5e7544), the traffic's configuration as 0x406c00 decodes it (0x5e6d08), each car's
+squares table (+0x1014) and 0x406900's table of 1 / i (0x5e7550). `ARGS=` replaces the replay with
+another run (`--param cops=4 --param aidrive=1` for the police, `--param traffic=3` for the traffic).
+
+The police's states are dumped with the car: 0x40cf90 (the chase), 0x40dcd0 (the roadblock) and
+0x40e230 (turning round) run on the state rebuilt in ecx (+0 the original's vtable, +4 the car, the
+words the port keeps as a car's index + 1 written as its address) and the state's words are compared
+after. `FD_TRACE=<va>,..` prints the lane driver's scores and eax / edi at those addresses, to find
+where a function first goes another way.
 
 The whole road is dumped once per run (`FD road*`, its pointers as indices) and rebuilt in the
 original's layout (0x47fbd0: the segments, junctions and near lists behind vector pointers);
