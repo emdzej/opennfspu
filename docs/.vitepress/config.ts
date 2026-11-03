@@ -94,6 +94,7 @@ export default defineConfig({
           items: [
             { text: "Introduction", link: "/guide/" },
             { text: "Status", link: "/guide/status" },
+            { text: "Roadmap", link: "/guide/roadmap" },
             { text: "Installing", link: "/guide/install" },
             { text: "Game data", link: "/guide/game-data" },
             { text: "Running on gasm", link: "/guide/gasm" },
