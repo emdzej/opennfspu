@@ -58,4 +58,17 @@ the relay's address from the game's address text), everything above them ported 
 port has one thread, and the frame-driven schedule keeps the hash runs repeatable. Modems (TAPI) find no
 lines. The web games list asks EA's servers, which are gone.
 
-Tests: two `gasm-run --allow-net` against a local gasm-relay (`--max-peers 8`).
+Tests: two `gasm-run --allow-net --realtime` against a local gasm-relay (`--max-peers 8`):
+`--param thrash_test=3` the WinSock layer, `=4` the UDP provider (src/real/udp.c: each broadcasts its
+address as a type 0x77 packet and reads the other's).
+
+## Ported
+
+- WinSock over the relay (src/real/wsock.c), threads/events/timer callbacks (src/real/thread.c), the lists
+  0x5803e0..0x580b70 (src/real/netlist.c).
+- The providers' registry and a connection's provider calls 0x580340..0x5803c0 (src/real/netprov.c).
+- UDP (src/real/udp.c): register 0x560580, probe 0x583780, host address 0x5834f0 (no RAS, no autodial
+  registry), the slots 0x5602e0..0x560540, the datagram socket 0x586f80..0x587950 with its threads.
+  The socket's receive match 0x587840 takes a packet of another type than asked, or of that type from
+  the address given: a caller wanting any packet asks for type 0 (never kept: type 0 datagrams are
+  dropped on arrival).

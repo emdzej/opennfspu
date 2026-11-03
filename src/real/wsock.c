@@ -158,10 +158,11 @@ int WS_cleanup(void)
     return 0;
 }
 
-/* Datagram sockets of the Internet family only: there is no IPX here. */
+/* Sockets of the Internet family only: there is no IPX here. A stream socket can be made and closed (the
+   UDP provider's probe 0x583780 makes one) but not connected. */
 int WS_socket(int af, int type, int protocol)
 {
-    if (af != WS_AF_INET || type != WS_SOCK_DGRAM) return fail(10047 /* WSAEAFNOSUPPORT */);
+    if (af != WS_AF_INET || (type != WS_SOCK_DGRAM && type != WS_SOCK_STREAM)) return fail(10047 /* WSAEAFNOSUPPORT */);
     for (int i = 0; i < NSOCK; i++)
         if (!socks[i].used) {
             memset(&socks[i], 0, sizeof socks[i]);
