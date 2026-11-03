@@ -17,6 +17,9 @@
 #include "platform.h"
 #include "app.h"
 #include "render/render.h"
+#include "front/fecomms.h"
+#include "game/net.h"
+#include "game/option_rec.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +32,7 @@ void HTime_Format(int t, char *out, bool sign);   /* game/hud.h (the same) */
 
 enum { TRK_SIZE = 0x4a8, CAR_SIZE = 0x670 };
 
-typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_PRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST, ACC_CMPCAR, ACC_CMPDATA } AccKind;
+typedef enum { ACC_INT, ACC_TRACK, ACC_OPPCAR, ACC_LIST, ACC_DEALER, ACC_OWNED, ACC_TDATA, ACC_MERGED, ACC_TOURNY, ACC_RTRACK, ACC_COLOUR, ACC_INTCOLOUR, ACC_SETUP, ACC_ALLPARTS, ACC_BASKET, ACC_INSTALL, ACC_USEDDMG, ACC_FDATA, ACC_FDCAR, ACC_FDPRIZE, ACC_PRIZE, ACC_USERS, ACC_REPLAYS, ACC_STRING, ACC_SHOWCASE, ACC_CARSET, ACC_BOOL, ACC_DEVICES, ACC_CDAVAIL, ACC_CDSEL, ACC_CDTITLE, ACC_DEADZONE, ACC_RES, ACC_REPAIRLIST, ACC_CMPCAR, ACC_CMPDATA, ACC_COMMS, ACC_CDATA, ACC_CHARVECT } AccKind;
 
 struct FEAccessor {
     char name[64];
@@ -49,9 +52,15 @@ struct FEAccessor {
     int dzpad;
     unsigned dzserial;
     void (*changed)(FEAccessor *a);   /* the callback its set runs (+0x10, 0x4bbe20) */
+    int optid, share;   /* its option (+8) and how a network game shares it (+0xc: 1 each player's, 2 the host's) */
+    char *text;         /* ACC_STRING: its text (+0x14), its length (+0x18), a file's name (+0x1c) */
+    int cap;
+    bool filename;
+    char items[10][0x20];   /* ACC_CHARVECT: its texts (FECharVectAccessor 0x4b8560, ten at most) */
 };
 
 enum { NACC = 256 };
+static int32_t s_trackopt[4];   /* TRACKLOCALEID0, TRACKDIRECTION0, TRACKTRAFFIC0, TRACKLAPS0 (bound below) */
 static FEAccessor s_acc[NACC];   /* 0x65b3a8 */
 static int s_nacc;
 static uint8_t *s_trk, *s_car;
@@ -1712,9 +1721,16 @@ int FEData_RepairCallback(const char *cb)
     return 0;
 }
 
+int FEAccess_CommsList(const FEAccessor *a) { return a && a->kind == ACC_COMMS ? a->src : -1; }
+
 bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out)
 {
     memset(out, 0, sizeof *out);
+    if (a->kind == ACC_COMMS) {   /* (their rows 14 high, drawn by FEComms_Row) */
+        out->height = 0xe;
+        snprintf(out->text, sizeof out->text, "%s", FEComms_Text(a->src, row));
+        return true;
+    }
     int year = career_year();
     if (a->kind == ACC_ALLPARTS) {   /* FEPartsAllPartsAccessor_v15 0x514ef0, _v26 0x515450 */
         int g, i;
@@ -1876,6 +1892,47 @@ void FEData_ResetRecords(void)
     load_track_records();
 }
 
+/* FEdaComms_v0 0x50aed0: the network game's accessors. Their texts (FEStringAccessor 0x4bc490: a length
+   each), the address and phone lists (FECharVectAccessor 0x4b8560, ten), the session's lists, the data
+   (FEMultiplayerDataAccessor, vtable 0x5b9604), the positional updates and collisions (FEListAccessor of
+   0x5b9674 and 0x5b95f4, the host's: the first COMMSPOSITIONAL, 0x14), the modems (one, 600 "none"), the
+   mode (four). */
+static char s_texts[8][0x30];
+static void bind_trackopts(void);
+static void comms(void)
+{
+    static const struct { const char *name; int cap; } texts[] = {
+        {"Comms.PrimaryServerInput", 0x20}, {"Comms.IP", 0x1f}, {"Comms.PhoneNumber", 0x20}, {"Comms.GameName", 0xf},
+        {"COMMS.ACCOUNTID", 0x20}, {"COMMS.PASSWORD", 7}, {"Comms.ChatInput", 0x2d},
+    };
+    add("Game.MaxHumanCars", ACC_INT, 8, 1, 7);   /* 0x4b9ef0(.., 8, 1, 8): 8 of 1 .. 8 */
+    for (size_t i = 0; i < sizeof texts / sizeof *texts; i++) {
+        FEAccessor *t = add(texts[i].name, ACC_STRING, 1, 0, 0);
+        if (t) t->text = s_texts[i], t->cap = texts[i].cap;
+    }
+    add("Comms.IPList", ACC_CHARVECT, 0, 0, 0);
+    add("Comms.PhoneList", ACC_CHARVECT, 0, 0, 0);
+    static const char *const lists[4] = {"Comms.GamesList", "Comms.ServerList", "Comms.LobbyPlayerList", "Comms.PlayerList"};
+    for (int i = 0; i < 4; i++) {
+        FEAccessor *l = add(lists[i], ACC_COMMS, 0, 0, 0);
+        if (l) l->src = i;
+        if (l && i == 3) l->nosel = true;   /* (FEPlayerListAccessor 0x4bb450: 0x4bbdd0's +0x1d on, the chat to all) */
+    }
+    add("Comms.Data", ACC_CDATA, 1, 0, 0);
+    FEAccessor *pu = add("Comms.Positional", ACC_LIST, list_count(0x5b9674), 0, 1);
+    if (pu) pu->list = 0x5b9674, pu->optid = 0x14, pu->share = 2;
+    FEAccessor *co = add("Comms.Collision", ACC_LIST, list_count(0x5b95f4), 0, 1);
+    if (co) co->list = 0x5b95f4, co->share = 2;
+    FEAccessor *mo = add("Comms.ModemList", ACC_CHARVECT, 0, 0, 0);
+    if (mo) {
+        /* (its first text the string 600: no modem) */
+        snprintf(mo->items[0], sizeof mo->items[0], "%s", FEStrings_Get(600));
+        mo->count = 1;
+    }
+    add("Comms.GameMode", ACC_INT, 4, 0, 0);   /* FEPositionableAccessor 0x4bbdd0(.., 4) */
+    bind_trackopts();
+}
+
 void FEData_Init(void)
 {
     if (s_nacc) return;
@@ -1911,11 +1968,14 @@ void FEData_Init(void)
     if (fe_key("track_name", v, sizeof v))
         for (int i = 0; i < s_navail; i++)
             if (!strcasecmp(trk_name_of(NULL, i), v)) tp = i;
-    add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
+    FEAccessor *t1 = add("Track1.Track", ACC_TRACK, s_navail, 0, tp);   /* (0x4f9a90 on 0x4f9490's list) */
+    if (t1) t1->optid = 0xc, t1->share = 2;   /* (TRACKLOCALEID0, the host's) */
     add("Game.NumKOOpponents", ACC_INT, 7, 1, 3);      /* FEIntAccessor 0x4b9ef0(.., 4, 1, 7): 4 of 1 .. 7 */
     /* FEdaUserList_v0 0x4e5410: the name typed (FEStringAccessor 0x4bc490, 8 characters, a file's) and the
        players (FESpecialUserListCharVectAccessor 0x4b8b50, Save_ListPlayers' list) */
-    add("UserList.NameInput", ACC_STRING, 1, 0, 0);
+    FEAccessor *ni = add("UserList.NameInput", ACC_STRING, 1, 0, 0);
+    if (ni) ni->text = s_nameinput, ni->cap = 8, ni->filename = true;
+    comms();
     add("UserList.UserList", ACC_USERS, 0, 0, 0);
     /* (and the replays: FECharVectAccessor 0x4b8560, the save directory's *.rpl) */
     FESave_ListReplays();
@@ -1944,9 +2004,11 @@ void FEData_Init(void)
         snprintf(nm, sizeof nm, "Track%d.Direction", k);
         x = add(nm, ACC_LIST, list_count(0x5b963c), 0, 0);
         if (x) x->list = 0x5b963c;
+        if (x && k == 1) x->optid = 0xd, x->share = 2;   /* (TRACKDIRECTION0) */
         snprintf(nm, sizeof nm, "Track%d.Laps", k);
         x = add(nm, ACC_LIST, list_count(0x5b9650), 0, k == 1 ? 2 : 0);
         if (x) x->list = 0x5b9650;
+        if (x && k == 1) x->optid = 0xf, x->share = 2;   /* (TRACKLAPS0) */
     }
     add("Knockout.TrackNumber", ACC_INT, 7, 0, 0);      /* FEKnockoutTrackNumberAccessor (vtable 0x5b50a4) */
     {
@@ -1958,7 +2020,8 @@ void FEData_Init(void)
         if (!strcasecmp(car_file(i), "964")) cp = i;
     /* FEMergedCarListAccessor (0x4f3c40, vtable 0x5b773c): the owned cars, then the generic ones
        (0x4f3f10: a position below the first list's count is its) */
-    add("zMergedList.Car", ACC_MERGED, s_ncars, 0, cp);
+    FEAccessor *mc = add("zMergedList.Car", ACC_MERGED, s_ncars, 0, cp);
+    if (mc) mc->optid = 0x141, mc->share = 1;   /* (0x4f3c40: FEMULTIPLAYERCARNAME, each player's) */
     audio();
     force_feedback();
     dead_zones();
@@ -2001,6 +2064,7 @@ void FEData_Init(void)
     /* GenericCar.Colour (0x4b8dd0 with 0x4f0260 / 0x4f0290 on GenericCar.Car, the merged list's cars past
        the owned ones: FEMergedCarListAccessor_v11 0x4f4020 hands it the place) */
     FEAccessor *gcol = add("GenericCar.Colour", ACC_COLOUR, 1, 0, 0);
+    if (gcol) gcol->optid = 0x225, gcol->share = 1;   /* (0x4b8dd0: COLOUR, each player's) */
     if (gcol) gcol->src = 2;
     /* The paint shop's (FEdaGarage 0x4f2xxx): FEColourAccessor 0x4b8dd0 on the garage car's palettes, the
        stripe package (FEListAccessor of 0x5b7644), the race number (FEIntAccessor -1 .. 99). */
@@ -2090,6 +2154,11 @@ static SaveCar *garage_car(void)
 static void refresh(const FEAccessor *c)
 {
     FEAccessor *a = (FEAccessor *)c;
+    if (a->kind == ACC_COMMS) {   /* (the session's lists as they stand: FEGameListAccessor_v2 0x4b9b90 ..) */
+        a->count = FEComms_Count(a->src);
+        if (a->count <= a->pos) a->pos = 0;   /* (0x4bbef0) */
+        return;
+    }
     if (a->kind == ACC_USERS) {
         FESave_Current();
         a->count = FESave_PlayerCount();
@@ -2215,6 +2284,76 @@ static uint32_t palette_colour(const FEAccessor *a, int i)
     return swap32((uint32_t)rec32(gc->rec + 4, base + 0x10 * i));
 }
 
+/* A shared accessor's records to the game's players (0x4bbe20's end: 0x4b7d60, in a game the players'
+   own, 1, and the host's, 2, of the host; the accessor's slot 1 then Net_AddOptions). */
+static bool is_shared(const FEAccessor *a)   /* 0x4b7d60 */
+{
+    if (!Net_Live()) return false;
+    if (g_net->in && a->share == 1) return true;
+    return g_net->in && Net_IsFirst() && a->share == 2;
+}
+
+static int my_number(void) { return Net_Live() ? g_net->me : 0; }   /* 0x4ed360 */
+
+static int32_t *records(const FEAccessor *a, int32_t *p)   /* the slot 1s */
+{
+    if (!a->optid) return p;   /* (0x4b7fe0) */
+    if (a->kind == ACC_MERGED) {
+        /* FEMergedCarListAccessor_v1 0x4f3f10: FEMULTIPLAYERCARID the car's id, in a network game
+           FEMULTIPLAYERCARNAME its box's text, COLOUR its body colour (the car's +0x74) */
+        const uint8_t *r = FEAccess_CarRecord(a);
+        uint32_t col[4] = {0, 0, 0, 0};
+        FEAccess_CarColours(a, col);
+        if (0 <= my_number()) Option_PutCar(&p, 0x226, my_number(), r ? rec16(r, 0) : 0);
+        if (s_fe_gametype == 3 && 0 <= my_number()) Option_PutCarText(&p, a->optid, my_number(), FEAccess_Text(a));
+        if (0 <= my_number()) Option_PutCar(&p, 0x225, my_number(), (int32_t)(col[0] & 0xffffffu));
+        return p;
+    }
+    if (a->kind == ACC_TRACK) {   /* FETrackAccessor_v1 0x4f9cb0: the record's string id */
+        Option_PutInt(&p, a->optid, rec32(s_trk + TRK_SIZE * track_rec(a, a->pos), 4));
+        return p;
+    }
+    int32_t v = a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR ? (int32_t)a->cval : a->pos;   /* (FEColourAccessor_v1 0x4b90b0: +0x2c) */
+    if (0x21d < a->optid) {   /* (0x4b4b30: a car's, my number's) */
+        if (0 <= my_number()) Option_PutCar(&p, a->optid, my_number(), v);
+    } else {
+        Option_PutInt(&p, a->optid, v);   /* (FEPositionableAccessor_v1 0x4bbfb0) */
+    }
+    return p;
+}
+
+static void shared(FEAccessor *a)
+{
+    if (!is_shared(a)) return;
+    int32_t recs[0x40], *p = records(a, recs);
+    *p = 0;
+    if (p != recs) Net_AddOptions(recs);
+}
+
+/* Every shared accessor's records out (0x4b77b0: the registry in its order, the map's, by name). */
+void FEAccess_SendShared(void)
+{
+    const FEAccessor *last = NULL;
+    for (;;) {
+        FEAccessor *next = NULL;
+        for (int i = 0; i < s_nacc; i++) {
+            FEAccessor *a = &s_acc[i];
+            if (last && strcmp(a->name, last->name) <= 0) continue;
+            if (!next || strcmp(a->name, next->name) < 0) next = a;
+        }
+        if (!next) return;
+        shared(next);   /* (its slot 3) */
+        last = next;
+    }
+}
+
+int32_t *FEData_CarRecords(int32_t *p, int number)
+{
+    (void)number;
+    FEAccessor *a = FEAccess_Find("zMergedList.Car");
+    return a ? records(a, p) : p;
+}
+
 void FEAccess_SetPos(FEAccessor *a, int pos)
 {
     refresh(a);
@@ -2266,6 +2405,7 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
             a->pos = pos;
             a->cval = FEData_Custom(pos - a->pal - 1);
         }
+        shared(a);
         return;
     }
     if (!a->count) return;
@@ -2274,6 +2414,7 @@ void FEAccess_SetPos(FEAccessor *a, int pos)
     if (a->changed) a->changed(a);
     if (a->key) Options_SetInt(a->key, a->min + a->pos);   /* (the accessor's option, slot 11 0x4bbe20) */
     if (a->kind == ACC_COLOUR || a->kind == ACC_INTCOLOUR) a->cval = colour_row(a, a->pos);
+    shared(a);
 }
 
 int FEAccess_Int(const FEAccessor *a) { return a ? a->min + a->pos : 0; }   /* (FEIntAccessor's slot 0x6c) */
@@ -2332,9 +2473,15 @@ const char *FEAccess_Text(const FEAccessor *a)
         snprintf(b, sizeof b, "%s", FESave_PlayerStem(a->pos)[0] ? FESave_PlayerStem(a->pos) + 1 : "");
         return b;
     case ACC_STRING:
-        return s_nameinput;
+        return a->text ? a->text : "";
     case ACC_REPLAYS:
         return FESave_ReplayStem(a->pos);
+    case ACC_COMMS:
+        return FEComms_Text(a->src, a->pos);
+    case ACC_CHARVECT:   /* FECharVectAccessor_v12 */
+        return a->items[a->pos < 10 ? a->pos : 0];
+    case ACC_CDATA:
+        return "";
     case ACC_DEVICES:
         return FECtrl_ListName(a->src == 1, a->pos);
     case ACC_CDAVAIL:   /* _v12 0x4be790 */
@@ -2459,6 +2606,7 @@ const char *FEAccess_TextArg(const FEAccessor *a, const char *arg)
 {
     static char b[16];
     if (a->kind == ACC_SHOWCASE) return FEShowcase_Text(Fert_ParseInt(arg ? arg : ""));   /* v5 0x508540 */
+    if (a->kind == ACC_CDATA) return FEComms_Data(arg ? arg : "");
     if ((a->kind == ACC_CDSEL || a->kind == ACC_CDTITLE) && arg && *arg) return cd_text(a, arg);
     if (a->kind == ACC_FDATA) {   /* FEFactoryDriverDataAccessor_v5 0x519620 */
         FEAccessor *p = FEAccess_Find("Factory.ProfileNum");
@@ -3407,8 +3555,19 @@ bool FEData_TrackLooped(int type)   /* 0x4fb4f0 */
     char nm[32];
     const char *acc;
     switch (type) {
+    case 3:
+        if (!Net_IsFirst()) {
+            /* a guest's: the host's TRACKLOCALEID0's record among the tracks (0x691d00), else the first */
+            bind_trackopts();
+            if (!s_navail) return false;
+            int r = s_avail[0];
+            for (int i = 0; i < s_navail; i++)
+                if (rec32(s_trk + TRK_SIZE * s_avail[i], 4) == s_trackopt[0]) r = s_avail[i];
+            return rec16(s_trk + TRK_SIZE * r, 0x6e) == 1;
+        }
+        acc = "Track1.Track";
+        break;
     case 0:
-    case 3:   /* (a multiplayer client's the session's track, 0x691d00: no multiplayer) */
         acc = "Track1.Track";
         break;
     case 1:
@@ -4022,17 +4181,41 @@ char *FEData_NameInput(void) { return s_nameinput; }
    nothing past its length), the last one taken off (_v14 0x4bc550 -> _v13). */
 bool FEAccess_TypeChar(FEAccessor *a, int ch)
 {
-    if (!a || a->kind != ACC_STRING) return false;
-    size_t n = strlen(s_nameinput);
+    if (!a || a->kind != ACC_STRING || !a->text) return false;
+    size_t n = strlen(a->text);
     if (ch == 8) {
-        if (n) s_nameinput[n - 1] = 0;
+        if (n) a->text[n - 1] = 0;
         return true;
     }
-    if (ch == '%' || (ch < 0x20 && ch != 8) || strchr("\\/:*?\"<>|", ch)) return true;
-    if (n == sizeof s_nameinput - 1) return false;
-    s_nameinput[n] = (char)ch;
-    s_nameinput[n + 1] = 0;
+    if (ch == '%' || (a->filename && ((ch < 0x20 && ch != 8) || strchr("\\/:*?\"<>|", ch)))) return true;
+    if (n >= (size_t)a->cap) return false;
+    a->text[n] = (char)ch;
+    a->text[n + 1] = 0;
     return true;
+}
+
+/* FEStringAccessor's set (slot 9, 0x24) and clear (0x44): the text cut to its length. */
+void FEAccess_SetText(FEAccessor *a, const char *t)
+{
+    if (!a || a->kind != ACC_STRING || !a->text) return;
+    snprintf(a->text, (size_t)a->cap + 1, "%s", t ? t : "");
+}
+
+/* FECharVectAccessor's add (0x4b8750): a text at the front, the same one before taken out, ten kept. */
+void FEAccess_ListAdd(FEAccessor *a, const char *t)
+{
+    if (!a || a->kind != ACC_CHARVECT || !t || !t[0]) return;
+    for (int i = 0; i < a->count; i++)
+        if (!strcmp(a->items[i], t)) {
+            memmove(a->items[i], a->items[i + 1], sizeof a->items[0] * (size_t)(a->count - i - 1));
+            a->count--;
+            break;
+        }
+    if (a->count == 10) a->count--;
+    memmove(a->items[1], a->items[0], sizeof a->items[0] * (size_t)a->count);
+    snprintf(a->items[0], sizeof a->items[0], "%s", t);
+    a->count++;
+    a->pos = 0;
 }
 
 void FEData_KnockoutStop(void)   /* 0x4ddaf0: the knockout's on byte off */
@@ -4087,4 +4270,61 @@ static const uint8_t *generic_rec(void)
     refresh(m);
     if (!m->count || m->pos < m->owned) return NULL;
     return s_car + CAR_SIZE * s_cars[m->pos - m->owned];
+}
+
+/* ---------------------------------------------------------------- the network game's */
+
+/* The FE's options the host's records set (TRACKLOCALEID0 0x699f30, TRACKDIRECTION0 0x699f2c,
+   TRACKTRAFFIC0 0x699f24, TRACKLAPS0 0x699fb4; ids 0xc .. 0xf), bound for Option_Apply. */
+static void bind_trackopts(void)
+{
+    static bool done;
+    if (done) return;
+    done = true;
+    static const uint32_t va[4] = {0x699f30, 0x699f2c, 0x699f24, 0x699fb4};
+    for (int i = 0; i < 4; i++) Option_Bind(va[i], &s_trackopt[i], 4);
+}
+
+int FEData_TrackLocaleOption(void) { bind_trackopts(); return s_trackopt[0]; }
+int FEData_TrackOption(int k) { bind_trackopts(); return 0 < k && k < 4 ? s_trackopt[k] : 0; }
+
+int FEData_TrackLocale(void)   /* (FETrackAccessor's slot 0x70: the record's string id) */
+{
+    bind_trackopts();
+    FEAccessor *a = FEAccess_Find("Track1.Track");
+    return a && a->count ? rec32(s_trk + TRK_SIZE * track_rec(a, a->pos), 4) : 0;
+}
+
+/* The track of the host's TRACKLOCALEID0 (0x4fb4f0(3) off the host: the first without it). */
+const char *FEData_TrackByLocale(void)
+{
+    bind_trackopts();
+    if (!s_trk || !s_navail) return "coastal";
+    for (int i = 0; i < s_navail; i++)
+        if (rec32(s_trk + TRK_SIZE * s_avail[i], 4) == s_trackopt[0]) return (const char *)s_trk + TRK_SIZE * s_avail[i] + 8;
+    return (const char *)s_trk + TRK_SIZE * s_avail[0] + 8;
+}
+
+bool FEData_HaveCarId(int id)   /* 0x4f3ad0: among the racing cars (0x6919f0) */
+{
+    for (int i = 0; i < s_ncars; i++)
+        if (rec16(s_car + CAR_SIZE * s_cars[i], 0) == id) return true;
+    return false;
+}
+
+const char *FEData_CarNameById(int id)   /* 0x4f39e0 + 2: the record's full name */
+{
+    const uint8_t *r = FEData_CarById(id);
+    return r ? (const char *)r + 2 : "";
+}
+
+/* The car lists set again at their places (0x508950 / 0x509bb0: OwnedCars.Car's, zMergedList.Car's
+   slot 11 with their own place: zMergedList's shared records go out). */
+void FEData_ResyncCars(void)
+{
+    static const char *const names[2] = {"OwnedCars.Car", "zMergedList.Car"};
+    for (int i = 0; i < 2; i++) {
+        FEAccessor *a = FEAccess_Find(names[i]);
+        if (a) FEAccess_SetPos(a, a->pos);
+    }
 }

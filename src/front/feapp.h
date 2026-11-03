@@ -45,6 +45,24 @@ void FEApp_RaceRecord(const char *name, const char *car, int32_t best, int32_t t
 
 /* A message box of a string id up over the screens, closed by its OK (0x512d00). */
 void FEApp_Message(int string_id);
+void FEApp_MessageText(const char *text);
+/* A box for another module's use (the network screens'): kind 0 one button (b1), 1 two, 2 a text of cap
+   letters and two; its handle. Its state: -1 gone (or another box over it), 0 up, else the button that
+   closed it (Enter: 1). Closed by its handle; the input box's text. */
+int FEApp_DialogOpen(int kind, const char *text, int b1, int b2, int cap);
+int FEApp_DialogState(int h);
+void FEApp_DialogClose(int h);
+char *FEApp_DialogInput(void);
+/* The screen on and still (its transitions done). */
+bool FEApp_Idle(void);
+const char *FEApp_ScreenAttr(FertControl *w, const char *name);
+/* A control of a screen enabled or not (0x50cf40). */
+void FEApp_Enable(FertControl *w, const char *name, bool on);
+/* Game.GameType set (the screens' own; 3 a network game). */
+void FEApp_SetGameType(int type);
+/* Text broken into lines of a width in Univers8b, each line malloc'd; their count. */
+int FEApp_WrapText(const char *text, int width, char **out, int cap);
+
 
 /* The race's wear on the player's car (its parts' ids and wear) into the owned car raced, if one was. */
 void FEApp_RaceWear(const int32_t *ids, const float *wear, int n);
@@ -88,5 +106,7 @@ int FEApp_OpponentCars(RaceOpponent out[8]);
 float FEApp_Skill(void);
 /* A control's callback by name, as a click would run it (port addition: --param fecb=, tests). */
 void FEApp_Callback(const char *cb);
+/* PLAYGAME as the callback list's slot (0xd4), without the screen's canplaygame test: a network guest's start. */
+void FEApp_PlayDirect(void);
 /* A click at (x, y) on the top screen: a move there, the button down and up (port addition: tests). */
 void FEApp_Click(int32_t x, int32_t y);

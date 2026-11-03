@@ -195,6 +195,8 @@ typedef struct {
     int status_align;         /* 0 from there, 2 to there */
 } FEPartsRow;
 bool FEData_PartsRow(const FEAccessor *a, int row, FEPartsRow *out);
+/* The session list an accessor shows (FEComms_Count's), -1 for another kind. */
+int FEAccess_CommsList(const FEAccessor *a);
 /* The parts screen made (0x518ba0). */
 void FEData_PartsOpen(void);
 /* A parts screen callback (BUYPARTCALLBACK, ...): 0, or a message (0x32a: too little money). */
@@ -287,3 +289,20 @@ bool FEData_EraEnded(void);
 /* The player's four race cameras (Camera.1 .. Camera.4: 0 .. 3, or the save's). */
 void FEData_Cameras(int32_t out[4]);
 const uint8_t *FEData_CarAt(int i);
+
+/* The network game's (front/fecomms.c): string accessors' set, a list's text added at its front; the
+   merged car's records (0x4f3f10) at p for my number; the host's track options (TRACKLOCALEID0, and 1
+   the direction, 2 the traffic, 3 the laps); Track1.Track's string id; the track of TRACKLOCALEID0; a car
+   among the racing cars, a car's name by id; the car lists set again. */
+void FEAccess_SetText(FEAccessor *a, const char *t);
+/* Every shared accessor's records to the game (0x4b77b0). */
+void FEAccess_SendShared(void);
+void FEAccess_ListAdd(FEAccessor *a, const char *t);
+int32_t *FEData_CarRecords(int32_t *p, int number);
+int FEData_TrackLocaleOption(void);
+int FEData_TrackOption(int k);
+int FEData_TrackLocale(void);
+const char *FEData_TrackByLocale(void);
+bool FEData_HaveCarId(int id);
+const char *FEData_CarNameById(int id);
+void FEData_ResyncCars(void);

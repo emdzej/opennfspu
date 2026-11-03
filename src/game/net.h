@@ -215,7 +215,6 @@ int Net_PlayerPing(NetPlayer *p);                                     /* 0x49055
 void Net_GameList(NetLst *l, const uint8_t *m, int len);              /* 0x490b60 */
 NetGameRec *NetGame_FromText(const char *text, int32_t id);           /* 0x48c240 */
 int Net_GamePing(NetGameRec *g);                                      /* 0x48c5c0 */
-int Option_Size(const int32_t *rec);                                  /* 0x4b4aa0 */
 extern void (*g_net_chathook)(const char *text, int32_t to);          /* 0x6afb24 */
 
 /* (Car state packets of the state mode, g_race_network 1: 0x49ff00 out, 0x4a0bd0 in, net_car.c) */

@@ -25,6 +25,8 @@
 #include "support/crt.h"
 #include "game/audio.h"
 #include "game/input.h"
+#include "front/fecomms.h"
+#include "game/net.h"
 #include "game/music.h"
 #include "game/options.h"
 #include "game/mission.h"
@@ -64,13 +66,13 @@ static int s_depth;
 /* The dialog up (FEDialog 0x511c60 and its kinds): one button (0x512d00), two (FEDialogTwoItem 0x5133a0),
    an input and two (FEDialogInputCancel 0x513b50). done: closed by its first button (1) or second (2). */
 enum { DLG_ONE, DLG_TWO, DLG_INPUT };
-enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE, DLG_FOR_KILLREPLAY, DLG_FOR_FORFEIT };
+enum { DLG_FOR_NONE, DLG_FOR_SELL, DLG_FOR_OFFER, DLG_FOR_DECAL, DLG_FOR_TOUR, DLG_FOR_REMOVE, DLG_FOR_KILLREPLAY, DLG_FOR_FORFEIT, DLG_FOR_COMMS };
 static struct {
     bool up;
     int kind, purpose, done;
     char text[300];
     int b1, b2;              /* the buttons' strings */
-    char input[16];          /* FEDialogInput's text (+0xe4), its length cap (+0xe8), digits only (+0xf1) */
+    char input[32];          /* FEDialogInput's text (+0xe4), its length cap (+0xe8), digits only (+0xf1) */
     int cap;
     bool digits;
     float x, y, w, h, tw;
@@ -78,9 +80,19 @@ static struct {
 static int dialog_button_hit(int32_t mx, int32_t my);
 static void dialog_key(uint8_t code);
 static FertControl *focused_input(FertControl *w);
+/* FEInputBox and its kinds: FEChatInputBox (vtable 0x5b5ac8), FECharVectAccessorInputBox (0x5b59e4). */
+static bool is_inputbox(const FertControl *c)
+{
+    return !strcmp(c->id, "NFS5.INPUTBOX") || !strcmp(c->id, "NFS5.CHATINPUTBOX") || !strcmp(c->id, "NFS5.CHARVECTACCESSORINPUTBOX");
+}
+static bool inputbox_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
 static int s_driver_pic = 8;          /* 0x5d8f2c: the create player screen's driver */
 static void inputbox_keys(FertControl *c, const uint8_t *k, int nk);
 static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool chatinput_draw(FertControl *c, int32_t ox, int32_t oy);
+static bool chat_draw(FertControl *c, int32_t ox, int32_t oy);
+static void chat_tick(FertControl *c);
+static void charvect_commit(FertControl *c);
 static bool picture_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool badge_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool picture_click(FertControl *c);
@@ -106,6 +118,7 @@ static uint32_t s_colours[4];         /* the race car's colours (the description
 static bool s_havecol;
 static int s_tour_race = -1;          /* the career race being run (its index in the tournament) */
 static int s_owned_race = -1;         /* the owned car raced (its index in the save) */
+static bool s_play_direct;   /* (FEApp_PlayDirect's) */
 static int s_gametype;                /* Game.GameType (0x690ad4): 0 quick race, 1, 2 knockouts, 3 multiplayer, 4 career, 9 Factory Driver */
 static FertControl *s_tourny_win;     /* the tournament screen's (FETournamentCallBackList 0x5051a0) */
 static int s_tourny_offer = -1;       /* its car with an offer (+0x2f0), an owned index */
@@ -388,6 +401,9 @@ static FertControl *load_screen(const char *name)
 }
 
 static bool fe_start(const char *start);
+static FertControl *s_cbl_w;
+static char s_cbl_name[40];
+static bool s_cbl_quiet;   /* (the history put back without its lists, 0x4d56b0) */
 
 /* 0x5d9158: 1 until the first run's start is done; FEApplication_Run's runs after it (back from a race)
    show the loading screen's steps (FE_LoadingScreen 0x4dd4b0) between its start's loads. The port's
@@ -445,12 +461,27 @@ static bool fe_start(const char *start)
     s_nleaving = 0;
     s_building = true;   /* (until the first frame) */
     while (s_depth) screen_free(s_stack[--s_depth]);   /* (FEApplication_Run starts its stack anew) */
+    FEComms_Errors(true);   /* 0x508b50 */
     if (s_nsaved) {
         /* back from a race (0x4d2e70 after it): the screens it began from, the knockout between its races
            on its race information (knockoutraceinfo 0x5d9354) */
         int n = s_nsaved;
         s_nsaved = 0;
         bool ok = true;
+        if (s_gametype == 3 && FEComms_InGame() && n > 0) {
+            /* (0x4d2e70 in a game: the first screen, the mode's screens, then the game's own; only the
+               last one's list made) */
+            const char *names[4];
+            int k = FEComms_ReturnStack(names);
+            s_cbl_quiet = true;
+            ok = FEApp_GotoScreen(s_saved[0], true);
+            for (int i = 0; i + 1 < k && ok; i++) ok = FEApp_GotoScreen(names[i], true);
+            s_cbl_quiet = false;
+            if (ok) ok = FEApp_GotoScreen(names[k - 1], true);
+            if (ok) return true;
+            while (s_depth) screen_free(s_stack[--s_depth]);
+            return FEApp_GotoScreen(start, true);
+        }
         if (s_gametype == 9 && n > 0) {
             /* (0x4d2e70's Factory Driver stack: the first screen, factorydriver unless all missions are
                done, a level's end on the victory screen with its message popped up) */
@@ -582,6 +613,9 @@ void FEApp_End(void)
     FESave_Write();        /* (Save_Write 0x4de850 of the player, 0x501a90, and its picture, 0x500820) */
     FEPointer_Free();      /* 0x4e1450 */
     FEShowcase_Load(NULL); /* 0x5081e0 (the port's: the race's memory) */
+    if (s_cbl_w) FEComms_Close(s_cbl_name);   /* (0x4d5d40: the top's list let go, 0x508b60 the errors off) */
+    s_cbl_w = NULL;
+    FEComms_Errors(false);
     R3DCar_FreeCommon();   /* 0x443a80 (FEApplication_Run's end: made again for the race's mode) */
     Render_FreeCommonFsh();   /* 0x448af0 */
     g_r3d_frontend = 0;
@@ -628,6 +662,7 @@ static void factory_open(void)
 
 bool FEApp_GotoScreen(const char *name, bool push)
 {
+    FEComms_Leaving();   /* (0x4d1b50: in a game my READY off first) */
     FertControl *w = load_screen(name);
     if (!w) {
         char m[200];
@@ -673,6 +708,19 @@ void FEApp_Back(void)
 }
 
 FertControl *FEApp_Top(void) { return s_depth ? s_stack[s_depth - 1] : NULL; }
+
+/* The screen on and still (0x65b928's +0xe4 and its state 2, 0x4e09a0). */
+bool FEApp_Idle(void) { return s_overlay && s_overlay->trans.phase == 2; }
+const char *FEApp_ScreenAttr(FertControl *w, const char *name) { return screen_attr(w, name); }
+static void enable(FertControl *w, const char *name, bool on);
+void FEApp_Enable(FertControl *w, const char *name, bool on) { enable(w, name, on); }   /* 0x50cf40 */
+void FEApp_SetGameType(int type)   /* (Game.GameType's set) */
+{
+    s_gametype = type;
+    FEData_SetGameType(type);
+}
+
+
 
 /* ---------------------------------------------------------------- the controls' behaviour */
 
@@ -881,7 +929,13 @@ static int play_mode(void)   /* (0x4d5df0: data.canplaygame: 1 a race of the cho
     return 0;
 }
 
-static bool can_play(void) { return play_mode() != 0; }
+static bool can_play(void)
+{
+    if (play_mode() == 0) return false;
+    /* (FECommsCreateScreen_v41 0x508870: the host's, every player ready, no race on) */
+    if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_COMMSCREATESCREEN")) return FEComms_CanPlay();
+    return true;
+}
 
 /* The prize races' setup (0x4fb630's and 0x4eadb0's types 10, 11): the prize race's track, laps,
    direction and traffic, in the prize car with its first colour on all four (none: 0xffff0000). */
@@ -1026,6 +1080,8 @@ static bool cd_callback(const char *cb)
 static void callback(const char *cb)
 {
     if (player_callback(cb)) return;
+    if (FEComms_Callback(screen_attr(FEApp_Top(), "callbacklist"), cb)) return;
+    if (!strcmp(cb, "GOBACK") && FEComms_Back(screen_attr(FEApp_Top(), "callbacklist"))) return;
     if (!strcmp(screen_attr(FEApp_Top(), "callbacklist"), "ID_CHRONICLE") && FEChronicle_Callback(cb)) return;
     if (FEData_CompareCallback(cb)) return;   /* (and SHOWCASE.MERGEDCAR's compared car) */
     if (FEShowcase_Callback(cb)) return;   /* (the base list's SHOWCASE.<car> functors) */
@@ -1291,12 +1347,30 @@ static void callback(const char *cb)
         s_nopp = -1;
         s_factory_race = false;
         set_direction(0);
-        if (!can_play()) return;
+        if (!s_play_direct && !can_play()) return;
+        s_play_direct = false;
         /* The race description the screens leave in the options (0x4d2e70's end), from the data areas'
            accessors. */
         char v[64];
         (void)v;
         s_tour_race = -1;
+        if (s_gametype == 3) {
+            /* a network game: everyone's start first (0x50c550), then the race of the host's track
+               (Track1.Track; a guest's TRACKLOCALEID0's, 0x4fb4f0(3)), laps and direction, the chosen car,
+               no opponents, police or traffic (0x4ec590's type 3); the host's options give the rest */
+            if (!FEComms_Play()) return;
+            snprintf(s_track, sizeof s_track, "%s", Net_IsFirst() ? FEData_Track() : FEData_TrackByLocale());
+            snprintf(s_car, sizeof s_car, "%s", FEData_Car());
+            s_havecol = FEAccess_CarColours(FEAccess_Find("zMergedList.Car"), s_colours);
+            s_owned_race = FEData_OwnedIndex("zMergedList.Car");
+            FEAccessor *la = FEAccess_Find("Track1.Laps");
+            s_laps = FEData_TrackLooped(3) && la ? FEAccess_Pos(la) + 1 : 1;
+            set_direction(FEAccess_ItemId(FEAccess_Find("Track1.Direction")));
+            s_opponents = 0;
+            s_nopp = 0;
+            s_result = FE_PLAY;
+            return;
+        }
         if (play_mode() == 2) {
             /* the career's race: the tournament's next track, the player's chosen car; its laps,
                direction, traffic and racers the tournament's */
@@ -1506,6 +1580,7 @@ static FertControl *hit(FertControl *w, int32_t x, int32_t y)
 static void window_event(FertControl *w, int type, int32_t x, int32_t y)
 {
     FertControl *target = w->focus;
+    if (target && is_inputbox(target) && !(target->feflags & 0x40)) target = w->focus = NULL;   /* (let go, 0x4c7970) */
     for (int i = 0; type == 7 && i < w->nchildren; i++)
         if (w->children[i]->sub && !(w->children[i]->feflags & 0x20)) window_event(w->children[i]->sub, 7, x, y);
     switch (type) {
@@ -1534,6 +1609,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         if (target && type == 4 && FEChronicle_Down(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 8 && FEChronicle_Up(target)) break;
         if (target && type == 4 && FECar3D_Click(target, w->mouse[0], w->mouse[1])) break;
+        if (target && type == 4 && inputbox_click(w, target, type, x, y)) break;
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && picture_click(target)) break;
@@ -1839,6 +1915,21 @@ static int wrap_lines(HudFont *font, const char *text, float width, int *step, f
     return nlines;
 }
 
+/* Text broken into lines of a width in Univers8b (the chat box's, 0x522900), each malloc'd. */
+int FEApp_WrapText(const char *text, int width, char **out, int cap)
+{
+    char fp[300];
+    FE_ResolvePath("Univers8b.ffn", fp, sizeof fp);
+    HudFont *f = FEFont_Get(fp);
+    if (!f || !f->font) return 0;
+    int step;
+    float total;
+    int n = wrap_lines(f, text, (float)width, &step, &total);
+    if (n > cap) n = cap;
+    for (int i = 0; i < n; i++) out[i] = strdup(s_wrap[i]);
+    return n;
+}
+
 static void wrap_text(HudFont *font, const char *t, float x, float y, uint32_t colour)
 {
     char *copy = FE2D_Alloc((int)strlen(t) + 1);
@@ -1911,6 +2002,13 @@ static void dialog_open(int kind, const char *text, int b1, int b2)
 
 void FEApp_Callback(const char *cb) { callback(cb); }
 
+void FEApp_PlayDirect(void)   /* (the callback list's PLAYGAME slot itself, 0xd4: no canplaygame test) */
+{
+    s_play_direct = true;
+    callback("PLAYGAME");
+    s_play_direct = false;
+}
+
 void FEApp_Click(int32_t x, int32_t y)
 {
     FertControl *w = FEApp_Top();
@@ -1925,6 +2023,32 @@ void FEApp_Message(int string_id)
 {
     dialog_open(DLG_ONE, FEStrings_Get(string_id), 0x2be, 0);
 }
+
+void FEApp_MessageText(const char *text) { dialog_open(DLG_ONE, text, 0x2be, 0); }   /* (0x512e70) */
+
+static int s_dialog_serial;
+int FEApp_DialogOpen(int kind, const char *text, int b1, int b2, int cap)
+{
+    dialog_open(kind == 0 ? DLG_ONE : kind == 1 ? DLG_TWO : DLG_INPUT, text, b1 ? b1 : kind == 0 ? 0x2be : 0x2be, b2 ? b2 : 0x2bf);
+    s_dialog.cap = cap < (int)sizeof s_dialog.input ? cap : (int)sizeof s_dialog.input - 1;
+    s_dialog.purpose = DLG_FOR_COMMS;
+    return ++s_dialog_serial;
+}
+
+int FEApp_DialogState(int h)
+{
+    if (h < 0 || h != s_dialog_serial || s_dialog.purpose != DLG_FOR_COMMS) return -1;
+    return s_dialog.up ? 0 : s_dialog.done;
+}
+
+void FEApp_DialogClose(int h)
+{
+    if (FEApp_DialogState(h) < 0) return;
+    s_dialog.up = false;
+    s_dialog.purpose = DLG_FOR_NONE;
+}
+
+char *FEApp_DialogInput(void) { return s_dialog.input; }
 
 static HudFont *dialog_font(void)
 {
@@ -1976,19 +2100,11 @@ static int dialog_button_hit(int32_t mx, int32_t my)
 static void dialog_key(uint8_t code)
 {
     if (s_dialog.kind != DLG_INPUT) return;
-    static const char row1[] = "1234567890", rowq[] = "qwertyuiop", rowa[] = "asdfghjkl", rowz[] = "zxcvbnm";
-    static const uint8_t pad[] = {0x52, 0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, 0x48, 0x49};   /* keypad 0..9 */
-    int ch = 0;
-    if (code >= 0x02 && code <= 0x0b) ch = row1[code - 2];
-    else if (code >= 0x10 && code <= 0x19) ch = rowq[code - 0x10];
-    else if (code >= 0x1e && code <= 0x26) ch = rowa[code - 0x1e];
-    else if (code >= 0x2c && code <= 0x32) ch = rowz[code - 0x2c];
-    else if (code == 0x39) ch = ' ';
-    else if (code == 0x0e) ch = 8;
-    else if (code == 0x1c || code == 0x9c) ch = 13;
-    for (int i = 0; i < 10; i++)
-        if (code == pad[i]) ch = '0' + i;
-    if (!ch) return;
+    /* (the characters Windows makes of the keys, WM_CHAR: the keypad's digits, backspace, Enter) */
+    uint8_t held[KEY_COUNT];
+    bool shift = plat_keys(held) && (held[0x2a] || held[0x36]);
+    int ch = code == 0x9c ? 13 : Input_KeyChar(code, shift);
+    if (!ch || (ch != 8 && ch != 13 && (ch < 0x20 || ch > 0xfe))) return;
     Audio_UI(9);   /* 0x4aab80 */
     size_t n = strlen(s_dialog.input);
     if (ch == 8) {
@@ -2199,8 +2315,21 @@ static void anim_update(FertControl *c)
 
 /* The screens changed: the typing states of controls no longer on the stack dropped (a screen's controls
    are made with it, so a new screen's start afresh: their v21). */
+/* The top screen's callback list (0x65b928's +0xe0): made when a screen comes on top, let go when it
+   goes (the network game's lists, front/fecomms.c). */
+static void cbl_track(void)
+{
+    FertControl *t = FEApp_Top();
+    if (t == s_cbl_w) return;
+    if (s_cbl_w && !s_cbl_quiet) FEComms_Close(s_cbl_name);
+    s_cbl_w = t;
+    snprintf(s_cbl_name, sizeof s_cbl_name, "%s", t ? screen_attr(t, "callbacklist") : "");
+    if (t && !s_cbl_quiet) FEComms_Open(s_cbl_name);
+}
+
 static void screen_entered(void)
 {
+    cbl_track();
     for (int i = 0; i < 8; i++) {
         bool on = false;
         for (int k = 0; k < s_depth && s_types[i].c && !on; k++) on = control_in(s_stack[k], s_types[i].c);
@@ -2528,6 +2657,28 @@ static void list_text(HudFont *f, float x, float y, const char *t, uint32_t colo
     FE2D_Text(f, align == 2 ? x - fw : align == 1 ? x - fw * 0.5f : x, y, 0, colour, copy, 1.0f, 1.0f);
 }
 
+/* A row's cells at their controls' x (FEComms_Row): right of it (+4) or up to it (-4); a colour box
+   (15 x 10 at +4, framed, 0x4d8d30 0x4d8cb0) puts the text at +0x17. */
+static void comms_row(HudFont *f, int list, int row, float x, float y, int32_t ox, uint32_t fg)
+{
+    FECommsRow r;
+    if (!FEComms_Row(list, row, &r)) return;
+    for (int k = 0; k < r.n; k++) {
+        const FECommsCell *e = &r.cell[k];
+        FertControl *pc = e->pos ? control_named(FEApp_Top(), e->pos) : NULL;
+        int32_t pr[4] = {0, 0, 0, 0};
+        if (pc) control_rect(pc, pr);
+        float px = pc ? (float)(pr[0] + ox) : x;
+        if (e->box) {
+            FE2D_Rect(px + 4.0f, y + 2.0f, 15.0f, 10.0f, e->box);
+            FE2D_Frame(px + 4.0f, y + 2.0f, 15.0f, 10.0f, 0xff000000u);
+            list_text(f, px + 23.0f, y + 1.0f, e->text, fg, 0);
+        } else {
+            list_text(f, e->align == 2 ? px - 4.0f : px + 4.0f, y + 1.0f, e->text, fg, e->align);
+        }
+    }
+}
+
 static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
 {
     if (c->feflags & 0x20) return true;
@@ -2567,6 +2718,12 @@ static bool listbox_draw(FertControl *c, int32_t ox, int32_t oy)
         uint32_t bg = chosen ? 0xffbc0000u : row.header ? 0x60000000u : 0;   /* (highlightcolorselected) */
         if (bg) FE2D_Gouraud(x, yy, w, 13.0f, bg, bg, bg, bg);
         uint32_t fg = chosen ? 0xffffffffu : row.dim ? 0x40000000u : 0xff000000u;
+        int cl = FEAccess_CommsList(a);
+        if (cl >= 0) {   /* (the session's lists, their slot 15: FEGameListAccessor_v15 0x4b9c10 ..) */
+            comms_row(f, cl, i, x, yy, ox, fg);
+            yy += 14.0f;
+            continue;
+        }
         float tx = x + 3.0f;
         if (row.header) {
             FeImage *ic = FEShapes_Image(icons, row.open ? 0xb : 3);
@@ -2644,6 +2801,11 @@ static bool ko_list_click(FertControl *c, int32_t my)
 /* A press on a list box chooses its row there (FEComboBox's 0x4c66c0 on its list). */
 static bool listbox_click(FertControl *c, int32_t mx, int32_t my)
 {
+    if (!strcmp(c->id, "NFS5.CHATDISPLAYBOX")) {   /* (its bar, FEChatDisplayBox_v9 0x4c2ca0) */
+        ListState *l = list_state(c);
+        if (l->made && l->slider.count > 1 && slider_down(&l->slider, mx, my)) s_slider_held = &l->slider;
+        return true;
+    }
     if (strcmp(c->id, "NFS5.ListBox")) return false;
     FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
     if (!a) return true;
@@ -2784,7 +2946,9 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.ACCOUNTTHING")) return account_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.WORDWRAPACCESSORWATCH") || !strcmp(c->id, "NFS5.WORDWRAPCONTROL")) return wordwrap_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.ListBox")) return listbox_draw(c, ox, oy);
-    if (!strcmp(c->id, "NFS5.INPUTBOX")) return inputbox_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.INPUTBOX") || !strcmp(c->id, "NFS5.CHARVECTACCESSORINPUTBOX")) return inputbox_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.CHATINPUTBOX")) return chatinput_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.CHATDISPLAYBOX")) return chat_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.PLAYERDRIVERPICTURE") || !strcmp(c->id, "NFS5.PLAYERPICTURE")) return picture_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.BADGE")) return badge_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) return camera_draw(c, ox, oy);
@@ -2945,6 +3109,84 @@ static bool inputbox_draw(FertControl *c, int32_t ox, int32_t oy)
         return true;
     }
     FEStyle_Inset(x, y, w, h, 0xff, 3);
+    return true;
+}
+
+/* The chat's input (FEChatInputBox_v15 0x4c2f90): its parts, the cursor blinking while focused, the inset
+   while focused or hovered (and not disabled); no shadow, no shine. */
+static bool chatinput_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    FEControl_Draw(c, ox, oy);
+    int32_t r[4];
+    FertControl_rect(c, r);
+    bool focused = (c->feflags & 0x40) != 0;
+    uint32_t ticks = (uint32_t)((uint64_t)app_ticks_ms() * 128u / 1000u);   /* TIMER_ticks */
+    int k = FertControl_findPart(c, "cursor");
+    if (focused && (ticks & 0x3f) < 0x20 && k >= 0) {
+        int32_t pos[2] = {0, 0};
+        FertAttr *pa = FertAttrList_find(&c->attrs, "pos");
+        if (pa) FertAttr_point(pa, pos);
+        FE2D_DepthStep();
+        FEPart_Draw(c->parts[k], pos[0] + ox, pos[1] + oy);
+    }
+    if (focused || (c->feflags & 4))
+        FEStyle_Inset((float)(r[0] + ox), (float)(r[1] + oy), (float)(r[2] - r[0]), (float)(r[3] - r[1]), 0xff, 3);
+    return true;
+}
+
+/* The chat's lines (FEChatDisplayBox): opened (_v21 0x4c2520) the lines cleared, its rows data.height /
+   data.spacing (_v20 0x4c2740), a bar at its right (0x4da860 over "<name>_SliderBar"); each tick (_v1
+   0x4c2990) the messages taken (0x4c20d0: at most 100 lines kept, the bar's range the lines past a box,
+   still at the end when it was). Its draw (_v15 0x4c2b30): the bar when it has a range, its parts, the
+   rows from the bar's place at (+4, +2 + row * spacing), Univers8b, black at the fade. */
+static FertControl *s_chat_box;
+static void chat_tick(FertControl *c)
+{
+    ListState *l = list_state(c);
+    int32_t r[4];
+    FertControl_rect(c, r);
+    int spacing = data_int_of(c, "spacing"), rows = spacing > 0 ? data_int_of(c, "height") / spacing : 0;
+    if (s_chat_box != c) {
+        s_chat_box = c;
+        FEComms_ChatClear();
+    }
+    if (!l->made) {
+        l->made = true;
+        slider_layout(&l->slider, r[2] - 0x10, r[1], r[3] - r[1]);
+        slider_setcount(&l->slider, 1);
+    }
+    bool at_end = l->slider.pos == l->slider.count - 1;
+    int before = FEComms_ChatLines();
+    FEComms_ChatTick(r[2] - r[0]);
+    if (FEComms_ChatLines() != before) {
+        int past = FEComms_ChatLines() - rows;
+        slider_setcount(&l->slider, (past < 0 ? 0 : past) + 1);   /* 0x4ba0d0(0, ..) */
+        if (at_end) slider_setpos(&l->slider, l->slider.count - 1);
+        slider_refresh(&l->slider);
+    }
+    slider_tick(&l->slider);
+    l->scroll = l->slider.count > 1;
+}
+
+static bool chat_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;
+    ListState *l = list_state(c);
+    if (!l->made) return true;
+    int32_t r[4];
+    FertControl_rect(c, r);
+    if (s_slider_held != &l->slider) slider_hit(&l->slider, s_mouse[0], s_mouse[1]);
+    if (l->slider.count > 1) slider_draw(&l->slider, ox, oy, 0xff);
+    FEControl_Draw(c, ox, oy);
+    int spacing = data_int_of(c, "spacing"), rows = spacing > 0 ? data_int_of(c, "height") / spacing : 0;
+    HudFont *f = list_font();
+    int first = l->slider.pos;
+    FE2D_DepthStep();
+    for (int i = first; i < first + rows; i++) {
+        if (i < 0 || FEComms_ChatLines() <= i) continue;
+        list_text(f, (float)(r[0] + 1 + ox) + 3.0f, (float)((i - first) * spacing + 2 + r[1] + oy), FEComms_ChatLine(i), 0xff000000u, 0);
+    }
     return true;
 }
 
@@ -3511,11 +3753,48 @@ static FertControl *focused_input(FertControl *w)
             FertControl *f = focused_input(c->sub);
             if (f) return f;
         }
-        if (!strcmp(c->id, "NFS5.INPUTBOX") && (c->feflags & 0x40) && !(c->feflags & 0x30)) return c;
+        if (is_inputbox(c) && (c->feflags & 0x40) && !(c->feflags & 0x30)) return c;
     }
     return NULL;
 }
 
+
+/* FECharVectAccessorInputBox's Enter (and its press away, _v9 0x4c1e00): a text typed to the front of its
+   list (0x4b8750, chosen), then its callback (data.callback, by the screen's list 0x50cd90) or none. */
+static void charvect_commit(FertControl *c)
+{
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    FEAccessor *v = FEAccess_Find(data_str(c, "charvectaccessor"));
+    if (a && FEAccess_Text(a)[0]) {
+        FEAccess_ListAdd(v, FEAccess_Text(a));
+        if (v) FEAccess_SetPos(v, 0);
+    }
+    const char *cb = data_str(c, "callback");
+    if (cb && cb[0]) FEApp_Callback(cb);
+}
+
+/* A press (FEInputBox_v9 0x4cc5b0): one off it focuses it (0x4c7940; the window's presses to it
+   first); one while focused away from it (+0x148, the mouse in, _v6 _v7) lets it go and goes to the
+   window. */
+static bool inputbox_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y)
+{
+    if (!is_inputbox(c)) return false;
+    if (!(c->feflags & 0x40)) {
+        c->feflags |= 0x40;
+        if (!data_int_of(c, "alwaysfocused")) w->focus = c;
+        refresh_state(c);
+        return true;
+    }
+    int32_t r[4];
+    FertControl_rect(c, r);
+    if (r[0] <= w->mouse[0] && w->mouse[0] < r[2] && r[1] <= w->mouse[1] && w->mouse[1] < r[3]) return true;
+    if (!strcmp(c->id, "NFS5.CHARVECTACCESSORINPUTBOX")) charvect_commit(c);
+    c->feflags &= ~0x40u;   /* 0x4c7970 */
+    refresh_state(c);
+    if (w->focus == c) w->focus = NULL;
+    window_event(w, type, x, y);
+    return true;
+}
 
 static void inputbox_keys(FertControl *c, const uint8_t *k, int nk)
 {
@@ -3525,6 +3804,21 @@ static void inputbox_keys(FertControl *c, const uint8_t *k, int nk)
     for (int i = 0; i < nk && a; i++) {
         int ch = Input_KeyChar(k[i], shift);
         if (!ch || (ch != 8 && ch != 13 && (ch < 0x20 || ch > 0xfe || ch == '%'))) continue;
+        if (ch == 13 && !strcmp(c->id, "NFS5.CHATINPUTBOX")) {
+            /* FEChatInputBox_v4 0x4c2ee0: the text to the player chosen in its player list (0x4bb720), to
+               all when none is (0x4bc210), the text cleared; the focus kept */
+            FEAccessor *pl = FEAccess_Find(data_str(c, "playerlistaccessor"));
+            int to = pl && FEAccess_Pos(pl) >= 0 ? FEComms_RowNumber(3, FEAccess_Pos(pl)) : -1;
+            FEComms_ChatSend(FEAccess_Text(a), to);
+            FEAccess_SetText(a, "");
+            return;
+        }
+        if (ch == 13 && !strcmp(c->id, "NFS5.CHARVECTACCESSORINPUTBOX")) {
+            charvect_commit(c);   /* FECharVectAccessorInputBox_v4 0x4c1d00 */
+            c->feflags &= ~0x40u;   /* 0x4c7970 */
+            refresh_state(c);
+            return;
+        }
         if (ch == 13) {
             if (!data_int_of(c, "alwaysfocused")) {   /* (0x4c7970; an always focused box takes it back) */
                 c->feflags &= ~0x40u;
@@ -3544,8 +3838,22 @@ static void update_watches(FertControl *w)
     for (int i = 0; w && i < w->nchildren; i++) {
         FertControl *c = w->children[i];
         if (c->sub) update_watches(c->sub);
-        if (!strcmp(c->id, "NFS5.INPUTBOX")) {
+        if (is_inputbox(c)) {
+            if (!strcmp(c->id, "NFS5.CHARVECTACCESSORINPUTBOX") && !(c->feflags & 0x40)) {
+                /* _v1 0x4c1ef0: unfocused, its text the list's chosen one */
+                FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+                FEAccessor *v = FEAccess_Find(data_str(c, "charvectaccessor"));
+                if (a && v && strcmp(FEAccess_Text(a), FEAccess_Text(v))) {
+                    char t[0x20];
+                    snprintf(t, sizeof t, "%s", FEAccess_Text(v));
+                    FEAccess_SetText(a, t);
+                }
+            }
             inputbox_sync(w, c);
+            continue;
+        }
+        if (!strcmp(c->id, "NFS5.CHATDISPLAYBOX")) {
+            chat_tick(c);
             continue;
         }
         if (!strcmp(c->id, "NFS5.CAMERASELECT") || !strcmp(c->id, "NFS5.CAMERAPICTURE")) {
@@ -3961,7 +4269,9 @@ static bool base_cbl(const char *cbl)
 {
     static const char *const names[] = {"", "ID_NONE", "ID_KNOCKOUTSCREEN", "ID_TRACKRECORDSCREEN", "ID_CARCOMPARECBL",
                                         "ID_CAREERFIRST", "ID_DEALERCBL", "ID_FDVICTORYSCREEN", "ID_CARSETUP", "ID_USEDCARCBL",
-                                        "ID_ENDOFERASCREEN", "ID_VICTORYSCREEN", "ID_CHRONICLE", "ID_CREDITS"};
+                                        "ID_ENDOFERASCREEN", "ID_VICTORYSCREEN", "ID_CHRONICLE", "ID_CREDITS",
+                                        "ID_COMMSCREATESCREEN", "ID_COMMSJOINSCREEN", "ID_COMMSLANGAMESSCREEN",
+                                        "ID_COMMSWEBGAMESSCREEN", "ID_COMMSMODEMSCREEN", "ID_PEERTOPEERIP", "ID_COMMSSERVERSCREEN"};
     for (size_t i = 0; i < sizeof names / sizeof *names; i++)
         if (!strcmp(cbl, names[i])) return true;
     return false;
@@ -4001,6 +4311,7 @@ static void screen_update(FertControl *w)   /* the screen's callback list's upda
             enable(w, "ID_ROOF", sc[0x1bf] != 0);
         }
     }
+    FEComms_Update(w, cbl);   /* (FECommsErrorHandler_v1 0x508c10 and the network screens' own) */
     if (!strcmp(cbl, "ID_CREDITS")) {
         /* FECreditsCallBackList_v1 0x50e350: the roll backwards (-3) over ID_CREDSBACK, forwards (3)
            over ID_CREDSFWD (0x4c7880: hovered, not disabled), else at 1 */

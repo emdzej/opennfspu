@@ -6,11 +6,13 @@
 #include "game/car.h"
 #include "game/input.h"
 #include "game/loadscreen.h"
+#include "game/option_rec.h"
 #include "game/race_progress.h"
 #include "pending.h"
 #include "platform.h"
 #include "real/systask.h"
 #include "real/udp.h"
+#include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -363,8 +365,15 @@ static void read_version(NetSession *s)   /* Net_ReadVersion 0x48db10 */
     /* (the registry's values 8 and 7 first, 0x4b7030: the port's registry has none of them) */
     snprintf(s->version2, sizeof s->version2, "%s", exe_str(0x5d07a0));
     snprintf(s->version, sizeof s->version, "%s", exe_str(0x5d07a0));
-    /* version.txt (0x5d0790), its first 5 bytes */
-    PENDING_NOTE(0x48db10, "version.txt for the network's version (0x59ddf0)");
+    /* version.txt (0x5d0790, 0x59ddf0), its first 5 bytes, when it has any */
+    size_t n = 0;
+    uint8_t *t = vfs_read_all(exe_str(0x5d0790), &n);
+    if (t && n) {
+        if (5 < n) n = 5;
+        memcpy(s->version, t, n);
+        s->version[n] = 0;
+    }
+    free(t);
 }
 
 static void timer_cb(void);
@@ -828,26 +837,6 @@ void Net_FlushOptions(void)
     }
 }
 
-int Option_Size(const int32_t *rec)   /* 0x4b4aa0: in words */
-{
-    int32_t id = rec[0];
-    if (0x21d < id) return 3;
-    if (id >= 0x14e) return 2;
-    const int32_t *r = rec;
-    if (id < 0x142) {
-        if (0x10d < id) {
-            /* a text from the second word (third above 0x139), its end's word included */
-            if (0x139 < id) r++;
-            const uint8_t *t = (const uint8_t *)(r + 1);
-            size_t n = strlen((const char *)t);
-            r += (n + 1 + 3) / 4 - 1;
-        }
-        return (int)(r - rec) + 2;
-    }
-    if (0x146 < id) r++;
-    return (int)(r - rec) + 2 + r[1];
-}
-
 void Net_AddOption(const int32_t *rec)
 {
     NetSession *s = g_net;
@@ -1224,9 +1213,8 @@ static void got_packet(NetSession *s, const uint8_t *m, int len)
         break;
     }
     case 0xbc:   /* options */
-        for (const uint8_t *r = m + 4; r < m + (len / 4) * 4; r += Option_Size((const int32_t *)r) * 4) {
-            PENDING_NOTE(0x4b4950, "Option_Apply: the host's options into the game's (the options' table 0x5d1e40)");
-        }
+        for (const uint8_t *r = m + 4; r < m + (len / 4) * 4; r += Option_Size((const int32_t *)r) * 4)
+            Option_Apply((const int32_t *)r);   /* 0x4b4950 */
         break;
     case 0xbd:
         s->ready ^= (uint16_t)(1u << (m[3] & 0x1f));
@@ -1404,7 +1392,7 @@ static void st_thread(void *arg)
     (void)arg;
     char v[8], m[160];
     bool hosting = plat_param("nethost", v, sizeof v) && v[0] == '1';
-    if (!Net_Construct()) {
+    if (!g_net && !Net_Construct()) {
         plat_log("net: no session (no provider)");
         return;
     }

@@ -54,7 +54,7 @@ static char drive_name[32];   /* --param drive=<track>: drive car=<name> (defaul
 static char screen_name[64];  /* --param screen=<layout>: a front-end screen (FE_selftest), e.g. main.lay */
 static char fe_cb[128];       /* --param fecb=<cb>[,<cb>..]: run at front-end frames 30, 40, .. (port addition, tests;
                                  "=<name>" types the name into UserList.NameInput, "^" goes back a screen, "@x:y"
-                                 clicks there) */
+                                 clicks there, "$acc:text" sets a text) */
 static int fe_frames;
 static char fe_start[64];     /* --param fe=<screen>: the front end from that screen (default gamesetup) */
 static bool fe_on;
@@ -110,6 +110,9 @@ bool app_init(void)
 bool app_frame(void)
 {
     g_app_frames++;
+    /* (Sys_Init 0x4a51e0: the network session; on the first frame, as gasm's threads, which the UDP
+       provider starts, run from the frame loop) */
+    if (g_app_frames == 1 && !g_net) Net_Construct();
     TIMER_run(app_ticks_ms());   /* (the timer's threads: their ticks up to the frame's time) */
     /* Every frame runs the game, the runner's catch-up frames too (gasm_gl_frame_shown 0: only the last
        of them is shown): the game's time is the frame count, so skipping them would stop it. */
@@ -173,6 +176,13 @@ bool app_frame(void)
                             const char *colon = strchr(one, ':');
                             if (colon) px = atoi(one + 1), py = atoi(colon + 1);
                             MOUSE_Override(true, px, py, colon ? 1u : 0u);
+                        }
+                        else if (one[0] == '$') {   /* ($<accessor>:<text>: a text typed into it) */
+                            char *colon = strchr(one, ':');
+                            if (colon) *colon = 0;
+                            FEAccessor *acc = FEAccess_Find(one + 1);
+                            FEAccess_SetText(acc, colon ? colon + 1 : "");   /* (a string's) */
+                            FEAccess_ListAdd(acc, colon ? colon + 1 : "");   /* (a list's, chosen) */
                         }
                         else if (one[0] == '@') {   /* (@<x>:<y>: a click there) */
                             const char *colon = strchr(one, ':');

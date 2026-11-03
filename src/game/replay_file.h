@@ -8,10 +8,14 @@
    zero. */
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 /* The race as it stands into <file> (Replay_WriteFinalTick 0x414680; Replay_Save 0x413ff0 is the same
    with "replay.rpl"): the final tick the current one when still recording. */
 bool Replay_Write(const char *file);
+/* The port's field at the original's address <va> in the race's block (0x6573e8, the car descriptions from
+   0x65808c), its size in *size; NULL for one the port doesn't keep. */
+void *Replay_Field(uint32_t va, int *size);
 /* Whether the save directory has <file> (0x59d9e0). */
 bool Replay_Exists(const char *file);
 /* <file>, else the default replay.rpl, into the loaded copy (Replay_Load 0x414710); false (the replay

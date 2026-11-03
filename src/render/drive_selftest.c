@@ -14,6 +14,8 @@
 #include "game/car_drive.h"
 #include "game/car_physics.h"
 #include "game/race_setup.h"
+#include "game/net.h"
+#include "game/option_rec.h"
 #include "game/mission.h"
 #include "game/race.h"
 #include "game/hud.h"
@@ -246,7 +248,11 @@ static int load(const char *track, const char *carname)
         }
         plat_param("driver", g_race_driver_name, sizeof g_race_driver_name);   /* --param driver=<name>: the player's name */
         if (!RaceSetup_SingleCar(carname)) return -1;
-        {
+        if (g_race_mode == 3 && Net_InGame()) {
+            /* (a network race: no opponents, police or traffic; the seats' cars from the session) */
+            RaceSetup_Network();   /* (Race_Configure 0x4b4b70) */
+            if (g_nracecars < 1) return -1;
+        } else {
             int opponents = plat_param("opponents", v, sizeof v) ? atoi(v) : g_drive_opponents;   /* --param opponents=<n> */
             g_ai_drive = plat_param("aidrive", v, sizeof v) && v[0] == '1';       /* --param aidrive=1 */
             if (0 < opponents) RaceSetup_Opponents(opponents);
@@ -255,7 +261,7 @@ static int load(const char *track, const char *carname)
             int traffic = plat_param("traffic", v, sizeof v) ? atoi(v) : g_drive_traffic;   /* --param traffic=<n> */
             if (0 < traffic) RaceSetup_Traffic(traffic, g_track_name);   /* (0x4ec590) */
         }
-        if (g_drive_laps > 0) g_race_laps = g_drive_laps;                    /* (the front end's choice) */
+        if (g_drive_laps > 0 && !(g_race_mode == 3 && Net_InGame())) g_race_laps = g_drive_laps;   /* (the front end's choice; the host's in a network race) */
         if (plat_param("laps", v, sizeof v)) g_race_laps = atoi(v);          /* --param laps=<n> */
         Replay_Apply();   /* (the file's descriptions and settings over the set-up's) */
         LoadingScreen(0);

@@ -104,6 +104,7 @@ extern int32_t g_race_cops;   /* 0x657414: COPS (option 0x15: police in the race
 extern int32_t g_sim_tick;
 extern int32_t g_race_rally;
 extern int32_t g_race_network;
+extern int32_t g_race_nocollision;   /* 0x65740c: NOCOLLISION (car_collide.c) */
 extern int32_t g_race_heavy;             /* 0x6573fc: the human cars ten times heavier */
 
 /* ---- task lists (0x414c50 / 0x414cd0 / 0x414d50) ---- */

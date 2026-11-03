@@ -401,6 +401,7 @@ void CarSim_Objects(Car *c)
 
 static Car *g_collided[CAR_MAX + TRAFFIC_MAX];   /* 0x628cdc (room for 138, unchecked) */
 static int g_ncollided;
+int32_t g_race_nocollision;   /* 0x65740c: NOCOLLISION (the network game's Comms.Collision) */
 
 void CarSim_ClearCollided(void) { g_ncollided = 0; }
 
@@ -413,7 +414,8 @@ void CarSim_Collide(void *car)
         CarSim_Edges(c);   /* 0x494f90 */
         CarSim_Objects(c);  /* 0x498d50 */
     }
-    if (g_race_network) return;
+    /* (the cars pass through each other in a network game's state mode with NOCOLLISION) */
+    if (g_race_network && g_race_nocollision) return;
     for (int i = 0; i < g_ncollided; i++) {
         Car *o = g_collided[i];
         float r = *CAR_F(o, 0x3b4) + *CAR_F(c, 0x3b4);

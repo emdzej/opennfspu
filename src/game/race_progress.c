@@ -188,7 +188,7 @@ void Race_CarProgress(Car *c)
                 HUD_LapDone();   /* 0x427790 */
         }
     }
-ranked:
+ranked:;
     /* Into the ranking of distances (the latest tick first among equals); the rows after it move down. */
     float d = *CAR_F(c, 0xaf8);
     int i = 0;

@@ -47,6 +47,8 @@ static const struct {
     {0x014, &g_race_heavy, 4},         /* HEAVY */
     {0x018, &g_race_derby, 4},         /* DERBY */
     {0x01c, &g_race_players, 4},       /* COMM_MODE */
+    {0x020, &g_race_network, 4},       /* COMMSPOSITIONAL */
+    {0x024, &g_race_nocollision, 4},   /* NOCOLLISION */
     {0x02c, &g_race_cops, 4},          /* COPS */
     {0x034, &g_race_local, 4},         /* 0x65741c */
     {0x03c, &g_race_view, 4},          /* 0x657424 */
@@ -98,6 +100,20 @@ static const struct {
 };
 
 static uint8_t *s_loaded;   /* 0x5e9a20: the loaded copy (FILE_SIZE) */
+
+void *Replay_Field(uint32_t va, int *size)
+{
+    for (size_t i = 0; i < sizeof k_fields / sizeof *k_fields; i++)
+        if (va == 0x6573e8u + (uint32_t)k_fields[i].off) {
+            *size = k_fields[i].size;
+            return k_fields[i].p;
+        }
+    if (va >= 0x65808cu && va < 0x65808cu + CARDESC_SIZE * CAR_MAX) {
+        *size = CARDESC_SIZE - (int)((va - 0x65808cu) % CARDESC_SIZE);
+        return g_cardesc[0] + (va - 0x65808cu);
+    }
+    return NULL;
+}
 
 static void put(uint8_t *f, int off, int32_t v) { memcpy(f + off, &v, 4); }
 static int32_t get(const uint8_t *f, int off) { int32_t v; memcpy(&v, f + off, 4); return v; }
