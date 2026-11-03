@@ -709,8 +709,50 @@ static void on_enter(FertControl *c)   /* 0x4c7760 */
     }
 }
 
+/* A car setting button (FECarSettingButton, vtable 0x5b5970: data.accessor, data.step): a press steps
+   its accessor (_v27 0x4c1b00) and holds the focus, stepping again every 150 ms while held (_v5 0x4c1b20:
+   the timer 0x529050, repeating; _v10 0x4c1b60 its event); let go or left, the timer stops and the
+   focus goes (_v7 0x4c1b90, which _v9 runs). */
+static struct { FertControl *c, *w; uint32_t next; } s_csb;   /* (+0x14c the timer) */
+
+static void csb_step(FertControl *c)
+{
+    FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
+    if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + data_int_of(c, "step"));
+}
+
+static bool csb_down(FertControl *w, FertControl *c)
+{
+    if (strcmp(c->id, "NFS5.CARSETTINGBUTTON") || (c->feflags & 0x10)) return false;
+    s_csb.c = c;
+    s_csb.w = w;
+    s_csb.next = app_ticks_ms() + 150;
+    csb_step(c);
+    c->feflags |= 0x40;   /* 0x4c7940 */
+    w->focus = c;
+    refresh_state(c);
+    return true;
+}
+
+static void csb_stop(FertControl *c)
+{
+    if (s_csb.c != c) return;
+    if (s_csb.w && s_csb.w->focus == c) s_csb.w->focus = NULL;   /* 0x4c7970 */
+    c->feflags &= ~0x40u;
+    refresh_state(c);
+    memset(&s_csb, 0, sizeof s_csb);
+}
+
+static void csb_tick(FertControl *c)
+{
+    if (s_csb.c != c || app_ticks_ms() < s_csb.next) return;
+    s_csb.next += 150;
+    csb_step(c);
+}
+
 static void on_leave(FertControl *c)   /* 0x4c7820 */
 {
+    if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) csb_stop(c);   /* (its _v7 0x4c1b90) */
     FEChronicle_Leave(c);
     if (c->feflags & 4) {
         c->feflags &= ~4u;
@@ -1377,9 +1419,8 @@ static void combo_open(FertControl *c);
 static void on_up(FertControl *c)
 {
     if (c->feflags & 0x10) return;   /* 0x4c7a10: disabled */
-    if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) {   /* FECarSettingButton: its accessor a step on */
-        FEAccessor *a = FEAccess_Find(data_str(c, "accessor"));
-        if (a) FEAccess_SetPos(a, FEAccess_Pos(a) + data_int_of(c, "step"));
+    if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) {   /* FECarSettingButton_v9 0x4c1b80: its v7 */
+        csb_stop(c);
         return;
     }
     if (!strcmp(c->id, "NFS5.CheckBox")) {   /* FECheckBox_v9 0x4c3340: a click in it turns its accessor over */
@@ -1476,6 +1517,7 @@ static void window_event(FertControl *w, int type, int32_t x, int32_t y)
         if (target && type == 4 && indicator_click(target, w->mouse[0])) break;
         if (target && type == 4 && listbox_click(target, w->mouse[0], w->mouse[1])) break;
         if (target && type == 4 && picture_click(target)) break;
+        if (target && type == 4 && csb_down(w, target)) break;
         if (target && type == 4 && FECtrl_Click(target)) break;
         if (target && type == 4 && FECtrl_DeadZonePress(target, w->mouse[0])) break;
         if (target && type == 4 && ko_list_click(target, w->mouse[1])) break;
@@ -3394,6 +3436,10 @@ static void update_watches(FertControl *w)
         }
         if (!strcmp(c->id, "NFS5.AnimatingPicture")) {
             animpic_update(c);
+            continue;
+        }
+        if (!strcmp(c->id, "NFS5.CARSETTINGBUTTON")) {
+            csb_tick(c);
             continue;
         }
         if (strcmp(c->id, "NFS5.AccessorWatch")) continue;
