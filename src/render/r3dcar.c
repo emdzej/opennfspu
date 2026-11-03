@@ -5,6 +5,7 @@
 #include "render/r3dcar.h"
 #include "render/weather.h"
 #include "game/camera.h"
+#include "game/race_progress.h"
 #include "game/car_drive.h"
 #include "render/rlayers.h"
 #include "exe.h"
@@ -578,7 +579,7 @@ static float zone_damage(const R3DCar *car, int z)
     const float *d = car->state->damage;
     float v = d ? d[z] : 0;
     uint32_t table = 0x5b35ac;
-    if (car->state->index == g_camera_car && (g_racecam[0].mode != 0 || (g_racecam[0].flags2 >> 3 & 1))) table = 0x5b35d4;
+    if (car->state->index == g_race_local && (g_racecam[0].mode != 0 || (g_racecam[0].flags2 >> 3 & 1))) table = 0x5b35d4;
     float cap = f32(table + 4u * (unsigned)z) * f32(0x5b242c);
     return cap < v ? cap : v;
 }
@@ -1159,7 +1160,7 @@ static void car_draw_lods(R3DCar *car, EaglMatStack *model)
     /* The camera's car (0x465c40) in a view inside it (the camera's flag 8, 0x627f43): LOD list index 1's
        interior (0x10) and 0's parts seen from inside (0x40), and unless a look key is held (0x5e99ac,
        0x5e99b0, 0x5e99b4) at a detail level above 0, the detail's LOD (0x5cdb1c) shadow and decals (0x80). */
-    if (!g_r3d_frontend && car->state->index == g_camera_car && (g_racecam[0].flags2 >> 3 & 1)) {
+    if (!g_r3d_frontend && car->state->index == g_race_local && (g_racecam[0].flags2 >> 3 & 1)) {
         if (car->nlods > 1) R3DCarLOD_Draw(car->lods[1], model, 0x10, true);
         R3DCarLOD_Draw(car->lods[0], model, 0x40, true);
         if (g_look[3] == 0 && g_look[1] == 0 && g_look[2] == 0 && 0 < g_r3d_quality)
@@ -1220,7 +1221,7 @@ void R3DCar_Draw(R3DCar *car, EaglMatStack *model)
     g_rlayer_spectex = car->globaltex;   /* (the light block's +0xdc: 0x440870) */
     /* R3DCar_v14 0x43a3c0: the camera's car seen from inside (flag 8, 0x627f43) with a screen (four 'odnW'
        points at least): the rain's splats on it first */
-    if (!g_r3d_frontend && car->state->index == g_camera_car && car->nwindow > 3 && (g_racecam[0].flags2 >> 3 & 1)) {
+    if (!g_r3d_frontend && car->state->index == g_race_local && car->nwindow > 3 && (g_racecam[0].flags2 >> 3 & 1)) {
         float q[4][4];
         for (int i = 0; i < 4; i++) {
             memcpy(q[i], car->window[i], sizeof car->window[i]);

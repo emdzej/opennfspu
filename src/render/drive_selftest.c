@@ -130,7 +130,7 @@ static float sqrt_bits(float v)
 static bool car_lod(R3DCar *r, Car *car, EaglView *view)
 {
     if (!car->b[0x7f]) return false;
-    if (*CAR_I(car, CAR_INDEX) == g_camera_car) {
+    if (*CAR_I(car, CAR_INDEX) == g_race_local) {
         if (g_racecam[0].mode == 0) return false;   /* (0x465630) */
         if (g_racecam[0].flags2 & 8) goto lower;
     }
@@ -206,7 +206,7 @@ static void draw_cars(RCamera *c)
         CarLight_Update(&r->light, car, c->update[0]);   /* R3DCar_v15 0x43a490 (the cars' render ticks) */
         r->lit = true;
         R3DCar_SetLights(r, car);          /* R3DCar_v6 0x439290 */
-        bool viewed = *CAR_I(car, CAR_INDEX) == g_camera_car, nocull = false;
+        bool viewed = *CAR_I(car, CAR_INDEX) == g_race_local, nocull = false;
         if (viewed) {
             if (g_racecam[0].flags2 & 0x10) continue;   /* (0x442fd0: not in its own mirror) */
             nocull = (g_racecam[0].flags2 & 8) != 0;
@@ -357,11 +357,12 @@ static int load(const char *track, const char *carname)
     AI_MakeControllers();  /* 0x406580 */
     AI_LoadData();         /* 0x406950: the personalities, the traffic's configuration */
     {
-        /* The race camera on the viewed car (--param follow=<car>), in its list's first mode or
+        /* The race camera on the local player's car (0x65741c: a network game's own number), or the car
+           of --param follow=<car> (a test aid: it is then the local car), in its list's first mode or
            --param cam=<mode>. */
-        int follow = plat_param("follow", v, sizeof v) ? atoi(v) : 0;
+        int follow = plat_param("follow", v, sizeof v) ? atoi(v) : g_race_local;
         if (follow < 0 || follow >= g_ncars) follow = 0;
-        g_camera_car = follow;
+        g_race_local = follow;
         int mode = plat_param("cam", v, sizeof v) ? atoi(v) : DESC_I(g_cars[follow], 0x208);
         Camera_Init(0, g_cars[follow], s_start == 0 ? 0xe : mode);   /* (0x463f70: mode 14, the fly-in) */
         int look = plat_param("camlook", v, sizeof v) ? atoi(v) : -1;   /* --param camlook=<car>: the car looked at */

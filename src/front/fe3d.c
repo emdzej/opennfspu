@@ -1,4 +1,5 @@
 /* The front end's 3D objects and rooms (fe3d.h). */
+#include "game/race_progress.h"
 #include "front/fe3d.h"
 #include "render/carlight.h"
 #include "front/fe_parts.h"
@@ -49,6 +50,7 @@ FE3DObject *FE3DObject_New(int kind, const char *name, const uint32_t colours[4]
     o->spec.scheme = scheme;
     o->state.spec = &o->spec;
     o->state.damage = o->damage;
+    g_race_local = 0;   /* (0x4d0d31: the ctor puts the race's local car back to the first) */
     R3DCar_Init(&o->car, &o->state);   /* R3DCar_ctor(state, 0x32, 0x14, 3) */
     R3DCar_SetHingeCount(&o->car, 0x32);
     /* (a room's 20 flags at +0x2d4 set, a car's +0x700: not read by the ported draw) */

@@ -1,5 +1,6 @@
 /* The race cameras (see camera.h). */
 #include "game/camera.h"
+#include "game/race_progress.h"
 #include "exe.h"
 #include "game/car_drive.h"
 #include "game/car_ground.h"
@@ -24,7 +25,6 @@
 
 RaceCamera g_racecam[2];
 int32_t g_look[4];
-int32_t g_camera_car;
 
 /* 0x606a98, 0x606870, 0x606ad4: the game's pause and its single step, and a hold of the cameras (none
    of them set by the port yet). */
@@ -907,7 +907,7 @@ void Camera_ReplayStart(void)
         }
         g_tvmode = 0x14;
     }
-    s_viewed = g_camera_car;
+    s_viewed = g_race_local;
     s_replay_paused = 0;
     s_replay_speed = 2;
     s_replay_exit = 0;
@@ -1146,7 +1146,7 @@ void Camera_Update(void)
             reload_flags(c);
             c->flags &= 0xfe;
             /* No replay controller (0x628c70): the camera back on the viewed car (0x5e8c00[0x65741c]). */
-            if (0 <= g_camera_car && g_camera_car < g_ncars) c->car = c->base = g_cars[g_camera_car];
+            if (0 <= g_race_local && g_race_local < g_ncars) c->car = c->base = g_cars[g_race_local];
             if (1 < g_replay_mode) Camera_ReplayCuts(g_tvmode == 0x14);
         }
         switch (c->mode) {

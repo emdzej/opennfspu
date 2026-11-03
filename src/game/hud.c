@@ -4673,7 +4673,7 @@ static void race_screens(bool again)
         /* The place: a knockout's 1 (8 when the car was knocked out, +0xb50 3), the network race's by the
            session's finishes, else the camera's car's (+0xcd4). (0x60ca98 overrides it when
            set; nothing sets it here.) */
-        Car *c = g_camera_car < g_racers.n ? g_racers.c[g_camera_car] : NULL;
+        Car *c = g_race_local < g_racers.n ? g_racers.c[g_race_local] : NULL;
         int place = 0;
         if (g_race_derby == 1) place = c && *CAR_I(c, 0xb50) == 3 ? 8 : 1;
         else if (g_race_mode == 3) place = Net_Place(g_race_local);   /* 0x48d720 */

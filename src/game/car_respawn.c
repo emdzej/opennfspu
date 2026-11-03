@@ -102,7 +102,7 @@ void CarSim_Respawn(Car *c, int kind)
         off[2] = lp[1];
     }
     CarSim_Place(c, n, off, dir);   /* 0x49b000 */
-    if (g_replay_mode < 2 && *CAR_I(c, 0x520) == g_camera_car) Camera_Snap(0);   /* 0x461770 */
+    if (g_replay_mode < 2 && *CAR_I(c, 0x520) == g_race_local) Camera_Snap(0);   /* 0x461770 */
     memset(CAR_F(c, 0x33c), 0, 12);
     still(c);
 }

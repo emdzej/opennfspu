@@ -201,7 +201,6 @@ void Replay_Apply(void)
     for (size_t i = 0; i < sizeof k_fields / sizeof *k_fields; i++) memcpy(k_fields[i].p, s_loaded + k_fields[i].off, (size_t)k_fields[i].size);
     g_track_name[sizeof g_track_name - 1] = 0;
     g_mission_skip = s_mission_skip != 0;
-    g_camera_car = g_race_local;   /* (the port's second name of 0x65741c) */
     if (g_nracecars > NDESCS) g_nracecars = NDESCS;
     for (int i = 0; i < NDESCS; i++) memcpy(g_cardesc[i], s_loaded + DESCS + CARDESC_SIZE * i, CARDESC_SIZE);
     g_replay_mode = g_race_view;   /* (0x5e99f4 from 0x657424: 2) */
