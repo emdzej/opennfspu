@@ -35,6 +35,7 @@
 #include "front/feaccess.h"
 #include "real/thread.h"
 #include "real/llpacket.h"
+#include "real/conman.h"
 #include "real/netgathr.h"
 #include "real/udp.h"
 #include "real/wsock.h"
@@ -273,11 +274,12 @@ bool app_frame(void)
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
-        else if (selftest >= 3 && selftest <= 6) {
+        else if (selftest >= 3 && selftest <= 7) {
             if (selftest == 3) WS_selftest();
             else if (selftest == 4) UDP_selftest();
             else if (selftest == 5) NETGATHR_selftest();
-            else PACKET_selftest();
+            else if (selftest == 6) PACKET_selftest();
+            else CONMAN_selftest();
             THRASH.fn.clearwindow();
             THRASH.fn.pageflip();
         }

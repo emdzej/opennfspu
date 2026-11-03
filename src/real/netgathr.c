@@ -455,8 +455,8 @@ static int gathr_packets(NetConn *c, void *p, int maxdata, uint32_t flags)
     return PACKET_open(pc, proto, &GATHR_link, maxdata, flags);
 }
 
-static int gathr_zero(NetConn *c) { return 0; }   /* 0x588770 */
-static int gathr_one(NetConn *c) { return 1; }    /* 0x589260 */
+static int gathr_zero(NetConn *c, const void *cfg) { return 0; }   /* 0x588770 */
+static int gathr_one(NetConn *c, void (*fn)(NetConn *, const uint8_t *, int)) { return 1; }   /* 0x589260 */
 
 /* A message to everyone ('<'). 0x589270 */
 static void gathr_message(NetConn *c, const void *data, int len)

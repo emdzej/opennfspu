@@ -83,6 +83,14 @@ address as a type 0x77 packet and reads the other's), `=5` the gathering (one in
   socket callback looks in first), PACKET_connect 0x582500. Self-test `--param thrash_test=6`. The other
   two protocols (PACKET 0x5e1c50 with flag 0x4000, UNRELY 0x5e1c70 with no window bits) and the packet
   filters (+0x34) are pending notes: CONMAN's flags 0x8004 use neither.
+- The session manager CONMAN (src/real/conman.c, 0x55a800..0x55d4b0): the host (0x55a800) and the guest
+  (0x55c0d0) with their threads, the message queue 0x57fd70..0x57fed0, the players' lists, the hello
+  [0xff][password][name][text] and its answer [0xfe][1 in / 2 the wrong password], the events to the game
+  (codes 0..0xd in conman.h). The transport's calls 0x580170..0x5802d0 are NET_find .. NET_setmessage.
+  0x5e8e50 (the gathering's password, the finds' user) is in the zeroed data: an empty text. Pending: the
+  TCP/IP stream provider CONMAN adds next to UDP (0x581ff0, transport 0x5e1a28, the text-address packet
+  connection 0x5833f0) and the modems' serial lines (0x55e890). The guest's messages 1 and 3 have no
+  poster in the exe. Self-test `--param thrash_test=7` (find, join with a password, five packets each way).
 - The port's timer moves at frames; the main thread's sleeps inside a frame move it on by their time
   (src/real/thread.c), so the requests' tick time-outs end while the main thread waits, as the
   original's timer thread makes them.

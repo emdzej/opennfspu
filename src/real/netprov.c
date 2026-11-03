@@ -37,9 +37,9 @@ int NET_open(NetConn *c, int (*joinfilter)(NetConn *, const NetAddr *), const ui
         conns_ready = true;
     }
     if (NetList_Index(&g_net_conns, c) != -1) NET_close(c);
-    uint32_t keep = c->keep04;
+    void *keep = c->owner;
     memset(c, 0, sizeof *c);
-    c->keep04 = keep;
+    c->owner = keep;
     for (int i = 0; i < g_net_nproviders && !r; i++) {
         const NetTransport *t = g_net_transports[i];
         const NetProvider *p = g_net_providers[i];
@@ -66,6 +66,26 @@ int NET_leave(NetConn *c)
 {
     if (NetList_Index(&g_net_conns, c) != -1) return c->transport->leave(c);
     return 1;
+}
+
+int NET_find(NetConn *c, NetGameFn fn, int ticks, int user) { return c->transport->find(c, fn, ticks, user); }
+int NET_join(NetConn *c, const NetAddr *host, const char *password) { return c->transport->join(c, host, password); }
+bool NET_query(NetConn *c, const NetAddr *host, NetGameInfo *out) { return c->transport->query(c, host, out); }
+int NET_host(NetConn *c, NetGameInfo *info, const char *password, NetPlayerFn joinfn)
+{
+    return c->transport->host(c, info, password, joinfn);
+}
+int NET_setinfo(NetConn *c, const NetGameInfo *info) { return c->transport->setinfo(c, info); }
+int NET_hide(NetConn *c, int free_it) { return c->transport->hide(c, free_it); }
+int NET_show(NetConn *c) { return c->transport->show(c); }
+unsigned NET_players(NetConn *c, const NetAddr *host, NetPlayerFn fn) { return c->transport->players(c, host, fn); }
+int NET_kill(NetConn *c, const NetAddr *who) { return c->transport->kill(c, who); }
+int NET_config(NetConn *c, const void *cfg) { return c->transport->config ? c->transport->config(c, cfg) : 0; }
+
+int NET_setmessage(NetConn *c, void (*fn)(NetConn *, const uint8_t *, int))
+{
+    c->onmessage = fn;
+    return c->transport->setmessage ? c->transport->setmessage(c, fn) : 0;
 }
 
 void NET_closeall(void)

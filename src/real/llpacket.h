@@ -43,7 +43,7 @@ typedef struct PacketProto {
 
 struct PacketConn {
     struct PacketConn *next;                  /* +0x00: in the open or the closed ones */
-    uint32_t unused04;
+    void *owner;                              /* +0x04: its user's (CONMAN's player) */
     const PacketProto *proto;                 /* +0x08 */
     void (*notify)(PacketConn *pc);           /* +0x0c: data on the link */
     uint32_t unused10;

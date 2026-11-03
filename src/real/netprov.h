@@ -111,16 +111,16 @@ typedef struct NetTransport {
     unsigned (*players)(NetConn *c, const NetAddr *host, NetPlayerFn fn);        /* +0x30 */
     int (*kill)(NetConn *c, const NetAddr *who);                                  /* +0x34 */
     int (*packets)(NetConn *c, void *pc, int maxdata, uint32_t flags);           /* +0x38: a packet connection on it */
-    int (*slot3c)(NetConn *c);                                                    /* +0x3c */
+    int (*config)(NetConn *c, const void *cfg);                                   /* +0x3c: (the stream one's) */
     bool (*receive)(NetConn *c, const NetAddr *from, uint8_t type, const uint8_t *data, int len, uint32_t *more);   /* +0x40 */
-    int (*slot44)(NetConn *c);                                                    /* +0x44 */
+    int (*setmessage)(NetConn *c, void (*fn)(NetConn *, const uint8_t *, int));   /* +0x44 */
     void (*message)(NetConn *c, const void *data, int len);                       /* +0x48 */
 } NetTransport;
 
 /* A connection (0xb4 bytes). */
 struct NetConn {
     struct NetConn *next;           /* +0x00: in the open connections 0x6b4a00 */
-    uint32_t keep04;                /* +0x04: kept across 0x57ff60's clear */
+    void *owner;                    /* +0x04: its user's (CONMAN), kept across 0x57ff60's clear */
     const NetTransport *transport;  /* +0x08 */
     const NetProvider *provider;    /* +0x0c */
     void *socket;                   /* +0x10: the provider's socket */
@@ -154,6 +154,19 @@ int NET_open(NetConn *c, int (*joinfilter)(NetConn *, const NetAddr *), const ui
              int port, const char *name, const char *extra);
 int NET_close(NetConn *c);            /* 0x580130 */
 int NET_leave(NetConn *c);            /* 0x580240 */
+
+/* The transport's calls (0x580170..0x5802d0). */
+int NET_find(NetConn *c, NetGameFn fn, int ticks, int user);                          /* 0x580170 */
+int NET_join(NetConn *c, const NetAddr *host, const char *password);                  /* 0x580190 */
+bool NET_query(NetConn *c, const NetAddr *host, NetGameInfo *out);                    /* 0x5801b0 */
+int NET_host(NetConn *c, NetGameInfo *info, const char *password, NetPlayerFn joinfn);   /* 0x5801d0 */
+int NET_setinfo(NetConn *c, const NetGameInfo *info);                                 /* 0x5801f0 */
+int NET_hide(NetConn *c, int free_it);                                                /* 0x580210 */
+int NET_show(NetConn *c);                                                             /* 0x580230 */
+unsigned NET_players(NetConn *c, const NetAddr *host, NetPlayerFn fn);               /* 0x580270 */
+int NET_kill(NetConn *c, const NetAddr *who);                                         /* 0x580290 */
+int NET_config(NetConn *c, const void *cfg);                                          /* 0x5802b0 */
+int NET_setmessage(NetConn *c, void (*fn)(NetConn *, const uint8_t *, int));          /* 0x5802d0 */
 void NET_closeall(void);              /* 0x5800e0 (at exit) */
 
 bool NETCONN_same(NetConn *c, const NetAddr *a, const NetAddr *b);                /* 0x580340 */
