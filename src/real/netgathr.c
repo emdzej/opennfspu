@@ -1,5 +1,6 @@
 /* The datagram transport, game gathering: see netgathr.h. */
 #include "real/netgathr.h"
+#include "real/llpacket.h"
 #include "exe.h"
 #include "pending.h"
 #include "platform.h"
@@ -437,10 +438,21 @@ static int gathr_kill(NetConn *c, const NetAddr *who)
 
 /* A packet connection on the transport: its timing defaulted (a 30th and two 15ths of a second), the
    protocol by the flags (none: 0x5e1c70; else 0x5e1c50 with 0x4000, 0x5e2e58 without). 0x5886c0 */
-static int gathr_packets(NetConn *c, void *pc, void *a3, uint32_t flags)
+static int gathr_packets(NetConn *c, void *p, int maxdata, uint32_t flags)
 {
-    PENDING_NOTE(0x55ff80, "PACKET_open (the packet connections)");
-    return 0;
+    PacketConn *pc = p;
+    const PacketProto *proto = &LLPACKET_proto;
+    if ((flags & 0xff) == 0 || flags & 0x4000) {
+        PENDING_NOTE(0x5e1c50, "the PACKET and UNRELY protocols (0x5e1c50, 0x5e1c70)");
+        return 0;
+    }
+    if (pc) {
+        if (!pc->timing[1]) pc->timing[1] = (int16_t)(TIMER_RATE / 30);
+        if (!pc->timing[2]) pc->timing[2] = (int16_t)(TIMER_RATE / 15);
+        if (!pc->timing[3]) pc->timing[3] = (int16_t)(TIMER_RATE / 15);
+        pc->timing[0] = 0;
+    }
+    return PACKET_open(pc, proto, &GATHR_link, maxdata, flags);
 }
 
 static int gathr_zero(NetConn *c) { return 0; }   /* 0x588770 */
@@ -656,7 +668,7 @@ const NetTransport NETGATHR_transport = {
 void NET_onreceive(void *owner, const NetAddr *from)
 {
     NetConn *c = owner;
-    /* (First the packet connections on the socket, 0x6acf28 / 0x5821c0: none are ported yet.) */
+    if (PACKET_dispatch(c, from)) return;   /* (a packet connection to the sender, 0x5821c0) */
     if (!c->transport->receive || !c->socket) return;
     int n;
     do {

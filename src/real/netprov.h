@@ -110,7 +110,7 @@ typedef struct NetTransport {
     int (*leave)(NetConn *c);                                                     /* +0x2c */
     unsigned (*players)(NetConn *c, const NetAddr *host, NetPlayerFn fn);        /* +0x30 */
     int (*kill)(NetConn *c, const NetAddr *who);                                  /* +0x34 */
-    int (*packets)(NetConn *c, void *conn, void *a3, uint32_t flags);            /* +0x38 */
+    int (*packets)(NetConn *c, void *pc, int maxdata, uint32_t flags);           /* +0x38: a packet connection on it */
     int (*slot3c)(NetConn *c);                                                    /* +0x3c */
     bool (*receive)(NetConn *c, const NetAddr *from, uint8_t type, const uint8_t *data, int len, uint32_t *more);   /* +0x40 */
     int (*slot44)(NetConn *c);                                                    /* +0x44 */

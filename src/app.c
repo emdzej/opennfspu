@@ -34,6 +34,7 @@
 #include "game/music.h"
 #include "front/feaccess.h"
 #include "real/thread.h"
+#include "real/llpacket.h"
 #include "real/netgathr.h"
 #include "real/udp.h"
 #include "real/wsock.h"
@@ -272,10 +273,11 @@ bool app_frame(void)
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
-        else if (selftest >= 3 && selftest <= 5) {
+        else if (selftest >= 3 && selftest <= 6) {
             if (selftest == 3) WS_selftest();
             else if (selftest == 4) UDP_selftest();
-            else NETGATHR_selftest();
+            else if (selftest == 5) NETGATHR_selftest();
+            else PACKET_selftest();
             THRASH.fn.clearwindow();
             THRASH.fn.pageflip();
         }

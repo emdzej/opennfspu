@@ -76,8 +76,13 @@ address as a type 0x77 packet and reads the other's), `=5` the gathering (one in
 - The connections 0x57ff60..0x580240 and the datagram transport, game gathering (\real\patch3\cmn\
   netgathr.c, class 0x5e1cf0, src/real/netgathr.c; the packet types are listed in netgathr.h). A socket
   bound to any address reports 0.0.0.0, as on Windows: a player's address in the protocol is 0.x, which
-  CONMAN 0x55d3b0 replaces with the host address text 0x6b49c0. The packet connections (0x55ff80, the
-  transport's +0x38, and the socket callback's first look 0x5821c0) are next.
+  CONMAN 0x55d3b0 replaces with the host address text 0x6b49c0.
+- The packet connections (src/real/llpacket.c): the generic layer 0x55ff80..0x560240, CONMAN's protocol
+  0x5e2e58 (llpacket.c 0x594f50..0x595f30, a sliding window with piggybacked packets and Jacobson's
+  time-out) over the gathering's link layer 0x5e1ad8 (0x582220..0x5824b0, the table 0x6abf28 that the
+  socket callback looks in first), PACKET_connect 0x582500. Self-test `--param thrash_test=6`. The other
+  two protocols (PACKET 0x5e1c50 with flag 0x4000, UNRELY 0x5e1c70 with no window bits) and the packet
+  filters (+0x34) are pending notes: CONMAN's flags 0x8004 use neither.
 - The port's timer moves at frames; the main thread's sleeps inside a frame move it on by their time
   (src/real/thread.c), so the requests' tick time-outs end while the main thread waits, as the
   original's timer thread makes them.
