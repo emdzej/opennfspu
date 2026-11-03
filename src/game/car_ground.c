@@ -47,10 +47,10 @@ static void cross3(const float a[3], const float b[3], float out[3])   /* 0x5325
 
 static void unit3(const float v[3], float out[3])   /* 0x532640 */
 {
-    double r = (double)K(0x5b24a8) / sqrt((double)v[1] * v[1] + (double)v[0] * v[0] + (double)v[2] * v[2]);
-    out[0] = (float)(r * v[0]);
-    out[1] = (float)(v[1] * r);
-    out[2] = (float)(v[2] * r);
+    float r = K(0x5b24a8) / sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);   /* (single precision: 0x532890) */
+    out[0] = r * v[0];
+    out[1] = v[1] * r;
+    out[2] = v[2] * r;
 }
 
 /* Angles in turns (2 pi as the double at 0x5bb2c0). 0x532550, 0x532560 */
@@ -287,7 +287,7 @@ float CarSim_Ground(Car *c, float out[3])
         /* The wheel's camber from the ride height and the compression. */
         float cam = ride * K(0x5b49b4);
         if (x > K(0x5b23f8)) cam = *comp * K(0x5b49b4) + cam;
-        float ang = (float)asin(cam);
+        float ang = Math_Asin(cam);   /* 0x5a27c0 */
         *CAR_F(c, t + 0x6c) = i == 0 || i == 2 ? ang : -ang;
     }
     float mean[3] = {sum[0] * K(0x5b2468), sum[1] * K(0x5b2468), sum[2] * K(0x5b2468)};
@@ -418,14 +418,14 @@ float CarSim_Ground(Car *c, float out[3])
         } else {
             *dc8 = s12c * d4c;
         }
-        double roll = ((double)K(0x5b24a8) - (double)c->b[0xd7f] * K(0x5b49e0)) * *dc8 + ((double)(w3 + w1) - (double)(w2 + w0)) / div;
+        float roll = (K(0x5b24a8) - (float)c->b[0xd7f] * K(0x5b49e0)) * *dc8 + ((w3 + w1) - (w2 + w0)) / div;
         if (roll <= K(0x5b23f8)) {
             if (roll <= -s138) roll = -s138;
         } else if (s138 < roll) {
             roll = s138;
         }
         loc[0] = s114 * loc[0] * K(0x5b49dc) + pitch;
-        loc[2] = (float)((double)lz * s118 + roll);
+        loc[2] = lz * s118 + roll;
         clamp_spin(c);   /* 0x49bbf0 */
         float rt[9];
         Mat3_Transpose(CAR_F(c, 0x364), rt);
@@ -770,7 +770,7 @@ void CarSim_Track(void *car)
     if (g_race_rally && (kind == 1 || kind == 10)) *CAR_I(c, 0x464) = 2;
     if (!g_road || !g_road->nnodes) return;
     /* The heading against the road: the angle of the car's forward to the node's side axis. */
-    float a = (float)asin(dot3(CAR_F(c, 0x37c), node_vec(c->body.node, 0x28)));
+    float a = Math_Asin(dot3(CAR_F(c, 0x37c), node_vec(c->body.node, 0x28)));
     *CAR_F(c, 0x414) = a;
     if (dot3(CAR_F(c, 0x37c), node_vec(c->body.node, 0x1c)) < K(0x5b23f8))
         *CAR_F(c, 0x414) = (K(0x5b23f8) < a ? K(0x5b4a14) : K(0x5b4a10)) - a;

@@ -1,0 +1,151 @@
+--- a/src/game/wtree.c
++++ b/src/game/wtree.c	2026-11-03 15:26:32
+@@ -1285,7 +1285,15 @@
+     return best;
+ }
+ 
++void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);   /* (forcesdump) */
++static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out);
+ uint16_t WSurface_FindAbove(WSurface *s, const float p[3], WTreeElem **out)
++{
++    uint16_t r = above_(s, p, out);
++    if (g_wsurf_hook) g_wsurf_hook(s, 1, r);
++    return r;
++}
++static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out)
+ {
+     load_consts();
+     WTree *t = world_tree();
+@@ -1313,7 +1321,13 @@
+     return best->flags;
+ }
+ 
++static void update_(WSurface *s, const float p[3], bool keep);
+ void WSurface_Update(WSurface *s, const float p[3], bool keep)
++{
++    update_(s, p, keep);
++    if (g_wsurf_hook) g_wsurf_hook(s, 0, 0);
++}
++static void update_(WSurface *s, const float p[3], bool keep)
+ {
+     WTreeElem *old = s->elem;
+     if (old && old->vt->contains(old, p) && keep) {
+--- a/src/game/car_ground.c
++++ b/src/game/car_ground.c	2026-11-03 15:26:32
+@@ -524,9 +524,108 @@
+ static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(kind & 0xf)); }
+ static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
+ 
++
++/* (forcesdump) --param forcesdump=<tick>[:<step>:<last>]: the player's car around 0x49bcb0 */
++#include "platform.h"
++#include "game/race_progress.h"
++#include "game/race_setup.h"
++#include "game/car_damage.h"
++#include "game/race_car.h"
++#include "game/car_drive.h"
++#include <stdio.h>
++#include <stdlib.h>
++void SimRand_Peek(uint32_t o[3]);
++extern void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);
++static Car *s_fd_car;
++static void fd_hex(const char *tag, const char *k, const void *p, size_t n)
++{
++    static char line[0x6000];
++    const uint8_t *b = p;
++    int o = snprintf(line, sizeof line, "FD %s %s ", tag, k);
++    for (size_t i = 0; i < n && o + 3 < (int)sizeof line; i++) o += snprintf(line + o, sizeof line - (size_t)o, "%02x", b[i]);
++    plat_log(line);
++}
++static void fd_elem(const WTreeElem *e)
++{
++    if (!e) return;
++    float n[3];
++    e->vt->normal(e, n);
++    int nv = e->vt->nvertices ? e->vt->nvertices(e) : 4;
++    if (nv > 8) nv = 8;
++    float v[8][3];
++    for (int i = 0; i < nv; i++) memcpy(v[i], e->vt->vertex(e, i), 12);
++    char k[32];
++    snprintf(k, sizeof k, "%x", (unsigned)(uintptr_t)e);
++    uint8_t buf[4 + 12 + 8 * 12];
++    memcpy(buf, &nv, 4);
++    memcpy(buf + 4, n, 12);
++    memcpy(buf + 16, v, 12 * (size_t)nv);
++    fd_hex("elem", k, buf, 16 + 12 * (size_t)nv);
++}
++static int fd_index(WSurface *s)
++{
++    for (int i = 0; i < 4; i++) if (s == &s_fd_car->surf[i]) return i;
++    return s == &s_fd_car->body ? 4 : -1;
++}
++static void fd_hook(WSurface *s, int kind, uint16_t v)
++{
++    char k[32];
++    snprintf(k, sizeof k, "%d", fd_index(s));
++    if (kind == 0) { fd_hex("upd", k, s, sizeof *s); fd_elem(s->elem); }
++    else { char b[64]; snprintf(b, sizeof b, "FD above %s %u", k, v); plat_log(b); }
++}
++static void fd_car(Car *c, const char *tag)
++{
++    static uint8_t img[CAR_SIZE];
++    memcpy(img, c->b, CAR_SIZE);
++    for (int i = 0; i < 4; i++) memcpy(img + 0x7bc + 0xc4 * i, &c->surf[i], sizeof c->surf[i]);
++    memcpy(img + 0x8, &c->body, sizeof c->body);
++    fd_hex(tag, "0", img, CAR_SIZE);
++}
++static bool fd_on(Car *c)
++{
++    static int start = -2, step = 1, last = -1;
++    if (start == -2) {
++        char v[32];
++        start = -1;
++        if (plat_param("forcesdump", v, sizeof v)) { start = atoi(v); char *q = strchr(v, ':'); if (q) step = atoi(q + 1); q = q ? strchr(q + 1, ':') : NULL; last = q ? atoi(q + 1) : start; }
++    }
++    return start >= 0 && g_sim_tick >= start && g_sim_tick <= last && (g_sim_tick - start) % step == 0 && c == g_cars[g_race_local];
++}
++static void forces_(void *car);
+ void CarSim_Forces(void *car)
+ {
+     Car *c = car;
++    bool on = fd_on(c);
++    if (on) {
++        s_fd_car = c;
++        fd_car(c, "pre");
++        fd_hex("desc", "0", CAR_DESCB(c), CARDESC_SIZE);
++        fd_hex("specs", "0", CAR_SPECSB(c), CARSPECS_SIZE);
++        for (int i = 0; i < CAR_NPARTS; i++) if (c->p[CARP_PARTS + i]) { char k[8]; snprintf(k, sizeof k, "%d", i); fd_hex("part", k, c->p[CARP_PARTS + i], CARPART_SIZE); }
++        for (int i = 0; i < 4; i++) fd_elem(c->surf[i].elem);
++        fd_elem(c->body.elem);
++        uint32_t r[3];
++        SimRand_Peek(r);
++        char b[256];
++        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2]);
++        plat_log(b);
++        g_wsurf_hook = fd_hook;
++    }
++    forces_(car);
++    if (on) {
++        g_wsurf_hook = NULL;
++        fd_car(c, "post");
++        uint32_t r[3];
++        SimRand_Peek(r);
++        char b[128];
++        snprintf(b, sizeof b, "FD postglob 0 rand=%u,%u,%u", r[0], r[1], r[2]);
++        plat_log(b);
++    }
++}
++static void forces_(void *car)
++{
++    Car *c = car;
+     if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
+     int rate, ticks;
+     float dt;
+--- a/src/game/sim_rand.c
++++ b/src/game/sim_rand.c	2026-11-03 15:26:32
+@@ -36,3 +36,5 @@
+     }
+     return r;
+ }
++
++void SimRand_Peek(uint32_t o[3]) { load(); o[0] = state, o[1] = mult, o[2] = product; }   /* (forcesdump) */

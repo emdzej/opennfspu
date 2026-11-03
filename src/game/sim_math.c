@@ -30,6 +30,11 @@ void Math_SinCosTurns(float t, float *s, float *c)
     *c = (float)cos(a);
 }
 
+float Math_Asin(float x)
+{
+    return (float)atan2((double)x, (double)sqrtf((1.0f + x) * (1.0f - x)));
+}
+
 void Mat3_TurnX(float m[9], float t)
 {
     float s, c, a[9];

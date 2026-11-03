@@ -61,10 +61,11 @@ void CarSim_ContactImpulse(Car *c, const float at[3], const float v[3], const fl
     float r[3] = {at[0] - pos[0], at[1] - pos[1], at[2] - pos[2]}, rn[3];
     cross3(r, n, rn);
     float im = *CAR_F(c, 0x358), ii = *CAR_F(c, 0x398);
-    double num = (double)dot3(w, rn) + vn;
-    double len = sqrt((double)rn[1] * rn[1] + (double)rn[0] * rn[0] + (double)rn[2] * rn[2]);   /* 0x532890 */
-    double den = ((double)ii + ii) * len * K(0x5b23f0) + (double)(im * K(0x5b23f0) * K(0x5b23f0));
-    double j = -(num / den);
+    /* (in single precision, as the x87 runs) */
+    float num = dot3(w, rn) + vn;
+    float len = sqrtf(rn[0] * rn[0] + rn[1] * rn[1] + rn[2] * rn[2]);   /* 0x532890 */
+    float den = (ii + ii) * len * K(0x5b23f0) + im * K(0x5b23f0) * K(0x5b23f0);
+    float j = -(num / den);
     float k = K(0x5b25f0), jn;
     bool scaled = false;
     if (*CAR_I(c, CAR_FLAGS) & 0x80) {
@@ -74,11 +75,11 @@ void CarSim_ContactImpulse(Car *c, const float at[3], const float v[3], const fl
         if (e <= *CAR_F(c, 0x3b0)) e = *CAR_F(c, 0x3b0);
         k = K(0x5b261c);
         if (K(0x5b246c) < e) {
-            jn = (float)(j * K(0x5b49b8) / e);
+            jn = j * K(0x5b49b8) / e;
             scaled = true;
         }
     }
-    if (!scaled) jn = (float)(j * k);
+    if (!scaled) jn = j * k;
     *CAR_I(c, 0x434) = 0;
     *CAR_F(c, 0x430) = fabsf(vn);
     *CAR_I(c, 0x438) = *CAR_I(c, 0x464) | 0x30000;

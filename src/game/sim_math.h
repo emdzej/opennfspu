@@ -7,6 +7,9 @@ void Vec3_Cross(const float a[3], const float b[3], float out[3]);              
 void Vec3_Unit(const float v[3], float out[3]);                                     /* 0x532640 (the length 0x532890) */
 void Vec3_AddArray(int n, const float *src, const float add[3], float *dst);   /* 0x532070 (0x56e410 each) */
 void Math_SinCosTurns(float turns, float *s, float *c);                         /* 0x532570 */
+/* The runtime's asin as the game runs it (0x5a27c0): the root of (1 + x)(1 - x) at the x87's single
+   precision, its fpatan at full. */
+float Math_Asin(float x);
 void Mat3_RotX(float m[9], float turns);                                        /* 0x532310 */
 void Mat3_RotY(float m[9], float turns);                                        /* 0x532370 */
 void Mat3_RotZ(float m[9], float turns);                                        /* 0x5323d0 */

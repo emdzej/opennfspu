@@ -76,23 +76,25 @@ static void cross(const float a[3], const float b[3], float out[3])   /* 0x5325f
     out[2] = z;
 }
 
-static double length(const float v[3])   /* 0x532890 */
+/* (The x87 runs at single precision: each step rounds to a float.) */
+static float length(const float v[3])   /* 0x532890 */
 {
-    return sqrt((double)v[1] * v[1] + (double)v[0] * v[0] + (double)v[2] * v[2]);
+    return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 }
 
 static void normalize(const float v[3], float out[3])   /* 0x532640 */
 {
-    double r = (double)k_one / length(v);
-    out[0] = (float)(r * v[0]);
-    out[1] = (float)(v[1] * r);
-    out[2] = (float)(v[2] * r);
+    float r = k_one / length(v);
+    out[0] = r * v[0];
+    out[1] = v[1] * r;
+    out[2] = v[2] * r;
 }
 
 /* The height of the plane through v with normal n at p's (x, z). 0x489f90 */
-static double plane_height(const float n[3], const float v[3], const float p[3])
+static float plane_height(const float n[3], const float v[3], const float p[3])
 {
-    return -((double)n[0] * p[0] + (double)p[2] * n[2] - ((double)n[0] * v[0] + (double)v[2] * n[2] + (double)v[1] * n[1])) / n[1];
+    float d = -((v[1] * n[1] + v[2] * n[2]) + n[0] * v[0]);
+    return -((d + p[2] * n[2]) + n[0] * p[0]) / n[1];
 }
 
 /* How far the quad's fourth vertex is from the plane of the first three. 0x489fd0 (the normal 0x489ec0) */
@@ -102,19 +104,19 @@ static float quad_warp(const float *const v[4])
     float e2[3] = {v[0][0] - v[2][0], v[0][1] - v[2][1], v[0][2] - v[2][2]};
     float n[3];
     cross(e1, e2, n);
-    double len = length(n);
+    float len = length(n);
     bool clamp = true;
     if (k_minlen <= len) {
-        double r = (double)k_one / len;
-        n[0] = (float)(n[0] * r);
-        n[1] = (float)(r * n[1]);
-        n[2] = (float)(n[2] * r);
+        float r = k_one / len;
+        n[0] = n[0] * r;
+        n[1] = r * n[1];
+        n[2] = n[2] * r;
         clamp = !(n[1] < k_ymax);
     }
     if (clamp) n[1] = 0.9999f;
-    double d = (double)v[3][1] - plane_height(n, v[0], v[3]);
+    float d = v[3][1] - plane_height(n, v[0], v[3]);
     if (d <= k_zero) d = -d;
-    return (float)d;
+    return d;
 }
 
 /* The 2D side of p against the edge a -> b (> 0 left): the polygons' containment tests. */
@@ -822,18 +824,18 @@ static float box_radius(const WTreeObject *o) { return o->radius; }   /* 0x486ce
    misses: the root of a negative is NaN, failing both tests). */
 static bool line_circle(float x0, float z0, float x1, float z1, float cx, float cz, float r, float *t0, float *t1)
 {
-    double dx = (double)x1 - x0, dz = (double)z1 - z0;
-    double a = dx * dx + dz * dz;
-    double b = ((double)x0 - cx) * dx + ((double)z0 - cz) * dz;
+    float dx = x1 - x0, dz = z1 - z0;
+    float a = dx * dx + dz * dz;
+    float b = (x0 - cx) * dx + (z0 - cz) * dz;
     b += b;
-    double pc = (double)z0 * cz + (double)x0 * cx;
-    double c = ((double)cz * cz + (double)cx * cx + (double)z0 * z0 + (double)x0 * x0) - (pc + pc) - (double)r * r;
-    double q = sqrt(b * b - c * a * 4.0), a2 = a + a;
-    *t0 = (float)((-b - q) / a2);
-    double u = (q - b) / a2;
-    *t1 = (float)u;
+    float pc = z0 * cz + x0 * cx;
+    float c = (cz * cz + cx * cx + z0 * z0 + x0 * x0) - (pc + pc) - r * r;
+    float q = sqrtf(b * b - c * a * 4.0f), a2 = a + a;
+    *t0 = (-b - q) / a2;
+    float u = (q - b) / a2;
+    *t1 = u;
     if (*t0 >= k_zero && *t0 <= k_one) return true;
-    return u >= (double)k_zero && u <= (double)k_one;
+    return u >= k_zero && u <= k_one;
 }
 
 /* The segment against the cylinder in the ground plane (slot 6, 0x4866b0): both crossings within the
@@ -946,7 +948,7 @@ WTreeElem *WTreeBox_new(W3DObjectBundle *b, int entry, const float corners[4][3]
     o->shape = WOBJ_BOX;
     /* Half the box's diagonal in the ground plane, times 0x5b3f90. */
     float hx = o->bmax[0] - (o->bmin[0] + o->bmax[0]) * k_half, hz = o->bmax[2] - (o->bmin[2] + o->bmax[2]) * k_half;
-    o->radius = (float)(sqrt((double)hz * hz + (double)hx * hx) * (double)exe_f32(0x5b3f90));
+    o->radius = sqrtf(hz * hz + hx * hx) * exe_f32(0x5b3f90);
     memcpy(o->corner, corners, sizeof o->corner);
     return &o->e;
 }
@@ -1523,12 +1525,12 @@ static bool segment_meets_circle(float x0, float z0, float x1, float z1, float c
     float b = (x0 - cx) * dx + (z0 - cz) * dz;
     b = b + b;
     float m = z0 * cz + x0 * cx;
-    double disc = sqrt((double)(b * b - (((cz * cz + cx * cx + z0 * z0 + x0 * x0) - (m + m)) - r * r) * a * 4.0f));
-    double a2 = (double)a + (double)a;
-    float t1 = (float)((-(double)b - disc) / a2);
-    double t2 = (disc - (double)b) / a2;
+    float disc = sqrtf(b * b - (((cz * cz + cx * cx + z0 * z0 + x0 * x0) - (m + m)) - r * r) * a * 4.0f);
+    float a2 = a + a;
+    float t1 = (-b - disc) / a2;
+    float t2 = (disc - b) / a2;
     if (t1 >= 0.0f && t1 <= 1.0f) return true;
-    return t2 >= 0.0 && t2 <= 1.0;
+    return t2 >= 0.0f && t2 <= 1.0f;
 }
 
 WTreeElems *WTree_EdgesNear(const float p[3], float r)   /* 0x473b00 */
@@ -1572,7 +1574,7 @@ WTreeElems *WTree_EdgesAlong(const float seg[6])   /* 0x473d60 */
     return out;
 }
 
-double WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]) { return plane_height(n, v, p); }
+float WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]) { return plane_height(n, v, p); }
 
 /* The light at p from the polygon under it (0x474600 -> 0x474660): the tracker moved to p first (a copy);
    of a quad the triangle that holds p (by the signs of its edges' crossings, from the second corner),
@@ -1630,7 +1632,7 @@ tri:;
         cross(a, b, nrm);
         normalize(nrm, nrm);
         if (0.9999f <= nrm[1]) nrm[1] = 0.99989998f;   /* 0x5b3e0c, 0x3f7ff972 */
-        double hgt = WTree_PlaneHeight(nrm, tri3, p);
-        out[1 + c] = 1.0 <= hgt ? 1.0f : (float)hgt;
+        float hgt = WTree_PlaneHeight(nrm, tri3, p);
+        out[1 + c] = 1.0f <= hgt ? 1.0f : hgt;
     }
 }

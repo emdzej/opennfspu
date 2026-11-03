@@ -206,6 +206,6 @@ WTreeElems *WTree_ObjectsAlong(const float from[3], const float seg[6]);
 WTreeElems *WTree_EdgesNear(const float p[3], float r);
 WTreeElems *WTree_EdgesAlong(const float seg[6]);
 /* The height of the plane through v with normal n at p's (x, z). 0x489f90 */
-double WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]);
+float WTree_PlaneHeight(const float n[3], const float v[3], const float p[3]);
 
 extern WTree *g_wtree;   /* the world's (BWorld +0x24) */
