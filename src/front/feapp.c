@@ -89,6 +89,7 @@ static bool mini_draw(FertControl *c, int32_t ox, int32_t oy);
 static bool glintyline_draw(FertControl *c);
 static bool header_draw(FertControl *c, int32_t ox, int32_t oy);
 static void animpic_update(FertControl *c);
+static bool bbb_draw(FertControl *c, int32_t ox, int32_t oy);
 static void glintylines_drop(void);
 static bool camera_click(FertControl *w, FertControl *c, int type, int32_t x, int32_t y);
 static void camera_update(FertControl *w, FertControl *c);
@@ -2775,6 +2776,7 @@ static bool indicator_draw(FertControl *c, int32_t ox, int32_t oy)
     if (!strcmp(c->id, "NFS5.MINIBADGE") || !strcmp(c->id, "NFS5.MINIPLAYERPICTURE")) return mini_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.GLINTYLINE")) return glintyline_draw(c);
     if (!strcmp(c->id, "NFS5.HEADER")) return header_draw(c, ox, oy);
+    if (!strcmp(c->id, "NFS5.BOTTOMBARBUTTON")) return bbb_draw(c, ox, oy);
     if (!strcmp(c->id, "NFS5.BEVELEDOPTIONBOX")) {
         /* FEBeveledOptionsBoxes_v15 0x5206d0 (the function keys' boxes): its parts, then the inset over
            its rectangle at the fade */
@@ -3128,6 +3130,77 @@ static bool header_draw(FertControl *c, int32_t ox, int32_t oy)
     }
     FE2D_OverlayEnd();   /* 0x4da5b0 */
     FE2D_DepthPop();
+    return true;
+}
+
+/* A bottom bar button's draw (FEAnimatingGoToButton_v15 0x4c9610), not hidden: its picture (the part's
+   image and flip, data.picoffy down: _v21 0x4c9050 +0x1d4) in white at the fade, at half of it when
+   disabled; its label by its state (disabledlabel,
+   hoverlabel, label: +0x174, +0x170, +0x16c) over it; hovered, enabled and its window on, weeicons.fsh's
+   GLNT glint sweeping across the screen over the label (640 ticks, then a wait of up to 127: _v21's). */
+typedef struct { const FertControl *c; bool sweeping; uint32_t start; int wait; } BarGlint;   /* +0x276, +0x278, +0x27c */
+static BarGlint s_barglint[8];
+
+static bool bbb_draw(FertControl *c, int32_t ox, int32_t oy)
+{
+    if (c->feflags & 0x20) return true;   /* 0x4c7aa0 */
+    BarGlint *g = NULL;
+    for (int i = 0; i < 8 && !g; i++)
+        if (s_barglint[i].c == c) g = &s_barglint[i];
+    uint32_t now = timer_ticks();
+    for (int i = 0; i < 8 && !g; i++)
+        if (!s_barglint[i].c) {
+            g = &s_barglint[i];
+            g->c = c;
+            g->sweeping = false;
+            g->start = now;
+            g->wait = CRT_rand() % 128;
+        }
+    int32_t p[2] = {0, 0};
+    FertAttr *pa = FertAttrList_find(&c->attrs, "pos");   /* 0x524b90 */
+    if (pa) FertAttr_point(pa, p);
+    int x = p[0] + ox, y = p[1] + oy;   /* (0x4c8330 in ox, oy) */
+    int fade = g_fe_fade;   /* 0x4c8410 */
+    bool disabled = c->feflags & 0x10;   /* 0x4c7a10 */
+    int k = FertControl_findPart(c, "picture");   /* ("picture" 0x5d85e4) */
+    FertPart *pic = k < 0 ? NULL : c->parts[k];
+    if (pic && !pic->hidden && pic->image) {
+        int32_t pp[2] = {0, 0};
+        FertAttr *ppa = FertAttrList_find(&pic->attrs, "pos");   /* (0x4e6700: +0x58) */
+        if (ppa) FertAttr_point(ppa, pp);
+        FertAttr *fl = FertAttrList_find(&pic->attrs, "flip");   /* (0x4e66b0: +0x164) */
+        const FeImage *im = pic->image;
+        int a = fade * (disabled ? 0x80 : 0xff) / 0xff;   /* (0x4d8280, 0x4d82a0) */
+        FE2D_Image(im, (float)(pp[0] + x), (float)(pp[1] + y), (float)im->w, (float)im->h,
+                   (uint32_t)a << 24 | 0xffffffu, fl ? (uint32_t)FertAttr_int(fl) : 0, false);   /* 0x4d95a0 */
+    }
+    FE2D_DepthPushStep();   /* 0x4da4c0 */
+    k = FertControl_findPart(c, disabled ? "disabledlabel" : (c->feflags & 4) ? "hoverlabel" : "label");
+    if (k >= 0) FEPart_Draw(c->parts[k], x, y);   /* (its slot 5) */
+    FE2D_OverlayBegin();   /* 0x4da570 */
+    const FertTrans *tr = FETrans_Window();
+    if (g && !disabled && (c->feflags & 4) && !(tr && FETrans_Counter(tr) != 0)) {   /* (0x4e2da0, 0x4c7860, 0x4c83f0) */
+        if (!g->sweeping && (int)(g->start + (uint32_t)g->wait) < (int)now) {
+            g->sweeping = true;
+            g->start = now;
+        }
+        if (g->sweeping) {
+            int d = (int)(now - g->start);
+            if (640 <= d) {   /* 0x4e2d30 */
+                g->sweeping = false;
+                g->start = now;
+                g->wait = CRT_rand() % 128;
+            } else {
+                if (!s_weeicons[0]) {
+                    FE_ResolvePath("weeicons.fsh", s_weeicons, sizeof s_weeicons);   /* ("%sweeicons.fsh" 0x5d7bf8) */
+                    FEShapes_Load(s_weeicons);
+                }
+                FeImage *gi = FEShapes_Named(s_weeicons, "GLNT");   /* (+0x1dc, 0x4d75f0) */
+                if (gi) FE2D_Image(gi, (float)d, (float)y, (float)gi->w, (float)gi->h, (uint32_t)fade << 24 | 0xffffffu, 0, false);
+            }
+        }
+    }
+    FE2D_OverlayEnd();   /* 0x4da5b0 */
     return true;
 }
 
