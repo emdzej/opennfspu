@@ -356,9 +356,14 @@ static bool mount_game(void)
 static bool running;
 static double audio_acc;   /* fractional audio frames carried between frames */
 
-GASM_EXPORT("gasm_abi_version") int32_t pu_gasm_abi_version(void) { return GASM_ABI_VERSION; }
+#ifdef PU_LOOP_THREADS
+#define PU_EXPORT(name)
+#else
+#define PU_EXPORT(name) GASM_EXPORT(name)
+PU_EXPORT("gasm_abi_version") int32_t pu_gasm_abi_version(void) { return GASM_ABI_VERSION; }
+#endif
 
-GASM_EXPORT("gasm_init") int32_t pu_gasm_init(void)
+PU_EXPORT("gasm_init") int32_t pu_gasm_init(void)
 {
     gasm_set_frame_rate(APP_FRAME_HZ);
     gasm_audio_config(APP_AUDIO_RATE, 2);
@@ -377,7 +382,7 @@ GASM_EXPORT("gasm_init") int32_t pu_gasm_init(void)
     return 0;
 }
 
-GASM_EXPORT("gasm_frame") void pu_gasm_frame(void)
+PU_EXPORT("gasm_frame") void pu_gasm_frame(void)
 {
     static float audio_buf[2048 * 2];
     if (!running) return;
@@ -395,9 +400,24 @@ GASM_EXPORT("gasm_frame") void pu_gasm_frame(void)
     gasm_audio_push(audio_buf, n);
 }
 
-GASM_EXPORT("gasm_exit") void pu_gasm_exit(void)
+PU_EXPORT("gasm_exit") void pu_gasm_exit(void)
 {
     if (!running) return;
     running = false;
     app_exit();
 }
+
+#ifdef PU_LOOP_THREADS
+/* gasm_loop.c's exports: the game's frames from its main loop, which waits a frame between them (the
+   network library's threads run in those waits). */
+#include "gasm_loop.h"
+int gasm_loop_init(void) { return pu_gasm_init(); }
+void gasm_loop_exit(void) { pu_gasm_exit(); }
+int gasm_main(void)
+{
+    for (;;) {
+        pu_gasm_frame();
+        gasm_wait_frame();
+    }
+}
+#endif
