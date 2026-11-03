@@ -101,3 +101,33 @@ bool plat_user_file_name(int i, char *dst, size_t cap)
     snprintf(dst, cap, "%s", s_files[i].name);
     return true;
 }
+
+/* No threads in the native build (tests and tools): the network library finds none. */
+PlatThread *plat_thread_create(int (*fn)(void *arg), void *arg) { return NULL; }
+void plat_thread_detach(PlatThread *t) {}
+bool plat_thread_is_main(void) { return true; }
+uint32_t plat_thread_id(void) { return 0; }
+void plat_thread_sleep_ms(double ms) {}
+void plat_thread_yield(void) {}
+double plat_time_ms(void) { return 0; }
+struct PlatMutex { int unused; };
+PlatMutex *plat_mutex_create(void) { return calloc(1, sizeof(PlatMutex)); }
+void plat_mutex_destroy(PlatMutex *m) { free(m); }
+void plat_mutex_lock(PlatMutex *m) {}
+void plat_mutex_unlock(PlatMutex *m) {}
+struct PlatEvent { bool manual, set; };
+PlatEvent *plat_event_create(bool manual)
+{
+    PlatEvent *e = calloc(1, sizeof *e);
+    if (e) e->manual = manual;
+    return e;
+}
+void plat_event_destroy(PlatEvent *e) { free(e); }
+void plat_event_set(PlatEvent *e) { if (e) e->set = true; }
+void plat_event_reset(PlatEvent *e) { if (e) e->set = false; }
+bool plat_event_wait(PlatEvent *e, double ms)
+{
+    if (!e || !e->set) return false;
+    if (!e->manual) e->set = false;
+    return true;
+}

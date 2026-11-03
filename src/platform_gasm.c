@@ -421,3 +421,85 @@ int gasm_main(void)
     }
 }
 #endif
+
+/* ---- threads (gasm_thread.h; the LOOP THREADS build only) ---- */
+
+#ifdef PU_LOOP_THREADS
+#include "gasm_thread.h"
+
+PlatThread *plat_thread_create(int (*fn)(void *arg), void *arg) { return (PlatThread *)gasm_thread_create(fn, arg, 0); }
+void plat_thread_detach(PlatThread *t) { if (t) gasm_thread_detach((gasm_thread *)t); }
+bool plat_thread_is_main(void) { return gasm_thread_id(gasm_thread_self()) == 0; }
+uint32_t plat_thread_id(void) { return gasm_thread_id(gasm_thread_self()); }
+void plat_thread_sleep_ms(double ms) { gasm_thread_sleep_ms(ms); }
+void plat_thread_yield(void) { gasm_thread_yield(); }
+
+struct PlatMutex { gasm_mutex m; };
+PlatMutex *plat_mutex_create(void)
+{
+    PlatMutex *m = calloc(1, sizeof *m);
+    if (m) m->m = (gasm_mutex)GASM_MUTEX_RECURSIVE_INIT;
+    return m;
+}
+void plat_mutex_lock(PlatMutex *m) { if (m) gasm_mutex_lock(&m->m); }
+void plat_mutex_unlock(PlatMutex *m) { if (m) gasm_mutex_unlock(&m->m); }
+
+struct PlatEvent { gasm_mutex m; gasm_cond c; bool manual, set; };
+PlatEvent *plat_event_create(bool manual)
+{
+    PlatEvent *e = calloc(1, sizeof *e);
+    if (e) e->manual = manual;
+    return e;
+}
+void plat_event_set(PlatEvent *e)
+{
+    if (!e) return;
+    gasm_mutex_lock(&e->m);
+    e->set = true;
+    if (e->manual) gasm_cond_broadcast(&e->c);
+    else gasm_cond_signal(&e->c);
+    gasm_mutex_unlock(&e->m);
+}
+void plat_event_reset(PlatEvent *e) { if (e) e->set = false; }
+bool plat_event_wait(PlatEvent *e, double ms)
+{
+    if (!e) return false;
+    double deadline = ms < 0 ? GASM_FOREVER : gasm_time_ms() + ms;
+    gasm_mutex_lock(&e->m);
+    while (!e->set)
+        if (gasm_cond_wait(&e->c, &e->m, deadline) && !e->set) break;
+    bool got = e->set;
+    if (got && !e->manual) e->set = false;
+    gasm_mutex_unlock(&e->m);
+    return got;
+}
+#else
+PlatThread *plat_thread_create(int (*fn)(void *arg), void *arg) { return NULL; }
+void plat_thread_detach(PlatThread *t) {}
+bool plat_thread_is_main(void) { return true; }
+uint32_t plat_thread_id(void) { return 0; }
+void plat_thread_sleep_ms(double ms) {}
+void plat_thread_yield(void) {}
+struct PlatMutex { int unused; };
+PlatMutex *plat_mutex_create(void) { return calloc(1, sizeof(PlatMutex)); }
+void plat_mutex_lock(PlatMutex *m) {}
+void plat_mutex_unlock(PlatMutex *m) {}
+struct PlatEvent { bool manual, set; };
+PlatEvent *plat_event_create(bool manual)
+{
+    PlatEvent *e = calloc(1, sizeof *e);
+    if (e) e->manual = manual;
+    return e;
+}
+void plat_event_set(PlatEvent *e) { if (e) e->set = true; }
+void plat_event_reset(PlatEvent *e) { if (e) e->set = false; }
+bool plat_event_wait(PlatEvent *e, double ms)
+{
+    if (!e || !e->set) return false;
+    if (!e->manual) e->set = false;
+    return true;
+}
+#endif
+void plat_mutex_destroy(PlatMutex *m) { free(m); }
+void plat_event_destroy(PlatEvent *e) { free(e); }
+double plat_time_ms(void) { return gasm_time_ms(); }

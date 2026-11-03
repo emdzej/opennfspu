@@ -43,3 +43,31 @@ bool plat_delete_user_file(const char *name);
 /* The user files there are, by index (0 .. count - 1, in name order). */
 int plat_user_file_count(void);
 bool plat_user_file_name(int i, char *dst, size_t cap);
+
+/* Threads, cooperative (gasm's, in the LOOP THREADS build: a thread runs until it blocks, sleeps or
+   yields; the main thread's frame ends when none is ready). Without them (the native build, gasm's plain
+   exports) plat_thread_create returns NULL and the rest does nothing. Sleeps end at the first frame at
+   or after their time; the time is the frames' (virtual in headless runs). */
+typedef struct PlatThread PlatThread;
+PlatThread *plat_thread_create(int (*fn)(void *arg), void *arg);
+void plat_thread_detach(PlatThread *t);
+bool plat_thread_is_main(void);
+/* The calling thread's number: 0 the main thread, then 1, 2, ... in creation order. */
+uint32_t plat_thread_id(void);
+void plat_thread_sleep_ms(double ms);
+void plat_thread_yield(void);
+double plat_time_ms(void);
+/* A recursive lock (a Windows critical section). */
+typedef struct PlatMutex PlatMutex;
+PlatMutex *plat_mutex_create(void);
+void plat_mutex_destroy(PlatMutex *m);
+void plat_mutex_lock(PlatMutex *m);
+void plat_mutex_unlock(PlatMutex *m);
+/* A Windows event: manual (stays set until reset) or automatic (one waiter takes it). The wait: ms < 0
+   forever; true if it was set. */
+typedef struct PlatEvent PlatEvent;
+PlatEvent *plat_event_create(bool manual);
+void plat_event_destroy(PlatEvent *e);
+void plat_event_set(PlatEvent *e);
+void plat_event_reset(PlatEvent *e);
+bool plat_event_wait(PlatEvent *e, double ms);

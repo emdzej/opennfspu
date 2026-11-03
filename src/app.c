@@ -33,6 +33,7 @@
 #include "front/fectrl.h"
 #include "game/music.h"
 #include "front/feaccess.h"
+#include "real/thread.h"
 #include "render/render.h"
 #include "render/thrash.h"
 #include "static_init.h"
@@ -103,6 +104,7 @@ bool app_init(void)
 bool app_frame(void)
 {
     g_app_frames++;
+    TIMER_run(app_ticks_ms());   /* (the timer's threads: their ticks up to the frame's time) */
     /* Every frame runs the game, the runner's catch-up frames too (gasm_gl_frame_shown 0: only the last
        of them is shown): the game's time is the frame count, so skipping them would stop it. */
     {
