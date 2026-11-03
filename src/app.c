@@ -34,6 +34,7 @@
 #include "front/fectrl.h"
 #include "game/music.h"
 #include "front/feaccess.h"
+#include "front/fecomms.h"
 #include "real/thread.h"
 #include "real/llpacket.h"
 #include "real/conman.h"
@@ -230,14 +231,24 @@ bool app_frame(void)
                     g_race_rally = FE_Cheat(0);   /* RALLY (0x19) */
                     g_race_heavy = FE_Cheat(8);   /* HEAVY (0x1a) */
                     g_race_derby = FE_Cheat(7);
+                    /* 0x4ecc60: out of a network game COMMSPOSITIONAL (0x14) off; in one NOCOLLISION (0x29)
+                       when the race is positional (Comms.Positional 1) with the collisions off
+                       (Comms.Collision 0): the cars then pass through each other. The collisions list has no
+                       option of its own, so each player's game takes its own setting. */
+                    if (!FEComms_InGame()) {
+                        g_race_network = 0;
+                        g_race_nocollision = 0;
+                    } else {
+                        const FEAccessor *pu = FEAccess_Find("Comms.Positional"), *co = FEAccess_Find("Comms.Collision");
+                        g_race_nocollision = pu && co && FEAccess_Pos(pu) == 1 && FEAccess_Pos(co) == 0;
+                    }
                     g_race_linear = FEData_TrackLinear(race_track);   /* LINEAR_TRACK (0x4ec480's 0x1d) */
                     if (g_race_derby) {
                         snprintf(race_track, sizeof race_track, "%s", exe_str(0x5da6d0));   /* "Skidpad" */
                         g_drive_race_type = 3;
                         g_race_linear = 0;   /* (its LINEAR_TRACK 0) */
                         g_race_fe_damage = 1;   /* (its DAMAGE 1) */
-                        /* (and NOCOLLISION 0x29 at 0: the cars' collisions skip only in a network game
-                           with it set, 0x657408 and 0x65740c in 0x498f60's pair test, so alone it is a no-op) */
+                        g_race_nocollision = 0;   /* (its NOCOLLISION 0x29 at 0) */
                     }
                     /* (0x4ec590: Fuzzyfuz gives the quick race four police cars; a mission with police two) */
                     g_drive_cops = FE_Cheat(5) && FEApp_GameType() == 0 ? 4 : FEApp_GameType() == 9 ? FEApp_Cops() : 0;
