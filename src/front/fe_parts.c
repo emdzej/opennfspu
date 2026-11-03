@@ -9,6 +9,8 @@
 #include "real/window.h"
 #include "render/render.h"
 #include "app.h"
+#include "exe.h"
+#include "game/options.h"
 #include "support/crt.h"
 #include "vfs.h"
 #include <ctype.h>
@@ -303,8 +305,21 @@ static void shape_eval(FertPart *p)
     int32_t index = ia ? FertAttr_int(ia) : 0;
     if (p->image && !strcmp(path, p->bank) && index == p->bankindex) return;   /* unchanged */
     if (index < 0) return;
-    /* (0x4e6140: some backgrounds aren't shown in some modes, 0x657e60: pending) */
+    /* FEShapePart_v8 0x4e6140: with a low-end card (FELOWENDCARD, 0x657e60), the rooms' detail off or
+       under 33 MB (0x4e2da0, 0x4e2db0: the port has neither), the white backgrounds and big pieces
+       named as written (optwht2.fsh, careerwhtbg.fsh, .., whtrkrec.fsh: 0x5da2e4 .. 0x5da230) are
+       hidden, not loaded */
     p->hidden = false;
+    if (Options_Int(0x5d5d8c, 0) != 0) {
+        static const uint32_t names[12] = {0x5da2e4, 0x5da2d4, 0x5da2c0, 0x5da2b0, 0x5da2a0, 0x5da28c,
+                                           0x5da27c, 0x5da26c, 0x5da25c, 0x5da24c, 0x5da240, 0x5da230};
+        const char *raw = pa ? FertAttr_str(pa) : "";
+        for (int i = 0; i < 12; i++)
+            if (!strcmp(raw, exe_str(names[i]))) {
+                p->hidden = true;
+                return;
+            }
+    }
     if (p->bank[0]) FEShapes_Release(p->bank);   /* 0x4d7270 */
     snprintf(p->bank, sizeof p->bank, "%s", path);
     p->bankindex = index;

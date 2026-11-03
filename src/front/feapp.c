@@ -1364,7 +1364,7 @@ static void callback(const char *cb)
 }
 
 static bool is_combo(const FertControl *c) { return !strcmp(c->id, "NFS5.ComboBoxSlider"); }
-/* A colour box (FEColorBox: its swatch and the selection box pend; a click steps its colour). */
+/* A colour box (FEColorBox: a combo box of its accessor's colours, its swatch on the bar; front/fecolour.c the picker). */
 static bool is_colourbox(const FertControl *c) { return !strcmp(c->id, "NFS5.ColorBox"); }
 
 static void combo_open(FertControl *c);
