@@ -28,11 +28,18 @@ the original does.
   doesn't read those race keys from `fe.txt` yet. Porting it means the race's `fe.txt` keys, then the two views,
   cameras and HUDs, and the second player's controls.
 - **The network game's leftovers:** the observer's view and one race-progress message.
-- **The front end's save:** the track, colour and car choices aren't restored from the player's save yet, and
-  the dealer's colour slots are missing.
+- **The front end's save:** the opponents' cars aren't read back from the player's save. The race picks
+  them again anyway.
+
+## Online and devices
+
+- **An Internet game of our own.** EA's servers are gone. The front end's Internet game (its lobby of
+  players and games) can run over a gasm relay instead, the same way peer IP and LAN games do now.
+- **Force feedback.** The original sends the hits' jolts and the road's feel to a force-feedback wheel. This
+  needs rumble or force-feedback support from gasm.
+- **Voice chat (maybe).** The original has voice chat between the players of a network game. It needs
+  microphone input from gasm.
 
 ## Out of scope
 
-- The Internet game: EA's servers are gone.
 - The modem and serial cable game: gasm has no serial ports.
-- Voice chat and force feedback: gasm has no microphone or force feedback device.
