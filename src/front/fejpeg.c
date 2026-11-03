@@ -269,6 +269,60 @@ static void idct(const Jpeg *j, const Comp *c, const int16_t *z, uint8_t *out, i
         }
 }
 
+/* A component's samples at the picture's size into out (W x H). A half-width one (h2v1) or half in both
+   (h2v2) goes through libjpeg's "fancy" upsampling, its default: each output sample 3/4 its nearer input
+   and 1/4 the next farther, across and (h2v2) down, the edges repeated, with libjpeg's roundings
+   (+1/+2 for the pairs across, +8/+7 in 16ths for both). Other ratios repeat the samples. */
+static void upsample(const Jpeg *j, const Comp *c, uint8_t *out)
+{
+    int W = j->width, H = j->height, stride = c->bw * 8;
+    int hx = j->hmax / c->h, vy = j->vmax / c->v;
+    int n = (W * c->h + j->hmax - 1) / j->hmax, rows = (H * c->v + j->vmax - 1) / j->vmax;   /* (its own size) */
+    const uint8_t *d = c->data;
+    if (hx == 2 && (vy == 1 || vy == 2) && n >= 2) {
+        int *sum = malloc((size_t)n * sizeof *sum);
+        uint8_t *row = malloc((size_t)n * 2);
+        if (!sum || !row) {
+            free(sum), free(row);
+            goto plain;
+        }
+        for (int y = 0; y < H; y++) {
+            int r = y / vy, k = n - 1;
+            const uint8_t *near = d + (size_t)r * (size_t)stride;
+            if (vy == 1) {
+                row[0] = near[0];
+                row[1] = (uint8_t)((near[0] * 3 + near[1] + 2) >> 2);
+                for (int i = 1; i < k; i++) {
+                    row[2 * i] = (uint8_t)((near[i] * 3 + near[i - 1] + 1) >> 2);
+                    row[2 * i + 1] = (uint8_t)((near[i] * 3 + near[i + 1] + 2) >> 2);
+                }
+                row[2 * k] = (uint8_t)((near[k] * 3 + near[k - 1] + 1) >> 2);
+                row[2 * k + 1] = near[k];
+            } else {
+                int fr = y % 2 ? r + 1 : r - 1;   /* (the lower output row leans down, the upper up) */
+                if (fr < 0) fr = 0;
+                if (fr >= rows) fr = rows - 1;
+                const uint8_t *far = d + (size_t)fr * (size_t)stride;
+                for (int i = 0; i < n; i++) sum[i] = near[i] * 3 + far[i];
+                row[0] = (uint8_t)((sum[0] * 4 + 8) >> 4);
+                row[1] = (uint8_t)((sum[0] * 3 + sum[1] + 7) >> 4);
+                for (int i = 1; i < k; i++) {
+                    row[2 * i] = (uint8_t)((sum[i] * 3 + sum[i - 1] + 8) >> 4);
+                    row[2 * i + 1] = (uint8_t)((sum[i] * 3 + sum[i + 1] + 7) >> 4);
+                }
+                row[2 * k] = (uint8_t)((sum[k] * 3 + sum[k - 1] + 8) >> 4);
+                row[2 * k + 1] = (uint8_t)((sum[k] * 4 + 7) >> 4);
+            }
+            memcpy(out + (size_t)y * (size_t)W, row, (size_t)W);
+        }
+        free(sum), free(row);
+        return;
+    }
+plain:
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) out[(size_t)y * (size_t)W + (size_t)x] = d[(size_t)(y / vy) * (size_t)stride + (size_t)(x / hx)];
+}
+
 static uint32_t be16(const uint8_t *p) { return (uint32_t)p[0] << 8 | p[1]; }
 
 static void restart(Jpeg *j, int *left)
@@ -427,30 +481,35 @@ bool FEJpeg_Decode(const uint8_t *d, size_t n, int *w, int *h, uint8_t **rgb)
                          c->data + (size_t)by * 8 * (size_t)stride + (size_t)bx * 8, stride);
         }
     }
+    uint8_t *plane[3] = {NULL, NULL, NULL};
     if (ok) {
         int W = j->width, H = j->height;
-        *rgb = malloc((size_t)W * (size_t)H * 3);
+        for (int i = 0; ok && i < j->nc; i++) {
+            plane[i] = malloc((size_t)W * (size_t)H);
+            if (!plane[i]) ok = false;
+            else upsample(j, &j->c[i], plane[i]);
+        }
+        *rgb = ok ? malloc((size_t)W * (size_t)H * 3) : NULL;
         if (!*rgb) ok = false;
-        for (int y = 0; ok && y < H; y++)
-            for (int x = 0; x < W; x++) {
-                float v[3];
-                for (int i = 0; i < j->nc; i++) {
-                    const Comp *c = &j->c[i];
-                    int sx = x * c->h / j->hmax, sy = y * c->v / j->vmax;
-                    v[i] = c->data[(size_t)sy * (size_t)(c->bw * 8) + (size_t)sx];
-                }
-                uint8_t *o = *rgb + ((size_t)y * (size_t)W + (size_t)x) * 3;
-                if (j->nc == 1) o[0] = o[1] = o[2] = (uint8_t)v[0];
-                else {
-                    float Y = v[0], cb = v[1] - 128.0f, cr = v[2] - 128.0f;
-                    float r = Y + 1.402f * cr, g = Y - 0.344136f * cb - 0.714136f * cr, b = Y + 1.772f * cb;
-                    o[0] = (uint8_t)(r < 0 ? 0 : r > 255 ? 255 : lrintf(r));
-                    o[1] = (uint8_t)(g < 0 ? 0 : g > 255 ? 255 : lrintf(g));
-                    o[2] = (uint8_t)(b < 0 ? 0 : b > 255 ? 255 : lrintf(b));
-                }
+        for (size_t p = 0; ok && p < (size_t)W * (size_t)H; p++) {
+            uint8_t *o = *rgb + p * 3;
+            if (j->nc == 1) {
+                o[0] = o[1] = o[2] = plane[0][p];
+                continue;
             }
+            /* libjpeg's YCbCr to RGB in 16-bit fixed point (jdcolor.c's tables: 1.40200, 1.77200,
+               -0.71414 and -0.34414, rounded) */
+            int Y = plane[0][p], cb = plane[1][p] - 128, cr = plane[2][p] - 128;
+            int r = Y + ((91881 * cr + 32768) >> 16);
+            int g = Y + ((-22554 * cb - 46802 * cr + 32768) >> 16);
+            int b = Y + ((116130 * cb + 32768) >> 16);
+            o[0] = (uint8_t)(r < 0 ? 0 : r > 255 ? 255 : r);
+            o[1] = (uint8_t)(g < 0 ? 0 : g > 255 ? 255 : g);
+            o[2] = (uint8_t)(b < 0 ? 0 : b > 255 ? 255 : b);
+        }
         *w = W, *h = H;
     }
+    for (int i = 0; i < 3; i++) free(plane[i]);
 done:
     for (int i = 0; i < 3; i++) free(j->c[i].data), free(j->c[i].coef);
     free(j);
