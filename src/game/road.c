@@ -7,6 +7,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+static double exe_f64(uint32_t va)   /* (a qword constant) */
+{
+    uint64_t u = (uint64_t)exe_u32(va) | (uint64_t)exe_u32(va + 4) << 32;
+    double d;
+    memcpy(&d, &u, 8);
+    return d;
+}
+
 Road *g_road;
 
 static float exe_f32(uint32_t va)
@@ -249,7 +257,7 @@ static bool build(Road *r, int nnodes, int nlens, const int32_t *lens, const uin
         float a, b;
         int count, first = 0;
         Road_SegmentRange(r, r->seg[i].last, &a, &b, &count, &first);
-        if (exe_f32(0x5b47c8) <= b) r->lastnode = count - 1 + first;
+        if (exe_f64(0x5b47c8) <= b) r->lastnode = count - 1 + first;
     }
     return true;
 }

@@ -26,6 +26,14 @@
 #include <string.h>
 #include <strings.h>
 
+static double exe_f64(uint32_t va)   /* (a qword constant) */
+{
+    uint64_t u = (uint64_t)exe_u32(va) | (uint64_t)exe_u32(va + 4) << 32;
+    double d;
+    memcpy(&d, &u, 8);
+    return d;
+}
+
 #define K(va) exe_f32(va)
 
 static float exe_f32(uint32_t va)
@@ -202,7 +210,7 @@ void AI_Plan(Car *c)
         node_vec(n, 0x28, v);
         float side = dot3(v, fw);
         node_vec(n, 0x1c, v);
-        float a = (float)(acos((double)dot3(v, fw)) * (double)K(0x5b2688));
+        float a = (float)(acos((double)dot3(v, fw)) * exe_f64(0x5b2688));
         if (K(0x5b23f8) <= side) {
             if (right < a) right = a;
         } else if (left < a)

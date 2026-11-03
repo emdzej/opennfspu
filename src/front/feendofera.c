@@ -15,6 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+static double exe_f64(uint32_t va)   /* (a qword constant) */
+{
+    uint64_t u = (uint64_t)exe_u32(va) | (uint64_t)exe_u32(va + 4) << 32;
+    double d;
+    memcpy(&d, &u, 8);
+    return d;
+}
+
 void Audio_Say(int idx);                     /* game/audio.h (whose car.h clashes with the front end's) */
 bool Audio_SpeechBank(const char *entry);
 void Audio_SpeechFree(void);
@@ -442,7 +450,7 @@ void FEEndOfEra_Draw(void)
             if (l->number && l->value) {
                 digits(l->value, a, l->x, l->y);
             } else if (s.font) {
-                bool scaled = K(0x5b2750) < l->scale;
+                bool scaled = exe_f64(0x5b2750) < l->scale;
                 if (!l->number && l->shadow) {
                     if (scaled) FE2D_Flush();
                     FE2D_Text(s.font, (float)(l->x + 4), (float)(l->y + 4), 1, (uint32_t)a << 24, l->text, l->scale, 1.0f);
