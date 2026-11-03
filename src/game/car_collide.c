@@ -225,10 +225,10 @@ void CarSim_Edges(Car *c)
 
 static void unit3(float v[3])   /* 0x532640 */
 {
-    double r = (double)K(0x5b24a8) / sqrt((double)v[1] * v[1] + (double)v[0] * v[0] + (double)v[2] * v[2]);
-    v[0] = (float)(r * v[0]);
-    v[1] = (float)(v[1] * r);
-    v[2] = (float)(v[2] * r);
+    float r = K(0x5b24a8) / sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);   /* (single precision) */
+    v[0] = r * v[0];
+    v[1] = v[1] * r;
+    v[2] = v[2] * r;
 }
 
 /* Within r of the car's box in its right and forward axes (ground plane). 0x4981f0 */

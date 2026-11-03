@@ -1,5 +1,5 @@
 --- a/src/game/wtree.c
-+++ b/src/game/wtree.c	2026-11-03 15:26:32
++++ b/src/game/wtree.c
 @@ -1285,7 +1285,15 @@
      return best;
  }
@@ -31,12 +31,12 @@
      WTreeElem *old = s->elem;
      if (old && old->vt->contains(old, p) && keep) {
 --- a/src/game/car_ground.c
-+++ b/src/game/car_ground.c	2026-11-03 15:26:32
-@@ -524,9 +524,108 @@
- static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(kind & 0xf)); }
++++ b/src/game/car_ground.c
+@@ -526,7 +526,115 @@
  static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
  
-+
+ 
+-void CarSim_Forces(void *car)
 +/* (forcesdump) --param forcesdump=<tick>[:<step>:<last>]: the player's car around 0x49bcb0 */
 +#include "platform.h"
 +#include "game/race_progress.h"
@@ -105,12 +105,21 @@
 +    return start >= 0 && g_sim_tick >= start && g_sim_tick <= last && (g_sim_tick - start) % step == 0 && c == g_cars[g_race_local];
 +}
 +static void forces_(void *car);
- void CarSim_Forces(void *car)
- {
-     Car *c = car;
-+    bool on = fd_on(c);
++/* Runs fn on the car, dumped when the tick is chosen and fdfn (hex, default 49bcb0) names va. */
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va)
++{
++    Car *c = car;
++    static int want = -1;
++    if (want < 0) {
++        char v[32];
++        want = plat_param("fdfn", v, sizeof v) ? (int)strtol(v, NULL, 16) : 0x49bcb0;
++    }
++    bool on = (uint32_t)want == va && fd_on(c);
 +    if (on) {
 +        s_fd_car = c;
++        char f[32];
++        snprintf(f, sizeof f, "FD fn 0 %x", va);
++        plat_log(f);
 +        fd_car(c, "pre");
 +        fd_hex("desc", "0", CAR_DESCB(c), CARDESC_SIZE);
 +        fd_hex("specs", "0", CAR_SPECSB(c), CARSPECS_SIZE);
@@ -124,7 +133,7 @@
 +        plat_log(b);
 +        g_wsurf_hook = fd_hook;
 +    }
-+    forces_(car);
++    fn(car);
 +    if (on) {
 +        g_wsurf_hook = NULL;
 +        fd_car(c, "post");
@@ -135,17 +144,41 @@
 +        plat_log(b);
 +    }
 +}
++void CarSim_Forces(void *car) { FD_Wrap(forces_, car, 0x49bcb0); }
 +static void forces_(void *car)
-+{
-+    Car *c = car;
+ {
+     Car *c = car;
      if (!c->b[0x7f] || !c->b[0x7c] || c->b[0x7d]) return;
-     int rate, ticks;
-     float dt;
 --- a/src/game/sim_rand.c
-+++ b/src/game/sim_rand.c	2026-11-03 15:26:32
++++ b/src/game/sim_rand.c
 @@ -36,3 +36,5 @@
      }
      return r;
  }
 +
 +void SimRand_Peek(uint32_t o[3]) { load(); o[0] = state, o[1] = mult, o[2] = product; }   /* (forcesdump) */
+--- a/src/game/car_physics.c
++++ b/src/game/car_physics.c
+@@ -51,7 +51,12 @@
+     }
+ }
+ 
+-void CarSim_Move(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void move_(void *car);
++static void turn_(void *car);
++void CarSim_Move(void *car) { FD_Wrap(move_, car, 0x49b710); }
++void CarSim_Turn(void *car) { FD_Wrap(turn_, car, 0x49b850); }
++static void move_(void *car)
+ {
+     Car *c = car;
+     if (!c->b[0x7f] || c->b[0x7d]) return;
+@@ -69,7 +74,7 @@
+     CarSim_WheelSpin(c);
+ }
+ 
+-void CarSim_Turn(void *car)
++static void turn_(void *car)
+ {
+     Car *c = car;
+     if (!c->b[0x7f] || c->b[0x7d]) return;

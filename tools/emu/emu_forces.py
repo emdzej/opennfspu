@@ -3,6 +3,7 @@
 # tree's calls are answered from the port's record: 0x473fc0 (a tracker's update) writes the tracker the
 # port had after it, its polygon a stand-in object whose normal (+0x14) and vertex (+0x18) methods give the
 # port's; 0x473290 (the roof lookup) returns the port's answer.
+# Other car tasks dumped the same way (--param fdfn=<hex>) run as well: the dump names the function.
 # emu_forces.py <exe> <dump> [fpucw hex]
 import struct, sys
 from unicorn import *
@@ -11,6 +12,7 @@ from unicorn.x86_const import *
 exe = open(sys.argv[1], 'rb').read()
 cw = int(sys.argv[3], 16) if len(sys.argv) > 3 else 0x007f
 pre = post = desc = specs = None
+fn = 0x49bcb0
 parts, elems, upd, above, glob = {}, {}, [], [], {}
 for line in open(sys.argv[2]):
     p = line.split()
@@ -18,6 +20,9 @@ for line in open(sys.argv[2]):
     tag, key = p[1], p[2]
     if tag in ('glob', 'postglob'):
         glob[tag] = dict(t.split('=', 1) for t in p[3:] if '=' in t)
+        continue
+    if tag == 'fn':
+        fn = int(p[3], 16)
         continue
     if tag == 'above':
         above.append(int(p[3]))
@@ -141,7 +146,7 @@ mu.emu_start(stub, RET, count=100)
 sp = STK - 0x2000
 mu.mem_write(sp, struct.pack('<II', RET, car))
 mu.reg_write(UC_X86_REG_ESP, sp)
-mu.emu_start(0x49bcb0, RET, count=50_000_000)
+mu.emu_start(fn, RET, count=50_000_000)
 if mu.reg_read(UC_X86_REG_EIP) != RET:
     print('did not return', hex(mu.reg_read(UC_X86_REG_EIP))); sys.exit(2)
 

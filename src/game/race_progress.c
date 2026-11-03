@@ -371,7 +371,7 @@ void Race_TickEven(void)
         }
         if (*CAR_I(c, CAR_FLAGS) & 4) {
             const float *v = CAR_F(c, 0x33c);
-            *CAR_F(c, 0xec4) = (float)sqrt((double)v[1] * v[1] + (double)v[0] * v[0] + (double)v[2] * v[2]);
+            *CAR_F(c, 0xec4) = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);   /* 0x532890 */
             float along = *CAR_F(c, 0xec0);
             if (along <= K(0x5b23fc) || 3.0f <= along)
                 *CAR_I(c, 0xeb0) = along < K(0x5b23f8) ? -1 : 1;

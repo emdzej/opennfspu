@@ -116,8 +116,8 @@ float CarSim_SurfaceNoise(Car *c, int wheel)
         amp = 0.03f;
     }
     float *from = CAR_F(c, 0x82c + w), *to = CAR_F(c, 0x830 + w), *t = CAR_F(c, 0x834 + w);
-    double nt = (double)*CAR_F(c, 0x35c) * K(0x5b24b8) + *t;
-    *t = (float)nt;
+    float nt = *CAR_F(c, 0x35c) * K(0x5b24b8) + *t;
+    *t = nt;
     if ((period < nt && K(0x5b23f8) < period) || amp < K(0x5b27a8)) {
         /* The next bump: a random height in [-amp / 2 ... amp / 6] (the generator's 16 bits). */
         *t = 0;
@@ -125,12 +125,12 @@ float CarSim_SurfaceNoise(Car *c, int wheel)
         uint32_t r = SimRand_Next();
         *to = amp * K(0x5b49d4) - (float)r * amp * K(0x5b253c);
     }
-    return (float)(((double)*t / period) * ((double)*to - *from) + *from);
+    return (*t / period) * (*to - *from) + *from;
 }
 
 float CarSim_TyreBump(Car *c)
 {
-    double sum = K(0x5b23f8);
+    float sum = K(0x5b23f8);
     int n = 0;
     for (int i = 0; i < CAR_NPARTS; i++) {
         const uint8_t *part = c->p[CARP_PARTS + i];
@@ -141,21 +141,21 @@ float CarSim_TyreBump(Car *c)
         n++;
         /* The mean of the damage zones the part covers (its ten flags at +0x48, the car's zones from
            +0x4e4). */
-        double z = K(0x5b23f8);
+        float z = K(0x5b23f8);
         int k = 0;
         for (int j = 0; j < 10; j++)
             if (part[0x48 + j]) {
                 z += *CAR_F(c, 0x4e4 + 4 * j);
                 k++;
             }
-        if (k > 1) z /= k;
+        if (k > 1) z /= (float)k;
         float a, b;
         memcpy(&a, part + 0x60, 4);
         memcpy(&b, part + 0x164, 4);
-        sum = z * ((double)K(0x5b246c) - (double)a * K(0x5b3284)) + b + sum;
+        sum = z * (K(0x5b246c) - a * K(0x5b3284)) + b + sum;
     }
-    if (n > 1) sum /= n;
-    return (float)sum;
+    if (n > 1) sum /= (float)n;
+    return sum;
 }
 
 /* The ride heights: of the four corner points the lowest and the mean (most cars), of all the body
@@ -239,9 +239,10 @@ float CarSim_Ground(Car *c, float out[3])
             contact[i][1] = CarSim_SurfaceNoise(c, i) + contact[i][1];
             if (i < 2) {
                 /* The front wheels' tyre bumps. */
-                double a = CarSim_TyreBump(c);
-                double ph = sin(((double)i * K(0x5b23f0) + *CAR_F(c, t + 0x84)) * K(0x5b4a08));
-                contact[i][1] = (float)(ph * a * exe_f64(0x5b4a00) + contact[i][1]);   /* (a double: 1/1500) */
+                float a = CarSim_TyreBump(c);
+                double ph = sin(((float)i * K(0x5b23f0) + *CAR_F(c, t + 0x84)) * K(0x5b4a08));   /* (fsin: unrounded) */
+                float pa = (float)(ph * a);
+                contact[i][1] = (float)(pa * exe_f64(0x5b4a00)) + contact[i][1];   /* (a double: 1/1500) */
             }
         } else {
             /* Off the polygons: the car's own ground plane (point +0x400, normal +0x3e8), level ground
@@ -334,7 +335,7 @@ float CarSim_Ground(Car *c, float out[3])
             *CAR_F(c, t + 0x68) = f[1];
         }
         *CAR_F(c, t + 0x54) = f[0] * scale[i];
-        *CAR_F(c, t + 0x58) = (float)((double)f[1] * scale[i] + extra);
+        *CAR_F(c, t + 0x58) = f[1] * scale[i] + extra;
         *CAR_F(c, t + 0x5c) = f[2] * scale[i];
     }
 
@@ -523,6 +524,7 @@ static void clamp_turn(Car *c)
 /* The surface table (0x5d0b90, 8 bytes per surface kind): the friction and the bounce. */
 static float surface_friction(int kind) { return K(0x5d0b94 + 8u * (unsigned)(kind & 0xf)); }
 static float surface_bounce(int kind) { return K(0x5d0b98 + 8u * (unsigned)(kind & 0xf)); }
+
 
 void CarSim_Forces(void *car)
 {

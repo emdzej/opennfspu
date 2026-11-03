@@ -151,8 +151,8 @@ void Vec3_Cross(const float a[3], const float b[3], float out[3])
 
 void Vec3_Unit(const float v[3], float out[3])
 {
-    double r = (double)exe_f32(0x5b24a8) / sqrt((double)v[1] * v[1] + (double)v[0] * v[0] + (double)v[2] * v[2]);
-    out[0] = (float)(r * v[0]);
-    out[1] = (float)(v[1] * r);
-    out[2] = (float)(v[2] * r);
+    float r = exe_f32(0x5b24a8) / sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);   /* (single precision) */
+    out[0] = r * v[0];
+    out[1] = v[1] * r;
+    out[2] = v[2] * r;
 }

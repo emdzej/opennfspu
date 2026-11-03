@@ -32,7 +32,9 @@ polygon a stand-in object whose normal and vertex methods give the port's, and t
 (0x473290) returns the port's answer. The comparison skips the trackers' pointers. The control word
 defaults to 0x007f.
 
-`forcesdump.patch` adds `--param forcesdump=<tick>[:<step>:<last>]`. The task runs on even ticks. Apply
+`forcesdump.patch` adds `--param forcesdump=<tick>[:<step>:<last>]` and `--param fdfn=<hex>`, the task
+dumped: 49bcb0 the forces (the default, even ticks), 49b850 the turn, 49b710 the move (`FN=` for
+`sweep_forces.sh`). Apply
 one dump patch at a time (both add to `sim_rand.c`):
 
 ```sh
