@@ -242,31 +242,73 @@ static void smooth(const Jpeg *j, Comp *c)
     free(dc);
 }
 
-/* a block's coefficients dequantised and through the inverse DCT into out (stride) */
+/* libjpeg's sample range limit (jdmaster.c's table indexed by the value & 1023): -128 .. 127 to 0 .. 255,
+   up to 511 255, down to -512 0, wrapping past those. */
+static uint8_t range_limit(int x)
+{
+    int k = x & 1023;
+    return (uint8_t)(k < 128 ? k + 128 : k < 512 ? 255 : k < 896 ? 0 : k - 896);
+}
+
+/* a block's coefficients dequantised and through libjpeg's default integer inverse DCT (jidctint.c,
+   the Loeffler-Ligtenberg-Moschytz factorisation in 13-bit fixed point: columns into a workspace kept 2
+   bits finer, then rows, a column or row without AC terms shortcut) into out (stride) */
 static void idct(const Jpeg *j, const Comp *c, const int16_t *z, uint8_t *out, int stride)
 {
-    static float cosv[8][8];
-    static bool init;
-    if (!init) {
-        for (int x = 0; x < 8; x++)
-            for (int u = 0; u < 8; u++) cosv[x][u] = (u ? 1.0f : 0.70710678f) * cosf((float)((2 * x + 1) * u) * 3.14159265f / 16.0f);
-        init = true;
+    enum { CB = 13, P1 = 2 };
+    enum { F0298 = 2446, F0390 = 3196, F0541 = 4433, F0765 = 6270, F0899 = 7373, F1175 = 9633, F1501 = 12299,
+           F1847 = 15137, F1961 = 16069, F2053 = 16819, F2562 = 20995, F3072 = 25172 };
+#define DESCALE(x, n) (((x) + (1L << ((n) - 1))) >> (n))
+    long in[64], ws[64];
+    for (int k = 0; k < 64; k++) in[zigzag[k]] = (long)z[k] * j->q[c->tq][k];
+    for (int col = 0; col < 8; col++) {
+        const long *p = in + col;
+        long *w = ws + col;
+        if (!p[8] && !p[16] && !p[24] && !p[32] && !p[40] && !p[48] && !p[56]) {
+            long dc = p[0] << P1;
+            for (int r = 0; r < 8; r++) w[8 * r] = dc;
+            continue;
+        }
+        long z2 = p[16], z3 = p[48], z1 = (z2 + z3) * F0541;
+        long t2 = z1 + z3 * -F1847, t3 = z1 + z2 * F0765;
+        long t0 = (p[0] + p[32]) << CB, t1 = (p[0] - p[32]) << CB;
+        long t10 = t0 + t3, t13 = t0 - t3, t11 = t1 + t2, t12 = t1 - t2;
+        long o0 = p[56], o1 = p[40], o2 = p[24], o3 = p[8];
+        long a1 = o0 + o3, a2 = o1 + o2, a3 = o0 + o2, a4 = o1 + o3, a5 = (a3 + a4) * F1175;
+        o0 *= F0298, o1 *= F2053, o2 *= F3072, o3 *= F1501;
+        a1 *= -F0899, a2 *= -F2562, a3 *= -F1961, a4 *= -F0390;
+        a3 += a5, a4 += a5;
+        o0 += a1 + a3, o1 += a2 + a4, o2 += a2 + a3, o3 += a1 + a4;
+        w[0] = DESCALE(t10 + o3, CB - P1), w[56] = DESCALE(t10 - o3, CB - P1);
+        w[8] = DESCALE(t11 + o2, CB - P1), w[48] = DESCALE(t11 - o2, CB - P1);
+        w[16] = DESCALE(t12 + o1, CB - P1), w[40] = DESCALE(t12 - o1, CB - P1);
+        w[24] = DESCALE(t13 + o0, CB - P1), w[32] = DESCALE(t13 - o0, CB - P1);
     }
-    float coef[64], tmp[64];
-    for (int k = 0; k < 64; k++) coef[zigzag[k]] = (float)(z[k] * j->q[c->tq][k]);
-    for (int y = 0; y < 8; y++)
-        for (int u = 0; u < 8; u++) {
-            float s = 0;
-            for (int v = 0; v < 8; v++) s += cosv[y][v] * coef[v * 8 + u];
-            tmp[y * 8 + u] = s;
+    for (int row = 0; row < 8; row++) {
+        const long *w = ws + 8 * row;
+        uint8_t *o = out + row * stride;
+        if (!w[1] && !w[2] && !w[3] && !w[4] && !w[5] && !w[6] && !w[7]) {
+            uint8_t v = range_limit((int)DESCALE(w[0], P1 + 3));
+            for (int x = 0; x < 8; x++) o[x] = v;
+            continue;
         }
-    for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 8; x++) {
-            float s = 0;
-            for (int u = 0; u < 8; u++) s += cosv[x][u] * tmp[y * 8 + u];
-            int v = (int)lrintf(s / 4.0f + 128.0f);
-            out[y * stride + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
-        }
+        long z2 = w[2], z3 = w[6], z1 = (z2 + z3) * F0541;
+        long t2 = z1 + z3 * -F1847, t3 = z1 + z2 * F0765;
+        long t0 = (w[0] + w[4]) << CB, t1 = (w[0] - w[4]) << CB;
+        long t10 = t0 + t3, t13 = t0 - t3, t11 = t1 + t2, t12 = t1 - t2;
+        long o0 = w[7], o1 = w[5], o2 = w[3], o3 = w[1];
+        long a1 = o0 + o3, a2 = o1 + o2, a3 = o0 + o2, a4 = o1 + o3, a5 = (a3 + a4) * F1175;
+        o0 *= F0298, o1 *= F2053, o2 *= F3072, o3 *= F1501;
+        a1 *= -F0899, a2 *= -F2562, a3 *= -F1961, a4 *= -F0390;
+        a3 += a5, a4 += a5;
+        o0 += a1 + a3, o1 += a2 + a4, o2 += a2 + a3, o3 += a1 + a4;
+        const int n = CB + P1 + 3;
+        o[0] = range_limit((int)DESCALE(t10 + o3, n)), o[7] = range_limit((int)DESCALE(t10 - o3, n));
+        o[1] = range_limit((int)DESCALE(t11 + o2, n)), o[6] = range_limit((int)DESCALE(t11 - o2, n));
+        o[2] = range_limit((int)DESCALE(t12 + o1, n)), o[5] = range_limit((int)DESCALE(t12 - o1, n));
+        o[3] = range_limit((int)DESCALE(t13 + o0, n)), o[4] = range_limit((int)DESCALE(t13 - o0, n));
+    }
+#undef DESCALE
 }
 
 /* A component's samples at the picture's size into out (W x H). A half-width one (h2v1) or half in both
