@@ -17,3 +17,9 @@ typedef enum { USERPIC_NONE, USERPIC_SHOWN, USERPIC_FAILED } UserPicState;
 /* The player's own picture by name: none (the driver's picture then), shown (*img set), or a file that
    didn't convert (no picture: the original's ConvertFile failing). Kept until the name changes. */
 UserPicState FEUserPic_Get(const char *name, FeImage **img);
+
+/* SaveData\pic16.fsh as FE_LoadDriverPictures 0x4db650 has gimme.dll's ConvertFile make it: the current
+   player's own picture (at its size), else its driver's of AllDrivr.fsh, as one 16-bit (565) record in an
+   FSH of its own (malloc'd; NULL without). The port makes it when it's sent (HUD_LoadArt 0x427a20) rather
+   than keeping the file. */
+uint8_t *FEUserPic_Pic16(size_t *size);

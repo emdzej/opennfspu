@@ -1,5 +1,6 @@
 /* The race HUD (see hud.h). */
 #include "game/net.h"
+#include "front/feuserpic.h"
 #include "game/hud.h"
 #include "game/controls.h"
 #include "real/mouse.h"
@@ -842,6 +843,17 @@ static HudVisual *time_new(const HudVisualVtbl *vt, int place, int w, int h)
     HudConfig_pos(place, &x, &y);
     combo_init(&t->combo, vt, x, y, w, h, place, true);
     return &t->combo.tray.base;
+}
+
+/* The player's picture to the network game's players, block 0 (HUD_LoadArt 0x427a20: SaveData\pic16.fsh;
+   out of a game the send does nothing, and the port doesn't make it). */
+void HUD_LoadArt(void)
+{
+    if (!Net_InGame()) return;
+    size_t n = 0;
+    uint8_t *f = FEUserPic_Pic16(&n);
+    if (f) Net_SendBlock(0, f, (int)n);   /* 0x48ca80 */
+    free(f);
 }
 
 /* ---- the standings (HPosition, 600 bytes, vtable 0x5b2dbc; 0x42a6f0) ---- */

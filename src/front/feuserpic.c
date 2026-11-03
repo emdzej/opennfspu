@@ -6,6 +6,11 @@
 #include "front/fejpeg.h"
 #include "front/fetiff.h"
 #include "exe.h"
+#include "front/fe_parts.h"
+#include "front/fesave.h"
+#include "real/depthconv.h"
+#include "real/mem.h"
+#include "real/shape.h"
 #include "real/texture.h"
 #include "real/window.h"
 #include "render/render.h"
@@ -276,4 +281,78 @@ UserPicState FEUserPic_Get(const char *name, FeImage **img)
     }
     *img = s_pic.img;
     return s_pic.state;
+}
+
+/* An FSH of one record (SHPI, its size, one entry, "GIMX", the entry's name and offset). */
+static uint8_t *fsh_of(const uint8_t *rec, size_t len, const char name[4], size_t *size)
+{
+    size_t n = 0x18 + len;
+    uint8_t *f = malloc(n);
+    if (!f) return NULL;
+    uint32_t v[2] = {(uint32_t)n, 1}, off = 0x18;
+    memcpy(f, "SHPI", 4);
+    memcpy(f + 4, v, 8);
+    memcpy(f + 0xc, "GIMX", 4);
+    memcpy(f + 0x10, name, 4);
+    memcpy(f + 0x14, &off, 4);
+    memcpy(f + 0x18, rec, len);
+    f[0x19] = f[0x1a] = f[0x1b] = 0;   /* (no record after it) */
+    *size = n;
+    return f;
+}
+
+uint8_t *FEUserPic_Pic16(size_t *size)
+{
+    *size = 0;
+    const char *stem = FESave_Stem();
+    if (!stem) stem = "";
+    FeImage *own = NULL;
+    if (FEUserPic_Get(stem[0] ? stem + 1 : stem, &own) == USERPIC_SHOWN) {
+        /* (gimme's: the file's picture at its own size) */
+        for (int i = 0; i < 5; i++) {
+            char path[96];
+            snprintf(path, sizeof path, "%s%s", stem + 1, exe_str(exe_u32(0x5d97b0 + 4u * (unsigned)i)));
+            if (!vfs_exists(path)) continue;
+            size_t n = 0;
+            uint8_t *d = vfs_read_all(path, &n), *rgb = NULL, *f = NULL;
+            int w = 0, h = 0;
+            if (d && FEUserPic_Decode(d, n, strrchr(path, '.'), &w, &h, &rgb) && 0 < w && 0 < h && w < 0x8000 && h < 0x8000) {
+                size_t len = 0x10 + (size_t)w * (size_t)h * 2;
+                uint8_t *rec = calloc(1, len);
+                if (rec) {
+                    int16_t wh[2] = {(int16_t)w, (int16_t)h};
+                    rec[0] = 0x78;
+                    memcpy(rec + 4, wh, 4);
+                    uint16_t *o = (uint16_t *)(void *)(rec + 0x10);
+                    for (size_t k = 0; k < (size_t)w * (size_t)h; k++) {
+                        const uint8_t *c = rgb + k * 3;
+                        o[k] = (uint16_t)((c[0] >> 3) << 11 | (c[1] >> 2) << 5 | c[2] >> 3);
+                    }
+                    f = fsh_of(rec, len, "pic1", size);
+                    free(rec);
+                }
+            }
+            free(rgb);
+            free(d);
+            return f;
+        }
+        return NULL;
+    }
+    /* the driver's picture: AllDrivr.fsh's of the stem's digit, in 16 bits */
+    int k = stem[0] - '0';
+    k = k < 1 ? 0 : k > 8 ? 8 : k;
+    char path[300];
+    FE_ResolvePath("ALLdrivr.fsh", path, sizeof path);   /* ("%sAllDrivr.fsh" 0x5d9824) */
+    size_t n = 0;
+    uint8_t *d = vfs_read_all(path, &n), *f = NULL;
+    const uint8_t *src = d ? SHAPE_entry(d, k) : NULL;
+    uint8_t *rec = src ? SHAPE_converttype(src, 0x78, 0, 0) : NULL;   /* 0x534ab0 */
+    if (rec) {
+        int16_t h;
+        memcpy(&h, rec + 6, 2);
+        f = fsh_of(rec, 0x10 + (size_t)SHAPE_rowbytes(rec) * (size_t)(h < 0 ? 0 : h), (const char *)d + 0x10 + 8 * k, size);
+        MEM_purge(rec);
+    }
+    free(d);
+    return f;
 }

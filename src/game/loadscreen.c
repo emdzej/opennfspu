@@ -1,6 +1,9 @@
 /* The race's loading screen (see loadscreen.h). */
 #include "game/loadscreen.h"
 #include "game/car_drive.h"
+#include "game/net.h"
+#include "game/option_rec.h"
+#include "game/race_progress.h"
 #include "game/options.h"
 #include "game/race_car.h"
 #include "game/track.h"
@@ -76,7 +79,13 @@ void LoadingScreen(int step)
         if (!s_on) return;
     }
     if (!s_window) s_window = WINDOW_new(640, 480, WINDOW_defaultdepth, 0x10);
-    /* (a network game's peers are told the step, 0x4ed290 message 0x256: the port has no network game) */
+    if (Net_InGame() && 0 < step && s_on) {
+        /* a network game's players told my step (LOADINGAMOUNT 0x256) */
+        int32_t recs[8], *p = recs;
+        Option_PutCar(&p, 0x256, g_race_local, step);
+        *p = 0;
+        if (p != recs) Net_AddOptions(recs);   /* 0x48d480 */
+    }
     if (Options_Int(0x5d3bb8, 0) == 1) return;   /* NOLOADINGSCREEN */
     /* (the music stream's prebuffering waited for, 0x4ad440 against 0x4ad490 with the timer tasks: the
        port's stream is fed by the frames) */
@@ -101,7 +110,18 @@ void LoadingScreen(int step)
         MEM_purge(bg);
         if (track) MEM_purge(track);
     }
-    /* (a network game's step 0 and 5 put MLoading.fsh's three pieces at y 0x142, 0x9e high) */
+    if (Net_InGame() && (step == 0 || step == 5)) {
+        /* a network game's: MLoading.fsh's three pieces (from 0 at step 0, from 3 at 5) across at y 0x142 */
+        snprintf(path, sizeof path, "%sMLoading.fsh", FE_DIR_ART);   /* ("%sMLoading.fsh" 0x5d10a0) */
+        uint8_t *ml = UTIL_loadfileabort(path, 0);
+        int k = step > 4 ? 3 : 0;
+        static const int px[3] = {0, 0x100, 0x200}, pw[3] = {0x100, 0x100, 0x80};
+        for (int i = 0; ml && i < 3; i++) {
+            const uint8_t *s = SHAPE_entry(ml, k + i);
+            if (s) WINDOW_drawscaled(s, px[i], 0x142, pw[i], 0x9e);   /* 0x5628c0 */
+        }
+        if (ml) MEM_purge(ml);
+    }
     int language = Options_Int(0x5d61cc, 0);   /* LANGUAGE (0x657c84) */
     if ((step == 0 || step == 5) && language != 0) {
         /* "Loading" in the language: loadtext.fsh's shape language - 1 at minus its centre, keyed */
@@ -117,7 +137,31 @@ void LoadingScreen(int step)
         union { uint32_t u; float f; } k = {exe_u32(0x5b4ac0)};   /* 12.4 pixels a step */
         WINDOW_fillrect(0x12e, 0x1d3, (int)((double)step * (double)k.f), 6, 0xffffbb00);
     }
-    /* (and a network game's bars of each player's step) */
+    if (Net_InGame() && s_on) {
+        /* a network game's players, by grid slot (STARTINGPOS) 0x4a apart from x 0x20: a black box for
+           a seat without a racing player; a player's picture (its block 0, once whole) above the bar of
+           its step (LOADINGAMOUNT of ten, 54 wide) */
+        for (int i = 0; i < g_race_inputs && i < CAR_MAX; i++) {
+            int32_t slot, amount;
+            memcpy(&slot, g_cardesc[i] + 0x174, 4);
+            memcpy(&amount, g_cardesc[i] + 0x57c, 4);
+            int x = slot * 0x4a + 0x20;
+            NetPlayer *pl = Net_PlayerByCar(i);   /* 0x48d650 */
+            if (!pl || !Net_PlayerRacing(pl)) {
+                WINDOW_fillrect(x, 0x16c, 0x36, 0x40, 0);
+                continue;
+            }
+            const uint8_t *pic = Net_PlayerBlock(pl, 0);   /* 0x4903a0 */
+            if (!pic) continue;
+            uint32_t off;
+            memcpy(&off, pic + 0x14, 4);
+            const uint8_t *s = pic + off;
+            WINDOW_drawscaledkey(s, x, 0x16c, sh16(s, 4), sh16(s, 6));   /* 0x561c90 */
+            int done = amount * 0x36 / 10;
+            WINDOW_fillrect(x + done, 0x1b4, 0x36 - done, 6, 0xff312000);
+            WINDOW_fillrect(x, 0x1b4, done, 6, 0xffffbb00);
+        }
+    }
     THRASH.fn.window(2);
     THRASH.fn.clearwindow();
     THRASH.fn.sync(0);

@@ -274,6 +274,7 @@ static int load(const char *track, const char *carname)
            of video memory): level 3. Until the first race the front end runs at
            the level's initial 0, as the original's does. */
         RTex_detectquality(&RTex_machine);
+        HUD_LoadArt();   /* 0x427a20 */
         LoadingScreen(1);
         return 0;
     case 2:

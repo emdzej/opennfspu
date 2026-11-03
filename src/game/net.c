@@ -289,6 +289,14 @@ static bool player_racing(const NetPlayer *p)   /* 0x490340 */
     return Net_InGame() && (g_net->racing & (1u << (p->number & 0x1f)));
 }
 
+bool Net_PlayerRacing(const NetPlayer *p) { return player_racing(p); }
+
+const uint8_t *Net_PlayerBlock(NetPlayer *p, int16_t id)
+{
+    NetData *d = p ? player_data(p, id) : NULL;
+    return d && d->size <= d->done ? d->data : NULL;
+}
+
 int Net_PlayerPing(NetPlayer *p)
 {
     if (Net_Live() && g_net->in && !p->pinging && tickcount() - p->pinged > 1000) {

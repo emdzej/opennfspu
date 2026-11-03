@@ -204,6 +204,9 @@ void Net_AddOptions(const int32_t *recs);                             /* 0x48d48
 void Net_SendBlock(int16_t id, const void *data, int size);           /* 0x48ca80 */
 NetPlayer *Net_PlayerByNumber(int number);                            /* 0x48d600 */
 NetPlayer *Net_PlayerByCar(int car);                                  /* 0x48d650 */
+bool Net_PlayerRacing(const NetPlayer *p);                            /* 0x490340 */
+/* A player's block received whole (0x4903a0, its +0xc against +8), NULL before. */
+const uint8_t *Net_PlayerBlock(NetPlayer *p, int16_t id);
 int Net_FinishTime(int car);                                          /* 0x48d6a0 */
 int Net_Place(int car);                                               /* 0x48d720 */
 int Net_RaceTime(void);                                               /* 0x48d770 */

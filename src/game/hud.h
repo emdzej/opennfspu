@@ -30,6 +30,7 @@ struct HudVisual {
 
 /* The HUD for the race (the visuals ported so far). 0x424420 */
 void HUD_Init(void);
+void HUD_LoadArt(void);   /* 0x427a20 */
 /* The local player's lap done: the announcer's lap, gap, place, best and final lap (0x427790). */
 void HUD_LapDone(void);
 void HUD_Free(void);
