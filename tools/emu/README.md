@@ -44,6 +44,8 @@ dumped; `FN=` for `sweep_forces.sh`) and `--param fdcar=<i>` (the car, default t
 | 4083c0 | the AI's drive (opponents not driven by a replay) |
 | 49aee0 | the road tracking: the node search 0x4743a0 answered from the port's record, the road's nodes dumped |
 | 40b670, 40c000 | the AI's plan and steering (opponents): the whole road and the racing line (.lsp) rebuilt once |
+| 4169d0 | the race task (progress, laps, finish): the race's laps, type and linearity in the dump |
+| 4102e0 | the hit task: the sparks (0x43f3f0, on the renderer's effects) skipped |
 | 498f60 | the collisions: the walls, the objects (only ticks where none passes the box test), and the cars checked before this one (0x628cdc), compared after as well |
 
 +0x434 (the car hit) is the original's pointer and the port's index plus one; it compares as equal

@@ -1,52 +1,128 @@
---- a/src/game/wtree.c
-+++ b/src/game/wtree.c
-@@ -1285,8 +1285,16 @@
-     return best;
+--- a/src/game/ai.c
++++ b/src/game/ai.c
+@@ -128,6 +128,7 @@
+     line_size = 0;
  }
  
-+void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);   /* (forcesdump) */
-+static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out);
- uint16_t WSurface_FindAbove(WSurface *s, const float p[3], WTreeElem **out)
++const uint8_t *AI_LineData(size_t *n) { *n = line_size; return line; }   /* (forcesdump) */
+ void AI_LinePoint(int n, float out[2])
  {
-+    uint16_t r = above_(s, p, out);
-+    if (g_wsurf_hook) g_wsurf_hook(s, 1, r);
-+    return r;
-+}
-+static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out)
-+{
-     load_consts();
-     WTree *t = world_tree();
-     if (!s->cell || !WTree_CellContains(s->cell, p)) {
-@@ -1313,7 +1321,13 @@
-     return best->flags;
+     if (line && 4 + 8 * (size_t)n + 8 <= line_size) {
+@@ -152,7 +153,11 @@
+     return 0 <= j ? &r->junctions[j] : NULL;
  }
  
-+static void update_(WSurface *s, const float p[3], bool keep);
- void WSurface_Update(WSurface *s, const float p[3], bool keep)
-+{
-+    update_(s, p, keep);
-+    if (g_wsurf_hook) g_wsurf_hook(s, 0, 0);
-+}
-+static void update_(WSurface *s, const float p[3], bool keep)
+-void AI_Plan(Car *c)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void ai_plan_(Car *c);
++static void ai_plan__task(void *car) { ai_plan_(car); }
++void AI_Plan(Car *c) { FD_Wrap(ai_plan__task, c, 0x40b670); }
++static void ai_plan_(Car *c)
  {
-     WTreeElem *old = s->elem;
-     if (old && old->vt->contains(old, p) && keep) {
-@@ -1398,7 +1412,15 @@
-     return (float)plane_height(s.normal, v, p);
+     const Road *r = g_road;
+     int node = car_node(c);
+@@ -270,7 +275,11 @@
+     }
  }
  
-+void (*g_wedge_hook)(const float out[6], uint16_t flag, bool hit);   /* (forcesdump) */
-+static bool edge_(WSurface *s, const float seg[6], float out[6], uint16_t *flag);
- bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
-+{
-+    bool r = edge_(s, seg, out, flag);
-+    if (g_wedge_hook) g_wedge_hook(out, *flag, r);
-+    return r;
-+}
-+static bool edge_(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
+-void AI_Steer(Car *c)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void ai_steer_(Car *c);
++static void ai_steer__task(void *car) { ai_steer_(car); }
++void AI_Steer(Car *c) { FD_Wrap(ai_steer__task, c, 0x40c000); }
++static void ai_steer_(Car *c)
  {
-     load_consts();
-     WTree *t = world_tree();
+     const Road *r = g_road;
+     int8_t gear = (int8_t)c->b[0xd82];
+--- a/src/game/ai_drive.c
++++ b/src/game/ai_drive.c
+@@ -718,7 +718,10 @@
+     F(0x38c) = F(0x38c) * K(0x5b25f4);
+ }
+ 
+-void AI_DriveTask(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void aidrive_(void *car);
++void AI_DriveTask(void *car) { FD_Wrap(aidrive_, car, 0x4083c0); }
++static void aidrive_(void *car)
+ {
+     Car *c = car;
+     uint32_t f = (uint32_t)I(CAR_FLAGS);
+--- a/src/game/car_collide.c
++++ b/src/game/car_collide.c
+@@ -160,7 +160,11 @@
+     return h < K(0x5b23f8) ? -h : h;
+ }
+ 
+-void CarSim_Edges(Car *c)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void edges_(Car *c);
++static void edges_task(void *car) { edges_(car); }
++void CarSim_Edges(Car *c) { FD_Wrap(edges_task, c, 0x494f90); }
++static void edges_(Car *c)
+ {
+     float worst = 0.0f;
+     float back[3];
+@@ -405,7 +409,45 @@
+ 
+ void CarSim_ClearCollided(void) { g_ncollided = 0; }
+ 
++#include "platform.h"
++#include <stdio.h>
++static void collide_(void *car);
++static void collide_extra(void *car);
+ void CarSim_Collide(void *car)
++{
++    extern void (*g_fd_extra)(void *car);
++    g_fd_extra = collide_extra;
++    FD_Wrap(collide_, car, 0x498f60);
++    g_fd_extra = NULL;
++}
++static void collide_extra(void *car)
++{
++    Car *c = car;
++    {
++        char b[256];
++        int o = snprintf(b, sizeof b, "FD collided 0");
++        for (int i = 0; i < g_ncollided; i++) {
++            int k = -1;
++            for (int j = 0; j < g_racers.n; j++) if (g_racers.c[j] == g_collided[i]) k = j;
++            o += snprintf(b + o, sizeof b - (size_t)o, " %d", k);
++        }
++        plat_log(b);
++        int n = 0;
++        if (*CAR_I(c, 0x43c) == 0) {
++            WTreeElems *near = WTree_ObjectsNear(CAR_F(c, 0x330), 5.0f);
++            for (uint32_t i = 0; near && i < near->n; i++) {
++                WTreeObject *ob = (WTreeObject *)near->e[i];
++                float ctr[3];
++                ob->e.vt->centre(&ob->e, ctr);
++                if (near_box(c, ctr, ob->ovt->radius(ob))) n++;
++            }
++            if (near) WTreeElems_free(near);
++        }
++        snprintf(b, sizeof b, "FD objects 0 %d", n);
++        plat_log(b);
++    }
++}
++static void collide_(void *car)
+ {
+     Car *c = car;
+     if (!c->b[0x7f] || c->b[0x7d]) return;
+--- a/src/game/car_drive.c
++++ b/src/game/car_drive.c
+@@ -1046,7 +1046,10 @@
+         for (int j = 0; j < 3; j++) v[j] *= 0.5f;
+ }
+ 
+-void CarSim_Drive(void *car)
++void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
++static void drive_(void *car);
++void CarSim_Drive(void *car) { FD_Wrap(drive_, car, 0x49fb20); }
++static void drive_(void *car)
+ {
+     Car *c = car;
+     if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
 --- a/src/game/car_ground.c
 +++ b/src/game/car_ground.c
 @@ -7,6 +7,7 @@
@@ -230,7 +306,7 @@
 +        SimRand_Peek(r);
 +        char b[256];
 +        for (int i = 0; i < g_racers.n; i++) { char k[8]; snprintf(k, sizeof k, "%d", i); if (g_racers.c[i] == c) { char m[32]; snprintf(m, sizeof m, "FD self %d", i); plat_log(m); } fd_hex("racer", k, g_racers.c[i]->b, CAR_SIZE); }
-+        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u players=%d demo=%d altgrip=%d nracers=%d started=%d", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2], g_race_players, g_race_demo, g_race_alt_grip, g_racers.n, g_race_started);
++        snprintf(b, sizeof b, "FD glob 0 tick=%d rally=%d network=%d damage=%d derby=%d mode=%d rand=%u,%u,%u players=%d demo=%d altgrip=%d nracers=%d started=%d laps=%d rtype=%d linear=%d", g_sim_tick, g_race_rally, g_race_network, g_race_damage, g_race_derby, g_race_mode, r[0], r[1], r[2], g_race_players, g_race_demo, g_race_alt_grip, g_racers.n, g_race_started, g_race_laps, g_race_type, g_race_linear);
 +        plat_log(b);
 +        {
 +            extern float g_track_road_width;
@@ -301,14 +377,6 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d] || !c->b[0x7c]) return;
---- a/src/game/sim_rand.c
-+++ b/src/game/sim_rand.c
-@@ -36,3 +36,5 @@
-     }
-     return r;
- }
-+
-+void SimRand_Peek(uint32_t o[3]) { load(); o[0] = state, o[1] = mult, o[2] = product; }   /* (forcesdump) */
 --- a/src/game/car_physics.c
 +++ b/src/game/car_physics.c
 @@ -51,7 +51,12 @@
@@ -334,95 +402,20 @@
  {
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
---- a/src/game/ai_drive.c
-+++ b/src/game/ai_drive.c
-@@ -718,7 +718,10 @@
-     F(0x38c) = F(0x38c) * K(0x5b25f4);
+--- a/src/game/car_respawn.c
++++ b/src/game/car_respawn.c
+@@ -266,7 +266,10 @@
+     }
  }
  
--void AI_DriveTask(void *car)
+-void CarSim_HitTask(void *car)
 +void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
-+static void aidrive_(void *car);
-+void AI_DriveTask(void *car) { FD_Wrap(aidrive_, car, 0x4083c0); }
-+static void aidrive_(void *car)
++static void carsim_hittask_(void *car);
++void CarSim_HitTask(void *car) { FD_Wrap(carsim_hittask_, car, 0x4102e0); }
++static void carsim_hittask_(void *car)
  {
      Car *c = car;
-     uint32_t f = (uint32_t)I(CAR_FLAGS);
---- a/src/game/car_drive.c
-+++ b/src/game/car_drive.c
-@@ -1046,7 +1046,10 @@
-         for (int j = 0; j < 3; j++) v[j] *= 0.5f;
- }
- 
--void CarSim_Drive(void *car)
-+void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
-+static void drive_(void *car);
-+void CarSim_Drive(void *car) { FD_Wrap(drive_, car, 0x49fb20); }
-+static void drive_(void *car)
- {
-     Car *c = car;
-     if (K(0x5b23f0) <= *CAR_F(c, 0x3a0)) {
---- a/src/game/car_collide.c
-+++ b/src/game/car_collide.c
-@@ -160,7 +160,11 @@
-     return h < K(0x5b23f8) ? -h : h;
- }
- 
--void CarSim_Edges(Car *c)
-+void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
-+static void edges_(Car *c);
-+static void edges_task(void *car) { edges_(car); }
-+void CarSim_Edges(Car *c) { FD_Wrap(edges_task, c, 0x494f90); }
-+static void edges_(Car *c)
- {
-     float worst = 0.0f;
-     float back[3];
-@@ -405,7 +409,45 @@
- 
- void CarSim_ClearCollided(void) { g_ncollided = 0; }
- 
-+#include "platform.h"
-+#include <stdio.h>
-+static void collide_(void *car);
-+static void collide_extra(void *car);
- void CarSim_Collide(void *car)
-+{
-+    extern void (*g_fd_extra)(void *car);
-+    g_fd_extra = collide_extra;
-+    FD_Wrap(collide_, car, 0x498f60);
-+    g_fd_extra = NULL;
-+}
-+static void collide_extra(void *car)
-+{
-+    Car *c = car;
-+    {
-+        char b[256];
-+        int o = snprintf(b, sizeof b, "FD collided 0");
-+        for (int i = 0; i < g_ncollided; i++) {
-+            int k = -1;
-+            for (int j = 0; j < g_racers.n; j++) if (g_racers.c[j] == g_collided[i]) k = j;
-+            o += snprintf(b + o, sizeof b - (size_t)o, " %d", k);
-+        }
-+        plat_log(b);
-+        int n = 0;
-+        if (*CAR_I(c, 0x43c) == 0) {
-+            WTreeElems *near = WTree_ObjectsNear(CAR_F(c, 0x330), 5.0f);
-+            for (uint32_t i = 0; near && i < near->n; i++) {
-+                WTreeObject *ob = (WTreeObject *)near->e[i];
-+                float ctr[3];
-+                ob->e.vt->centre(&ob->e, ctr);
-+                if (near_box(c, ctr, ob->ovt->radius(ob))) n++;
-+            }
-+            if (near) WTreeElems_free(near);
-+        }
-+        snprintf(b, sizeof b, "FD objects 0 %d", n);
-+        plat_log(b);
-+    }
-+}
-+static void collide_(void *car)
- {
-     Car *c = car;
-     if (!c->b[0x7f] || c->b[0x7d]) return;
+     if (c->b[0x7d]) return;
 --- a/src/game/input.c
 +++ b/src/game/input.c
 @@ -222,7 +222,10 @@
@@ -451,53 +444,60 @@
  {
      Car *c = car;
      if (g_sim_tick & 1) return;
---- a/src/game/car_respawn.c
-+++ b/src/game/car_respawn.c
-@@ -266,7 +266,10 @@
+--- a/src/game/sim_rand.c
++++ b/src/game/sim_rand.c
+@@ -36,3 +36,5 @@
      }
+     return r;
+ }
++
++void SimRand_Peek(uint32_t o[3]) { load(); o[0] = state, o[1] = mult, o[2] = product; }   /* (forcesdump) */
+--- a/src/game/wtree.c
++++ b/src/game/wtree.c
+@@ -1285,8 +1285,16 @@
+     return best;
  }
  
--void CarSim_HitTask(void *car)
-+void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
-+static void carsim_hittask_(void *car);
-+void CarSim_HitTask(void *car) { FD_Wrap(carsim_hittask_, car, 0x4102e0); }
-+static void carsim_hittask_(void *car)
++void (*g_wsurf_hook)(WSurface *s, int kind, uint16_t v);   /* (forcesdump) */
++static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out);
+ uint16_t WSurface_FindAbove(WSurface *s, const float p[3], WTreeElem **out)
  {
-     Car *c = car;
-     if (c->b[0x7d]) return;
---- a/src/game/ai.c
-+++ b/src/game/ai.c
-@@ -128,6 +128,7 @@
-     line_size = 0;
++    uint16_t r = above_(s, p, out);
++    if (g_wsurf_hook) g_wsurf_hook(s, 1, r);
++    return r;
++}
++static uint16_t above_(WSurface *s, const float p[3], WTreeElem **out)
++{
+     load_consts();
+     WTree *t = world_tree();
+     if (!s->cell || !WTree_CellContains(s->cell, p)) {
+@@ -1313,7 +1321,13 @@
+     return best->flags;
  }
  
-+const uint8_t *AI_LineData(size_t *n) { *n = line_size; return line; }   /* (forcesdump) */
- void AI_LinePoint(int n, float out[2])
++static void update_(WSurface *s, const float p[3], bool keep);
+ void WSurface_Update(WSurface *s, const float p[3], bool keep)
++{
++    update_(s, p, keep);
++    if (g_wsurf_hook) g_wsurf_hook(s, 0, 0);
++}
++static void update_(WSurface *s, const float p[3], bool keep)
  {
-     if (line && 4 + 8 * (size_t)n + 8 <= line_size) {
-@@ -152,7 +153,11 @@
-     return 0 <= j ? &r->junctions[j] : NULL;
+     WTreeElem *old = s->elem;
+     if (old && old->vt->contains(old, p) && keep) {
+@@ -1398,7 +1412,15 @@
+     return (float)plane_height(s.normal, v, p);
  }
  
--void AI_Plan(Car *c)
-+void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
-+static void ai_plan_(Car *c);
-+static void ai_plan__task(void *car) { ai_plan_(car); }
-+void AI_Plan(Car *c) { FD_Wrap(ai_plan__task, c, 0x40b670); }
-+static void ai_plan_(Car *c)
++void (*g_wedge_hook)(const float out[6], uint16_t flag, bool hit);   /* (forcesdump) */
++static bool edge_(WSurface *s, const float seg[6], float out[6], uint16_t *flag);
+ bool WSurface_FindEdge(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
++{
++    bool r = edge_(s, seg, out, flag);
++    if (g_wedge_hook) g_wedge_hook(out, *flag, r);
++    return r;
++}
++static bool edge_(WSurface *s, const float seg[6], float out[6], uint16_t *flag)
  {
-     const Road *r = g_road;
-     int node = car_node(c);
-@@ -270,7 +275,11 @@
-     }
- }
- 
--void AI_Steer(Car *c)
-+void FD_Wrap(void (*fn)(void *), void *car, uint32_t va);
-+static void ai_steer_(Car *c);
-+static void ai_steer__task(void *car) { ai_steer_(car); }
-+void AI_Steer(Car *c) { FD_Wrap(ai_steer__task, c, 0x40c000); }
-+static void ai_steer_(Car *c)
- {
-     const Road *r = g_road;
-     int8_t gear = (int8_t)c->b[0xd82];
+     load_consts();
+     WTree *t = world_tree();

@@ -131,13 +131,14 @@ struct.pack_into('<I', img, 0x760, specs_a)
 for i in range(20): struct.pack_into('<I', img, 0x768 + 4 * i, parts_a[i])
 for o in TRACK: img[o:o + 0x30] = tracker(img[o:o + 0x30])
 if aispecs: struct.pack_into('<I', img, 0x764, alloc(aispecs))
+struct.pack_into('<I', img, 0x74c, alloc(bytes(0x800)))   # the renderer: a blank stand-in (hit effects only)
 car = alloc(bytes(img))
 idx = struct.unpack_from('<i', pre, 0x520)[0]
 mu.mem_write(0x65808c + 0x580 * idx, desc)
 g = glob['glob']
 w32(0x606ac4, int(g['tick'])); w32(0x6573f8, int(g['rally'])); w32(0x657408, int(g['network']))
 w32(0x657a2c, int(g['damage'])); w32(0x657400, int(g['derby'])); w32(0x6573e8, int(g['mode']))
-for k, va in (('players', 0x657404), ('demo', 0x5e67b0), ('altgrip', 0x606ae0), ('started', 0x606ac0)):
+for k, va in (('players', 0x657404), ('demo', 0x5e67b0), ('altgrip', 0x606ae0), ('started', 0x606ac0), ('laps', 0x6573f0), ('rtype', 0x6573ec), ('linear', 0x657494)):
     if k in g: w32(va, int(g[k]))
 # the racers (the draft reads their positions), the car itself among them
 w32(0x5e8ae8, len(racers))
@@ -258,6 +259,10 @@ def hook(uc, addr, size, ud):
         # passed the box test
         if nobjects: log.append('objects unsupported')
         ret(uc, 8, 0)
+    elif addr == 0x43f3f0:
+        # a hit's sparks (thiscall on the renderer's effects; ret 8): drawing only
+        log.append('sparks')
+        ret(uc, 8)
     elif addr == 0x5a520c:
         # the runtime's per-thread data (errno for a maths function's domain error): a scratch block
         ret(uc, 0, TLS)
@@ -271,7 +276,7 @@ def hook(uc, addr, size, ud):
         i = struct.unpack('<i', uc.mem_read(sp + 4, 4))[0]
         ret(uc, 4, verts + 12 * (i % nv if i >= nv else i))   # (past the last wraps round, 0x485f80, 0x485a60)
 TLS = alloc(bytes(0x100))
-for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, 0x4743a0, 0x5a520c, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
+for a in (0x473fc0, 0x473290, 0x474030, 0x4737d0, 0x4743a0, 0x5a520c, 0x43f3f0, STUB_N, STUB_V): mu.hook_add(UC_HOOK_CODE, hook, begin=a, end=a)
 def bad(uc, access, addr, size, value, ud):
     print('bad access', hex(addr), 'at', hex(uc.reg_read(UC_X86_REG_EIP)))
     return False
@@ -293,7 +298,7 @@ if mu.reg_read(UC_X86_REG_EIP) != RET:
 emu = bytes(mu.mem_read(car, len(post)))
 want = bytearray(post)
 for o in TRACK: want[o:o + 0x30] = tracker(want[o:o + 0x30])
-skip = set(range(0x558, 0x55c)) | set(range(0x760, 0x768)) | set(range(0x768, 0x7b8))
+skip = set(range(0x558, 0x55c)) | set(range(0x74c, 0x750)) | set(range(0x760, 0x768)) | set(range(0x768, 0x7b8))
 for o in TRACK: skip |= set(range(o + 0x28, o + 0x30))
 def same(o, a, b):
     # +0x434, the car hit: the original's pointer, the port's index plus one (read only against 0)
