@@ -9,6 +9,8 @@
 //   Porsche.exe the original program (OpenNFSPU reads its tables at runtime: src/exe.c checks the size and
 //               CRC-32 fd2f5573)
 //   Drivers/dx7z.dll, SaveData/  the Direct3D 7 renderer and the default save folder, when present
+//   fe.txt      the settings the game reads at start (its renderer, display and options) before the
+//               player's own copy is saved in the browser
 // The game (opennfspu.wasm) reads them as assets named by their paths, case-insensitively. An image is an
 // .iso (ISO 9660 with Joliet names) or raw .bin of that folder, one file that reaches the game as the asset
 // "cd" (src/platform_gasm.c mounts it with vfs_mount_image); the game checks what is inside.
@@ -24,7 +26,7 @@ export const EXE = 'Porsche.exe';
 export const EXE_SIZE = 2129965;
 /** The folders the game reads, and single files next to them. */
 const FOLDERS = ['GAMEDATA', 'FEDATA', 'SAVEDATA'];
-const FILES = ['PORSCHE.EXE', 'DRIVERS/DX7Z.DLL'];
+const FILES = ['PORSCHE.EXE', 'DRIVERS/DX7Z.DLL', 'FE.TXT'];
 const REQUIRED = ['GAMEDATA', 'FEDATA'];
 /** Never needed: Visual SourceSafe leftovers in the shipped folders. */
 const SKIP = /(^|\/)vssver\.scc$/i;
