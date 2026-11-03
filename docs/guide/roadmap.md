@@ -22,8 +22,11 @@ the original does.
 
 - **The handling.** Replays recorded by the original drift from the port's physics after a few seconds. The
   goal is the same car state frame by frame, so that the original's recordings play back exactly.
-- **Two-player split screen.** The race code has a split-screen mode (the game setup's communication mode 1:
-  the second player's camera, the catch-up logic). Next is finding out whether the PC's front end can reach it.
+- **Two-player split screen.** The race code has a split-screen mode: communication mode 1, with a second
+  player's camera and the catch-up logic. The front end never offers it. The original reads it from `fe.txt`
+  (`comm_mode`, `numplayerracecars`, `car[1].class`, `catchup_logic`, all in the shipped file), and the port
+  doesn't read those race keys from `fe.txt` yet. Porting it means the race's `fe.txt` keys, then the two views,
+  cameras and HUDs, and the second player's controls.
 - **The network game's leftovers:** the observer's view and one race-progress message.
 - **The front end's save:** the track, colour and car choices aren't restored from the player's save yet, and
   the dealer's colour slots are missing.
