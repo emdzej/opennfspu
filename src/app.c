@@ -1,7 +1,7 @@
 /* Application states (see app.h). For now: the exe check and the render system brought up as the game
    does (Render_Init: the 3D Setup's driver "dx7z", mode 1 = 640x480 at 16 bits); the front end and the race come as they are
    ported (docs/re/port-plan.md, docs/guide/status.md). --param thrash_test=1 draws the driver's self-test
-   scene instead of a blank frame, thrash_test=2 EAGL's;
+   scene instead of a blank frame, thrash_test=2 EAGL's; 10 the TCP/IP provider's;
    car=<name> shows a car (CAR_selftest). */
 #include "app.h"
 #include "game/options.h"
@@ -38,6 +38,7 @@
 #include "real/llpacket.h"
 #include "real/conman.h"
 #include "real/netgathr.h"
+#include "real/tcp.h"
 #include "real/udp.h"
 #include "real/wsock.h"
 #include "render/render.h"
@@ -82,7 +83,7 @@ bool app_init(void)
         return false;
     }
     char v[8];
-    selftest = plat_param("thrash_test", v, sizeof v) ? v[0] - '0' : 0;
+    selftest = plat_param("thrash_test", v, sizeof v) ? atoi(v) : 0;
     if (!plat_param("car", car_name, sizeof car_name)) car_name[0] = 0;
     if (!plat_param("track", track_name, sizeof track_name)) track_name[0] = 0;
     if (!plat_param("drive", drive_name, sizeof drive_name)) drive_name[0] = 0;
@@ -285,13 +286,14 @@ bool app_frame(void)
         else if (car_name[0]) CAR_selftest(car_name);
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
-        else if (selftest >= 3 && selftest <= 9) {
+        else if (selftest >= 3 && selftest <= 10) {
             if (selftest == 3) WS_selftest();
             else if (selftest == 4) UDP_selftest();
             else if (selftest == 5) NETGATHR_selftest();
             else if (selftest == 6) PACKET_selftest();
             else if (selftest == 7) CONMAN_selftest();
             else if (selftest == 8) CONMAN_localtest();
+            else if (selftest == 10) TCP_selftest();
             else Net_Selftest();
             THRASH.fn.clearwindow();
             THRASH.fn.pageflip();

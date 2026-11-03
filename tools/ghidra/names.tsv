@@ -2671,3 +2671,27 @@
 0050cc30	FE_MakeRandomKnockout	frontend	high	Every slot's traffic, direction, laps and track at random
 004f9730	FEKnockoutTrackListControl_Draw	frontend	high	The slots raced shaded, the chosen highlit, the rows' and columns' lines
 004f9a10	FEKnockoutTrackListControl_Press	frontend	high	The slot at the press chosen (y x 7 / height)
+00428490	HLeader_ctor	hud	high	The network race leader's picture visual (vtable 0x5b2c34)
+00423e00	HGraphicVisual_Redraw	hud	high	The art's page redrawn from one image (a 64x64 window into its texture)
+00580d10	TCP_init	net	high	Stream protocol 0x5e1a10 init: take the accepted socket or connect (tcp.c)
+00581040	TCP_boundsocket	net	high	A stream socket bound to a port on any address
+005810b0	TCP_setoptions	net	high	Non-blocking, SO_REUSEADDR, TCP_NODELAY
+00581110	TCP_pollconnect	net	high	A non-blocking connect's state (2 done, 1 going, 3 refused)
+00581300	TCP_free	net	high	Stream protocol: no send pending
+00581320	TCP_close	net	high	Stream protocol close
+005813c0	TCPTR_open	net	high	Stream transport 0x5e1a28 open
+005814d0	TCPTR_close	net	high	Stream transport close
+005815c0	TCPTR_packets	net	high	Stream transport: a packet connection on the stream protocol
+00581630	TCP_startup	net	high	TCP/IP provider 0x5e1a78 startup
+005816b0	TCP_cleanup	net	high	TCP/IP provider cleanup
+00581800	TCP_sockthread	net	high	The provider socket's select/accept/read/write thread
+00581ab0	TCP_sweepone	net	high	A stream connection into the select's sets
+00581b60	TCP_readone	net	high	A whole [len 2][data] packet peeked, delivered, read
+00581c80	TCP_writeone	net	high	The rest of a packet sent
+00581d40	TCP_lose	net	high	A lost stream connection closed
+00581d90	TCP_closesock	net	high	The provider socket's thread stopped, listener closed
+00581e50	TCP_parse	net	high	An address from text
+00581f20	TCP_totext	net	high	An address as text
+00581f80	TCP_same	net	high	Two addresses' first 16 bytes equal
+00581fa0	TCP_localaddr	net	high	The listener's getsockname
+00581ff0	TCP_register	net	high	Registers the TCP/IP provider and stream transport

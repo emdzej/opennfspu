@@ -6,6 +6,7 @@
 #include "real/mem.h"
 #include "real/mempipe.h"
 #include "real/systask.h"
+#include "real/tcp.h"
 #include "real/udp.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,13 +70,6 @@ static void deadline(ConLink *l, int ms)
 static bool expired(const ConLink *l) { return l->deadline && l->deadline <= (int32_t)TIMER_count; }
 
 /* ---- the providers CONMAN asks for that the port doesn't have ---- */
-
-/* The TCP/IP stream provider (0x5e1a78, transport 0x5e1a28) added after UDP: its GUID, NULL. 0x581ff0 */
-static const uint8_t *tcp_register(const char *name)
-{
-    PENDING_NOTE(0x581ff0, "the TCP/IP stream provider");
-    return NULL;
-}
 
 /* A packet connection on a serial line (the modem's link 0x5df480, PACKET or UNRELY). 0x55e890 */
 static int serial_open(PacketConn *pc, int maxdata, uint32_t flags)
@@ -516,7 +510,7 @@ static void host_thread(void *arg)
             opened = true;
             cm->conn2open &= ~1u;
             const uint8_t *tcp;
-            if (udp_guid(cm->provider) && (tcp = tcp_register(exe_str(0x5bc6a8)))) {
+            if (udp_guid(cm->provider) && (tcp = TCP_register(exe_str(0x5bc6a8)))) {
                 cm->conn2.owner = cm;
                 if (NET_open(&cm->conn2, join_filter, cm->game, tcp, cm->port, "<<longname>>", "<<shortname>>"))
                     cm->conn2open |= 1;
@@ -935,7 +929,7 @@ static void guest_thread(void *arg)
                      cl->self.extra)) {
             cm->conn2open &= ~1u;
             const uint8_t *tcp;
-            if (udp_guid(cm->provider) && (tcp = tcp_register(exe_str(0x5bc6a8)))) {
+            if (udp_guid(cm->provider) && (tcp = TCP_register(exe_str(0x5bc6a8)))) {
                 cm->conn2.owner = cm;
                 if (NET_open(&cm->conn2, guest_filter, cm->game, tcp, cm->port, "<<longname>>", "<<shortname>>"))
                     cm->conn2open |= 1;

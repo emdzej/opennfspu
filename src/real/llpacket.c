@@ -121,8 +121,17 @@ int PACKET_send(PacketConn *pc, const void *data, uint32_t lenflags)
 /* The data to the connection's owner (0x586c20; no filters). */
 static int deliver(PacketConn *pc, const uint8_t *data, int len) { return pc->receive(pc, data, len); }
 int PACKET_deliver(PacketConn *pc, const uint8_t *data, int len) { return deliver(pc, data, len); }
-NetList *PACKET_active(void) { return &active; }
-NetList *PACKET_closedlist(void) { return &closed; }
+NetList *PACKET_active(void)
+{
+    if (!lists_ready) lists_init();
+    return &active;
+}
+
+NetList *PACKET_closedlist(void)
+{
+    if (!lists_ready) lists_init();
+    return &closed;
+}
 
 /* ---------------------------------------------------------------- the protocol 0x5e2e58 */
 

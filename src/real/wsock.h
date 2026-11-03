@@ -1,11 +1,15 @@
-/* The port's WinSock (WSOCK32.DLL, which the original's network library calls by ordinal): datagram
-   sockets on a gasm-relay room (platform.h plat_net_*), the room standing for the network segment.
+/* The port's WinSock (WSOCK32.DLL, which the original's network library calls by ordinal): datagram and
+   stream sockets on a gasm-relay room (platform.h plat_net_*), the room standing for the network segment.
 
    The relay (gasm's gasm-relay: ws://host:port/<room>) numbers its peers 0, 1, ... and forwards each
    peer's messages to the room's other peers. Here a peer is a host: relay index i is the address
    10.0.0.(i + 1), and the host's sockets are told apart by their ports. A datagram travels as one relay
    message, [destination address (4 bytes, 255.255.255.255 a broadcast)][destination port][source port]
-   (2 bytes each, network order) then the data; the others drop it unless it is theirs or a broadcast.
+   (2 bytes each, network order)[kind (1 byte)] then the data; the others drop it unless it is theirs or a
+   broadcast. Kind 0 is a datagram; the others carry streams (TCP's): a connect (1) answered by an accept
+   (2) or a refusal (5, also a reset), the data (3), the end (4). The relay is reliable and in order, so
+   a stream needs no more; a peer leaving the room resets its streams. Streams and datagrams have ports of
+   their own.
    The room and the relay come from the launch parameters relay=ws://host:port and room=<name> (default
    "nfs5"); without a relay there is no network, as on a machine whose TCP/IP isn't set up.
 
@@ -64,6 +68,13 @@ char *WS_inet_ntoa(const uint8_t addr[4]);      /* Ordinal 11 */
 uint16_t WS_htons(uint16_t v);                  /* Ordinal 9 (and 15 ntohs) */
 uint32_t WS_htonl(uint32_t v);                  /* Ordinal 8 */
 int WS_lasterror(void);                         /* Ordinal 111 WSAGetLastError */
+int WS_listen(int s, int backlog);              /* Ordinal 13 */
+int WS_accept(int s, WsAddr *a, int *len);      /* Ordinal 1 */
+int WS_connect(int s, const WsAddr *a, int len);   /* Ordinal 4 */
+int WS_send(int s, const void *buf, int len, int flags);   /* Ordinal 19 */
+int WS_recv(int s, void *buf, int len, int flags);         /* Ordinal 16 (flags 2: MSG_PEEK) */
+int WS_shutdown(int s, int how);                /* Ordinal 22 */
+int WS_getsockopt(int s, int level, int name, void *v, int *len);   /* Ordinal 7 (SO_ERROR) */
 
 /* The relay's messages read into the sockets' queues (each blocking call does it; the frame too). */
 void WS_pump(void);

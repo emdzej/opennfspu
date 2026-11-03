@@ -6,9 +6,14 @@
 #include <string.h>
 
 enum { RELAY_WELCOME = 1, RELAY_JOIN = 2, RELAY_LEAVE = 3, RELAY_FULL = 4, RELAY_DATA = 0x10 };
-enum { WSAEWOULDBLOCK = 10035, WSAENOTSOCK = 10038, WSAEADDRINUSE = 10048, WSAENETDOWN = 10050,
-       WSANOTINITIALISED = 10093, FIONBIO = 0x8004667e };
-enum { NSOCK = 32, QUEUE = 256, HEADER = 8, MAXMSG = 0x10000 };
+enum { WSAEWOULDBLOCK = 10035, WSAEALREADY = 10037, WSAENOTSOCK = 10038, WSAEINVAL = 10022,
+       WSAEADDRINUSE = 10048, WSAENETDOWN = 10050, WSAECONNRESET = 10054, WSAEISCONN = 10056,
+       WSAENOTCONN = 10057, WSAETIMEDOUT = 10060, WSAECONNREFUSED = 10061, WSANOTINITIALISED = 10093,
+       FIONBIO = 0x8004667e };
+enum { NSOCK = 32, QUEUE = 256, HEADER = 9, MAXMSG = 0x10000, BACKLOG = 5 };
+/* A message's kind (its header's last byte): a datagram, or a stream's handshake, data and end. */
+enum { K_DGRAM = 0, K_SYN = 1, K_SYNACK = 2, K_DATA = 3, K_FIN = 4, K_RST = 5 };
+#define CONNECT_MS 21000.0   /* (Windows' connect gives up after about 21 seconds without an answer) */
 
 typedef struct Datagram {
     WsAddr from;
@@ -22,6 +27,16 @@ typedef struct Sock {
     uint16_t port;          /* host order; 0 unbound */
     Datagram q[QUEUE];
     int head, count;
+    /* a stream: listening (the connections arrived and not yet accepted), or connecting or connected
+       to its peer; what has come and not been read; the peer's end; the pending error (SO_ERROR) */
+    bool listening, connecting, connected, fin, failed;
+    int pend[BACKLOG], npend;
+    uint8_t peer[4];
+    uint16_t peerport;
+    double until;           /* the connect's give-up time */
+    uint8_t *rbuf;
+    int rlen, rcap;
+    int error;
 } Sock;
 
 static int started;            /* WSAStartup's count */
@@ -72,9 +87,119 @@ static void deliver(const uint8_t from[4], uint16_t from_port, uint16_t to_port,
     }
 }
 
+static bool emit(const uint8_t to[4], uint16_t to_port, uint16_t from_port, uint8_t kind, const void *d, int n);
+
+static Sock *stream_of(const uint8_t from[4], uint16_t from_port, uint16_t to_port)
+{
+    for (int i = 0; i < NSOCK; i++) {
+        Sock *k = &socks[i];
+        if (k->used && k->type == WS_SOCK_STREAM && !k->listening && k->port == to_port && (k->connecting || k->connected) &&
+            k->peerport == from_port && !memcmp(k->peer, from, 4))
+            return k;
+    }
+    return NULL;
+}
+
+static void reset(Sock *k, int error)
+{
+    if (k->connecting) k->failed = true;
+    k->connecting = k->connected = false;
+    k->fin = true;
+    k->error = error;
+}
+
+/* A stream's message: a connection asked for on a listening port is made at once (as the system's TCP
+   completes the handshake before accept) and waits for accept; refused (RST) with no listener or a full
+   backlog. */
+static void deliver_stream(const uint8_t from[4], uint16_t from_port, uint16_t to_port, uint8_t kind, const uint8_t *d, int n)
+{
+    if (kind == K_SYN) {
+        Sock *l = NULL;
+        for (int i = 0; i < NSOCK && !l; i++)
+            if (socks[i].used && socks[i].type == WS_SOCK_STREAM && socks[i].listening && socks[i].port == to_port) l = &socks[i];
+        if (!l || l->npend == BACKLOG || stream_of(from, from_port, to_port)) {
+            if (!l || l->npend == BACKLOG) emit(from, from_port, to_port, K_RST, NULL, 0);
+            return;
+        }
+        int s = WS_socket(WS_AF_INET, WS_SOCK_STREAM, 0);
+        Sock *k = s > 0 ? &socks[s - 1] : NULL;
+        if (!k) {
+            emit(from, from_port, to_port, K_RST, NULL, 0);
+            return;
+        }
+        k->port = to_port;
+        k->connected = true;
+        memcpy(k->peer, from, 4);
+        k->peerport = from_port;
+        l->pend[l->npend++] = s;
+        emit(from, from_port, to_port, K_SYNACK, NULL, 0);
+        return;
+    }
+    Sock *k = stream_of(from, from_port, to_port);
+    if (!k) {
+        if (kind == K_DATA) emit(from, from_port, to_port, K_RST, NULL, 0);
+        return;
+    }
+    switch (kind) {
+    case K_SYNACK:
+        if (k->connecting) k->connecting = false, k->connected = true;
+        break;
+    case K_RST:
+        reset(k, k->connecting ? WSAECONNREFUSED : WSAECONNRESET);
+        break;
+    case K_FIN:
+        k->fin = true;
+        break;
+    case K_DATA:
+        if (n <= 0 || k->fin) break;
+        if (k->rcap < k->rlen + n) {
+            int cap = k->rcap ? k->rcap : 0x1000;
+            while (cap < k->rlen + n) cap *= 2;
+            uint8_t *b = realloc(k->rbuf, (size_t)cap);
+            if (!b) break;
+            k->rbuf = b, k->rcap = cap;
+        }
+        memcpy(k->rbuf + k->rlen, d, (size_t)n);
+        k->rlen += n;
+        break;
+    }
+}
+
+/* --param netdrop=1 (a test): the other hosts' datagrams to us are lost, broadcasts aside, as behind a
+   firewall that lets no UDP in (a join over UDP then fails, and CONMAN tries TCP/IP). */
+static bool drop_unicast(void)
+{
+    static int drop = -1;
+    if (drop < 0) {
+        char v[8];
+        drop = plat_param("netdrop", v, sizeof v) && v[0] == '1';
+    }
+    return drop;
+}
+
+/* A peer gone from the room: its streams reset. */
+static void peer_left(int index)
+{
+    uint8_t a[4] = {10, 0, 0, (uint8_t)(index + 1)};
+    for (int i = 0; i < NSOCK; i++) {
+        Sock *k = &socks[i];
+        if (k->used && k->type == WS_SOCK_STREAM && (k->connecting || k->connected) && !memcmp(k->peer, a, 4))
+            reset(k, WSAECONNRESET);
+    }
+}
+
+/* Connects that had no answer in time give up. */
+static void timeouts(void)
+{
+    double now = plat_time_ms();
+    for (int i = 0; i < NSOCK; i++)
+        if (socks[i].used && socks[i].connecting && socks[i].until <= now) reset(&socks[i], WSAETIMEDOUT);
+}
+
 void WS_pump(void)
 {
     if (conn <= 0) return;
+    timeouts();
     for (;;) {
         int32_t n = plat_net_recv(conn, rx, sizeof rx);
         if (n <= 0) {
@@ -98,12 +223,19 @@ void WS_pump(void)
                 const uint8_t *p = rx + 2;
                 uint8_t mine[4], from[4] = {10, 0, 0, (uint8_t)(rx[1] + 1)};
                 own_addr(mine);
-                if (is_broadcast(p) || !memcmp(p, mine, 4))
-                    deliver(from, (uint16_t)(p[6] << 8 | p[7]), (uint16_t)(p[4] << 8 | p[5]), p + HEADER,
-                            (int)n - 2 - HEADER);
+                uint16_t fp = (uint16_t)(p[6] << 8 | p[7]), tp = (uint16_t)(p[4] << 8 | p[5]);
+                if (p[8] == K_DGRAM) {
+                    if (is_broadcast(p) || (!memcmp(p, mine, 4) && !drop_unicast()))
+                        deliver(from, fp, tp, p + HEADER, (int)n - 2 - HEADER);
+                } else if (!memcmp(p, mine, 4)) {
+                    deliver_stream(from, fp, tp, p[8], p + HEADER, (int)n - 2 - HEADER);
+                }
             }
             break;
-        default:   /* JOIN, LEAVE: datagrams know no peers */
+        case RELAY_LEAVE:
+            if (n >= 2) peer_left(rx[1]);
+            break;
+        default:   /* JOIN */
             break;
         }
     }
@@ -158,8 +290,7 @@ int WS_cleanup(void)
     return 0;
 }
 
-/* Sockets of the Internet family only: there is no IPX here. A stream socket can be made and closed (the
-   UDP provider's probe 0x583780 makes one) but not connected. */
+/* Sockets of the Internet family only: there is no IPX here. */
 int WS_socket(int af, int type, int protocol)
 {
     if (af != WS_AF_INET || (type != WS_SOCK_DGRAM && type != WS_SOCK_STREAM)) return fail(10047 /* WSAEAFNOSUPPORT */);
@@ -173,19 +304,31 @@ int WS_socket(int af, int type, int protocol)
     return fail(10024 /* WSAEMFILE */);   /* (WS_INVALID_SOCKET) */
 }
 
+/* (A connected stream tells its peer it has ended; the connections a listener hadn't accepted are
+   refused.) */
 int WS_closesocket(int s)
 {
     Sock *k = sock(s);
     if (!k) return fail(WSAENOTSOCK);
     for (int i = 0; i < k->count; i++) free(k->q[(k->head + i) % QUEUE].data);
+    if (k->type == WS_SOCK_STREAM) {
+        if (k->connected || k->connecting) emit(k->peer, k->peerport, k->port, K_FIN, NULL, 0);
+        for (int i = 0; i < k->npend; i++) {
+            Sock *a = sock(k->pend[i]);
+            if (a) emit(a->peer, a->peerport, a->port, K_RST, NULL, 0);
+            if (a) free(a->rbuf), memset(a, 0, sizeof *a);
+        }
+        free(k->rbuf);
+    }
     memset(k, 0, sizeof *k);
     return 0;
 }
 
-static bool port_taken(uint16_t p)
+/* (Streams and datagrams have ports of their own, as TCP's and UDP's.) */
+static bool port_taken(uint16_t p, int type)
 {
     for (int i = 0; i < NSOCK; i++)
-        if (socks[i].used && socks[i].port == p) return true;
+        if (socks[i].used && socks[i].type == type && socks[i].port == p) return true;
     return false;
 }
 
@@ -194,8 +337,8 @@ int WS_bind(int s, const WsAddr *a, int len)
     Sock *k = sock(s);
     if (!k) return fail(WSAENOTSOCK);
     uint16_t p = a ? WS_htons(a->port) : 0;
-    if (p && port_taken(p)) return fail(WSAEADDRINUSE);
-    while (!p || port_taken(p)) {   /* (an ephemeral port: 49152 and up) */
+    if (p && port_taken(p, k->type)) return fail(WSAEADDRINUSE);
+    while (!p || port_taken(p, k->type)) {   /* (an ephemeral port: 49152 and up) */
         p = next_port++;
         if (!next_port) next_port = 49152;
     }
@@ -224,25 +367,166 @@ int WS_ioctlsocket(int s, uint32_t cmd, uint32_t *arg)
     return 0;
 }
 
+/* A message to (to, to_port) from our from_port: through the relay, and to our own sockets when it is
+   ours (or 127.*) or a datagram broadcast. */
+static bool emit(const uint8_t to[4], uint16_t to_port, uint16_t from_port, uint8_t kind, const void *d, int n)
+{
+    if (conn <= 0 || me < 0) return false;
+    static uint8_t tx[2 + HEADER + MAXMSG];
+    tx[0] = RELAY_DATA;
+    memcpy(tx + 1, to, 4);
+    tx[5] = (uint8_t)(to_port >> 8), tx[6] = (uint8_t)to_port;
+    tx[7] = (uint8_t)(from_port >> 8), tx[8] = (uint8_t)from_port;
+    tx[9] = kind;
+    if (n > 0) memcpy(tx + 1 + HEADER, d, (size_t)n);
+    uint8_t mine[4];
+    own_addr(mine);
+    bool local = !memcmp(to, mine, 4) || to[0] == 127;
+    if (!local && !plat_net_send(conn, tx, (uint32_t)(1 + HEADER + n))) return false;
+    if (kind == K_DGRAM) {
+        if (local || is_broadcast(to)) deliver(mine, from_port, to_port, d, n);
+    } else if (local) {
+        deliver_stream(mine, from_port, to_port, kind, d, n);
+    }
+    return true;
+}
+
 int WS_sendto(int s, const void *buf, int len, int flags, const WsAddr *to, int tolen)
 {
     Sock *k = sock(s);
     if (!k) return fail(WSAENOTSOCK);
+    if (k->type == WS_SOCK_STREAM) return WS_send(s, buf, len, flags);
     if (!k->port) WS_bind(s, NULL, 0);
     if (conn <= 0 || me < 0) return fail(WSAENETDOWN);
-    static uint8_t tx[2 + HEADER + MAXMSG];
     if (len < 0 || len > MAXMSG) return fail(10040 /* WSAEMSGSIZE */);
-    tx[0] = RELAY_DATA;
-    memcpy(tx + 1, to->addr, 4);
-    memcpy(tx + 5, &to->port, 2);
-    tx[7] = (uint8_t)(k->port >> 8), tx[8] = (uint8_t)k->port;
-    memcpy(tx + 1 + HEADER, buf, (size_t)len);
-    uint8_t mine[4];
-    own_addr(mine);
-    bool local = !memcmp(to->addr, mine, 4) || (to->addr[0] == 127);
-    if (!local && !plat_net_send(conn, tx, (uint32_t)(1 + HEADER + len))) return fail(WSAENETDOWN);
-    if (local || is_broadcast(to->addr)) deliver(mine, k->port, WS_htons(to->port), buf, len);
+    if (!emit(to->addr, WS_htons(to->port), k->port, K_DGRAM, buf, len)) return fail(WSAENETDOWN);
     return len;
+}
+
+/* ---- streams ---- */
+
+int WS_listen(int s, int backlog)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    if (k->type != WS_SOCK_STREAM || !k->port || k->connected || k->connecting) return fail(WSAEINVAL);
+    k->listening = true;
+    return 0;
+}
+
+int WS_accept(int s, WsAddr *a, int *len)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    if (!k->listening) return fail(WSAEINVAL);
+    WS_pump();
+    while (!k->npend) {
+        if (k->nonblocking) return fail(WSAEWOULDBLOCK);
+        plat_thread_sleep_ms(1);
+        WS_pump();
+        if (!k->used || !k->listening) return fail(WSAENOTSOCK);
+    }
+    int n = k->pend[0];
+    memmove(k->pend, k->pend + 1, sizeof k->pend[0] * (size_t)--k->npend);
+    Sock *c = sock(n);
+    if (!c) return fail(WSAECONNRESET);
+    if (a) {
+        memset(a, 0, sizeof *a);
+        a->family = WS_AF_INET;
+        a->port = WS_htons(c->peerport);
+        memcpy(a->addr, c->peer, 4);
+    }
+    if (len) *len = (int)sizeof *a;
+    return n;
+}
+
+int WS_connect(int s, const WsAddr *a, int len)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    if (k->type != WS_SOCK_STREAM || k->listening) return fail(WSAEINVAL);
+    if (k->connected) return fail(WSAEISCONN);
+    if (k->connecting) return fail(WSAEALREADY);
+    if (!k->port) WS_bind(s, NULL, 0);
+    if (conn <= 0 || me < 0) return fail(WSAENETDOWN);
+    memcpy(k->peer, a->addr, 4);
+    k->peerport = WS_htons(a->port);
+    k->connecting = true;
+    k->fin = k->failed = false;
+    k->error = 0;
+    k->until = plat_time_ms() + CONNECT_MS;
+    emit(k->peer, k->peerport, k->port, K_SYN, NULL, 0);
+    if (k->nonblocking) return fail(WSAEWOULDBLOCK);
+    while (k->connecting) {
+        plat_thread_sleep_ms(1);
+        WS_pump();
+    }
+    if (!k->connected) {
+        int e = k->error;
+        k->error = 0;
+        return fail(e ? e : (int)WSAECONNREFUSED);
+    }
+    return 0;
+}
+
+int WS_send(int s, const void *buf, int len, int flags)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    if (!k->connected) return fail(k->error ? k->error : (int)WSAENOTCONN);
+    for (int done = 0; done < len;) {
+        int n = len - done < MAXMSG ? len - done : MAXMSG;
+        if (!emit(k->peer, k->peerport, k->port, K_DATA, (const uint8_t *)buf + done, n)) return fail(WSAENETDOWN);
+        done += n;
+    }
+    return len;
+}
+
+int WS_recv(int s, void *buf, int len, int flags)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    if (k->type != WS_SOCK_STREAM) return WS_recvfrom(s, buf, len, flags, NULL, NULL);
+    WS_pump();
+    while (!k->rlen) {
+        if (k->fin) {
+            if (k->error == WSAECONNRESET) return fail(WSAECONNRESET);
+            return 0;
+        }
+        if (!k->connected) return fail(WSAENOTCONN);
+        if (k->nonblocking) return fail(WSAEWOULDBLOCK);
+        plat_thread_sleep_ms(1);
+        WS_pump();
+        if (!k->used) return fail(WSAENOTSOCK);
+    }
+    int n = k->rlen < len ? k->rlen : len;
+    if (n > 0) memcpy(buf, k->rbuf, (size_t)n);
+    if (!(flags & 2)) {   /* (MSG_PEEK leaves it) */
+        memmove(k->rbuf, k->rbuf + n, (size_t)(k->rlen - n));
+        k->rlen -= n;
+    }
+    return n;
+}
+
+int WS_shutdown(int s, int how)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    if (k->type == WS_SOCK_STREAM && k->connected && how >= 1) emit(k->peer, k->peerport, k->port, K_FIN, NULL, 0);
+    return 0;
+}
+
+int WS_getsockopt(int s, int level, int name, void *v, int *len)
+{
+    Sock *k = sock(s);
+    if (!k) return fail(WSAENOTSOCK);
+    int32_t r = 0;
+    if (level == 0xffff && name == 0x1007) {   /* SOL_SOCKET, SO_ERROR (read, cleared) */
+        r = k->error;
+        k->error = 0;
+    }
+    if (v && len && *len >= 4) memcpy(v, &r, 4), *len = 4;
+    return 0;
 }
 
 int WS_recvfrom(int s, void *buf, int len, int flags, WsAddr *from, int *fromlen)
@@ -267,38 +551,49 @@ int WS_recvfrom(int s, void *buf, int len, int flags, WsAddr *from, int *fromlen
     return n;   /* (a longer one is cut, WSAEMSGSIZE in Windows; the game reads short ones) */
 }
 
-static bool readable(const WsFdSet *r)
+/* Readable: datagrams queued, connections to accept, a stream's data or its end; writable: a datagram
+   socket, a connected stream (the relay takes all we send); exceptional: a connect that failed. */
+static bool is_readable(Sock *k)
 {
-    for (uint32_t i = 0; r && i < r->count; i++) {
-        Sock *k = sock(r->fd[i]);
-        if (k && k->count) return true;
+    if (k->type == WS_SOCK_DGRAM) return k->count != 0;
+    if (k->listening) return k->npend != 0;
+    return k->rlen != 0 || (k->fin && !k->failed);
+}
+static bool is_writable(Sock *k) { return k->type == WS_SOCK_DGRAM || k->connected; }
+static bool is_failed(Sock *k) { return k->type == WS_SOCK_STREAM && k->failed; }
+
+static int ready(WsFdSet *set, bool (*test)(Sock *), bool keep_only)
+{
+    if (!set) return 0;
+    uint32_t keep = 0;
+    for (uint32_t i = 0; i < set->count; i++) {
+        Sock *k = sock(set->fd[i]);
+        if (k && test(k)) {
+            if (keep_only) set->fd[keep] = set->fd[i];
+            keep++;
+        }
     }
-    return false;
+    if (keep_only) set->count = keep;
+    return (int)keep;
 }
 
-/* Only readability is waited for (the library's sockets are always writable here). */
+static int any_ready(WsFdSet *r, WsFdSet *w, WsFdSet *e)
+{
+    return ready(r, is_readable, false) + ready(w, is_writable, false) + ready(e, is_failed, false);
+}
+
+/* (All three sets empty is an error in WinSock, at once.) */
 int WS_select(int n, WsFdSet *r, WsFdSet *w, WsFdSet *e, const WsTimeval *t)
 {
+    if ((!r || !r->count) && (!w || !w->count) && (!e || !e->count)) return fail(WSAEINVAL);
     double until = t ? plat_time_ms() + t->sec * 1000.0 + t->usec / 1000.0 : -1;
     WS_pump();
-    while (!readable(r)) {
+    while (!any_ready(r, w, e)) {
         if (t && plat_time_ms() >= until) break;
         plat_thread_sleep_ms(1);
         WS_pump();
     }
-    int got = 0;
-    if (r) {
-        uint32_t keep = 0;
-        for (uint32_t i = 0; i < r->count; i++) {
-            Sock *k = sock(r->fd[i]);
-            if (k && k->count) r->fd[keep++] = r->fd[i];
-        }
-        r->count = keep;
-        got += (int)keep;
-    }
-    if (w) got += (int)w->count;
-    if (e) e->count = 0;
-    return got;
+    return ready(r, is_readable, true) + ready(w, is_writable, true) + ready(e, is_failed, true);
 }
 
 int WS_fdisset(int s, const WsFdSet *set)

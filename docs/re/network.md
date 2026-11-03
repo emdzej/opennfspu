@@ -13,7 +13,7 @@ The multiplayer code in Porsche.exe, as mapped for the port, and how it lands on
      0x5605f0: an AF_IPX (6) datagram socket, port bound, closed);
    - UDP 0x5df6b0 ("UDP" 0x5d07c0; registered by 0x560580 if 0x583780 finds a host address that is not
      127.* or 0.*);
-   - TCP/IP 0x5e1a78 ("TCP_IP"; registered by 0x581ff0, the stream transport).
+   - TCP/IP 0x5e1a78 ("TCP/IP" 0x5c10b0; registered by 0x581ff0, the stream transport).
    The providers' slots: +0x14 the startup (0x5873b0: WSAStartup, returns the max datagram), +0x18 the
    cleanup, +0x1c open a socket (IPX 0x5605f0, UDP 0x560300), +0x20 close (0x587610), +0x24..+0x34 the
    local address and its name, +0x38 parse an address from text (UDP 0x560410: dotted or a host name,
@@ -88,8 +88,19 @@ address as a type 0x77 packet and reads the other's), `=5` the gathering (one in
   [0xff][password][name][text] and its answer [0xfe][1 in / 2 the wrong password], the events to the game
   (codes 0..0xd in conman.h). The transport's calls 0x580170..0x5802d0 are NET_find .. NET_setmessage.
   0x5e8e50 (the gathering's password, the finds' user) is in the zeroed data: an empty text. Pending: the
-  TCP/IP stream provider CONMAN adds next to UDP (0x581ff0, transport 0x5e1a28) and the modems' serial
-  lines (0x55e890).
+  modems' serial lines (0x55e890).
+- The TCP/IP stream provider (src/real/tcp.c, `\real\patch3\pc\tcp.c`): the provider 0x5e1a78
+  (0x581630..0x581fd0: a listening stream socket on the connection's port with a thread 0x581800 that
+  selects on it and on every stream packet connection, accepts one connection at a time for four seconds,
+  asks the join filter, reads [len 2][data] packets by peeking, finishes sends), the transport 0x5e1a28
+  (0x5813b0..0x581620: only open, close and the packet connections) and the protocol 0x5e1a10 (0x580d10
+  init: no address takes the accepted socket, an address connects non-blocking and polls 0x581110;
+  CONN_send 0x581210; close 0x581320). CONMAN opens it as its second connection next to UDP; a guest
+  whose UDP join gets no answer connects over it, and the host's join filter lets it in. The accepted
+  address has its family cleared (0x581966), so 0x580d10's reuse of an accepted socket for an address
+  never matches. WinSock's streams are emulated over the relay in src/real/wsock.c. Self-test
+  `--param thrash_test=10`; `--param netdrop=1` drops a guest's incoming UDP unicasts to force the
+  fallback in a real game.
 - The memory link (src/real/mempipe.c, protocol 0x5e1af8, 0x5825a0..0x583400): how the host's own player
   joins its game in the same process (Net_HostGame's 0x48b540: CONMAN_call on the host and CONMAN_dial on
   its own guest with the GUID text 0x5d06bc, 0x1000 bytes). Two named pipes (a ring in a file mapping, a
