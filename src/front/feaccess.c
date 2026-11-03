@@ -284,8 +284,19 @@ FEAccessor *FEAccess_DeadZoneAccessor(int axis, bool max) { return 0 <= axis && 
 /* The kinds kept as FEPositionableAccessor keeps them (v7 0x4bc040 its place, v8 0x4bc060 the place
    read then set, slot 11): FEIntAccessor's, FEListAccessor's, FEBoolAccessor's (vtables 0x5b502c,
    0x5b518c, 0x5b4c64; the tournament's event type's 0x5b8960, the knockout's track number's 0x5b50a4
-   the same). The port's other kinds keep their state elsewhere (the save's own sections, options). */
-static bool saved_pos(const FEAccessor *a) { return a->kind == ACC_INT || a->kind == ACC_LIST || a->kind == ACC_BOOL; }
+   the same), the track accessors' (FETrackAccessor 0x5b7e80: Track<n>.Track, LoopedTrack.Track,
+   Tournament.RemainingTracks), the merged car list's (0x5b773c) and the dealer's car's (0x5b767c). The
+   port's other kinds keep their state elsewhere (the save's own sections, the car records, options;
+   the opponents' cars, FEOpponentCarAccessor v7/v8 0x4f4ce0/0x4f4d10, aren't read back). */
+static bool saved_pos(const FEAccessor *a)
+{
+    switch (a->kind) {
+    case ACC_INT: case ACC_LIST: case ACC_BOOL: case ACC_TRACK: case ACC_RTRACK: case ACC_MERGED: case ACC_DEALER:
+        return true;
+    default:
+        return false;
+    }
+}
 
 /* The save's accessor section into the accessors (0x4b7dc0, at each save's read; the names in the
    section's order, each callback run by its set). */
