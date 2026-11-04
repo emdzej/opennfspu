@@ -6,8 +6,9 @@ players' list. gasm has no raw network access, so the players' games meet in a r
 (`gasm-relay`, part of gasm). The room stands in for the network: every game in it gets an address, and the
 LAN game sees only the games in its room.
 
-What isn't there: the Internet game (EA's servers are gone; see [Roadmap](/guide/roadmap#online-and-devices)),
-the modem and serial cable games (out of scope), voice chat, and the observer's view.
+The Internet game works too. EA's servers are gone, so a game in the room started as a lobby server
+stands in for them (see [The Internet game](#the-internet-game)). What isn't there: EA's account
+registration, the modem and serial cable games (out of scope), voice chat, and the observer's view.
 
 ## The relay
 
@@ -72,6 +73,37 @@ The two race modes are the original's:
   controls. All players need the same `opennfspu.wasm`.
 
 A game that joins over UDP and gets no answer tries again over TCP, as the original does.
+
+## The Internet game
+
+The original's Internet game signed on to EA's entry server, `porsche-entry.earacing.com`, which listed
+EA's game servers. Players entered one of them, where they met in a lobby with a chat, and created and
+joined games there. OpenNFSPU runs that server side in the game itself: one game in the room, started
+with `--param netserver=1`, is the room's lobby server. It doesn't play. It stays on a black screen and
+answers the others, and the Internet game's entry name means that game.
+
+Start the lobby server first, so that it is the room's first game (peer 0), for example headless on the
+relay's machine:
+
+```sh
+gasm-run opennfspu.wasm --asset-dir <game folder> --headless 100000000 --realtime --allow-net \
+  --param relay=ws://<relay host>:9123 --param room=<name> --param netserver=1
+```
+
+Then the players join the same room and choose **Multiplayer**, **Internet**:
+
+1. **Sign on.** The account and password can be anything. EA's accounts are gone, and the lobby server
+   doesn't check them. The register button did open EA's page, which is gone too.
+2. **Server selection.** The lobby server is listed by its address in the room, with its ping. Choose it
+   and **enter**.
+3. **Internet games.** The players in the lobby are listed, and the chat goes to all of them. **Create**
+   makes a game that the others see in their list and **join**. The race is set up and started as in the
+   other modes.
+
+If the lobby server isn't the room's first game, give the players `--param entry=<its index>`: the
+index is its address's last number less one (`10.0.0.3` is 2). A lobby server is a port addition. The
+original's game code has it (the game's own server with no player of its own, the way EA's servers ran
+it), but no way to start one.
 
 ## In the race
 

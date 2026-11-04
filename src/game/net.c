@@ -1,6 +1,7 @@
 /* The game's network session: the session object, its guest and what the race asks of it (see net.h).
    GetTickCount is the real library's timer here (it runs on while the main thread waits). */
 #include "game/net.h"
+#include "render/render.h"
 #include "exe.h"
 #include "game/camera.h"
 #include "game/car.h"
@@ -450,9 +451,12 @@ void Net_Clear(void)
 
 static void read_version(NetSession *s)   /* Net_ReadVersion 0x48db10 */
 {
-    /* (the registry's values 8 and 7 first, 0x4b7030: the port's registry has none of them) */
-    snprintf(s->version2, sizeof s->version2, "%s", exe_str(0x5d07a0));
-    snprintf(s->version, sizeof s->version, "%s", exe_str(0x5d07a0));
+    /* the registry's Server Version and Client Version (0x4b7030: "0.0" by default), 4 characters each */
+    char v[256];
+    RRegistry_GetString(8, v, sizeof v);
+    snprintf(s->version2, sizeof s->version2, "%.4s", v);
+    RRegistry_GetString(7, v, sizeof v);
+    snprintf(s->version, sizeof s->version, "%.4s", v);
     /* version.txt (0x5d0790, 0x59ddf0), its first 5 bytes, when it has any */
     size_t n = 0;
     uint8_t *t = vfs_read_all(exe_str(0x5d0790), &n);
@@ -1469,6 +1473,40 @@ static int client_event(ConMan *cm, const NetPlayerInfo *who, const ConEvent *e)
     return r;
 }
 
+/* ================================================================ the lobby server */
+
+void Net_LobbyServer(void)
+{
+    static bool started;
+    static int32_t shown = -1;
+    static int waited;
+    if (!started) {
+        if (++waited == 600) plat_log("net: the lobby server waits for a relay room (--param relay=, room=)");
+        if (!g_net || !g_net->udp) return;   /* (the session first, Net_Construct; UDP up once in a room) */
+        started = true;
+        NetGameInfo info;
+        memset(&info, 0, sizeof info);
+        snprintf(info.name, sizeof info.name, "%s", exe_str(0x5d06b4));   /* "NfsNet" */
+        info.maxplayers = 0x20;   /* (the gathering's own default for none, 0x587df0; the room caps it too) */
+        /* listed under its address, which the players ping and enter by (EA's servers' names were theirs) */
+        char at[32];
+        if (NET_hostaddress(at)) NetServer_ListAs(at);
+        NetServer_New((uintptr_t)g_net->udp, &info, NULL, NULL, LOBBY_PORT, -1);
+        char m[160];
+        snprintf(m, sizeof m, "net: lobby server %s on %s port %d (%s)", g_net_server ? "up" : "failed",
+                 g_net_server ? g_net_server->address : "-", g_net_server ? g_net_server->port : 0,
+                 g_net_server && g_net_server->host->atlobby ? "the entry" : "not the entry: --param entry");
+        plat_log(m);
+    }
+    NetSrv *s = g_net_server;
+    if (s && s->nplayers * 0x10000 + s->nrooms != shown) {
+        shown = s->nplayers * 0x10000 + s->nrooms;
+        char m[96];
+        snprintf(m, sizeof m, "net: lobby server: %d players, %d games", s->nplayers, s->nrooms);
+        plat_log(m);
+    }
+}
+
 /* ================================================================ the self-test */
 
 /* --param thrash_test=9: with --param nethost=1 this instance hosts a game (its server and its own
@@ -1493,6 +1531,13 @@ static bool st_wait(bool (*cond)(void), int ms)
 }
 
 static bool st_ingame(void) { return Net_InGame(); }
+static bool st_signed(void) { return g_net->state == 4 || g_net->state == 5; }
+static bool st_listed(void) { return !NetLst_empty(&g_net->found); }
+static bool st_servers(void)
+{
+    NETLST_EACH(&g_net->ports, f) if (0 <= Net_GamePing(f->p)) return true;
+    return false;
+}
 static bool st_two(void) { return Net_InGame() && g_net->nplayers >= 2; }
 static bool st_racing(void) { return Net_InGame() && !g_net->raceover && (g_net->racing & 3) == 3; }
 static bool st_none(void) { return false; }
@@ -1510,7 +1555,39 @@ static void st_thread(void *arg)
     }
     g_net->mode = 1;
     g_net->chat = st_chat;
-    if (hosting) Net_HostGame(NULL, 0);
+    bool internet = plat_param("internet", v, sizeof v) && v[0] == '1';
+    if (internet) {
+        /* --param internet=1: the Internet game's sign on at the room's lobby server (netserver=1); the host
+           makes its game there (its info to the server: a room), the other finds it in the list and joins */
+        g_net->name[0] = 99;   /* ('c', then the account: FEComms' SIGNON) */
+        snprintf(g_net->name + 1, sizeof g_net->name - 1, hosting ? "host" : "guest");
+        snprintf(g_net->nick, sizeof g_net->nick, hosting ? "Hosty" : "Guesty");
+        char addr[64];
+        RRegistry_GetString(6, addr, sizeof addr);
+        Net_JoinGame(1, 0, addr);
+        bool in = st_wait(st_signed, 15000);
+        snprintf(m, sizeof m, "net: internet at '%s': signed on %d, state %d", addr, in, g_net->state);
+        plat_log(m);
+        if (!in) return;
+        st_wait(st_servers, 10000);   /* (the server list: the lobby's servers that answer a ping) */
+        NETLST_EACH(&g_net->ports, f) {
+            NetGameRec *g = f->p;
+            snprintf(m, sizeof m, "net: server %d '%s' ping %d", g->id, g->name, Net_GamePing(g));
+            plat_log(m);
+        }
+        if (hosting) {
+            Net_HostGame(NULL, 0);
+        } else {
+            bool listed = st_wait(st_listed, 15000);
+            NETLST_EACH(&g_net->found, f) {
+                NetGameRec *g = f->p;
+                snprintf(m, sizeof m, "net: listed %d '%s' players %d", g->id, g->name, g->players);
+                plat_log(m);
+            }
+            if (!listed) return;
+            Net_JoinGame(1, ((NetGameRec *)NetLst_front(&g_net->found))->id, NULL);
+        }
+    } else if (hosting) Net_HostGame(NULL, 0);
     else Net_JoinGame(1, 0, "10.0.0.1");
     bool in = st_wait(st_ingame, 15000);
     snprintf(m, sizeof m, "net: %s, in %d, me %d, state %d, name '%s'", hosting ? "hosting" : "joined", in, g_net->me,

@@ -176,9 +176,15 @@ static NetHost *host_new(uintptr_t provider, ConEventFn event, ConEventFn lobbye
     return h;
 }
 
+/* (port, Net_LobbyServer) The name a dedicated server is listed under at the lobby: its player name there
+   (the extra text's first part, which the players' server list shows, pings and joins by), empty as the
+   original's (whose servers were EA's own program). */
+static char s_listas[0x20];
+void NetServer_ListAs(const char *address) { snprintf(s_listas, sizeof s_listas, "%s", address); }
+
 static void host_lobby(NetHost *h)   /* 0x48b2f0, 0x48b380 */
 {
-    h->lobby = NetClient_New(h->provider, h->lobbyevent, (intptr_t)h->server, h->text, "", "", "", 0);
+    h->lobby = NetClient_New(h->provider, h->lobbyevent, (intptr_t)h->server, h->text, s_listas, "", "", 0);
     NetClient_JoinText(h->lobby, h->lobbyaddr, LOBBY_PORT);
     h->lobbysend = calloc(1, sizeof *h->lobbysend);
     h->lobbysend->wrap = &h->lobby->base;

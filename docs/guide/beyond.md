@@ -39,8 +39,9 @@ See [Running on gasm](/guide/gasm#graphics).
 
 The original's network races (peer to peer over IP, and LAN) meet in a room on a relay server here,
 `gasm-relay`, so they work across the Internet, through firewalls, and from the browser too. Both of the
-original's race modes are there, as are the players' pictures. EA's Internet lobby is gone, and its
-servers with it. See [Network games](/guide/multiplayer).
+original's race modes are there, as are the players' pictures. EA's servers for the Internet game are
+gone, so a copy of the game can stand in for them: started as a lobby server, it gives the Internet game
+its server list, lobby, chat and games again. See [Network games](/guide/multiplayer).
 
 ## Play anywhere, from your own copy
 

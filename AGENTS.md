@@ -29,7 +29,7 @@ loads from `Drivers/dx7z.dll` (Direct3D 7) or `voodoo2z.dll` (Glide). The port i
 career, Factory Driver, the races with AI, traffic and police, the HUD, sound and replays. Multiplayer: peer to
 peer IP and LAN (IPX + SAP, src/real/ipx.c) games over a gasm-relay room (src/real/wsock.c: peer i is
 10.0.0.(i+1)), both race modes, the TCP/IP stream fallback (src/real/tcp.c), the players' pictures
-(docs/guide/multiplayer.md); the Internet lobby (EA's servers are gone) is not ported, the modem and serial
+(docs/guide/multiplayer.md), the Internet game through a lobby server (`--param netserver=1`, in place of EA's; `Net_LobbyServer`), the modem and serial
 games are out of scope (their `PENDING_NOTE`s stay). Viewers: `--param car=<name>`, `track=<name>`, `drive=<track>`, `fe=<layout>`.
 
 ## Hard rules

@@ -51,6 +51,7 @@
 #include <string.h>
 
 static int selftest;   /* --param thrash_test: 1 the THRASH scene, 2 the EAGL scene */
+static bool netserver; /* --param netserver=1: the room's Internet lobby server (Net_LobbyServer) */
 static char car_name[64];     /* --param car=<name>: that car in the viewer (GameData/CarModel/<name>.crp) */
 static char track_name[32];   /* --param track=<name>: the track viewer (TRACK_selftest) */
 static char drive_name[32];   /* --param drive=<track>: drive car=<name> (default 964) there (DRIVE_selftest) */
@@ -86,6 +87,7 @@ bool app_init(void)
     }
     char v[8];
     selftest = plat_param("thrash_test", v, sizeof v) ? atoi(v) : 0;
+    netserver = plat_param("netserver", v, sizeof v) && v[0] == '1';
     if (!plat_param("car", car_name, sizeof car_name)) car_name[0] = 0;
     if (!plat_param("track", track_name, sizeof track_name)) track_name[0] = 0;
     if (!plat_param("drive", drive_name, sizeof drive_name)) drive_name[0] = 0;
@@ -102,7 +104,7 @@ bool app_init(void)
         }
     }
     /* Without a viewer parameter the game starts as the original does: in the front end. */
-    if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest) {
+    if (!fe_start[0] && !screen_name[0] && !drive_name[0] && !track_name[0] && !car_name[0] && !selftest && !netserver) {
         snprintf(fe_start, sizeof fe_start, "gamesetup");
         /* GameMain 0x4b6840: FE_IntroMovies once, before the first FEApplication_Run (unless 0x65743c) */
         intro = !(plat_param("intro", v, sizeof v) && v[0] == '0');
@@ -296,6 +298,11 @@ bool app_frame(void)
         else if (drive_name[0]) DRIVE_selftest(drive_name, car_name);
         else if (track_name[0]) TRACK_selftest(track_name);
         else if (car_name[0]) CAR_selftest(car_name);
+        else if (netserver) {
+            Net_LobbyServer();
+            THRASH.fn.clearwindow();
+            THRASH.fn.pageflip();
+        }
         else if (selftest == 1) THRASH_selftest();
         else if (selftest == 2) EAGL_selftest();
         else if (selftest >= 3 && selftest <= 11) {

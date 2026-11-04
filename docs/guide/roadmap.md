@@ -51,8 +51,11 @@ the original does.
 
 ## Online and devices
 
-- **An Internet game of our own.** EA's servers are gone. The front end's Internet game (its lobby of
-  players and games) can run over a gasm relay instead, the same way peer IP and LAN games do now.
+- **Done: the Internet game.** EA's servers are gone. A game started with `--param netserver=1` is the
+  room's lobby server, and the front end's Internet game (its sign on, server list, lobby, chat and games)
+  runs through it. See [Network games](/guide/multiplayer#the-internet-game).
+- **Next: a public lobby.** A relay with a lobby server always running, so that players need no
+  server of their own.
 - **Force feedback.** The original sends the hits' jolts and the road's feel to a force-feedback wheel. This
   needs rumble or force-feedback support from gasm.
 - **Voice chat (maybe).** The original has voice chat between the players of a network game. It needs

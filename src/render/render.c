@@ -37,7 +37,7 @@ RenderDisplay g_display;         /* 0x619780.. */
 
 /* ---- the registry (0x4b7030, 0x4b7130; values table 0x5d6f28: 12 bytes per value) ---- */
 
-enum { RREG_TABLE = 0x5d6f28, RREG_COUNT = 5 };
+enum { RREG_TABLE = 0x5d6f28, RREG_COUNT = 9 };   /* (the driver's five, Language, Primary Address, Client and Server Version) */
 
 static void reg_param_name(const char *name, char *dst, int cap)
 {

@@ -332,6 +332,7 @@ NetSrv *NetServer_New(uintptr_t provider, const NetGameInfo *info, NetClient *ow
                          int channel);   /* 0x491c80 */
 void NetServer_Delete(NetSrv *s);      /* 0x491f70 */
 void NetServer_Stop(void);                /* 0x492210 */
+void NetServer_ListAs(const char *address);   /* (port) a dedicated server's name at the lobby: its address */
 
 /* ---- the guest (net.c, for net_host.c) ---- */
 NetClient *NetClient_New(uintptr_t provider, ConEventFn event, intptr_t user, const char *name, const char *extra,
@@ -341,3 +342,7 @@ void NetClient_Find(NetClient *c);           /* 0x48ab80 */
 void NetClient_JoinText(NetClient *c, const char *text, int port);   /* 0x48abc0 */
 bool NetClient_Flush(NetClient *c);          /* 0x48ad60 */
 void Net_Selftest(void);                     /* --param thrash_test=9 */
+/* (a port addition) --param netserver=1: this game is the room's Internet lobby server (EA's entry server,
+   whose program wasn't shipped: the game's own server with no player of its own, 0x491c80's lobby case),
+   called each frame; the players' Internet game reaches it as porsche-entry.earacing.com (wsock.c). */
+void Net_LobbyServer(void);

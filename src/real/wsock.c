@@ -1,5 +1,6 @@
 /* The port's WinSock on a gasm-relay room: see wsock.h. */
 #include "real/wsock.h"
+#include "exe.h"
 #include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -717,7 +718,9 @@ char *WS_inet_ntoa(const uint8_t addr[4])
 }
 
 /* Names: our own (the host's address, or 127.0.0.1 without a room), "nfs5-<i>" a room's peer i, and
-   dotted addresses. */
+   dotted addresses. EA's entry server for the Internet game (porsche-entry.earacing.com, the registry's
+   Primary Address) is the room's peer --param entry=<i> (0 by default): the room's lobby server, the game
+   started with --param netserver=1 (game/net.h). */
 WsHost *WS_gethostbyname(const char *name)
 {
     static uint8_t addr[4];
@@ -735,7 +738,12 @@ WsHost *WS_gethostbyname(const char *name)
         else addr[0] = 127, addr[1] = 0, addr[2] = 0, addr[3] = 1;
     } else if (sscanf(name, "nfs5-%d", &peer) == 1 && peer >= 0 && peer < 255)
         addr[0] = 10, addr[1] = 0, addr[2] = 0, addr[3] = (uint8_t)(peer + 1);
-    else
+    else if (!strcmp(name, exe_str(0x5d06e0))) {
+        char v[8];
+        peer = plat_param("entry", v, sizeof v) ? atoi(v) : 0;
+        if (peer < 0 || 254 < peer) return NULL;
+        addr[0] = 10, addr[1] = 0, addr[2] = 0, addr[3] = (uint8_t)(peer + 1);
+    } else
         return NULL;
     snprintf(hname, sizeof hname, "%s", name);
     h.name = hname;
