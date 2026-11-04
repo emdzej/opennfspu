@@ -764,7 +764,8 @@ int THRASH_writerect(int x, int y, int w, int h, const void *src)
 
 /* ---------------------------------------------------------------- about, init, modes */
 
-static ThrashMode modes[10];
+static ThrashMode modes[6 + 2 * WIDE_SIZES];
+static int modes_shape = -1;   /* (port) the shape the wide modes were listed for, Wide_Now */
 static int nmodes = 5;
 static ThrashAbout about;
 static const char author[] = "AUTHOR: Daniel Kennett, Wednesday 07:51PM Mar 01, 2000";
@@ -787,14 +788,15 @@ static void modes_init(void)
 {
     static const int wh[5][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200}};
     memset(modes, 0, sizeof modes);
-    /* (a port addition, true widescreen, wide.h: four modes of the shape now after the five; the options
-       never offer the list's last, 0x4bc2f0, so the fourth only fills that place) */
-    int k = Wide_Now();
-    nmodes = k == WIDE_NONE ? 5 : 5 + WIDE_SIZES;
+    /* (a port addition, true widescreen, wide.h: the wide sizes after the five; the options never offer
+       the list's last, 0x4bc2f0, so the largest only fills that place) */
+    int wide[2 * WIDE_SIZES][2];
+    modes_shape = Wide_Now();
+    nmodes = 5 + Wide_List(wide);
     for (int i = 0; i < nmodes; i++) {
         int w, h;
         if (i < 5) w = wh[i][0], h = wh[i][1];
-        else Wide_Size(k, i - 5, &w, &h);
+        else w = wide[i - 5][0], h = wide[i - 5][1];
         modes[i + 1].width = w;
         modes[i + 1].height = h;
         modes[i + 1].bpp = 16;
@@ -836,8 +838,7 @@ const ThrashAbout *THRASH_about(void)
     about.ncluts = 4;
     about.cluts = cluts;
     /* (port, wide.h: with aspect=auto the wide modes follow the window's shape) */
-    if (modes[1].width && modes[6].width && Wide_Now() != (modes[6].height * 16 == modes[6].width * 9 ? WIDE_16_9 : WIDE_16_10))
-        modes_init();
+    if (modes[1].width && Wide_Now() != modes_shape) modes_init();
     about.modes = modes;
     about.nmodes = nmodes;
     memcpy(about.name, "DX7 3rash", 10);

@@ -52,6 +52,15 @@ void Wide_Size(int shape, int i, int *w, int *h)
     *h = sizes[shape - 1][i][1];
 }
 
+int Wide_List(int wh[][2])
+{
+    int now = Wide_Now(), n = 0;
+    for (int i = 0; i < WIDE_SIZES; i++)
+        for (int k = 1; k <= 2; k++)
+            if (now == WIDE_NONE || now == k) Wide_Size(k, i, &wh[n][0], &wh[n][1]), n++;
+    return n;
+}
+
 void Wide_Follow(int *w, int *h)
 {
     int now = Wide_Now();

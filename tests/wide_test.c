@@ -26,6 +26,9 @@ int main(void)
     Wide_Follow(&w, &h);
     CHECK(w == 1024 && h == 768);
 
+    int wh[2 * WIDE_SIZES][2];
+    CHECK(Wide_List(wh) == WIDE_SIZES && wh[0][0] == 1280 && wh[0][1] == 720);   /* the shape now's */
+
     setenv("OPENNFSPU_DISPLAY", "1440x1080", 1);   /* 4:3 now: the nearer wide shape */
     CHECK(Wide_Now() == WIDE_16_10);
     setenv("OPENNFSPU_DISPLAY", "0x0", 1);         /* no size: the start's shape */

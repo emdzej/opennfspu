@@ -15,7 +15,9 @@ the original does.
 - **Done:** 16:10 (`aspect=16:10`: 1280 x 800, 1680 x 1050, 1920 x 1200), a screen shape choice on the
   play page, and the HUD checked at every size (it keeps to the corners at its art's pixel size, as the
   original's does at every size).
-- **Next:** a switch in the game's own graphics options, in place of the parameter.
+- **Done:** no parameter needed. The game's own screen size list always offers the wide sizes after the
+  original's five, and a race at one of them draws at its shape. The parameter only keeps the list to
+  one shape.
 - **Done:** `aspect=auto` (and the play page's "match my screen"): the shape nearest the display's when the
   game starts.
 - **Done:** with `aspect=auto`, the window's own shape when it is resized while the game runs: the next

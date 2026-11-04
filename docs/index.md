@@ -29,7 +29,7 @@ features:
     link: /guide/gasm
     linkText: Running on gasm
   - title: Beyond the original
-    details: Opt-in true widescreen (16:9 and 16:10, wider at the sides), network races over a relay in place of EA's servers, saves that move between the browser and the desktop. Off, the game is the original.
+    details: True widescreen sizes in the game's own options (16:9 and 16:10, wider at the sides), network races over a relay in place of EA's servers, saves that move between the browser and the desktop. At the original's settings, the game is the original.
     link: /guide/beyond
     linkText: What it adds
   - title: In the browser

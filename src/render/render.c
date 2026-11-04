@@ -364,9 +364,9 @@ void Render_SetMode(RenderSystem *r, int mode)
     Render_DetectCard();
     Render_SetupQuality();
     EAGL_SetDisplaySize((float)w, (float)h);
-    /* (a port addition, true widescreen, wide.h: the projections take the display's true shape, Hor+;
-       the original's take 4:3 whatever the mode, 1280 x 1024's too) */
-    bool wide = Wide_Shape() != WIDE_NONE;
+    /* (a port addition, true widescreen, wide.h: at a mode wider than 4:3, the port's, the projections take
+       the display's true shape, Hor+; the original's take 4:3 whatever the mode, 1280 x 1024's too) */
+    bool wide = h * 4 < w * 3;
     EAGL_SetWide(wide ? ((float)w * 3.0f) / ((float)h * 4.0f) : 1.0f);
 }
 

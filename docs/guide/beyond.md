@@ -14,23 +14,26 @@ height and widens at the sides (Hor+), so you see more of the road, and the HUD 
 
 | Shape | Screen sizes added to the game's options |
 |---|---|
-| 16:9 | 1280 x 720, 1600 x 900, 1920 x 1080 |
+| 16:9 | 1280 x 720, 1600 x 900, 1920 x 1080, 2560 x 1440 |
 | 16:10 | 1280 x 800, 1680 x 1050, 1920 x 1200 |
 
-To turn it on:
+To turn it on, pick one of the new sizes in the game's options (Options, Graphics, screen size). They
+come after the original's five. A race at one of the original's sizes draws exactly as the original's
+does. The menus stay 4:3, with black bars at the sides. Pick the shape of the screen you play on:
+16:10 for most laptops, 16:9 for most monitors and TVs.
+
+To keep the list to one shape:
 
 - **In the browser:** pick the screen shape on the [play page](/play/){target="_self"} before you start.
-  The choice is kept in the browser.
-  "Match my screen" picks the shape nearest your screen's.
+  The window takes that shape, and the choice is kept in the browser. "Match my screen" picks the shape
+  nearest your screen's.
 - **On the desktop:** start the game with `--param aspect=16:9` or `--param aspect=16:10` (for example
   `./play --param aspect=16:9`), or `--param aspect=auto` for the shape nearest the window's (or the
   screen's, started fullscreen) when the game starts. With `auto`, the shape then follows the window:
   resize it from 16:10 to 16:9 (or back), or go fullscreen, and the next race starts in the new shape at
   the size you chose.
 
-Then choose one of the new sizes in the game's options (Graphics, screen size). The menus stay 4:3, with
-black bars at the sides. Pick the shape of the screen you play on: 16:10 for most laptops, 16:9 for most
-monitors and TVs. See [Running on gasm](/guide/gasm#graphics).
+See [Running on gasm](/guide/gasm#graphics).
 
 ## Network games without EA's servers
 
