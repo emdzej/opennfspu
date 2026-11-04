@@ -237,7 +237,7 @@ link_a = dict(racer_a)
 if trafnodes is not None:
     for i in range(len(trafnodes)): link_a[len(racers) + i] = struct.unpack('<I', mu.mem_read(0x5e8c24 + 4 * i, 4))[0]
 def fix_ed4(a):
-    for o in LINKS:
+    for o in LINKS + (0x434,):   # (+0x434, the car hit, as well: the hit task copies it to +0x454)
         k = struct.unpack('<i', mu.mem_read(a + o, 4))[0]
         if k > 0: wu32(a + o, link_a.get(k - 1, 0))
 for a in set(racer_a.values()) | {car}: fix_ed4(a)
@@ -452,6 +452,14 @@ if os.environ.get('FD_TRACE'):
         except Exception: eb8 = None
         print('trace', hex(addr), 'esi+eb8', eb8, 'ecx', uc.reg_read(UC_X86_REG_ECX), struct.unpack('<iiii', w), 'eax', uc.reg_read(UC_X86_REG_EAX), 'edi', uc.reg_read(UC_X86_REG_EDI), 'ret', hex(struct.unpack('<I', uc.mem_read(uc.reg_read(UC_X86_REG_ESP), 4))[0]), 'args', struct.unpack('<II', uc.mem_read(uc.reg_read(UC_X86_REG_ESP) + 4, 8)))
     for a in os.environ['FD_TRACE'].split(','): mu.hook_add(UC_HOOK_CODE, trace, begin=int(a, 16), end=int(a, 16))
+if os.environ.get('FD_WATCH'):
+    # (FD_WATCH=<car offset, hex>: each write to that word of the car, with the writing instruction)
+    def watch(uc, access, addr, size, value, ud):
+        sp = uc.reg_read(UC_X86_REG_ESP)
+        st = [w for w in struct.unpack('<32I', uc.mem_read(sp, 128)) if 0x401000 <= w < 0x5b0000]   # (code addresses on the stack: the callers)
+        print('watch', hex(uc.reg_read(UC_X86_REG_EIP)), hex(addr - car), struct.unpack('<f', struct.pack('<I', value & 0xffffffff))[0], value & 0xffffffff, 'stack', ' '.join(hex(w) for w in st[:6]))
+    wo = int(os.environ['FD_WATCH'], 16)
+    mu.hook_add(UC_HOOK_MEM_WRITE, watch, begin=car + wo, end=car + wo + 3)
 mu.emu_start(fn, RET, count=50_000_000)
 if mu.reg_read(UC_X86_REG_EIP) != RET:
     print('did not return', hex(mu.reg_read(UC_X86_REG_EIP))); sys.exit(2)

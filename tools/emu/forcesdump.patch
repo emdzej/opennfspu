@@ -309,10 +309,10 @@ index 34c2aa9..2acfcfd 100644
      Car *c = car;
      if (!c->b[0x7f] || c->b[0x7d]) return;
 diff --git a/src/game/car_drive.c b/src/game/car_drive.c
-index 4fef594..5b97b0b 100644
+index a6ed85d..4c8f49b 100644
 --- a/src/game/car_drive.c
 +++ b/src/game/car_drive.c
-@@ -1046,7 +1046,10 @@ static void drive(Car *c)
+@@ -1049,7 +1049,10 @@ static void drive(Car *c)
          for (int j = 0; j < 3; j++) v[j] *= 0.5f;
  }
  

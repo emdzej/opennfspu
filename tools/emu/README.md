@@ -107,6 +107,15 @@ CAR=-3 ARGS="--param drive=monaco1 --param aidrive=1 --param opponents=3" \
   PY=/path/to/venv/bin/python tools/emu/freerun.sh 1630:1:1760 3000          # an object woken at 1634
 ```
 
+`wholerace.sh <first> <last> [chunk] [jobs]` splits a range of ticks into chunks and free-runs them in
+parallel (every racer by default), each in its own scratch folder (about 0.9 GB each while it runs), and
+sums the differences in `/tmp/wholerace.txt`. `FD_WATCH=<hex offset>` makes the harness print each write
+to that car word with the writing code's address and the return addresses on the stack.
+
+```sh
+PY=/path/to/venv/bin/python tools/emu/wholerace.sh 0 6663 200 3   # the whole replay, three at a time
+```
+
 What the comparisons showed: the game runs the x87 at single precision, so every add, multiply, divide
 and root rounds to a float. The runtime's `asin` (0x5a27c0) keeps that precision for its root, and
 `fpatan` is exact. The port computes these steps in floats, in the original's order. The x87 keeps its
