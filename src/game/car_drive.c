@@ -724,12 +724,14 @@ static void tyre_grip(Car *c, int w)
 /* Rotates (x, z) by t turns. */
 static void rotate(float *x, float *z, float t)
 {
-    /* (0x4a1f39: the sine kept as a float, the cosine on the stack; each product a float) */
+    /* (0x4a1f39: the sine kept as a float, the cosine on the stack; the products and their sum on the
+       x87's stack, single precision with its wide exponent, stored once: a denormal result, the wheels'
+       ground speed of a car at rest, rounds twice) */
     float sn = (float)sin(turns_to_rad(t));
     double cs = cos(turns_to_rad(t));
     float a = *x, b = *z;
-    *x = (float)(cs * a) - sn * b;
-    *z = sn * a + (float)(cs * b);
+    *x = (float)Math_X87(Math_X87(cs * a) - Math_X87((double)sn * b));
+    *z = (float)Math_X87(Math_X87((double)sn * a) + Math_X87(cs * b));
 }
 
 void CarSim_Tyre(Car *c, int w)
@@ -753,7 +755,7 @@ void CarSim_Tyre(Car *c, int w)
         if (*drive < vz) *drive = vz;
         braking = true;
     }
-    float f = spec_f(c, 0xf4) * *drive;
+    float f = (float)Math_X87((double)spec_f(c, 0xf4) * *drive);   /* (0x4a2054: rounded twice when denormal) */
     *drive = f;
     float fwd = *CAR_F(c, 0xd60), afwd = fwd < K(0x5b23f8) ? -fwd : fwd;
     bool over;
@@ -950,20 +952,21 @@ static void drive(Car *c)
     /* The torque to the wheels by the specs' front share (+0x5c) and their loads. */
     float share = spec_f(c, 0x5c);
     float l0 = *WF(c, 0, 0xac), l1 = *WF(c, 1, 0xac), l2 = *WF(c, 2, 0xac), l3 = *WF(c, 3, 0xac);
-    *WF(c, 0, 0xa8) = (torque * share * l0) / (l1 + l0);
-    *WF(c, 1, 0xa8) = (l1 * share * torque) / (l1 + l0);
-    *WF(c, 2, 0xa8) = ((K(0x5b24a8) - share) * l2 * torque) / (l2 + l3);
-    *WF(c, 3, 0xa8) = ((K(0x5b24a8) - share) * l3 * torque) / (l2 + l3);
+    /* (0x49f5d4: each on the x87's stack, single precision with its wide exponent, stored once: a car at
+       rest's torque gives denormals, which round twice) */
+    double rs = Math_X87((double)K(0x5b24a8) - share), front = Math_X87((double)l1 + l0), rear = Math_X87((double)l2 + l3);
+    *WF(c, 0, 0xa8) = (float)Math_X87(Math_X87(Math_X87((double)torque * share) * l0) / front);
+    *WF(c, 1, 0xa8) = (float)Math_X87(Math_X87(Math_X87((double)l1 * share) * torque) / front);
+    *WF(c, 2, 0xa8) = (float)Math_X87(Math_X87(Math_X87(rs * l2) * torque) / rear);
+    *WF(c, 3, 0xa8) = (float)Math_X87(Math_X87(Math_X87(rs * l3) * torque) / rear);
     for (int w = 0; w < 4; w++) {
         *WI(c, w, 0xbc) = 0;
         *WF(c, w, 0x98) = 0;
         *WF(c, w, 0x90) = 0;
     }
-    float fb = fbrake * K(0x5b23f0), rb = (brake - fbrake) * K(0x5b23f0);
-    *WF(c, 0, 0xa8) += fb;
-    *WF(c, 1, 0xa8) += fb;
-    *WF(c, 2, 0xa8) += rb;
-    *WF(c, 3, 0xa8) += rb;
+    /* (0x49f68e: the halves on the stack, each sum stored once) */
+    double fb = Math_X87((double)fbrake * K(0x5b23f0)), rb = Math_X87(Math_X87((double)brake - fbrake) * K(0x5b23f0));
+    for (int w = 0; w < 4; w++) *WF(c, w, 0xa8) = (float)Math_X87((w < 2 ? fb : rb) + *WF(c, w, 0xa8));
     if (g_drive_front_down) {
         CarSim_Tyre(c, 0);
         CarSim_Tyre(c, 1);

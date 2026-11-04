@@ -211,8 +211,11 @@ static bool respond(Car *a, Car *b, const float point[3], const float n[3])
     Vec3_Cross(rb, n, cb);
     float vb = dot3(CAR_F(b, 0x33c), n), va = dot3(CAR_F(a, 0x33c), n);
     float wa = dot3(CAR_F(a, 0x388), ca), wb = dot3(CAR_F(b, 0x388), cb);
-    float j = (wb + ((vb - va) - wa)) / (*CAR_F(a, 0x358) * K(0x5b23f0) + *CAR_F(b, 0x358) * K(0x5b23f0) +
-                                         dot3(cb, cb) * *CAR_F(b, 0x398) * K(0x5b23f0) + dot3(ca, ca) * *CAR_F(a, 0x398) * K(0x5b23f0));
+    /* (0x4968af: the denominator in the original's order, b's turning share onto a's stored one, then the
+       two masses' halves, b's first) */
+    float da = dot3(ca, ca) * *CAR_F(a, 0x398) * K(0x5b23f0);
+    float den = ((dot3(cb, cb) * *CAR_F(b, 0x398) * K(0x5b23f0) + da) + *CAR_F(b, 0x358) * K(0x5b23f0)) + *CAR_F(a, 0x358) * K(0x5b23f0);
+    float j = (wb + ((vb - va) - wa)) / den;
     Car *both[2] = {a, b};
     for (int i = 0; i < 2; i++)
         if ((*CAR_I(both[i], CAR_FLAGS) & 0x80) && !both[i]->b[0x7c]) {
