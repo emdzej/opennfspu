@@ -30,7 +30,12 @@ career, Factory Driver, the races with AI, traffic and police, the HUD, sound an
 peer IP and LAN (IPX + SAP, src/real/ipx.c) games over a gasm-relay room (src/real/wsock.c: peer i is
 10.0.0.(i+1)), both race modes, the TCP/IP stream fallback (src/real/tcp.c), the players' pictures
 (docs/guide/multiplayer.md), the Internet game through a lobby server (`--param netserver=1`, in place of EA's; `Net_LobbyServer`), the modem and serial
-games are out of scope (their `PENDING_NOTE`s stay). Viewers: `--param car=<name>`, `track=<name>`, `drive=<track>`, `fe=<layout>`.
+games are out of scope (their `PENDING_NOTE`s stay). True widescreen (`src/wide.c`, a port addition): the
+options list 16:9 and 16:10 sizes after the original's five, Hor+ at a size wider than 4:3, `--param aspect=`
+narrows the list; the default sizes must stay hash-identical. Fidelity checks against the original's code run
+under the x86 emulator in `tools/emu` (README there; `wholerace.sh` for a whole replay). Work is paused after
+0.1.8: what's left is in docs/guide/roadmap.md (the whole-race free run, widescreen menus, split screen, a
+public lobby; force feedback and voice wait on gasm). Viewers: `--param car=<name>`, `track=<name>`, `drive=<track>`, `fe=<layout>`.
 
 ## Hard rules
 

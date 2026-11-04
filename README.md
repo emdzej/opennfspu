@@ -9,10 +9,12 @@ drawing through gasm's OpenGL ES 3.0 (`gasm:gl`; WebGL 2 in the browser) where t
 It contains no original code, assets or data: it reads the data files, and the tables of the original game
 program, from your own copy of the game.
 
-**Status: in progress.** Single player is playable from the menus through the races (Quick Race, the
-knockouts, the Evolution career, Factory Driver); multiplayer works as peer to peer IP and LAN games
-over gasm's relay, in `gasm-run` and the browser, still in progress. Details:
-[opennfspu.emdzej.pl/guide/status](https://opennfspu.emdzej.pl/guide/status).
+**Status: playable, work paused after 0.1.8.** Single player runs from the menus through the races
+(Quick Race, the knockouts, the Evolution career, Factory Driver), with the AI, traffic, police, sound and
+replays. Multiplayer works as peer to peer IP, LAN and Internet games over gasm's relay, in `gasm-run` and
+the browser (the Internet game through a lobby server you run, in place of EA's). Additions the original
+doesn't have: true 16:9 and 16:10 widescreen, saves that move between the browser and the desktop.
+Details: [status](https://opennfspu.emdzej.pl/guide/status), [roadmap](https://opennfspu.emdzej.pl/guide/roadmap).
 
 ## Game data
 
