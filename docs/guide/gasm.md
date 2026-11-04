@@ -44,7 +44,7 @@ runs use gasm's null GL, so the hashes are the same everywhere.
 The original's "wide screen" option is a letterbox: it crops the 4:3 picture to a band with black bars above
 and below. `--param aspect=16:9` adds true widescreen, which the original doesn't have. The options' screen
 size list gets 1280 x 720, 1600 x 900 and 1920 x 1080 (with `aspect=16:10`, 1280 x 800, 1680 x 1050 and
-1920 x 1200; `aspect=auto` takes the one nearer the display's shape when the game starts, 4:3 left as it is), and a race at one of them draws at the display's real shape. The vertical view stays as it is
+1920 x 1200; `aspect=auto` takes the one nearer the display's shape when the game starts, 4:3 left as it is, and then follows the window: resized to the other wide shape, the next race starts in it at the same place in the list), and a race at one of them draws at the display's real shape. The vertical view stays as it is
 and the sides widen (Hor+), and the HUD keeps to the corners. The front end stays 640 x 480 with black bars
 at the sides. In the browser player it is the start page's screen shape choice (or `/play/?aspect=16:9` in
 the address); with `./play`, `./play --param aspect=16:9`. Then pick one of the new sizes in the game's

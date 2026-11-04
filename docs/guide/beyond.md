@@ -24,7 +24,9 @@ To turn it on:
   "Match my screen" picks the shape nearest your screen's.
 - **On the desktop:** start the game with `--param aspect=16:9` or `--param aspect=16:10` (for example
   `./play --param aspect=16:9`), or `--param aspect=auto` for the shape nearest the window's (or the
-  screen's, started fullscreen) when the game starts.
+  screen's, started fullscreen) when the game starts. With `auto`, the shape then follows the window:
+  resize it from 16:10 to 16:9 (or back), or go fullscreen, and the next race starts in the new shape at
+  the size you chose.
 
 Then choose one of the new sizes in the game's options (Graphics, screen size). The menus stay 4:3, with
 black bars at the sides. Pick the shape of the screen you play on: 16:10 for most laptops, 16:9 for most

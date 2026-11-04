@@ -434,6 +434,9 @@ void Render_SetVideoMode(RenderSystem *r, int w, int h, int bpp, int buffers)
         Render_SetMode(r, 0);
         return;
     }
+    /* (port, wide.h: with aspect=auto a wide size is taken in the window's shape now) */
+    Wide_Follow(&w, &h);
+    if (w == g_display.width && h == g_display.height && bpp == g_display.bpp) return;
     Render_SetMode(r, find_mode(w, h, bpp, buffers, 1));
 }
 

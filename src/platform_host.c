@@ -1,5 +1,5 @@
 /* The platform contract for the native tests and tools: log to stderr, launch parameters from the
-   environment (OPENNFSPU_PARAM_<name>), no input, no display, user files in memory only. */
+   environment (OPENNFSPU_PARAM_<name>), no input, no display (its size 640 x 480 or OPENNFSPU_DISPLAY's), user files in memory only. */
 #include "platform.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -25,7 +25,12 @@ bool plat_param(const char *name, char *dst, size_t cap)
 }
 
 void plat_set_frame_rate(double hz) {}
-void plat_display_size(int *w, int *h) { *w = 640; *h = 480; }
+void plat_display_size(int *w, int *h)
+{
+    /* 640 x 480, or OPENNFSPU_DISPLAY=<w>x<h> (read at each call, so a test can resize it) */
+    const char *v = getenv("OPENNFSPU_DISPLAY");
+    if (!v || sscanf(v, "%dx%d", w, h) != 2) *w = 640, *h = 480;
+}
 bool plat_gamepad(int slot, float axes[16], float buttons[32], char *name, size_t cap)
 {
     (void)slot, (void)axes, (void)buttons, (void)name, (void)cap;

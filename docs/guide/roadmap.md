@@ -18,7 +18,9 @@ the original does.
 - **Next:** a switch in the game's own graphics options, in place of the parameter.
 - **Done:** `aspect=auto` (and the play page's "match my screen"): the shape nearest the display's when the
   game starts.
-- **Next:** the window's own shape when it is resized, while the game runs.
+- **Done:** with `aspect=auto`, the window's own shape when it is resized while the game runs: the next
+  race starts in the shape nearer the window's (16:9 or 16:10), at the same place in the size list. A race
+  already running keeps its shape until it ends.
 - **Later:** the front end. Its screens are laid out for 640 x 480 and are shown with black bars at the sides.
   Widening them means placing each screen's parts again.
 
