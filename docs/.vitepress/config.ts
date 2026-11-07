@@ -136,7 +136,7 @@ export default defineConfig({
 
     footer: {
       message:
-        "OpenNFSPU is released under the GPL-3.0. Need for Speed: Porsche Unleashed is © 2000 Electronic Arts; Porsche is a trademark of Dr. Ing. h.c. F. Porsche AG. OpenNFSPU contains no original code or assets and is not affiliated with them: it runs the game from your own copy. It runs on <a href=\"https://gasm.emdzej.pl\">gasm</a>.",
+        "OpenNFSPU is released under the GPL-3.0. Need for Speed: Porsche Unleashed is © 2000 Electronic Arts; Porsche is a trademark of Dr. Ing. h.c. F. Porsche AG. OpenNFSPU contains no original code or assets and is not affiliated with them: it runs the game from your own copy. It runs on <a href=\"https://gasm.emdzej.pl\">gasm</a>. <a href=\"/credits\">Credits</a>",
     },
   },
 });
