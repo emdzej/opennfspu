@@ -15,6 +15,7 @@ replays. Multiplayer works as peer to peer IP, LAN and Internet games over gasm'
 the browser (the Internet game through a lobby server you run, in place of EA's). Additions the original
 doesn't have: true 16:9 and 16:10 widescreen, saves that move between the browser and the desktop.
 Details: [status](https://opennfspu.emdzej.pl/guide/status), [roadmap](https://opennfspu.emdzej.pl/guide/roadmap).
+How the original works, for anyone building such a game: [theory of operation](https://opennfspu.emdzej.pl/guide/theory).
 
 ## Game data
 

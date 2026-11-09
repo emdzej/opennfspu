@@ -102,6 +102,7 @@ export default defineConfig({
             { text: "Playing in the browser", link: "/guide/playing" },
             { text: "Controls", link: "/guide/controls" },
             { text: "Multiplayer", link: "/guide/multiplayer" },
+            { text: "How the game works", link: "/guide/theory" },
           ],
         },
       ],

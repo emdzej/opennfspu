@@ -52,6 +52,10 @@ public lobby; force feedback and voice wait on gasm). Viewers: `--param car=<nam
    describe layouts, formulas and addresses.
 5. Community knowledge (NFS modding tools and format notes) may inform format understanding; the exe is the
    authority and no code is copied.
+6. **Explain the game, not only port it.** Keep `docs/re/` and `docs/formats.md` accurate as each subsystem
+   is ported. Keep `docs/guide/theory.md`, the theory of operation, up to date: how the game was designed and
+   how it works, in prose, for someone who wants to build such a game. No decompiler text, no game data, no
+   addresses in the main text (link to `docs/re/` and `docs/formats.md` on GitHub: they are not on the site).
 
 ## Layout
 
@@ -137,7 +141,7 @@ emojis**, no version menu. The reverse-engineering notes (`docs/re/`, `docs/form
 them out of the nav, sidebar and site pages. Don't overstate the state (`docs/guide/status.md`); don't host or link copies of the
 game. The "Built for gasm" badge is gasm's official one, hotlinked from
 `https://gasm.emdzej.pl/badge/built-for-gasm-{light,dark,flat}.svg` (rules: https://gasm.emdzej.pl/dev/badge;
-don't recolor, stretch or crop): light/dark by theme on the site, dark on the play page, flat in the README. New
+don't recolor, stretch or crop): light/dark by theme on the site, dark on the play page, flat in the README. `docs/guide/theory.md` is the theory of operation (rule 6). New
 notes go in the sidebar in `docs/.vitepress/config.ts`; dead links fail the build. Screenshots come from
 `tools/screenshots.sh` (headless renders of the port; never game files).
 
